@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Playground — NEXORA</title>
+  <meta name="description" content="Write, check and run NEXORA code in the browser, with the real NEXORA interpreter.">
+  <meta name="theme-color" content="#0A0A0D">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="pg-page">
+
+<a class="skip-link" href="#editor">Skip to the editor</a>
+
+<header class="pg-top">
+  <a class="brand" href="index.html" aria-label="NEXORA home">
+    <svg class="brand__mark" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2.5 21.5 12 12 21.5 2.5 12Z"/>
+      <path class="brand__core" d="M12 8.5 15.5 12 12 15.5 8.5 12Z"/>
+    </svg>
+    <span>NEXORA</span>
+  </a>
+  <span class="pg-top__section">Playground</span>
+  <span class="chip" data-version hidden></span>
+  <nav class="pg-top__links" aria-label="Site">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link" href="guide.html">Language guide</a>
+    <a class="nav-link" href="docs.html">Documentation</a>
+    <a class="nav-link" data-github hidden rel="noopener">GitHub</a>
+  </nav>
+</header>
+
+<main class="pg" data-playground-app>
+
+  <section class="pg-pane pg-pane--editor" aria-label="Editor">
+    <div class="pg-toolbar">
+      <span class="pg-file" data-filename>hello.nex</span>
+
+      <label class="pg-examples">
+        <span class="pg-examples__label">Example</span>
+        <select data-examples aria-describedby="example-description"></select>
+      </label>
+
+      <div class="pg-actions">
+        <span class="pg-spinner" data-spinner hidden aria-hidden="true"></span>
+        <button class="pg-btn pg-btn--primary" type="button" data-run title="Run (Ctrl+Enter)">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8Z"/></svg>
+          <span data-run-label>Run</span>
+        </button>
+        <button class="pg-btn" type="button" data-check title="Check without running (Ctrl+Shift+Enter)">
+          <span data-check-label>Check</span>
+        </button>
+        <button class="pg-btn" type="button" data-copy>Copy</button>
+        <button class="pg-btn" type="button" data-reset>Reset</button>
+      </div>
+    </div>
+
+    <p class="pg-description" id="example-description" data-description></p>
+
+    <div class="pg-editor" id="editor">
+      <div class="pg-gutter" data-gutter aria-hidden="true"></div>
+      <div class="pg-code">
+        <pre class="pg-highlight" data-highlight aria-hidden="true"></pre>
+        <textarea class="pg-input" data-input spellcheck="false" autocapitalize="off" autocomplete="off"
+                  autocorrect="off" wrap="off" aria-label="NEXORA source code"
+                  aria-describedby="editor-help"></textarea>
+      </div>
+    </div>
+    <p class="pg-help" id="editor-help">
+      Tab indents. Press Esc and then Tab to leave the editor with the keyboard.
+      Ctrl+Enter runs, Ctrl+Shift+Enter checks.
+    </p>
+  </section>
+
+  <section class="pg-pane pg-pane--results" aria-label="Results">
+    <div class="pg-status" data-status role="status" aria-live="polite">Loading the playground…</div>
+
+    <div class="pg-notice" data-notice hidden role="status" aria-live="polite">
+      <span data-notice-text></span>
+      <button class="pg-link" type="button" data-undo hidden>Undo</button>
+      <button class="pg-link" type="button" data-dismiss aria-label="Dismiss this message">Dismiss</button>
+    </div>
+
+    <div class="pg-tabs" role="tablist" aria-label="Results">
+      <button class="pg-tab" role="tab" id="tab-output" aria-controls="panel-output" aria-selected="true" data-tab="output">Output</button>
+      <button class="pg-tab" role="tab" id="tab-diagnostics" aria-controls="panel-diagnostics" aria-selected="false" tabindex="-1" data-tab="diagnostics">
+        Diagnostics <span class="pg-count" data-count hidden></span>
+      </button>
+    </div>
+
+    <div class="pg-panel" role="tabpanel" id="panel-output" aria-labelledby="tab-output" data-panel="output">
+      <p class="pg-empty" data-output-empty>Nothing has been run yet. Press Run to execute the program.</p>
+      <pre class="pg-output" data-output hidden tabindex="0"></pre>
+    </div>
+
+    <div class="pg-panel" role="tabpanel" id="panel-diagnostics" aria-labelledby="tab-diagnostics" data-panel="diagnostics" hidden>
+      <p class="pg-empty" data-diagnostics-empty>No diagnostics yet. Press Check to analyse the program without running it.</p>
+      <p class="pg-stale" data-stale hidden>These diagnostics are from the last run. The code has changed since.</p>
+      <ol class="pg-diagnostics" data-diagnostics></ol>
+    </div>
+  </section>
+
+</main>
+
+<footer class="pg-foot">
+  <p class="pg-foot__note">
+    NEXORA is in early development. The syntax may change, and some things are not implemented yet:
+    see the <a href="guide.html#limitations">current limitations</a>.
+    Code runs on the server with the real NEXORA interpreter<span data-limits></span>. It is not stored.
+  </p>
+  <nav class="pg-foot__links" aria-label="Learn the language">
+    <a href="guide.html#introduction">Introduction</a>
+    <a href="guide.html#syntax">Syntax</a>
+    <a href="guide.html#types">Types</a>
+    <a href="guide.html#operators">Operators</a>
+    <a href="guide.html#functions">Functions</a>
+    <a href="guide.html#diagnostics">Diagnostics</a>
+    <a href="guide.html#limitations">Limitations</a>
+  </nav>
+</footer>
+
+<noscript>
+  <p class="pg-noscript">The playground needs JavaScript to send your code to the NEXORA interpreter.</p>
+</noscript>
+
+<script type="module" src="js/playground/main.js"></script>
+</body>
+</html>

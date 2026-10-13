@@ -1,0 +1,37 @@
+// Arithmetic: precedence, Int and Float division, negative numbers and the limits of Int.
+
+fn main() -> Void {
+    // '*' and '/' bind tighter than '+' and '-'. Operators of the same level go left to right.
+    print(2 + 3 * 4)
+    print((2 + 3) * 4)
+    print(20 - 5 - 3)
+    print(100 / 10 / 5)
+
+    // Int / Int is an Int: the fractional part is dropped (rounding toward zero).
+    print(7 / 2)
+    print(-7 / 2)
+    print(7 / -2)
+
+    // Float / Float keeps the fraction.
+    print(7.0 / 2.0)
+    print(1.0 / 3.0)
+
+    // Floats are IEEE 754 doubles: some decimal fractions are not exact.
+    print(0.1 + 0.2)
+    print(0.1 + 0.2 == 0.3)
+
+    // Unary minus, and digit separators for readability.
+    let debt = -1_500
+    print(-debt)
+    print(debt * 2)
+
+    // Int is a 64-bit signed integer. These are its largest and smallest values.
+    print(9223372036854775807)
+    print(-9223372036854775807 - 1)
+
+    // Mixing Int and Float needs an explicit conversion.
+    let items = 3
+    let price = 2.5
+    print(to_float(items) * price)
+    print(to_int(price * 10.0) / items)
+}

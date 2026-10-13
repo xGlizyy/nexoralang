@@ -1,0 +1,71 @@
+// Tipos, variables, funciones, contratos y errores como valores.
+
+/// Porcentaje entre 0 y 100.
+pub type Percent = Int where value >= 0 and value <= 100
+
+/// Producto del catálogo. Los precios van en céntimos para evitar decimales.
+pub type Product {
+  id: Int
+  name: String
+  price_cents: Int
+  stock: Int
+}
+
+/// Motivos por los que no se puede calcular un pedido.
+pub enum OrderError {
+  OutOfStock(product: String)
+  EmptyCart
+}
+
+/// Aplica un descuento a un precio en céntimos.
+pub fn apply_discount(price_cents: Int, percent: Percent) -> Int
+  requires price_cents >= 0
+  ensures result >= 0 and result <= price_cents
+  example apply_discount(10_000, 20) == 8_000
+  example apply_discount(999, 0) == 999
+{
+  price_cents * (100 - percent) / 100
+}
+
+/// Suma el precio de los productos del carrito.
+pub fn cart_total(items: List<Product>) -> Result<Int, OrderError> {
+  if List.is_empty(items) {
+    return Err(OrderError.EmptyCart)
+  }
+  var total = 0
+  for item in items {
+    if item.stock == 0 {
+      return Err(OrderError.OutOfStock(product: item.name))
+    }
+    total = total + item.price_cents
+  }
+  Ok(total)
+}
+
+/// Total del carrito con un descuento aplicado.
+pub fn checkout(items: List<Product>, discount: Percent) -> Result<Int, OrderError> {
+  let total = try cart_total(items)
+  Ok(apply_discount(total, discount))
+}
+
+fn describe(error: OrderError) -> String {
+  match error {
+    OrderError.OutOfStock(product) -> "Sin existencias: {product}"
+    OrderError.EmptyCart -> "El carrito está vacío"
+  }
+}
+
+fn main() -> Unit uses Log {
+  let cart = [
+    Product(id: 1, name: "Teclado", price_cents: 4_500, stock: 3),
+    Product(id: 2, name: "Ratón", price_cents: 2_000, stock: 1),
+  ]
+  match checkout(cart, 10) {
+    Ok(total) -> log.info("Total: {total} céntimos")
+    Err(error) -> log.error(describe(error))
+  }
+}
+
+test "el carrito vacío es un error" {
+  assert cart_total([]) == Err(OrderError.EmptyCart)
+}

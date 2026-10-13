@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Language guide — NEXORA</title>
+  <meta name="description" content="A short guide to the NEXORA language as it is implemented today: syntax, types, operators, functions, contracts, diagnostics and limitations.">
+  <meta name="theme-color" content="#0A0A0D">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="pg-top">
+  <a class="brand" href="index.html" aria-label="NEXORA home">
+    <svg class="brand__mark" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2.5 21.5 12 12 21.5 2.5 12Z"/>
+      <path class="brand__core" d="M12 8.5 15.5 12 12 15.5 8.5 12Z"/>
+    </svg>
+    <span>NEXORA</span>
+  </a>
+  <span class="pg-top__section">Language guide</span>
+  <nav class="pg-top__links" aria-label="Site">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link" href="playground.html">Playground</a>
+    <a class="nav-link" href="docs.html">Documentation</a>
+  </nav>
+</header>
+
+<main id="main" class="container docs">
+
+  <nav class="docs__toc" aria-label="On this page">
+    <p class="site-footer__title">On this page</p>
+    <ol>
+      <li><a href="#introduction">Introduction</a></li>
+      <li><a href="#syntax">Syntax</a></li>
+      <li><a href="#types">Types</a></li>
+      <li><a href="#operators">Operators</a></li>
+      <li><a href="#functions">Functions</a></li>
+      <li><a href="#contracts">Contracts</a></li>
+      <li><a href="#diagnostics">Diagnostics</a></li>
+      <li><a href="#limitations">Limitations</a></li>
+    </ol>
+  </nav>
+
+  <article class="docs__article guide">
+    <p class="eyebrow">Language guide</p>
+    <h1>NEXORA, as it works today</h1>
+    <p class="lead">
+      A short tour of what the current interpreter (version 0.2) accepts. Every program on this page is
+      run by the project's tests, and every one can be tried in the <a href="playground.html">playground</a>.
+    </p>
+
+    <div class="callout">
+      <p>
+        NEXORA is in early development. The syntax may change, and the language is still small:
+        the <a href="#limitations">limitations</a> are listed at the end.
+      </p>
+    </div>
+
+    <section id="introduction">
+      <h2>Introduction</h2>
+      <p>
+        A program is one <code>.nex</code> file. It starts running at the function <code>main</code>.
+        <code>print</code> writes a value followed by a line break.
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="run"><code>fn main() -&gt; Void {
+    print("Hello from NEXORA")
+}</code></pre>
+        <div class="guide-output"><pre data-expected>Hello from NEXORA</pre></div>
+      </figure>
+      <p>
+        Before running anything, NEXORA checks the whole program: names, types and whether every function
+        returns what it promises. A program with an error is never started.
+      </p>
+    </section>
+
+    <section id="syntax">
+      <h2>Syntax</h2>
+      <ul class="bullets">
+        <li>A statement ends at the end of its line. There are no semicolons.</li>
+        <li>Blocks are written with braces. Indentation is free.</li>
+        <li>A comment starts with <code>//</code> and runs to the end of the line.</li>
+        <li><code>let</code> declares a variable. Variables never change: there is no reassignment.</li>
+        <li>A name can only be declared once while it is visible. There is no shadowing.</li>
+        <li>Text is written between double quotes, on one line.</li>
+      </ul>
+      <figure class="window">
+        <pre class="code" data-example="run"><code>// Variables are declared with let and never change.
+fn main() -&gt; Void {
+    let name = "Ada"
+    let year = 1843
+    print(name)
+    print(year)
+    {
+        // A block has its own variables, and can read the ones around it.
+        let next = year + 1
+        print(next)
+    }
+}</code></pre>
+        <div class="guide-output"><pre data-expected>Ada
+1843
+1844</pre></div>
+      </figure>
+    </section>
+
+    <section id="types">
+      <h2>Types</h2>
+      <table>
+        <thead><tr><th>Type</th><th>Values</th><th>Written as</th></tr></thead>
+        <tbody>
+          <tr><td><code>Int</code></td><td>Whole numbers, 64 bits</td><td><code>42</code>, <code>1_000_000</code></td></tr>
+          <tr><td><code>Float</code></td><td>Numbers with decimals</td><td><code>3.14</code>, <code>10.0</code></td></tr>
+          <tr><td><code>Bool</code></td><td>True or false</td><td><code>true</code>, <code>false</code></td></tr>
+          <tr><td><code>Text</code></td><td>Text</td><td><code>"Hello"</code></td></tr>
+          <tr><td><code>Void</code></td><td>No value: only as a return type</td><td></td></tr>
+        </tbody>
+      </table>
+      <p>
+        The type of a variable is inferred from its value, or written after a colon. All types are known
+        before the program runs, so a type error can never appear while it is running.
+      </p>
+      <p>
+        <strong>Nothing is converted implicitly.</strong> An <code>Int</code> and a <code>Float</code> are never
+        mixed, and a number is never joined to a text. Conversions are explicit calls:
+        <code>to_float</code>, <code>to_int</code> and <code>to_text</code>.
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="run"><code>fn main() -&gt; Void {
+    let units: Int = 3
+    let price = 2.5
+    let total = to_float(units) * price
+    print("Total: " + to_text(total))
+    print(to_int(total))
+}</code></pre>
+        <div class="guide-output"><pre data-expected>Total: 7.5
+7</pre></div>
+      </figure>
+    </section>
+
+    <section id="operators">
+      <h2>Operators</h2>
+      <table>
+        <thead><tr><th>Operators</th><th>Work on</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td><code>+ - * /</code></td><td>Two <code>Int</code> or two <code>Float</code></td><td>The same type</td></tr>
+          <tr><td><code>+</code></td><td>Two <code>Text</code></td><td><code>Text</code></td></tr>
+          <tr><td><code>== !=</code></td><td>Two values of the same type</td><td><code>Bool</code></td></tr>
+          <tr><td><code>&lt; &lt;= &gt; &gt;=</code></td><td>Two <code>Int</code> or two <code>Float</code></td><td><code>Bool</code></td></tr>
+          <tr><td><code>and or not</code></td><td><code>Bool</code></td><td><code>Bool</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Multiplication and division come before addition and subtraction, then comparisons, then
+        <code>and</code>, then <code>or</code>. Dividing two <code>Int</code> gives an <code>Int</code>:
+        the fractional part is dropped. Comparisons cannot be chained.
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="run"><code>fn main() -&gt; Void {
+    print(2 + 3 * 4)
+    print(7 / 2)
+    print(7.0 / 2.0)
+    print(3 &gt; 2 and not (1 == 2))
+}</code></pre>
+        <div class="guide-output"><pre data-expected>14
+3
+3.5
+true</pre></div>
+      </figure>
+    </section>
+
+    <section id="functions">
+      <h2>Functions</h2>
+      <p>
+        Every parameter states its type, and the return type is always written. A function that returns a
+        value must end with <code>return</code> on every path. <code>if</code> and <code>else</code> choose
+        between blocks; the condition must be a <code>Bool</code>. There are no loops yet: repetition is
+        written with recursion.
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="run"><code>fn factorial(n: Int) -&gt; Int {
+    if n &lt;= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+fn describe(n: Int) -&gt; Text {
+    if n &lt; 0 {
+        return "negative"
+    } else if n == 0 {
+        return "zero"
+    } else {
+        return "positive"
+    }
+}
+
+fn main() -&gt; Void {
+    print(factorial(10))
+    print(describe(-4))
+}</code></pre>
+        <div class="guide-output"><pre data-expected>3628800
+negative</pre></div>
+      </figure>
+    </section>
+
+    <section id="contracts">
+      <h2>Contracts <span class="chip chip--experimental">Experimental</span></h2>
+      <p>
+        A function can state what it expects from its caller (<code>requires</code>) and what it promises
+        (<code>ensures</code>, where <code>result</code> is the value returned). The clauses go at the start
+        of the body. They are checked while the program runs, on every call: they are not proven in advance.
+        This part of the language may change.
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="run"><code>fn divide(a: Float, b: Float) -&gt; Float {
+    requires b != 0.0
+    return a / b
+}
+
+fn absolute(value: Int) -&gt; Int {
+    ensures result &gt;= 0
+    if value &lt; 0 {
+        return -value
+    }
+    return value
+}
+
+fn main() -&gt; Void {
+    print(divide(9.0, 2.0))
+    print(absolute(-42))
+}</code></pre>
+        <div class="guide-output"><pre data-expected>4.5
+42</pre></div>
+      </figure>
+    </section>
+
+    <section id="diagnostics">
+      <h2>Diagnostics</h2>
+      <p>
+        When something is wrong, NEXORA says what kind of problem it is, where it is, and what was expected.
+        Each problem has a stable code. This program has a type error, found without running it:
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="check-fails" data-code="E2011" data-line="2"><code>fn main() -&gt; Void {
+    let age: Int = "twenty"
+    print(age)
+}</code></pre>
+        <div class="guide-output guide-output--error"><pre>type error[E2011]: Type mismatch
+  line 2, column 20: Expected Int, found Text</pre></div>
+      </figure>
+      <table>
+        <thead><tr><th>Kind</th><th>Meaning</th><th>Found</th></tr></thead>
+        <tbody>
+          <tr><td><code>lexical</code></td><td>A character that is not part of the language</td><td>Before running</td></tr>
+          <tr><td><code>syntax</code></td><td>The code does not follow the grammar</td><td>Before running</td></tr>
+          <tr><td><code>semantic</code></td><td>Names, scopes, return paths</td><td>Before running</td></tr>
+          <tr><td><code>type</code></td><td>Types that do not match</td><td>Before running</td></tr>
+          <tr><td><code>runtime</code></td><td>Division by zero, overflow, endless recursion</td><td>While running</td></tr>
+          <tr><td><code>contract</code></td><td>A <code>requires</code> or <code>ensures</code> condition was false</td><td>While running</td></tr>
+        </tbody>
+      </table>
+      <p>In the playground, selecting a diagnostic shows its position in the editor.</p>
+    </section>
+
+    <section id="limitations">
+      <h2>Limitations</h2>
+      <p>These do not exist yet. Using them is an error, not something the playground pretends to support:</p>
+      <ul class="bullets">
+        <li>Loops and variables that can be reassigned.</li>
+        <li>Lists, records and any other compound type.</li>
+        <li>Operations on text other than joining and comparing for equality.</li>
+        <li>Reading input, files or the network: a program can only print.</li>
+        <li>Modules: a program is a single file.</li>
+        <li>Any integration with AI models.</li>
+      </ul>
+      <p>Limits of the implementation:</p>
+      <ul class="bullets">
+        <li>At most 1000 nested calls.</li>
+        <li><code>Int</code> is a 64-bit integer; going out of range stops the program.</li>
+        <li>In the playground, a program is stopped after a time limit and if it prints too much.</li>
+      </ul>
+      <p>
+        The interpreter is a reference implementation: it has not been measured for speed, and NEXORA is not
+        ready for production use.
+      </p>
+      <div class="actions">
+        <a class="btn btn--primary" href="playground.html">Open the playground</a>
+      </div>
+    </section>
+  </article>
+
+</main>
+
+<script type="module" src="js/guide.js"></script>
+</body>
+</html>

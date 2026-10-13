@@ -1,0 +1,68 @@
+// Functions with typed parameters and return values, 'if' / 'else', and recursion.
+
+fn add(a: Int, b: Int) -> Int {
+    return a + b
+}
+
+// Every path of a function that returns a value ends in 'return'.
+fn max(a: Int, b: Int) -> Int {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+fn describe(n: Int) -> Text {
+    if n < 0 {
+        return "negative"
+    } else if n == 0 {
+        return "zero"
+    } else {
+        return "positive"
+    }
+}
+
+// A function can call itself. The 'if' is what makes the recursion stop.
+fn factorial(n: Int) -> Int {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+fn is_even(n: Int) -> Bool {
+    if n == 0 {
+        return true
+    }
+    return is_odd(n - 1)
+}
+
+// Functions can be declared in any order: is_even calls is_odd, declared after it.
+fn is_odd(n: Int) -> Bool {
+    if n == 0 {
+        return false
+    }
+    return is_even(n - 1)
+}
+
+// A Void function returns nothing. A bare 'return' leaves it early.
+fn greet(name: Text, formal: Bool) -> Void {
+    if formal {
+        print("Good morning, " + name + ".")
+        return
+    }
+    print("Hi, " + name + "!")
+}
+
+fn main() -> Void {
+    let result: Int = add(2, 3)
+    print(result)
+    print(max(7, 12))
+    print(describe(-4))
+    print(describe(0))
+    print(factorial(10))
+    print(is_even(10))
+    print(is_odd(10))
+    greet("Ada", true)
+    greet("Ada", false)
+}

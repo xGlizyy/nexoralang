@@ -1,0 +1,42 @@
+// Values, variables, arithmetic and scopes.
+fn main() -> Void {
+    let name = "NEXORA"
+    let age = 1
+    let active = true
+    print(name)
+    print(age)
+    print(active)
+
+    // Arithmetic follows the usual precedence; parentheses change it.
+    let total = 10 + 5
+    let difference = 10 - 5
+    let product = 4 * 3
+    let quotient = 10 / 2
+    print(total)
+    print(difference)
+    print(product)
+    print(quotient)
+    print(2 + 3 * 4)
+    print((2 + 3) * 4)
+
+    // Int division drops the fractional part. Float division keeps it.
+    print(7 / 2)
+    print(7.0 / 2.0)
+    print(-total)
+
+    // '+' joins two strings.
+    let greeting = "Hello from " + name
+    print(greeting)
+
+    // A block opens a new scope. It can read the variables around it,
+    // and its own variables stop existing when it ends.
+    {
+        let inside = total * 2
+        print(inside)
+    }
+
+    // A line break inside parentheses does not end the statement.
+    print(
+        "A \"quoted\" word, a tab:\tand a brace: \{"
+    )
+}

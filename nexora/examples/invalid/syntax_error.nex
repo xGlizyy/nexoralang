@@ -1,0 +1,16 @@
+// Invalid on purpose: syntax errors. The text does not follow the grammar, so nothing
+// else is checked. `nex check examples/invalid/syntax_error.nex` reports each broken
+// statement (the parser recovers and keeps going) and exits with code 1.
+
+fn main() -> Void {
+    let = "missing name"
+    let total 10
+    print("missing parenthesis"
+    let chained = 1 < 2 < 3
+    var counter = 0
+    print("this line is fine")
+}
+
+fn broken(a, b: Int) -> Int {
+    return a + b
+}

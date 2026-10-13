@@ -1,0 +1,57 @@
+// Funciones de IA con salida tipada y herramientas.
+
+import http
+
+/// Área a la que pertenece un ticket.
+pub enum Category {
+  Billing
+  Account
+  Technical
+  Other
+}
+
+/// Urgencia de 1 (baja) a 5 (crítica).
+pub type Urgency = Int where value >= 1 and value <= 5
+
+/// Resultado de analizar un ticket.
+pub type Triage {
+  category: Category
+  urgency: Urgency
+  summary: String
+}
+
+/// Devuelve el estado de un pedido a partir de su identificador.
+tool fn order_status(order_id: Int) -> Result<String, http.Error> uses Net {
+  let response = try http.get("https://api.example.com/orders/{order_id}")
+  Ok(response.body)
+}
+
+/// Clasifica un ticket de soporte en una categoría.
+ai fn classify(ticket: String) -> Result<Category, AiError>
+  uses Ai
+  example classify("Me han cobrado dos veces") == Ok(Category.Billing)
+  example classify("No puedo iniciar sesión") == Ok(Category.Account)
+{
+  model: "fast"
+  system: "Eres un clasificador de tickets de soporte."
+  prompt: "Clasifica este ticket: {ticket}"
+}
+
+/// Analiza un ticket: categoría, urgencia y un resumen de una frase.
+/// Si el ticket menciona un pedido, consulta su estado antes de responder.
+ai fn triage(ticket: String) -> Result<Triage, AiError>
+  uses Ai, Net
+  ensures String.length(result.summary) <= 200
+{
+  model: "smart"
+  system: "Eres un agente de soporte. Responde en español."
+  prompt: "Analiza este ticket: {ticket}"
+  tools: [order_status]
+}
+
+fn main() -> Unit uses Ai, Net, Log {
+  match triage("Hola, mi pedido 4821 no ha llegado y lo necesito mañana") {
+    Ok(outcome) -> log.info("[urgencia {outcome.urgency}] {outcome.summary}")
+    Err(error) -> log.error("No se pudo analizar: {error.message}")
+  }
+}

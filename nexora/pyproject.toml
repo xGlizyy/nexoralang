@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexora"
+description = "Reference interpreter and command-line tool for the NEXORA programming language."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+# The interpreter uses only the Python standard library.
+dependencies = []
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Interpreters",
+]
+
+[project.optional-dependencies]
+# Optional integration: the MCP server (nex-mcp) needs the official MCP Python SDK, version 2.
+mcp = ["mcp>=2,<3"]
+# Everything needed to work on NEXORA: tests, coverage and lint, plus what the tests of the
+# optional integrations need (the MCP SDK and a JSON Schema validator).
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6", "jsonschema>=4", "mcp>=2,<3"]
+
+[project.scripts]
+nex = "nexora.cli:main"
+nex-mcp = "nexora.mcp_server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# The version lives in one place: src/nexora/version.py.
+[tool.setuptools.dynamic]
+version = { attr = "nexora.version.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+
+[tool.coverage.run]
+source = ["nexora"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+# The critical components (lexer, parser, checker, interpreter, diagnostics, CLI) are all of the
+# package, so one threshold covers them. `python -m pytest --cov` fails below it.
+fail_under = 90
+exclude_also = [
+    # Defensive branches that a checked program can never reach; hitting one is an internal error.
+    "raise TypeError\\(",
+    "raise LookupError\\(",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, bugbear and pyupgrade: real mistakes and outdated idioms, no style crusade.
+select = ["E", "F", "W", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests embed NEXORA programs as string literals; breaking those lines would make them harder to read.
+"tests/*" = ["E501"]

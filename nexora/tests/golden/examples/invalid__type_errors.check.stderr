@@ -1,0 +1,79 @@
+type error[E2011]: Type mismatch
+  --> examples/invalid/type_errors.nex:10:12
+   |
+10 |     return count
+   |            ^^^^^ Expected Text, found Int
+   = note: 'label' is declared to return Text.
+   = hint: Convert the value explicitly with to_text(...).
+
+type error[E2011]: Type mismatch
+  --> examples/invalid/type_errors.nex:14:20
+   |
+14 |     let age: Int = "twenty"
+   |                    ^^^^^^^^ Expected Int, found Text
+   = note: 'age' is declared as Int.
+
+type error[E2011]: Type mismatch
+  --> examples/invalid/type_errors.nex:15:20
+   |
+15 |     let total = 10 + 2.5
+   |                    ^ Cannot apply '+' to Int and Float
+   = hint: Int and Float are never mixed. Convert one side: to_float(x) turns an Int into a Float.
+
+type error[E2011]: Type mismatch
+  --> examples/invalid/type_errors.nex:16:19
+   |
+16 |     let ok = true + 1
+   |                   ^ Cannot apply '+' to Bool and Int
+   = hint: Arithmetic works on numbers. Bool values are combined with 'and', 'or' and 'not'.
+
+type error[E2011]: Type mismatch
+  --> examples/invalid/type_errors.nex:17:17
+   |
+17 |     let big = 3 > "2"
+   |                 ^ Cannot apply '>' to Int and Text
+   = hint: '>' compares two Int values or two Float values.
+
+type error[E2011]: Type mismatch
+  --> examples/invalid/type_errors.nex:18:18
+   |
+18 |     let same = 1 == 1.0
+   |                  ^^ Cannot apply '==' to Int and Float
+   = hint: Int and Float are never mixed. Convert one side: to_float(x) turns an Int into a Float.
+
+type error[E2011]: Type mismatch
+  --> examples/invalid/type_errors.nex:19:18
+   |
+19 |     let both = 1 and true
+   |                  ^^^ Cannot apply 'and' to Int and Bool
+   = hint: 'and' combines two Bool values.
+
+type error[E2011]: Type mismatch
+  --> examples/invalid/type_errors.nex:20:16
+   |
+20 |     print(half(4))
+   |                ^ Expected Float, found Int
+   = note: This is the argument for 'value' in: fn half(value: Float) -> Float
+   = hint: Convert the Int explicitly with to_float(...).
+
+type error[E2009]: Wrong number of arguments
+  --> examples/invalid/type_errors.nex:21:11
+   |
+21 |     print(half(1.0, 2.0))
+   |           ^^^^^^^^^^^^^^ 'half' takes 1 argument, but 2 were given
+   = note: Its signature is: fn half(value: Float) -> Float
+
+type error[E2011]: Type mismatch
+  --> examples/invalid/type_errors.nex:22:8
+   |
+22 |     if age {
+   |        ^^^ The condition of 'if' must be Bool, found Int
+   = hint: A number is not a condition. Compare it explicitly, for example: x != 0
+
+type error[E2011]: Type mismatch
+  --> examples/invalid/type_errors.nex:25:19
+   |
+25 |     let nothing = print("x")
+   |                   ^^^^^^^^^^ This call does not produce a value to store
+
+error: examples/invalid/type_errors.nex: check failed with 11 errors

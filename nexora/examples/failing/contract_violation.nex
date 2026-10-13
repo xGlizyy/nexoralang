@@ -1,0 +1,18 @@
+// Fails on purpose while running. It passes `nex check`, but breaks a contract when it runs.
+// `nex run examples/failing/contract_violation.nex` prints the first result, then reports
+// the broken 'requires' condition and exits with code 5.
+
+fn divide(a: Float, b: Float) -> Float {
+    requires b != 0.0
+    return a / b
+}
+
+fn average(total: Float, count: Float) -> Float {
+    return divide(total, count)
+}
+
+fn main() -> Void {
+    print(average(90.0, 4.0))
+    print(average(90.0, 0.0))
+    print("This line is never reached")
+}

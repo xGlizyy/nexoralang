@@ -1,0 +1,33 @@
+// Contracts (experimental): conditions a function expects and conditions it promises.
+//
+// 'requires' is checked when the function is called, before its body runs.
+// 'ensures' is checked when the function finishes; 'result' is the value it returns.
+// `nex check` verifies that each condition is a well-typed Bool expression.
+// Whether a condition holds is checked while the program runs, on every call.
+
+fn divide(a: Float, b: Float) -> Float {
+    requires b != 0.0
+    return a / b
+}
+
+fn absolute(value: Int) -> Int {
+    ensures result >= 0
+    ensures result == value or result == -value
+    if value < 0 {
+        return -value
+    }
+    return value
+}
+
+fn percentage(part: Int, whole: Int) -> Int {
+    requires whole > 0
+    requires part >= 0 and part <= whole
+    ensures result >= 0 and result <= 100
+    return part * 100 / whole
+}
+
+fn main() -> Void {
+    print(divide(10.0, 4.0))
+    print(absolute(-42))
+    print(percentage(3, 12))
+}

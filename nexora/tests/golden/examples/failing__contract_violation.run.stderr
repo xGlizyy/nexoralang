@@ -1,0 +1,10 @@
+contract error[E4001]: Precondition violated
+  --> examples/failing/contract_violation.nex:11:12
+   |
+11 |     return divide(total, count)
+   |            ^^^^^^^^^^^^^^^^^^^^ This call breaks a 'requires' condition of 'divide'
+   = note: The condition at line 6 is false: requires b != 0.0
+   = note: It was called with: a = 90.0, b = 0.0
+   = note: In 'average', called at line 16, column 11.
+
+error: examples/failing/contract_violation.nex: the program stopped because a contract was broken

@@ -1,0 +1,364 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexora.invalid/schemas/nexora-context.schema.json",
+  "title": "nexora.context/1: a technical summary of a program",
+  "type": "object",
+  "required": [
+    "schema",
+    "nexora_version",
+    "file",
+    "ok",
+    "diagnostics",
+    "executed",
+    "lines",
+    "analysed",
+    "complete",
+    "entry_point",
+    "functions",
+    "features",
+    "reserved_words_used",
+    "notes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "nexora.context/1"
+    },
+    "nexora_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "file": {
+      "type": "string",
+      "description": "The name the source was given. A label, not necessarily a path."
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "True when the static analysis found no errors."
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "executed": {
+      "const": false,
+      "description": "The program is never run to produce this document."
+    },
+    "lines": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "analysed": {
+      "type": "boolean",
+      "description": "False when the source has lexical errors: there is no structure."
+    },
+    "complete": {
+      "type": "boolean",
+      "description": "True when the analysis covers the whole file. False when syntax errors left out the statements and functions that have them, or when there is no structure at all."
+    },
+    "entry_point": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "functions": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/function"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "features": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reserved_words_used": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Words reserved for unimplemented features. Null if the text could not be split into tokens."
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "span": {
+      "description": "A region of the source. Lines and columns start at 1; the end is exclusive. Columns count Unicode code points.",
+      "type": "object",
+      "required": [
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": [
+        "severity",
+        "category",
+        "code",
+        "message",
+        "label",
+        "hint",
+        "notes",
+        "file",
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "severity": {
+          "const": "error"
+        },
+        "category": {
+          "enum": [
+            "contract",
+            "file",
+            "lexical",
+            "runtime",
+            "semantic",
+            "syntax",
+            "type"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^E[0-9]{4}$",
+          "description": "Stable identifier of the problem."
+        },
+        "message": {
+          "type": "string",
+          "description": "Fixed title of the code."
+        },
+        "label": {
+          "type": "string",
+          "description": "What is wrong in this particular case."
+        },
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A suggested fix, only when a rule of the language supports it."
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Related information."
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    },
+    "param": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "function": {
+      "type": "object",
+      "required": [
+        "name",
+        "signature",
+        "params",
+        "return_type",
+        "span",
+        "contracts",
+        "variables",
+        "calls",
+        "builtins_called",
+        "called_by",
+        "recursive"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/param"
+          }
+        },
+        "return_type": {
+          "type": "string"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "contracts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "clause",
+              "condition",
+              "line"
+            ],
+            "properties": {
+              "clause": {
+                "enum": [
+                  "requires",
+                  "ensures"
+                ]
+              },
+              "condition": {
+                "type": "string",
+                "description": "The condition, as written in the source."
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        "variables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "type",
+              "line"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        "calls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Functions of the program this one calls, sorted, without repetitions."
+        },
+        "builtins_called": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "called_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recursive": {
+          "type": "boolean",
+          "description": "True if the function can reach itself through calls."
+        }
+      }
+    }
+  }
+}

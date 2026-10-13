@@ -1,0 +1,7 @@
+runtime error[E3001]: Division by zero
+ --> examples/failing/runtime_error.nex:8:19
+  |
+8 |     print(items / people)
+  |                   ^^^^^^ The right-hand side of this division is zero
+
+error: examples/failing/runtime_error.nex: the program stopped because of a runtime error

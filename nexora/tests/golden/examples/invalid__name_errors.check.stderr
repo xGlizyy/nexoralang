@@ -1,0 +1,57 @@
+semantic error[E2014]: Missing return
+ --> examples/invalid/name_errors.nex:5:4
+  |
+5 | fn area(width: Int, height: Int) -> Int {
+  |    ^^^^ 'area' must return a value of type Int, but its body can end without a 'return'
+  = hint: Make sure every path through the function ends with 'return'. An 'if' without 'else' can be skipped.
+
+semantic error[E2006]: Name already declared
+  --> examples/invalid/name_errors.nex:13:9
+   |
+13 |     let name = "again"
+   |         ^^^^ 'name' is already declared and still visible here
+   = note: It was first declared at line 12, column 9.
+   = hint: Choose a different name: a visible name cannot be declared again.
+
+semantic error[E2005]: Unknown variable
+  --> examples/invalid/name_errors.nex:14:11
+   |
+14 |     print(totl)
+   |           ^^^^ There is no variable named 'totl' here
+   = hint: Declare it first with 'let'.
+
+semantic error[E2007]: Cannot reassign variable
+  --> examples/invalid/name_errors.nex:15:5
+   |
+15 |     name = "changed"
+   |     ^^^^ 'name' cannot be given a new value: variables are immutable
+   = hint: Declare a new variable with a different name instead.
+
+semantic error[E2010]: Unused value
+  --> examples/invalid/name_errors.nex:16:5
+   |
+16 |     40 + 2
+   |     ^^^^^^ The value of this expression is never used
+   = hint: Store it with 'let name = ...' or pass it to a function.
+
+semantic error[E2010]: Unused value
+  --> examples/invalid/name_errors.nex:17:5
+   |
+17 |     area(2, 3)
+   |     ^^^^^^^^^^ The Int returned by 'area' is never used
+   = hint: Store it with 'let name = ...' or pass it to a function.
+
+semantic error[E2008]: Unknown function
+  --> examples/invalid/name_errors.nex:18:5
+   |
+18 |     launch()
+   |     ^^^^^^ There is no function named 'launch'
+
+semantic error[E2015]: Unreachable code
+  --> examples/invalid/name_errors.nex:20:5
+   |
+20 |     print("never runs")
+   |     ^^^^^^^^^^^^^^^^^^^ This code can never run: the function has already returned
+   = hint: Remove it, or move it before the 'return'.
+
+error: examples/invalid/name_errors.nex: check failed with 8 errors

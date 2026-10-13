@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexora.invalid/schemas/nexora-result.schema.json",
+  "title": "nexora.result/1: the outcome of checking or running a program (nexora.api, playground)",
+  "type": "object",
+  "required": [
+    "schema",
+    "action",
+    "status",
+    "output",
+    "diagnostics",
+    "message"
+  ],
+  "properties": {
+    "schema": {
+      "const": "nexora.result/1"
+    },
+    "action": {
+      "enum": [
+        "check",
+        "run"
+      ]
+    },
+    "status": {
+      "enum": [
+        "success",
+        "invalid",
+        "runtime_error",
+        "contract_violation",
+        "output_limit",
+        "memory_limit",
+        "timeout"
+      ],
+      "description": "'timeout' is added by a host that stops the process; the core never returns it."
+    },
+    "output": {
+      "type": "string"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "$defs": {
+    "span": {
+      "description": "A region of the source. Lines and columns start at 1; the end is exclusive. Columns count Unicode code points.",
+      "type": "object",
+      "required": [
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": [
+        "severity",
+        "category",
+        "code",
+        "message",
+        "label",
+        "hint",
+        "notes",
+        "file",
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "severity": {
+          "const": "error"
+        },
+        "category": {
+          "enum": [
+            "contract",
+            "file",
+            "lexical",
+            "runtime",
+            "semantic",
+            "syntax",
+            "type"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^E[0-9]{4}$",
+          "description": "Stable identifier of the problem."
+        },
+        "message": {
+          "type": "string",
+          "description": "Fixed title of the code."
+        },
+        "label": {
+          "type": "string",
+          "description": "What is wrong in this particular case."
+        },
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A suggested fix, only when a rule of the language supports it."
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Related information."
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

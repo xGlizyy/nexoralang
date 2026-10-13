@@ -1,0 +1,6 @@
+# Files added to the source distribution besides the package itself, so that a copy built with
+# `python -m build` can run its own tests and carries its documentation and examples.
+include LICENSE CHANGELOG.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md
+recursive-include docs *.md *.json
+recursive-include examples *.nex *.md
+recursive-include tests *.py *.stdout *.stderr

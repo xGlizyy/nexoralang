@@ -1,0 +1,21 @@
+// Invalid on purpose: errors about names and program structure (category "semantic").
+// The syntax is correct; the problems are found by the static analysis, without running.
+// `nex check examples/invalid/name_errors.nex` reports them all and exits with code 1.
+
+fn area(width: Int, height: Int) -> Int {
+    if width > 0 {
+        return width * height
+    }
+}
+
+fn main() -> Void {
+    let name = "NEXORA"
+    let name = "again"
+    print(totl)
+    name = "changed"
+    40 + 2
+    area(2, 3)
+    launch()
+    return
+    print("never runs")
+}

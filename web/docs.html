@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Documentation — NEXORA</title>
+  <meta name="description" content="What NEXORA is, the current status of the project, its design philosophy, a conceptual example and the roadmap.">
+  <meta name="theme-color" content="#0A0A0D">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="NEXORA">
+  <meta property="og:title" content="NEXORA documentation">
+  <meta property="og:description" content="What NEXORA is, where the project stands today and the ideas behind its design.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="container site-header__row">
+    <a class="brand" href="index.html" aria-label="NEXORA home">
+      <svg class="brand__mark" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 2.5 21.5 12 12 21.5 2.5 12Z"/>
+        <path class="brand__core" d="M12 8.5 15.5 12 12 15.5 8.5 12Z"/>
+      </svg>
+      <span>NEXORA</span>
+    </a>
+
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="Open menu">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
+    </button>
+
+    <nav class="site-nav" id="site-nav" aria-label="Main">
+      <ul class="site-nav__links">
+        <li><a class="nav-link" href="index.html#language">Language</a></li>
+        <li><a class="nav-link" href="index.html#features">Features</a></li>
+        <li><a class="nav-link" href="playground.html">Playground</a></li>
+        <li class="nav-item--menu">
+          <a class="nav-link" href="docs.html" aria-current="page">Documentation</a>
+          <div class="nav-menu">
+            <div class="nav-menu__panel">
+              <a class="nav-menu__root" href="docs.html">Documentation</a>
+              <ol class="nav-menu__list">
+                <li><a href="docs.html#what"><span>01</span><strong>What is NEXORA</strong><small>The project, and what it is not</small></a></li>
+                <li><a href="docs.html#status"><span>02</span><strong>Current status</strong><small>What exists today, and what doesn't</small></a></li>
+                <li><a href="docs.html#philosophy"><span>03</span><strong>Design philosophy</strong><small>The ideas guiding the language</small></a></li>
+                <li><a href="docs.html#example"><span>04</span><strong>Conceptual example</strong><small>A first look at the syntax</small></a></li>
+                <li><a href="docs.html#roadmap"><span>05</span><strong>Roadmap</strong><small>The phases, in order</small></a></li>
+                <li><a href="docs.html#follow"><span>06</span><strong>Following the project</strong><small>How to keep up with it</small></a></li>
+              </ol>
+            </div>
+          </div>
+        </li>
+      </ul>
+      <div class="site-nav__actions">
+        <a class="nav-link" data-github hidden rel="noopener">GitHub</a>
+        <span class="site-nav__session" data-session>
+          <a class="nav-link" href="login.html">Log in</a>
+          <span class="pill pill--providers">
+            <a class="pill__provider" href="/api/auth/google" aria-label="Continue with Google" title="Continue with Google">
+              <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            </a>
+            <a class="pill__provider" href="/api/auth/github" aria-label="Continue with GitHub" title="Continue with GitHub">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+            </a>
+            <a class="pill__label" href="signup.html">Sign up <span aria-hidden="true">→</span></a>
+          </span>
+        </span>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="container docs">
+
+  <nav class="docs__toc" aria-label="Documentation sections">
+    <p class="site-footer__title">Documentation</p>
+    <ol>
+      <li><a href="#what">What is NEXORA</a></li>
+      <li><a href="#status">Current status</a></li>
+      <li><a href="#philosophy">Design philosophy</a></li>
+      <li><a href="#example">Conceptual example</a></li>
+      <li><a href="#roadmap">Roadmap</a></li>
+      <li><a href="#follow">Following the project</a></li>
+    </ol>
+  </nav>
+
+  <article class="docs__article">
+    <p class="eyebrow">Documentation</p>
+    <h1>Getting to know NEXORA</h1>
+    <p class="lead">
+      A short, honest overview of the project: what it is, what exists today and where it is going.
+    </p>
+
+    <div class="callout">
+      <p>
+        NEXORA is in early development. A first interpreter runs a small subset of the language; the rest
+        of this page describes a design in progress, and the syntax may change as the language evolves.
+      </p>
+    </div>
+
+    <section id="what">
+      <h2>What is NEXORA</h2>
+      <p>
+        NEXORA is a new programming language being built from scratch as an independent project.
+        Its aim is to explore a clearer, more expressive way to write software: a syntax of its own,
+        modern development tools and, over time, carefully chosen AI-related features.
+      </p>
+      <p>
+        It is not a framework or a layer on top of another language. It is a language design that
+        will get its own implementation, tooling and documentation, step by step.
+      </p>
+    </section>
+
+    <section id="status">
+      <h2>Current status</h2>
+      <p>The project is at an early stage. This is what exists today and what does not:</p>
+
+      <dl class="status-list">
+        <div>
+          <dt><span class="chip chip--in-progress">Available</span></dt>
+          <dd>
+            <ul>
+              <li>A reference interpreter, version 0.2, that runs a subset of the language from the command line.</li>
+              <li>A language specification for that subset, and a broader design draft.</li>
+              <li>A <a href="playground.html">playground</a> that runs code in the browser with that interpreter, and a short <a href="guide.html">language guide</a>.</li>
+              <li>This website and this first documentation page.</li>
+            </ul>
+          </dd>
+        </div>
+        <div>
+          <dt><span class="chip chip--experimental">Experimental</span></dt>
+          <dd>
+            <ul>
+              <li>The syntax itself. It is still being defined and can change.</li>
+              <li>Most code examples on this site. Unless stated otherwise they are illustrations, not runnable programs.</li>
+            </ul>
+          </dd>
+        </div>
+        <div>
+          <dt><span class="chip">Planned</span></dt>
+          <dd>
+            <ul>
+              <li>The rest of the language: loops, collections, modules.</li>
+              <li>More developer tools.</li>
+              <li>Optional AI integrations, currently at the research stage.</li>
+            </ul>
+          </dd>
+        </div>
+      </dl>
+
+      <p>
+        The full design draft is available as a working document:
+        <a href="../docs/fase-1-diseno.md">Language design draft v0.1</a> (written in Spanish).
+        It is more detailed than this page and some of its notation differs from the examples shown here.
+      </p>
+    </section>
+
+    <section id="philosophy">
+      <h2>Design philosophy</h2>
+      <p>Three goals guide the decisions made so far. They are intentions, not finished features.</p>
+
+      <h3>Clarity first</h3>
+      <p>
+        Code is read far more often than it is written. NEXORA aims for a syntax that is readable,
+        consistent and easy to understand, with few special cases to remember.
+      </p>
+
+      <h3>Built to evolve</h3>
+      <p>
+        The language is designed so that tools, documentation and an ecosystem can grow around it
+        without having to rethink its foundations.
+      </p>
+
+      <h3>AI, thoughtfully integrated</h3>
+      <p>
+        The project is exploring how AI tools could fit into the language. The intent is for them to stay
+        optional: writing NEXORA should never require an AI service, and nothing is promised before it exists.
+      </p>
+
+      <p>Ideas the current draft is exploring:</p>
+      <ul class="bullets">
+        <li>Values that are immutable unless declared otherwise.</li>
+        <li>Errors handled as ordinary values rather than exceptions.</li>
+        <li>Function signatures that state their types explicitly.</li>
+      </ul>
+    </section>
+
+    <section id="example">
+      <h2>Conceptual example</h2>
+      <p>This is how a minimal program is currently imagined:</p>
+
+      <figure class="window">
+        <div class="window__bar">
+          <span class="window__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="window__tab is-active">hello.nex</span>
+          <span class="chip chip--experimental window__flag">Conceptual</span>
+        </div>
+        <pre class="code"><code data-lang="nex">fn main() -&gt; Void {
+    let message = "Hello, future."
+    print(message)
+}</code></pre>
+      </figure>
+
+      <p>
+        <code>fn</code> declares a function and <code>-&gt; Void</code> states that it returns nothing.
+        <code>let</code> binds a name to a value, and <code>print</code> would write it out.
+        Run with the reference interpreter, this program prints <code>Hello, future.</code>
+      </p>
+    </section>
+
+    <section id="roadmap">
+      <h2>Roadmap</h2>
+      <p>The project moves through four phases, in order. There are no dates attached to them.</p>
+      <ol class="roadmap" data-roadmap></ol>
+      <noscript>
+        <ul class="bullets">
+          <li>Phase 1 — Language design: in progress.</li>
+          <li>Phase 2 — First interpreter: done.</li>
+          <li>Phase 3 — Tooling and documentation: in progress.</li>
+          <li>Phase 4 — Playground and ecosystem: in progress.</li>
+        </ul>
+      </noscript>
+    </section>
+
+    <section id="follow">
+      <h2>Following the project</h2>
+      <p data-no-github>
+        A public source repository is planned but not available yet. When it opens, the link will appear
+        here and in the site navigation.
+      </p>
+      <p><a data-github hidden rel="noopener">Follow the development on GitHub</a></p>
+      <p>
+        Until then, this page and the <a href="index.html#roadmap">roadmap</a> are updated as the project advances.
+      </p>
+    </section>
+  </article>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="site-footer__grid">
+      <div class="site-footer__brand">
+        <a class="brand" href="index.html" aria-label="NEXORA home">
+          <svg class="brand__mark" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2.5 21.5 12 12 21.5 2.5 12Z"/>
+            <path class="brand__core" d="M12 8.5 15.5 12 12 15.5 8.5 12Z"/>
+          </svg>
+          <span>NEXORA</span>
+        </a>
+        <p class="site-footer__about">A new programming language exploring a clearer, more expressive way to build software.</p>
+      </div>
+      <nav aria-label="Site">
+        <p class="site-footer__title">Project</p>
+        <ul class="site-footer__links">
+          <li><a href="index.html#language">Language</a></li>
+          <li><a href="index.html#features">Features</a></li>
+          <li><a href="playground.html">Playground</a></li>
+          <li><a href="index.html#roadmap">Roadmap</a></li>
+        </ul>
+      </nav>
+      <nav aria-label="Resources">
+        <p class="site-footer__title">Resources</p>
+        <ul class="site-footer__links">
+          <li><a href="docs.html">Documentation</a></li>
+          <li><a href="login.html">Log in</a></li>
+          <li><a href="signup.html">Sign up</a></li>
+          <li><a data-github hidden rel="noopener">GitHub</a></li>
+        </ul>
+      </nav>
+    </div>
+    <div class="site-footer__bottom">
+      <p>© <span data-year>2026</span> NEXORA</p>
+      <p>An independent project in development.</p>
+    </div>
+  </div>
+</footer>
+
+<script type="module" src="js/main.js"></script>
+<script src="auth.js" defer></script>
+</body>
+</html>

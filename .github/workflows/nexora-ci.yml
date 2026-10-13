@@ -1,0 +1,79 @@
+# Integración continua del núcleo de NEXORA (directorio nexora/).
+#
+# ESTADO: preparado, nunca ejecutado. El proyecto todavía no tiene repositorio en GitHub.
+# Se activará solo al publicar el repositorio con este archivo en .github/workflows/.
+#
+# - No usa secretos ni servicios de pago: solo ejecutores gratuitos de GitHub.
+# - Si la rama principal no se llama "main", cambia la lista de "branches".
+# - Si nexora/ pasa a ser la raíz de su propio repositorio, elimina las dos líneas
+#   "working-directory" y los filtros "paths".
+
+name: nexora-ci
+
+on:
+  push:
+    branches: [main]
+    paths: ["nexora/**", ".github/workflows/nexora-ci.yml"]
+  pull_request:
+    paths: ["nexora/**", ".github/workflows/nexora-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Python ${{ matrix.python }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: nexora
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Instalar NEXORA y las herramientas de desarrollo
+        run: python -m pip install -e ".[dev]"
+
+      - name: Análisis estático del código
+        run: python -m ruff check src tests
+
+      - name: Pruebas con cobertura
+        run: python -m pytest --cov
+
+      - name: El comando instalado funciona
+        run: |
+          nex --version
+          nex run examples/hello.nex
+
+  package:
+    name: Paquete instalable
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nexora
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generar el paquete
+        run: |
+          python -m pip install build
+          python -m build
+
+      - name: Instalar el paquete en un entorno limpio y usarlo
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/python -m pip install dist/*.whl
+          /tmp/clean/bin/nex --version
+          /tmp/clean/bin/nex run examples/hello.nex

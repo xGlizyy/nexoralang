@@ -1,0 +1,3 @@
+# Every text file is stored and checked out with LF line endings, on every platform.
+# The tests compare recorded output character by character, so line endings must not change.
+* text=auto eol=lf

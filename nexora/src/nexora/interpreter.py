@@ -1,0 +1,350 @@
+"""Interpreter: runs a checked NEXORA program by walking its AST.
+
+It works on the tree directly; no Python code is generated or evaluated. The only
+effect a program can have is writing text through `print`.
+
+The interpreter only accepts a `CheckedProgram`: names and types were verified by the
+checker and are not verified again here. What is checked here is exactly what cannot be
+known before running: division by zero, overflow, conversions out of range, the depth of
+the call stack, and whether the `requires` and `ensures` conditions hold.
+"""
+
+from __future__ import annotations
+
+import math
+import sys
+from collections.abc import Callable
+
+from . import ast_nodes as ast
+from .checker import CheckedProgram
+from .diagnostics import Diagnostic, NexoraRuntimeError, Span
+from .values import INT_MAX, INT_MIN, Value, format_value, show_value
+
+# The deepest chain of calls a program may have (main counts as the first).
+MAX_CALL_DEPTH = 1000
+# Python frames needed to run MAX_CALL_DEPTH ordinary NEXORA calls, with room to spare.
+_PYTHON_RECURSION_LIMIT = 25_000
+# How many calls a run-time diagnostic lists.
+_TRACE_LENGTH = 6
+
+
+class _Returned:
+    """Signals that a `return` statement ran, carrying its value (None for a bare return)."""
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: Value | None) -> None:
+        self.value = value
+
+
+class Environment:
+    """The variables of one block, linked to the block that encloses it."""
+
+    __slots__ = ("_parent", "_values")
+
+    def __init__(self, parent: Environment | None = None) -> None:
+        self._parent = parent
+        self._values: dict[str, Value] = {}
+
+    def lookup(self, name: str) -> Value:
+        environment: Environment | None = self
+        while environment is not None:
+            if name in environment._values:
+                return environment._values[name]
+            environment = environment._parent
+        # Unreachable for a checked program; reported as an internal error, not a user error.
+        raise LookupError(f"variable '{name}' is not defined")
+
+    def declare(self, name: str, value: Value) -> None:
+        self._values[name] = value
+
+
+class Interpreter:
+    def __init__(self, checked: CheckedProgram, write: Callable[[str], object],
+                 text_limit: int | None = None) -> None:
+        """`write` receives the text produced by `print`. `text_limit`, if given, is the longest
+        Text (in characters) a program may build; a host sets it to bound memory use."""
+        self._functions = checked.functions
+        self._write = write
+        self._text_limit = text_limit
+        # The calls in progress: (function name, where it was called from). main has no call site.
+        self._stack: list[tuple[str, Span | None]] = []
+
+    def run(self) -> None:
+        """Runs `main`. Raises NexoraRuntimeError if the program fails."""
+        previous_limit = sys.getrecursionlimit()
+        sys.setrecursionlimit(max(previous_limit, _PYTHON_RECURSION_LIMIT))
+        try:
+            self._invoke(self._functions["main"], [], None)
+        except RecursionError:
+            # Calls combined with deeply nested expressions can exhaust Python's own stack before
+            # MAX_CALL_DEPTH is reached. Same error code; the message says what actually happened.
+            depth = len(self._stack)
+            raise self._fail(
+                "E3004",
+                f"The program ran out of stack space after {depth} nested calls",
+                None,
+                hint="Calls that sit inside deeply nested expressions use more stack. "
+                     "Reduce the recursion depth, or move parts of the expression into 'let' declarations.",
+            ) from None
+        finally:
+            sys.setrecursionlimit(previous_limit)
+
+    # Errors
+
+    def _fail(self, code: str, label: str, span: Span | None, *, hint: str | None = None,
+              notes: tuple[str, ...] = (), skip_frames: int = 0) -> NexoraRuntimeError:
+        """A run-time error, with the chain of calls that led to it as notes."""
+        frames = self._stack[: len(self._stack) - skip_frames]
+        trace = [
+            f"In '{name}', called at line {site.line}, column {site.column}."
+            for name, site in reversed(frames)
+            if site is not None
+        ]
+        if len(trace) > _TRACE_LENGTH:
+            hidden = len(trace) - _TRACE_LENGTH
+            trace = trace[:_TRACE_LENGTH] + [f"... and {hidden} more call{'' if hidden == 1 else 's'}."]
+        return NexoraRuntimeError(Diagnostic(code, label, span, hint, (*notes, *trace)))
+
+    def _too_deep(self, span: Span | None) -> NexoraRuntimeError:
+        return self._fail(
+            "E3004",
+            f"The program nested more than {MAX_CALL_DEPTH} calls",
+            span,
+            hint="A recursive function probably never reaches the case where it stops calling itself.",
+        )
+
+    # Functions
+
+    def _invoke(self, function: ast.Function, arguments: list[Value], site: Span | None) -> Value | None:
+        if len(self._stack) >= MAX_CALL_DEPTH:
+            raise self._too_deep(site)
+        self._stack.append((function.name, site))
+
+        parameters = Environment()
+        for param, argument in zip(function.params, arguments, strict=True):
+            parameters.declare(param.name, argument)
+
+        for contract in function.contracts:
+            if contract.clause == "requires" and not self._evaluate(contract.condition, parameters):
+                raise self._fail(
+                    "E4001",
+                    f"This call breaks a 'requires' condition of '{function.name}'",
+                    site,
+                    notes=(
+                        f"The condition at line {contract.span.line} is false: {self._source_of(contract)}",
+                        *self._values_note(function, arguments),
+                    ),
+                    # The callee never started: the trace begins at the caller.
+                    skip_frames=1,
+                )
+
+        outcome = self._block(function.body, Environment(parameters))
+        result = outcome.value if outcome is not None else None
+
+        for contract in function.contracts:
+            if contract.clause != "ensures":
+                continue
+            environment = parameters
+            if result is not None:
+                environment = Environment(parameters)
+                environment.declare("result", result)
+            if not self._evaluate(contract.condition, environment):
+                notes = [f"'{function.name}' finished, but its condition is false: {self._source_of(contract)}"]
+                if result is not None:
+                    notes.append(f"It returned: result = {show_value(result)}")
+                notes.extend(self._values_note(function, arguments))
+                raise self._fail(
+                    "E4002",
+                    f"'{function.name}' breaks its own 'ensures' condition",
+                    contract.span,
+                    notes=tuple(notes),
+                )
+
+        self._stack.pop()
+        return result
+
+    @staticmethod
+    def _values_note(function: ast.Function, arguments: list[Value]) -> tuple[str, ...]:
+        if not function.params:
+            return ()
+        pairs = zip(function.params, arguments, strict=True)
+        values = ", ".join(f"{param.name} = {show_value(value)}" for param, value in pairs)
+        return (f"It was called with: {values}",)
+
+    @staticmethod
+    def _source_of(contract: ast.Contract) -> str:
+        return f"{contract.clause} {_unparse(contract.condition)}"
+
+    # Statements. Each returns a _Returned when a 'return' ran inside it, and None otherwise.
+
+    def _block(self, block: ast.Block, environment: Environment) -> _Returned | None:
+        for statement in block.statements:
+            outcome = self._statement(statement, environment)
+            if outcome is not None:
+                return outcome
+        return None
+
+    def _statement(self, statement: ast.Statement, environment: Environment) -> _Returned | None:
+        if isinstance(statement, ast.Let):
+            environment.declare(statement.name, self._evaluate(statement.value, environment))
+            return None
+        if isinstance(statement, ast.Return):
+            if statement.value is None:
+                return _Returned(None)
+            return _Returned(self._evaluate(statement.value, environment))
+        if isinstance(statement, ast.If):
+            # Iterative over the 'else if' chain.
+            branch: ast.If | ast.Block | None = statement
+            while isinstance(branch, ast.If):
+                if self._evaluate(branch.condition, environment):
+                    return self._block(branch.then_block, Environment(environment))
+                branch = branch.else_branch
+            if branch is not None:
+                return self._block(branch, Environment(environment))
+            return None
+        if isinstance(statement, ast.Block):
+            return self._block(statement, Environment(environment))
+        if isinstance(statement, ast.ExprStatement):
+            self._evaluate(statement.expression, environment)
+            return None
+        # ast.Assign is always rejected by the checker.
+        raise TypeError(f"statement {type(statement).__name__} reached the interpreter")
+
+    # Expressions
+
+    def _evaluate(self, node: ast.Expr, environment: Environment) -> Value | None:
+        """Evaluates an expression. Only a call to a Void function yields None."""
+        if isinstance(node, (ast.IntLiteral, ast.FloatLiteral, ast.TextLiteral, ast.BoolLiteral)):
+            return node.value
+        if isinstance(node, ast.Name):
+            return environment.lookup(node.name)
+        if isinstance(node, ast.Group):
+            return self._evaluate(node.expression, environment)
+        if isinstance(node, ast.Binary):
+            return self._binary(node, environment)
+        if isinstance(node, ast.Unary):
+            operand = self._evaluate(node.operand, environment)
+            if node.operator == "not":
+                return not operand
+            if isinstance(operand, float):
+                return -operand
+            return self._int(-operand, node.span)
+        return self._call(node, environment)
+
+    def _binary(self, node: ast.Binary, environment: Environment) -> Value:
+        operator = node.operator
+        left = self._evaluate(node.left, environment)
+
+        # 'and' and 'or' only evaluate their right side when it can change the result.
+        if operator == "and":
+            return left and self._evaluate(node.right, environment)
+        if operator == "or":
+            return left or self._evaluate(node.right, environment)
+
+        right = self._evaluate(node.right, environment)
+        if operator == "==":
+            return left == right
+        if operator == "!=":
+            return left != right
+        if operator == "<":
+            return left < right
+        if operator == "<=":
+            return left <= right
+        if operator == ">":
+            return left > right
+        if operator == ">=":
+            return left >= right
+
+        if operator == "+":
+            result = left + right
+        elif operator == "-":
+            result = left - right
+        elif operator == "*":
+            result = left * right
+        else:
+            if right == 0:
+                raise self._fail("E3001", "The right-hand side of this division is zero", node.right.span)
+            if isinstance(left, float):
+                result = left / right
+            else:
+                # Int division drops the fractional part (rounds toward zero): -7 / 2 is -3.
+                result = abs(left) // abs(right)
+                if (left < 0) != (right < 0):
+                    result = -result
+
+        if isinstance(result, float):
+            if not math.isfinite(result):
+                raise self._fail("E3003", "The result of this operation is too large for a Float", node.span)
+            return result
+        if isinstance(result, int):
+            return self._int(result, node.span)
+        if self._text_limit is not None and len(result) > self._text_limit:
+            raise self._fail(
+                "E3006",
+                f"The result of this operation is longer than {self._text_limit} characters",
+                node.span,
+                hint="This environment limits the length of a Text value.",
+            )
+        return result
+
+    def _int(self, value: int, span: Span) -> int:
+        if not INT_MIN <= value <= INT_MAX:
+            raise self._fail(
+                "E3002",
+                "The result of this operation does not fit in an Int",
+                span,
+                hint=f"Int holds whole numbers from {INT_MIN} to {INT_MAX}.",
+            )
+        return value
+
+    def _call(self, node: ast.Call, environment: Environment) -> Value | None:
+        arguments = [self._evaluate(argument, environment) for argument in node.arguments]
+        function = self._functions.get(node.callee)
+        if function is not None:
+            return self._invoke(function, arguments, node.span)
+
+        # Built-in functions.
+        value = arguments[0]
+        if node.callee == "print":
+            self._write(format_value(value) + "\n")
+            return None
+        if node.callee == "to_text":
+            return format_value(value)
+        if node.callee == "to_float":
+            return float(value)
+        if node.callee == "to_int":
+            # Drops the fractional part (rounds toward zero), like Int division.
+            whole = math.trunc(value)
+            if not INT_MIN <= whole <= INT_MAX:
+                raise self._fail(
+                    "E3005",
+                    f"{format_value(value)} is outside the range of Int",
+                    node.arguments[0].span,
+                    hint=f"Int holds whole numbers from {INT_MIN} to {INT_MAX}.",
+                )
+            return whole
+        raise TypeError(f"call to '{node.callee}' reached the interpreter")
+
+
+def _unparse(node: ast.Expr) -> str:
+    """An expression written back as source text, for contract diagnostics."""
+    if isinstance(node, ast.TextLiteral):
+        return show_value(node.value)
+    if isinstance(node, (ast.IntLiteral, ast.FloatLiteral, ast.BoolLiteral)):
+        return format_value(node.value)
+    if isinstance(node, ast.Name):
+        return node.name
+    if isinstance(node, ast.Group):
+        return f"({_unparse(node.expression)})"
+    if isinstance(node, ast.Unary):
+        separator = " " if node.operator == "not" else ""
+        return f"{node.operator}{separator}{_unparse(node.operand)}"
+    if isinstance(node, ast.Binary):
+        return f"{_unparse(node.left)} {node.operator} {_unparse(node.right)}"
+    return f"{node.callee}({', '.join(_unparse(argument) for argument in node.arguments)})"
+
+
+def run(checked: CheckedProgram, write: Callable[[str], object], *, text_limit: int | None = None) -> None:
+    """Runs a program that passed the static checks."""
+    Interpreter(checked, write, text_limit).run()

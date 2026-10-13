@@ -1,0 +1,20 @@
+{
+  "name": "nexora-servidor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "start": "node --env-file=.env src/index.js",
+    "dev": "node --env-file=.env --watch src/index.js",
+    "migrate": "node --env-file=.env src/migrate.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "mysql2": "^3.11.0"
+  }
+}

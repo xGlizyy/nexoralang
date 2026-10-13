@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexora.invalid/schemas/nexora-spec.schema.json",
+  "title": "nexora.spec/1: the language specification, or one section of it",
+  "type": "object",
+  "required": [
+    "schema",
+    "nexora_version",
+    "available",
+    "spec_version",
+    "language",
+    "sections",
+    "section"
+  ],
+  "properties": {
+    "schema": {
+      "const": "nexora.spec/1"
+    },
+    "nexora_version": {
+      "type": "string"
+    },
+    "available": {
+      "type": "boolean",
+      "description": "False when NEXORA was installed without its documentation."
+    },
+    "spec_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "language": {
+      "const": "es",
+      "description": "The specification is written in Spanish."
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "level"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              2,
+              3
+            ]
+          }
+        }
+      }
+    },
+    "section": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "title",
+            "text"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string",
+              "description": "Markdown."
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "$defs": {}
+}

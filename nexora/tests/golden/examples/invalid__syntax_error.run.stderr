@@ -1,0 +1,42 @@
+syntax error[E1101]: Unexpected token
+ --> examples/invalid/syntax_error.nex:6:9
+  |
+6 |     let = "missing name"
+  |         ^ Expected a variable name after 'let', found '='
+
+syntax error[E1101]: Unexpected token
+ --> examples/invalid/syntax_error.nex:7:15
+  |
+7 |     let total 10
+  |               ^^ Expected '=' and a value for 'total', found the number 10
+  = hint: A variable must be given a value when it is declared.
+
+syntax error[E1101]: Unexpected token
+ --> examples/invalid/syntax_error.nex:8:32
+  |
+8 |     print("missing parenthesis"
+  |                                ^ Expected ')' to close the call, found the end of line
+  = note: The '(' was opened at line 8, column 10.
+
+syntax error[E1101]: Unexpected token
+ --> examples/invalid/syntax_error.nex:9:25
+  |
+9 |     let chained = 1 < 2 < 3
+  |                         ^ Comparisons cannot be chained
+  = hint: Join two comparisons with 'and': a < b and b < c
+
+syntax error[E1103]: Reserved word
+  --> examples/invalid/syntax_error.nex:10:5
+   |
+10 |     var counter = 0
+   |     ^^^ 'var' is reserved for a future version of NEXORA and is not implemented yet
+   = hint: Variables cannot be reassigned in this version; declare a new one with 'let'.
+
+syntax error[E1101]: Unexpected token
+  --> examples/invalid/syntax_error.nex:14:12
+   |
+14 | fn broken(a, b: Int) -> Int {
+   |            ^ Expected ':' and a type for the parameter 'a', found ','
+   = hint: Every parameter states its type: a: Int
+
+error: examples/invalid/syntax_error.nex: not run because of 6 errors

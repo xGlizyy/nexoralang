@@ -1,0 +1,324 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexora.invalid/schemas/nexora-symbols.schema.json",
+  "title": "nexora.symbols/1: the names a program declares and where they are used",
+  "type": "object",
+  "required": [
+    "schema",
+    "nexora_version",
+    "file",
+    "ok",
+    "diagnostics",
+    "complete",
+    "filter",
+    "symbols",
+    "builtins"
+  ],
+  "properties": {
+    "schema": {
+      "const": "nexora.symbols/1"
+    },
+    "nexora_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "file": {
+      "type": "string",
+      "description": "The name the source was given. A label, not necessarily a path."
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "True when the static analysis found no errors."
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "complete": {
+      "type": "boolean",
+      "description": "True when the analysis covers the whole file. False when syntax errors left out the statements and functions that have them, or when there is no structure at all."
+    },
+    "filter": {
+      "type": "object",
+      "required": [
+        "name",
+        "function"
+      ],
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "function": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "symbols": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/symbol"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Partial when 'complete' is false. Null when the source has lexical errors."
+    },
+    "builtins": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/builtin"
+      }
+    }
+  },
+  "$defs": {
+    "span": {
+      "description": "A region of the source. Lines and columns start at 1; the end is exclusive. Columns count Unicode code points.",
+      "type": "object",
+      "required": [
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": [
+        "severity",
+        "category",
+        "code",
+        "message",
+        "label",
+        "hint",
+        "notes",
+        "file",
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "severity": {
+          "const": "error"
+        },
+        "category": {
+          "enum": [
+            "contract",
+            "file",
+            "lexical",
+            "runtime",
+            "semantic",
+            "syntax",
+            "type"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^E[0-9]{4}$",
+          "description": "Stable identifier of the problem."
+        },
+        "message": {
+          "type": "string",
+          "description": "Fixed title of the code."
+        },
+        "label": {
+          "type": "string",
+          "description": "What is wrong in this particular case."
+        },
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A suggested fix, only when a rule of the language supports it."
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Related information."
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    },
+    "param": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "symbol": {
+      "type": "object",
+      "required": [
+        "name",
+        "category",
+        "type",
+        "function",
+        "declaration",
+        "scope",
+        "references"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "function",
+            "parameter",
+            "variable"
+          ]
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Its type; for a function, its return type. Null if it could not be determined."
+        },
+        "function": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The function it is declared in. Null for a function."
+        },
+        "declaration": {
+          "$ref": "#/$defs/span"
+        },
+        "scope": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The block where the name is visible. Null for a function (visible everywhere)."
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/span"
+          },
+          "description": "Every use the checker resolved to this symbol."
+        },
+        "signature": {
+          "type": "string",
+          "description": "Functions only."
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/param"
+          },
+          "description": "Functions only."
+        },
+        "return_type": {
+          "type": "string",
+          "description": "Functions only."
+        }
+      }
+    },
+    "builtin": {
+      "type": "object",
+      "required": [
+        "name",
+        "signature",
+        "params",
+        "return_type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/param"
+          }
+        },
+        "return_type": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

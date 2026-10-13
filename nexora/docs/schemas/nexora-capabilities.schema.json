@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexora.invalid/schemas/nexora-capabilities.schema.json",
+  "title": "nexora.capabilities/1: what this version of NEXORA is",
+  "type": "object",
+  "required": [
+    "schema",
+    "nexora_version",
+    "language",
+    "diagnostics",
+    "limits",
+    "schemas",
+    "analysis_executes_code"
+  ],
+  "properties": {
+    "schema": {
+      "const": "nexora.capabilities/1"
+    },
+    "nexora_version": {
+      "type": "string"
+    },
+    "language": {
+      "type": "object",
+      "required": [
+        "keywords",
+        "reserved_words",
+        "types",
+        "builtins"
+      ],
+      "properties": {
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reserved_words": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "builtins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/builtin"
+          }
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "category"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer"
+      }
+    },
+    "schemas": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "analysis_executes_code": {
+      "const": false
+    }
+  },
+  "$defs": {
+    "param": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "builtin": {
+      "type": "object",
+      "required": [
+        "name",
+        "signature",
+        "params",
+        "return_type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/param"
+          }
+        },
+        "return_type": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

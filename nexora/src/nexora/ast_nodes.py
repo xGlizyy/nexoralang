@@ -1,0 +1,190 @@
+"""Abstract syntax tree of a NEXORA program.
+
+Nodes are immutable and carry the span of the source text they came from, so later
+stages (and external tools, through `to_dict`) can point back at the code.
+
+The field names of these classes are the field names of the `nex inspect` JSON output,
+documented in docs/inspect-schema.md. Renaming or removing one changes that schema.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, fields
+
+from .diagnostics import Span
+
+
+@dataclass(frozen=True)
+class Node:
+    span: Span
+
+
+# Expressions
+
+@dataclass(frozen=True)
+class IntLiteral(Node):
+    value: int
+
+
+@dataclass(frozen=True)
+class FloatLiteral(Node):
+    value: float
+
+
+@dataclass(frozen=True)
+class TextLiteral(Node):
+    value: str
+
+
+@dataclass(frozen=True)
+class BoolLiteral(Node):
+    value: bool
+
+
+@dataclass(frozen=True)
+class Name(Node):
+    """A reference to a variable or a parameter (or to `result` inside `ensures`)."""
+    name: str
+
+
+@dataclass(frozen=True)
+class Unary(Node):
+    """`-operand` or `not operand`."""
+    operator: str
+    operand: Expr
+
+
+@dataclass(frozen=True)
+class Binary(Node):
+    """Arithmetic (`+ - * /`), comparison (`== != < <= > >=`) or logic (`and`, `or`)."""
+    operator: str
+    operator_span: Span
+    left: Expr
+    right: Expr
+
+
+@dataclass(frozen=True)
+class Group(Node):
+    """A parenthesised expression."""
+    expression: Expr
+
+
+@dataclass(frozen=True)
+class Call(Node):
+    callee: str
+    callee_span: Span
+    arguments: tuple[Expr, ...]
+
+
+Expr = IntLiteral | FloatLiteral | TextLiteral | BoolLiteral | Name | Unary | Binary | Group | Call
+EXPRESSION_NODES = (IntLiteral, FloatLiteral, TextLiteral, BoolLiteral, Name, Unary, Binary, Group, Call)
+
+
+# Types
+
+@dataclass(frozen=True)
+class TypeRef(Node):
+    """A type written in the source: `Int`, `Text`..."""
+    name: str
+
+
+# Statements
+
+@dataclass(frozen=True)
+class Let(Node):
+    name: str
+    name_span: Span
+    declared_type: TypeRef | None
+    value: Expr
+
+
+@dataclass(frozen=True)
+class Assign(Node):
+    """`name = value`. Parsed so it can be rejected with a precise message: variables are immutable."""
+    name: str
+    name_span: Span
+    value: Expr
+
+
+@dataclass(frozen=True)
+class Return(Node):
+    value: Expr | None
+
+
+@dataclass(frozen=True)
+class If(Node):
+    condition: Expr
+    then_block: Block
+    # A Block for `else { ... }`, another If for `else if ...`, or None.
+    else_branch: Block | If | None
+
+
+@dataclass(frozen=True)
+class ExprStatement(Node):
+    expression: Expr
+
+
+@dataclass(frozen=True)
+class Block(Node):
+    """`{ ... }`. A block opens a new scope; it is also a statement."""
+    statements: tuple[Statement, ...]
+
+
+Statement = Let | Assign | Return | If | ExprStatement | Block
+
+
+# Declarations
+
+@dataclass(frozen=True)
+class Param(Node):
+    name: str
+    name_span: Span
+    type: TypeRef
+
+
+@dataclass(frozen=True)
+class Contract(Node):
+    """A `requires` or `ensures` clause at the start of a function body."""
+    # "requires" or "ensures". Not called 'kind': that is the name of the node type in the JSON form.
+    clause: str
+    condition: Expr
+
+
+@dataclass(frozen=True)
+class Function(Node):
+    name: str
+    name_span: Span
+    params: tuple[Param, ...]
+    return_type: TypeRef
+    contracts: tuple[Contract, ...]
+    body: Block
+
+
+@dataclass(frozen=True)
+class Program(Node):
+    functions: tuple[Function, ...]
+
+
+def to_dict(node, types: dict[int, str] | None = None):
+    """Plain dictionaries and lists for a node, ready for `json.dumps`.
+
+    `types` maps `id(expression node)` to the type the checker computed for it. When given,
+    every expression gets a "type" field (null if the checker could not determine it).
+    """
+    if isinstance(node, Span):
+        return {
+            "line": node.line,
+            "column": node.column,
+            "end_line": node.end_line,
+            "end_column": node.end_column,
+        }
+    if isinstance(node, Node):
+        result = {"kind": type(node).__name__}
+        for field in fields(node):
+            result[field.name] = to_dict(getattr(node, field.name), types)
+        if types is not None and isinstance(node, EXPRESSION_NODES):
+            result["type"] = types.get(id(node))
+        return result
+    if isinstance(node, tuple):
+        return [to_dict(item, types) for item in node]
+    return node
