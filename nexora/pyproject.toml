@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nexora"
+name = "nexora-lang"
 description = "Reference interpreter and command-line tool for the NEXORA programming language."
 readme = "README.md"
 license = "MIT"

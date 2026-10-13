@@ -1,0 +1,4 @@
+# Copied from the repository by scripts/sync.js before packing or testing.
+python/nexora/
+LICENSE
+*.tgz

@@ -1,7 +1,8 @@
 # Instalación
 
-NEXORA se instala desde el código fuente. No está publicado en PyPI ni en ningún otro repositorio
-de paquetes.
+NEXORA se instala desde el código fuente. **Todavía no está publicado** en PyPI ni en npm: los
+paquetes para ambos están preparados y probados en local, pero no subidos
+([paquetes para pip y npm](#paquetes-para-pip-y-npm)).
 
 ## Requisitos
 
@@ -19,6 +20,7 @@ NEXORA funciona sin conexión.
 | Entorno | Estado |
 |---------|--------|
 | Windows 11, Python 3.12 | **Comprobado**: instalación en modo desarrollo en un entorno limpio, instalación desde el paquete generado, y batería de pruebas completa |
+| Windows 11, Node.js 24, paquete de npm | **Comprobado**: generado con `npm pack`, instalado desde el archivo y usado. No publicado |
 | Linux | **No comprobado.** Las instrucciones siguen el procedimiento estándar de Python. El flujo de integración continua preparado en `.github/workflows/` ejecutaría las pruebas en Linux, pero todavía no se ha ejecutado nunca |
 | macOS | **No comprobado** |
 | Python 3.11 y 3.13 | **No comprobado.** El código no usa nada posterior a Python 3.11 |
@@ -103,15 +105,69 @@ python -m pip install build
 python -m build
 ```
 
-Esto crea dos archivos en `dist/`: `nexora-0.2.0-py3-none-any.whl` y `nexora-0.2.0.tar.gz`. El
+Esto crea dos archivos en `dist/`: `nexora_lang-0.2.0-py3-none-any.whl` y `nexora_lang-0.2.0.tar.gz`. El
 primero puede instalarse en cualquier entorno con Python 3.11 o superior:
 
 ```bash
-python -m pip install dist/nexora-0.2.0-py3-none-any.whl
+python -m pip install dist/nexora_lang-0.2.0-py3-none-any.whl
 ```
 
 El *wheel* contiene solo el intérprete y el comando `nex`. Los ejemplos, la documentación y las
 pruebas están en el archivo `.tar.gz` y en el repositorio.
+
+## Paquetes para pip y npm
+
+El comando `nex` puede distribuirse por dos vías. El paquete se llama **`nexora-lang`** en las dos,
+porque el nombre `nexora` ya pertenece a otros proyectos en PyPI y en npm. El comando sigue siendo
+`nex`.
+
+**Ninguno de los dos está publicado.** Las órdenes `pip install nexora-lang` y
+`npm install -g nexora-lang` no funcionarán hasta que alguien con cuenta en esos registros los suba.
+Lo que sí se ha comprobado, en Windows 11, es que los dos paquetes se generan, se instalan desde el
+archivo local y dejan un comando `nex` que funciona.
+
+| | pip | npm |
+|-|-----|-----|
+| Paquete | `nexora-lang` (directorio `nexora/`) | `nexora-lang` (directorio `npm/`, en la raíz del repositorio) |
+| Qué contiene | El intérprete y los comandos `nex` y `nex-mcp` | Una copia del intérprete y un lanzador en JavaScript |
+| Qué necesita | Python 3.11 o superior | Node.js 18 o superior **y Python 3.11 o superior** |
+| Una vez publicado | `pipx install nexora-lang` | `npm install -g nexora-lang` |
+
+El paquete de npm **no elimina la dependencia de Python**: el intérprete está escrito en Python. El
+lanzador busca un Python 3.11+ en la máquina (`py -3` en Windows, `python3`, `python` y, en Windows,
+las carpetas del instalador oficial), ejecuta con él el intérprete incluido en el paquete, y pasa
+tal cual los argumentos, la salida y el código de salida. Si no encuentra ninguno lo explica y
+termina con el código `127`. La variable `NEXORA_PYTHON` permite elegir uno. No incluye el servidor
+MCP.
+
+### Generar e instalar el paquete de npm en local
+
+Desde el directorio `npm/`:
+
+```bash
+npm test                 # copia el intérprete al paquete y ejecuta las pruebas del lanzador
+npm pack                 # genera nexora-lang-0.2.0.tgz
+npm install -g ./nexora-lang-0.2.0.tgz
+nex --version
+```
+
+### Publicar
+
+Requiere una cuenta en cada registro y es irreversible en la práctica (una versión publicada no
+puede reutilizarse). Antes, la batería de pruebas tiene que pasar.
+
+```bash
+# PyPI, desde nexora/
+python -m pip install build twine
+python -m build
+python -m twine upload dist/*
+
+# npm, desde npm/
+npm login
+npm publish
+```
+
+Las credenciales se introducen al ejecutar esas órdenes; no se guardan en el repositorio.
 
 ## Problemas frecuentes
 
@@ -131,7 +187,7 @@ pruebas están en el archivo `.tar.gz` y en el repositorio.
 ## Desinstalar
 
 ```bash
-python -m pip uninstall nexora
+python -m pip uninstall nexora-lang
 ```
 
 O, simplemente, borra la carpeta `.venv`: todo lo instalado está dentro de ella.

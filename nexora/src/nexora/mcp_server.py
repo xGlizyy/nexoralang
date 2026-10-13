@@ -2,7 +2,7 @@
 
 It needs the official MCP Python SDK, which is NOT a dependency of NEXORA:
 
-    python -m pip install "nexora[mcp]"
+    python -m pip install "nexora-lang[mcp]"
 
 and it is started by the assistant, over standard input and output:
 
@@ -64,7 +64,9 @@ def _source(source: str, filename: str) -> None:
 def build_server():
     """Creates the MCP server with its tools. Raises RuntimeError if the SDK is not installed."""
     if MCPServer is None:
-        raise RuntimeError('The MCP server needs the MCP SDK. Install it with: python -m pip install "nexora[mcp]"')
+        raise RuntimeError(
+            'The MCP server needs the MCP SDK. Install it with: python -m pip install "nexora-lang[mcp]"'
+        )
 
     server = MCPServer("nexora", instructions=INSTRUCTIONS, version=__version__)
     # Every tool only reads its arguments and computes: no side effects, no outside world.

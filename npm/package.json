@@ -1,0 +1,31 @@
+{
+  "name": "nexora-lang",
+  "version": "0.2.0",
+  "description": "The nex command of the NEXORA programming language. Runs the reference interpreter, which needs Python 3.11 or newer.",
+  "license": "MIT",
+  "bin": {
+    "nex": "bin/nex.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "python/",
+    "!python/**/__pycache__/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "sync": "node scripts/sync.js",
+    "prepack": "node scripts/sync.js",
+    "test": "node scripts/sync.js && node --test \"test/*.test.js\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "nexora",
+    "programming-language",
+    "interpreter",
+    "cli"
+  ]
+}

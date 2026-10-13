@@ -43,7 +43,7 @@ def test_version(capsys):
 
 def test_version_matches_the_installed_package():
     from importlib.metadata import version
-    assert version("nexora") == __version__
+    assert version("nexora-lang") == __version__
 
 
 def test_help(capsys):

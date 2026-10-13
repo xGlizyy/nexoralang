@@ -28,6 +28,9 @@ publicar una nueva.
 ### Añadido
 
 - **Licencia MIT** (`LICENSE`).
+- **Paquete de npm** (`npm/`, nombre `nexora-lang`): instala el comando `nex` con un lanzador que
+  ejecuta el intérprete incluido usando el Python 3.11+ de la máquina. Preparado y probado en
+  local; **no publicado**.
 - **`nex context`**: resumen de un programa (firmas, contratos, variables, llamadas entre
   funciones, características usadas, diagnósticos), en texto o JSON. No ejecuta el programa.
 - **`nex symbols`**: funciones, parámetros y variables con su tipo, su ámbito, su declaración y
@@ -79,6 +82,11 @@ publicar una nueva.
 
 ### Cambios incompatibles
 
+- El paquete de Python pasa a llamarse `nexora-lang` (antes `nexora`), porque `nexora` ya existe en
+  PyPI. El comando (`nex`) y el módulo (`import nexora`) no cambian. Cómo actualizar una
+  instalación en modo desarrollo: `python -m pip uninstall nexora` y `python -m pip install -e .`.
+  Los archivos generados se llaman ahora `nexora_lang-0.2.0…`, y el extra opcional se instala con
+  `nexora-lang[mcp]`.
 - En el documento de `nex inspect`, con errores de sintaxis, `program` es ahora un árbol parcial y
   no `null`. Sigue siendo `null` con errores léxicos o si el archivo no puede leerse. Cómo
   actualizar: para saber si un programa es válido, usa `ok`; para saber si el árbol cubre todo el

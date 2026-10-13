@@ -12,7 +12,7 @@ import sys
 
 import pytest
 
-mcp = pytest.importorskip("mcp", reason="the MCP SDK is optional: pip install 'nexora[mcp]'")
+mcp = pytest.importorskip("mcp", reason="the MCP SDK is optional: pip install 'nexora-lang[mcp]'")
 
 from mcp import Client, StdioServerParameters  # noqa: E402
 
@@ -229,7 +229,7 @@ def test_the_server_exits_when_its_input_is_closed():
 def test_without_the_sdk_the_server_explains_how_to_install_it(monkeypatch, capsys):
     monkeypatch.setattr(mcp_server, "MCPServer", None)
     assert mcp_server.main() == 1
-    assert 'pip install "nexora[mcp]"' in capsys.readouterr().err
+    assert 'pip install "nexora-lang[mcp]"' in capsys.readouterr().err
 
 
 def test_the_language_core_does_not_need_the_sdk():

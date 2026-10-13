@@ -48,7 +48,7 @@ Editor  ⇄  servidor LSP (nuevo módulo, opcional)  ⇄  nexora.tooling  ⇄  l
 ```
 
 - Un módulo aparte, `src/nexora/lsp_server.py`, con su dependencia declarada como opcional
-  (`pip install "nexora[lsp]"`), igual que el servidor MCP. El núcleo no dependería de él.
+  (`pip install "nexora-lang[lsp]"`), igual que el servidor MCP. El núcleo no dependería de él.
 - Una biblioteca que implemente el protocolo (por ejemplo `pygls`), para no escribir a mano el
   transporte JSON-RPC. Habría que comprobar su versión y su interfaz vigentes antes de empezar.
 - Sincronización de documentos completa (el editor envía el texto entero en cada cambio): los
