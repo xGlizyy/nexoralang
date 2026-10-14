@@ -135,7 +135,7 @@ tenga o no errores el programa.
 | `contract_violation` | Una condición `requires` o `ensures` fue falsa | Lo escrito hasta el fallo |
 | `timeout` | Superó el tiempo máximo y se detuvo | Vacío: el proceso se mató |
 | `output_limit` | Escribió más de lo permitido y se detuvo | Los primeros bytes, hasta el límite |
-| `memory_limit` | Necesitó más memoria de la permitida (solo donde el sistema operativo la limita) | Lo escrito hasta entonces |
+| `memory_limit` | Necesitó más memoria de la permitida (solo donde el sistema operativo la limita). Si la memoria se agotó mientras el programa se ejecutaba, `diagnostics` contiene el `E3007` | Lo escrito hasta entonces |
 
 Un programa con errores **no** es un error HTTP: la petición se atendió correctamente.
 

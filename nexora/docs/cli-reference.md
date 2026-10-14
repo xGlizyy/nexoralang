@@ -244,7 +244,7 @@ Dónde aparece cada cosa:
 | `4` | El archivo no existe, no puede leerse o no es UTF-8 | `run`, `check`, `inspect`, `context`, `symbols`, `test` |
 | `5` | El programa incumplió un contrato durante la ejecución (categoría `contract`) | `run` |
 | `6` | Algún ejemplo no pasó (`failed` o `error`), o no había ningún ejemplo que evaluar | `test` |
-| `70` | Error interno de NEXORA: un fallo de la herramienta, no del programa. Excepción heredada: también cuando el programa agota la memoria | Todos |
+| `70` | Error interno de NEXORA: un fallo de la herramienta, no del programa. Un programa que agota la memoria al ejecutarse da `3` en `run` y `6` en `test`, con el diagnóstico `E3007` | Todos |
 | `130` | Interrumpido con Ctrl+C | Todos |
 
 El código de salida nunca es `0` si el programa no se ejecutó correctamente.

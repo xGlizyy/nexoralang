@@ -140,6 +140,7 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E3004` | Too many nested calls | Más de 1000 llamadas anidadas, o la pila se agotó antes | Suele ser una recursividad que no alcanza su caso base |
 | `E3005` | Conversion out of range | `to_int` de un `Float` que no cabe en un `Int` | Comprueba el valor antes de convertir |
 | `E3006` | Text too long | Un texto construido con `+` supera el límite del entorno donde se ejecuta. Solo ocurre donde se fija un límite, como el playground | Construye textos más cortos |
+| `E3007` | Out of memory | El programa necesitó más memoria de la disponible mientras se ejecutaba. No señala ninguna posición; las notas muestran la cadena de llamadas | Reduce el tamaño de los valores que crea el programa, sobre todo los que crecen en cada llamada |
 
 ### De contrato
 

@@ -109,6 +109,8 @@ def test_memory_limit_is_enforced_by_the_operating_system():
     _, response, _ = worker({"action": "run", "code": DOUBLE, "limits": {"memory_bytes": 256 * 1024 * 1024}})
     assert response["status"] == "memory_limit"
     assert "unreachable" not in response["output"]
+    # It ran out while the program was running: the same status, with its diagnostic (decision 0009).
+    assert [diagnostic["code"] for diagnostic in response["diagnostics"]] == ["E3007"]
 
 
 @POSIX_ONLY

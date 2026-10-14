@@ -23,7 +23,7 @@ EXIT_RUNTIME_ERROR = 3       # the program started and then failed
 EXIT_UNREADABLE_FILE = 4     # the file does not exist or cannot be read as UTF-8
 EXIT_CONTRACT_VIOLATION = 5  # a rule the program declares was broken while running
 EXIT_TEST_FAILED = 6         # nex test: an example did not pass, or there was no example to run
-EXIT_INTERNAL_ERROR = 70     # a bug in NEXORA itself (and, inherited from nex run, MemoryError)
+EXIT_INTERNAL_ERROR = 70     # a bug in NEXORA itself
 EXIT_INTERRUPTED = 130       # stopped by the user with Ctrl+C
 
 _EPILOG = """\
@@ -36,8 +36,7 @@ exit codes:
   5   the program broke a rule it declares while running: a contract
       ('requires', 'ensures') or the condition of a refined type
   6   nex test: an example did not pass, or there was no example to run
-  70  internal error in NEXORA (a bug, please report it); also when a
-      program runs out of memory
+  70  internal error in NEXORA (a bug, please report it)
   130 interrupted with Ctrl+C
 """
 

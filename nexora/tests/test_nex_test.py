@@ -203,16 +203,6 @@ def test_a_defect_of_nexora_is_not_turned_into_a_result(monkeypatch):           
         runs(double("example double(1) == 2"))
 
 
-def test_memory_error_is_not_caught_by_the_engine(monkeypatch):
-    # Decision 0008, 3.4: MemoryError keeps the behaviour of `nex run` (it reaches the internal error).
-    def exhausted(self, function, arguments, site):
-        raise MemoryError
-
-    monkeypatch.setattr(interpreter.Interpreter, "_invoke", exhausted)
-    with pytest.raises(MemoryError):
-        runs(double("example double(1) == 2"))
-
-
 def test_running_main_is_unchanged():
     text = double() + "\nfn main() -> Void {\n    print(double(21))\n}\n"
     analysis = analyze(Source("t.nex", text))
@@ -492,12 +482,6 @@ def test_cli_internal_error_in_a_later_example_writes_no_partial_report(monkeypa
         assert (code, captured.out, len(evaluated)) == (70, "", 2), extra
         assert "internal error: NEXORA hit an unexpected problem" in captured.err
         assert "passed" not in captured.err
-
-
-def test_cli_memory_error_keeps_the_inherited_code_70(monkeypatch, capsys, files):
-    name = str(files.dir / files("ok.nex", double("example double(2) == 4")))
-    code, captured = in_process(monkeypatch, capsys, MemoryError(), name, "--format", "json")
-    assert code == 70 and captured.out == ""
 
 
 def test_cli_ctrl_c_writes_no_report(monkeypatch, capsys, files):                       # [37]

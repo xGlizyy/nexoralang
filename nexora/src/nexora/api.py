@@ -109,6 +109,7 @@ def check_source(source: str, filename: str = DEFAULT_FILENAME) -> dict:
 
 
 NO_LIMITS = Limits()
+_MEMORY_MESSAGE = "The program needed more memory than this environment allows and was stopped."
 
 
 def run_source(source: str, filename: str = DEFAULT_FILENAME, *, limits: Limits = NO_LIMITS) -> dict:
@@ -125,6 +126,9 @@ def run_source(source: str, filename: str = DEFAULT_FILENAME, *, limits: Limits 
     try:
         run(analysis.checked, output.write, text_limit=limits.text_chars)
     except NexoraRuntimeError as error:
+        if error.diagnostic.code == "E3007":
+            # Out of memory while running: the same status as below, now with its diagnostic (decision 0009).
+            return _result("run", MEMORY_LIMIT, filename, (error.diagnostic,), output.text(), _MEMORY_MESSAGE)
         status = CONTRACT_VIOLATION if error.diagnostic.category == CONTRACT else RUNTIME_ERROR
         return _result("run", status, filename, (error.diagnostic,), output.text())
     except _OutputLimitReached:
@@ -133,10 +137,8 @@ def run_source(source: str, filename: str = DEFAULT_FILENAME, *, limits: Limits 
             message=f"The program printed more than {limits.output_bytes} bytes and was stopped.",
         )
     except MemoryError:
-        return _result(
-            "run", MEMORY_LIMIT, filename, output=output.text(),
-            message="The program needed more memory than this environment allows and was stopped.",
-        )
+        # Memory that ran out outside the interpreter, or while building E3007 (decision 0009, 3.5).
+        return _result("run", MEMORY_LIMIT, filename, output=output.text(), message=_MEMORY_MESSAGE)
     return _result("run", SUCCESS, filename, output=output.text())
 
 
@@ -181,9 +183,10 @@ def run_examples(analysis: Analysis, function: str | None = None) -> TestReport:
     the file. `analysis` should come from `analyze(source, require_main=False)`.
 
     Raises tooling.ToolingError("unknown_function") if `function` names no function of a program
-    without static errors. Any exception that is not a diagnostic of the program propagates: a
-    defect of NEXORA, MemoryError or KeyboardInterrupt (decision 0008, 3.4). Since the report is
-    built only at the end, such an exception never leaves a partial report behind."""
+    without static errors. Running out of memory during an example is a diagnostic of the program,
+    E3007 (decision 0009). Any exception that is not a diagnostic of the program propagates: a
+    defect of NEXORA or KeyboardInterrupt (decision 0008, 3.4). Since the report is built only at
+    the end, such an exception never leaves a partial report behind."""
     checked = analysis.checked
     if checked is None:
         return TestReport(analysis, function, NOT_RUN, None)
@@ -297,8 +300,10 @@ def test_source(source: str, filename: str = DEFAULT_FILENAME, *, function: str 
 
     The analysis does not require 'main', and 'main' is never run. `function` keeps only the
     examples declared in that function; the functions they call still check their contracts. A
-    function that does not exist raises tooling.ToolingError("unknown_function"). An internal
-    error is not turned into a document: the exception reaches the caller."""
+    function that does not exist raises tooling.ToolingError("unknown_function"). An example that
+    runs out of memory ends in "error" with E3007, and the next ones are evaluated (decision 0009).
+    An internal error is not turned into a document: the exception reaches the caller, and so does
+    a MemoryError outside the evaluation of an example."""
     analysis = analyze(Source(filename, source), require_main=False)
     return test_document(run_examples(analysis, function))
 

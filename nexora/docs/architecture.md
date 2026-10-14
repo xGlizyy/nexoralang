@@ -150,7 +150,8 @@ Recorre el AST de un programa ya comprobado. No genera ni evalúa código Python
 - **Pila de llamadas**: `_stack` guarda la función y el punto de llamada, para añadir la cadena de
   llamadas a los diagnósticos.
 - **Límite de recursividad**: `MAX_CALL_DEPTH` (1000). Además eleva temporalmente el límite de
-  recursión de Python y captura `RecursionError`, que convierte en el diagnóstico `E3004`.
+  recursión de Python y captura `RecursionError`, que convierte en el diagnóstico `E3004`, y
+  `MemoryError`, que convierte en `E3007` fuera del bloque `except` (decisión 0009).
 
 ## Cómo se representan los errores
 

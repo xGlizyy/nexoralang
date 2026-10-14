@@ -826,6 +826,7 @@ análisis estático no afirma nada sobre ellas:
 | Más de 1000 llamadas anidadas (recursividad sin fin) | `E3004` |
 | `to_int` de un valor que no cabe en un `Int` | `E3005` |
 | Un `Text` más largo que el límite del entorno, si este fija uno | `E3006` |
+| El programa agota la memoria disponible | `E3007` |
 | Condición `requires` falsa | `E4001` |
 | Condición `ensures` falsa | `E4002` |
 | Un valor comprobado con `Percent(x)` que no cumple la condición de su tipo | `E4003` |
@@ -935,6 +936,7 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E3004` | Too many nested calls | `runtime` | Más de 1000 llamadas anidadas |
 | `E3005` | Conversion out of range | `runtime` | `to_int` de un `Float` que no cabe en un `Int` |
 | `E3006` | Text too long | `runtime` | Un `Text` construido con `+` supera el límite fijado por el entorno. `nex run` no fija ninguno; el playground sí |
+| `E3007` | Out of memory | `runtime` | El programa agota la memoria mientras se ejecuta. Sin posición ([decisión 0009](decisions/0009-memoria-agotada.md)) |
 | `E4001` | Precondition violated | `contract` | Una condición `requires` es falsa en una llamada |
 | `E4002` | Postcondition violated | `contract` | Una condición `ensures` es falsa al terminar una función |
 | `E4003` | Refinement violated | `contract` | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado |
@@ -1023,7 +1025,7 @@ La representación del programa (`nex inspect`) está descrita en
 | `4` | El archivo no pudo leerse |
 | `5` | El programa incumplió durante la ejecución una regla que declara: un contrato o la condición de un tipo refinado |
 | `6` | `nex test`: algún ejemplo no pasó, o no había ningún ejemplo que evaluar |
-| `70` | Error interno de NEXORA (un fallo de la herramienta, no del programa). Excepción heredada: también cuando el programa agota la memoria ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md), sección 3.4) |
+| `70` | Error interno de NEXORA (un fallo de la herramienta, no del programa). Un programa que agota la memoria al ejecutarse no da `70`, sino el diagnóstico `E3007` ([decisión 0009](decisions/0009-memoria-agotada.md)) |
 | `130` | Interrumpido con Ctrl+C |
 
 Los comandos, sus opciones y sus formatos de salida están descritos en la

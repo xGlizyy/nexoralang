@@ -114,11 +114,17 @@ class Interpreter:
 
     def _guarded(self, action: Callable[[], Value | None]) -> Value | None:
         """Runs `action` with enough Python stack for MAX_CALL_DEPTH calls, and turns running out of
-        Python's own stack into the program's error E3004 instead of an internal error."""
+        Python's own stack (E3004) or out of memory (E3007) into an error of the program instead of
+        an internal error."""
         previous_limit = sys.getrecursionlimit()
         sys.setrecursionlimit(max(previous_limit, _PYTHON_RECURSION_LIMIT))
         try:
             return action()
+        except MemoryError:
+            # Only take note here. Raised inside this block, E3007 would keep the MemoryError as its
+            # __context__ (even with `from None`), and with it every frame and value of the program
+            # (decision 0009, 3.1). Out of the block, they are no longer referenced.
+            pass
         except RecursionError:
             # Calls combined with deeply nested expressions can exhaust Python's own stack before
             # MAX_CALL_DEPTH is reached. Same error code; the message says what actually happened.
@@ -132,6 +138,15 @@ class Interpreter:
             ) from None
         finally:
             sys.setrecursionlimit(previous_limit)
+        # Only reached after a MemoryError. If building the diagnostic runs out of memory again, that
+        # second MemoryError leaves unconverted (decision 0009, 3.5).
+        raise self._fail(
+            "E3007",
+            "The program needed more memory than is available.",
+            None,
+            hint="Reduce the size of values created by the program, especially values that grow with "
+                 "each function call.",
+        )
 
     # Errors
 
@@ -473,8 +488,9 @@ def run_example(checked: CheckedProgram, example: ast.Example, own_calls: list[a
     """Evaluates one example of a program that passed the static checks, in a new interpreter.
 
     A diagnostic of the program (a runtime error or a broken rule, including E3004 for running out
-    of Python's stack) is returned in `error`. Anything else, such as an exception that reveals a
-    defect in NEXORA, MemoryError or KeyboardInterrupt, propagates: decision 0008, 3.4."""
+    of Python's stack and E3007 for running out of memory) is returned in `error`. Anything else,
+    such as an exception that reveals a defect in NEXORA or KeyboardInterrupt, propagates:
+    decisions 0008, 3.4, and 0009."""
     output: list[str] = []
     interpreter = Interpreter(checked, output.append)
     try:

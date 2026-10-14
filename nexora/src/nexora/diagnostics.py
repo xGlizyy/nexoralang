@@ -113,6 +113,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E3004": ("Too many nested calls", RUNTIME),
     "E3005": ("Conversion out of range", RUNTIME),
     "E3006": ("Text too long", RUNTIME),
+    "E3007": ("Out of memory", RUNTIME),
 
     "E4001": ("Precondition violated", CONTRACT),
     "E4002": ("Postcondition violated", CONTRACT),
