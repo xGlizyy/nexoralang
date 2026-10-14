@@ -19,10 +19,12 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
-## Sin publicar — 0.4.0 en desarrollo
+## 0.4.0 — Ejemplos y `nex test`
 
-Trabajo de la rama de la 0.4.0. El número de versión sigue siendo 0.3.1 hasta que se publique.
-Implementa la [decisión 0008](docs/decisions/0008-ejemplos-y-nex-test.md).
+Tercer paso de la línea principal: una función puede llevar casos concretos de lo que debe dar, y
+`nex test` los comprueba sin escribir `main`. Implementa la
+[decisión 0008](docs/decisions/0008-ejemplos-y-nex-test.md) y la
+[decisión 0009](docs/decisions/0009-memoria-agotada.md).
 
 ### Añadido
 
@@ -38,17 +40,35 @@ Implementa la [decisión 0008](docs/decisions/0008-ejemplos-y-nex-test.md).
 - `nex inspect`: nodo `Example` y campo `examples` al final de `Function` (sigue siendo
   `nexora.inspect/2`). `nex context`: campo `examples` y valor `examples` en `features`.
 - Ejemplo `examples/checked_examples.nex`.
+- **`E3007` (Out of memory):** un programa que agota la memoria mientras se ejecuta recibe un
+  diagnóstico de ejecución, con la cadena de llamadas, en vez de un error interno. En `nex test`, el
+  ejemplo queda en `error` y se evalúan los siguientes. `nexora.api.run_source` sigue respondiendo
+  `memory_limit`, con el mismo mensaje, y ahora con el `E3007` en `diagnostics`.
+
+### Corregido
+
+- **Las pruebas de npm y del servidor no se ejecutaban con Node 18 y 20.** `node --test` solo expande
+  patrones como `"test/*.test.js"` desde Node 21, así que con las versiones que declaran los paquetes
+  no encontraba ningún archivo. Los scripts nombran ahora cada archivo, y una prueba comprueba que no
+  falte ninguno. La integración continua prueba npm con Node 18, 20 y 22, y el servidor con Node 20.6
+  y 22.
 
 ### Cambios incompatibles
 
 - `example` pasa de palabra reservada a palabra clave. Ningún programa válido podía usarla como
   nombre.
+- **`nex run` con un programa que agota la memoria termina con `3`, no con `70`**, y la salida de
+  error muestra `runtime error[E3007]` en vez de `internal error`. Con `--format json` escribe el
+  documento `nexora.diagnostics/1`. El código `70` vuelve a significar solo un defecto de NEXORA.
+  Un script que trate `70` como "falta de memoria" debe mirar el código `E3007`.
 
 ### Limitaciones
 
 - `nex test` no tiene límite de tiempo ni de memoria por ejemplo.
-- Si un programa agota la memoria, `nex test` termina con `70`, como `nex run`: es una excepción
-  heredada a la regla de que `70` es un fallo de NEXORA, pendiente de una decisión futura.
+- `E3007` solo aparece si Python llega a quedarse sin memoria. En Linux, el sistema puede matar el
+  proceso antes, sin ningún mensaje.
+- Una memoria agotada fuera de la ejecución (al analizar el programa o al construir un informe)
+  sigue terminando con `70`.
 
 ## 0.3.1 — Revisión de los tipos refinados
 

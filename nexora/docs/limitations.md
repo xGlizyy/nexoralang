@@ -1,6 +1,6 @@
 # Limitaciones
 
-Lo que NEXORA **no** hace en la versión 0.3.1, y los riesgos que conviene conocer antes de usarlo.
+Lo que NEXORA **no** hace en la versión 0.4.0, y los riesgos que conviene conocer antes de usarlo.
 Nada de lo que aparece aquí como "no existe" funciona hoy, aunque se mencione en el borrador de
 diseño o en la hoja de ruta.
 
@@ -52,7 +52,10 @@ lenguaje. No sirve todavía para escribir aplicaciones.
 
 No hay límite de tiempo ni de memoria: un programa puede tardar o consumir memoria sin que el
 intérprete lo detenga (dentro del límite de 1000 llamadas anidadas, eso significa sobre todo
-textos que crecen por concatenación). Se puede interrumpir con Ctrl+C.
+textos que crecen por concatenación). Se puede interrumpir con Ctrl+C. Tampoco `nex test` tiene
+límites por ejemplo. Si Python se queda sin memoria mientras el programa se ejecuta, el programa
+termina con el error `E3007`; pero en Linux el sistema puede matar el proceso antes, sin ningún
+mensaje ([decisión 0009](decisions/0009-memoria-agotada.md)).
 
 ## Rendimiento
 

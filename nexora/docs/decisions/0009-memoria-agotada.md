@@ -1,7 +1,7 @@
 # 0009 — Un programa que agota la memoria al ejecutarse: diagnóstico `E3007`
 
 - **Estado:** aceptada
-- **Versión:** sin decidir (ver "Cuestiones abiertas")
+- **Versión:** 0.4.0
 - **Relacionada con:** la [decisión 0008](0008-ejemplos-y-nex-test.md), en lo que dice sobre
   `MemoryError`: la fila `MemoryError` de la sección 3.4, la fila `70` de la sección 4.2 y la
   "Cuestión pendiente" 1. **No modifica la 0008**; las notas que remitan aquí son un cambio
@@ -215,8 +215,7 @@ Esta decisión no cambia estos comportamientos:
 
 - **Cambio visible:** en un programa que agota la memoria al ejecutarse, el código de salida pasa de
   `70` a `3` (`nex run`) o a `6` (`nex test`), con un texto distinto en la salida de error. Es un
-  cambio incompatible y se anunciará como tal; su impacto real está por evaluar ("Cuestiones
-  abiertas", 1).
+  cambio incompatible y se anuncia como tal en la 0.4.0 ("Cuestiones resueltas", 1).
 - **`nexora.diagnostics/1`:** gana un código. Sin cambio de versión (Protocolo JSON).
 - **`nexora.result/1`:** `memory_limit` igual; `diagnostics` puede tener un elemento en ese estado.
   Añadido, sin cambio de versión.
@@ -246,7 +245,7 @@ No forman parte de la implementación. Cada una tiene su propia autorización:
 | Tarea | Estado | Contenido |
 |-------|--------|-----------|
 | Notas de remisión en la 0008 | Hechas, en el mismo cambio documental que incorpora la 0009, antes de la implementación | "Este comportamiento cambia con la decisión 0009" en la fila `MemoryError` de la sección 3.4 y en la fila `70` de la 4.2, y "Resuelta en la decisión 0009" en la "Cuestión pendiente" 1, con el enlace a la 0009. Ningún otro texto de la 0008 cambia |
-| CHANGELOG | Sin autorizar. Cuando se decida la versión de publicación ("Cuestiones abiertas", 1) | El cambio en "Cambiado" y en "Cambios incompatibles" (`70` → `3` y `70` → `6`) |
+| CHANGELOG | Hecho, en la entrada de la 0.4.0 ("Cuestiones resueltas", 1) | El cambio en "Cambiado" y en "Cambios incompatibles" (`70` → `3` y `70` → `6`) |
 
 ## Pruebas de regresión
 
@@ -305,8 +304,9 @@ Se sustituyen dos pruebas que hoy fijan el comportamiento que esta decisión cam
 `test_memory_error_is_not_caught_by_the_engine` y `test_cli_memory_error_keeps_the_inherited_code_70`,
 ambas en `test_nex_test.py`.
 
-## Cuestiones abiertas
+## Cuestiones resueltas
 
-1. **La versión de publicación** (0.4.x o 0.5.0). Se decidirá después de evaluar el impacto real del
-   cambio de los códigos de salida `70` → `3` (`nex run`) y `70` → `6` (`nex test`): quién puede
-   depender hoy de ese `70` (scripts, CI) y si la 0.4.0 lo habría consolidado al publicarse.
+1. **La versión de publicación: 0.4.0.** `nex test` aparece en la 0.4.0, de modo que ninguna versión
+   publicada ha devuelto `70` en ese caso: el cambio `70` → `6` no rompe nada. El único cambio
+   incompatible es el de `nex run` (`70` → `3`), que ya se comportaba así en la 0.3.1. Publicarlo en la 0.4.0
+   evita fijar en una versión un comportamiento que ya se sabía que iba a cambiar.

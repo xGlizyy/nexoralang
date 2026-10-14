@@ -1,7 +1,7 @@
 # 0008 — Ejemplos en las funciones (`example`) y el comando `nex test`
 
 - **Estado:** aceptada
-- **Versión:** 0.4.0 (prevista)
+- **Versión:** 0.4.0
 
 ## Contexto
 

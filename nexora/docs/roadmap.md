@@ -29,6 +29,8 @@ hay una prueba que falla si deja de funcionar.
 | **Contratos** (`requires`, `ensures`), estables desde la 0.3.0 | `tests/test_contracts.py` |
 | **Explicación de cada regla**, mostrada en el diagnóstico cuando se incumple | `tests/test_contracts.py`, `tests/test_refined_types.py` |
 | **Tipos refinados** (`type ... where ...`): constantes comprobadas sin ejecutar, `Tipo(x)` al ejecutar, cadenas de tipos | `tests/test_refined_types.py` |
+| **Ejemplos en las funciones** (`example`), evaluados con `nex test` | `tests/test_example_clauses.py`, `tests/test_nex_test.py` |
+| Memoria agotada al ejecutar como error del programa (`E3007`) | `tests/test_out_of_memory.py` |
 | Análisis estático separado de la ejecución | `tests/test_checker.py`, `tests/test_security.py` |
 | Intérprete | `tests/test_interpreter.py` |
 | Diagnósticos con código, categoría y posición, en texto y JSON | `tests/test_diagnostics.py`, `tests/test_cli.py` |
@@ -65,7 +67,7 @@ sólido:
 |---|------|--------|
 | 1 | **Estabilizar los contratos** (`requires`, `ensures`): fijar su posición en el código y el nombre `result`, y dejar de marcarlos como experimentales | **Completado en la 0.3.0** ([decisión 0007](decisions/0007-contratos-estables-y-tipos-refinados.md)) |
 | 2 | **Una explicación en lenguaje natural unida a cada condición**, que aparece en el diagnóstico cuando la condición se incumple | **Completado en la 0.3.0**, en contratos y en tipos refinados |
-| 3 | **Casos concretos en la función (`example`)** y un comando que los ejecute sin escribir `main` | En desarrollo: implementado y probado en la rama de la 0.4.0 según la [decisión 0008](decisions/0008-ejemplos-y-nex-test.md), sin publicar |
+| 3 | **Casos concretos en la función (`example`)** y un comando que los ejecute sin escribir `main` | **Completado en la 0.4.0** ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
 | 4 | **Avisar cuando una edición elimina o debilita un requisito** | En investigación: no está decidido cómo detectar que una condición es más débil que otra |
 | 5 | **Tipos refinados** (`type Percent = Int where ...`) | **Completado en la 0.3.0** sobre los tipos integrados. Falta refinar registros, cuando existan |
 | 6 | **Evaluar si los requisitos en el código ayudan a un agente de IA** a no romperlos | Planificado; ver la última fila de [En investigación](#en-investigación) |
@@ -119,7 +121,7 @@ Ideas del diseño original cuyo valor o cuya forma no están decididos:
 | 3 | Documentación, pruebas y calidad | Completada en lo que puede comprobarse en local; integración continua y otras plataformas, pendientes de ejecutar |
 | 4 | Playground: editor web que ejecuta con el intérprete real | Implementada y probada en local; sin desplegar, y con el aislamiento por contenedor sin verificar |
 | 5 | Herramientas para agentes: protocolo JSON, `nex context`, `nex symbols`, API de Python, servidor MCP | Implementada y probada en local; el LSP queda planificado y ningún modelo de IA se ha evaluado |
-| 6 | Requisitos verificables: contratos estables, explicación de las reglas y tipos refinados | Completada (versión 0.3.0). Quedan los pasos 3, 4 y 6 de la [línea principal](#línea-principal-requisitos-verificables) |
+| 6 | Requisitos verificables: contratos estables, explicación de las reglas y tipos refinados | Completada (versión 0.3.0). Los ejemplos (paso 3) llegaron en la 0.4.0; quedan los pasos 4 y 6 de la [línea principal](#línea-principal-requisitos-verificables) |
 
 La web del proyecto (`web/`, en la raíz del repositorio) muestra una versión resumida de esta hoja
 de ruta. Este documento es la referencia.

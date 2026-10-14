@@ -120,7 +120,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.3.1",
+  "nexora_version": "0.4.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -194,7 +194,7 @@ Historial:
 | `nexora.inspect/1` | 0.2.0 | Campos `nexora_version` y `complete`; con errores de sintaxis, `program` es un árbol parcial en vez de `null` |
 | `nexora.inspect/2` | 0.3.0 | El campo `type` de una expresión puede ser el nombre de un tipo refinado (antes era una lista cerrada de cinco tipos). Nodo nuevo `TypeDecl`, campo `types` en `Program` y campo `message` en `Contract` |
 | `nexora.result/1` | Versión actual | |
-| `nexora.test/1` | Sin publicar (0.4.0) | Primera versión |
+| `nexora.test/1` | 0.4.0 | Primera versión |
 | `nexora.symbols/1`, `nexora.context/1`, `nexora.spec/1`, `nexora.capabilities/1` | Versión actual | |
 
 Casi todos los cambios han sido campos añadidos. La excepción es `program` en `nexora.inspect/1`:

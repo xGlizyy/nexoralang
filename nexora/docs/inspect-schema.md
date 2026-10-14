@@ -20,7 +20,7 @@ asistentes de IA). NEXORA no incluye ninguna de esas herramientas: solo proporci
 ```json
 {
   "schema": "nexora.inspect/2",
-  "nexora_version": "0.3.1",
+  "nexora_version": "0.4.0",
   "file": "hello.nex",
   "ok": true,
   "diagnostics": [],
@@ -195,5 +195,5 @@ versión 2, y otra comprueba que este documento los menciona todos.
 | Versión | Publicada en | Cambios |
 |---------|--------------|---------|
 | `nexora.inspect/1` | `nexora` 0.2.0 | Primera versión |
-| `nexora.inspect/2`, sin publicar (0.4.0) | — | Añadidos, sin cambiar la versión: nodo `Example` y campo `examples` al final de `Function` ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
+| `nexora.inspect/2` | `nexora` 0.4.0 | Añadidos, sin cambiar la versión: nodo `Example` y campo `examples` al final de `Function` ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
 | `nexora.inspect/2` | `nexora` 0.3.0 | **Cambio incompatible:** el campo `type` de las expresiones deja de ser una lista cerrada (`Int`, `Float`, `Bool`, `Text`, `Void`) y puede ser el nombre de un tipo refinado. Añadidos: nodo `TypeDecl`, campo `types` en `Program`, campo `message` en `Contract` |
