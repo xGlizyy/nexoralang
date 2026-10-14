@@ -13,6 +13,7 @@ una decisión se revisa, se añade otra que la sustituye y se indica en ambas.
 | [0005](0005-diagnosticos-y-esquemas-json.md) | Categorías de diagnóstico, esquemas JSON versionados y código de salida 5 | Aceptada | Sí |
 | [0006](0006-requisitos-verificables.md) | Característica diferencial: los requisitos son parte verificable del programa | Aceptada | No |
 | [0007](0007-contratos-estables-y-tipos-refinados.md) | Contratos estables, explicación de las reglas y tipos refinados | Aceptada | No |
+| [0008](0008-ejemplos-y-nex-test.md) | Ejemplos en las funciones (`example`) y el comando `nex test` | Aceptada | No |
 
 ## Posibles cambios incompatibles en el futuro
 
