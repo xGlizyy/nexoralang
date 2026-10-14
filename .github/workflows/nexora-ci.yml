@@ -1,4 +1,5 @@
-# Integración continua del núcleo de NEXORA (directorio nexora/).
+# Integración continua de NEXORA: el núcleo (nexora/), el paquete de npm (npm/) y el servidor del
+# playground con la web (servidor/, web/).
 #
 # ESTADO: preparado, nunca ejecutado. El proyecto todavía no tiene repositorio en GitHub.
 # Se activará solo al publicar el repositorio con este archivo en .github/workflows/.
@@ -13,9 +14,9 @@ name: nexora-ci
 on:
   push:
     branches: [main]
-    paths: ["nexora/**", "npm/**", ".github/workflows/nexora-ci.yml"]
+    paths: ["nexora/**", "npm/**", "servidor/**", "web/**", "LICENSE", ".github/workflows/nexora-ci.yml"]
   pull_request:
-    paths: ["nexora/**", "npm/**", ".github/workflows/nexora-ci.yml"]
+    paths: ["nexora/**", "npm/**", "servidor/**", "web/**", "LICENSE", ".github/workflows/nexora-ci.yml"]
 
 permissions:
   contents: read
@@ -79,12 +80,15 @@ jobs:
           /tmp/clean/bin/nex run examples/hello.nex
 
   npm:
-    name: Paquete de npm · ${{ matrix.os }}
+    name: Paquete de npm · Node ${{ matrix.node }} · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        # 18: el mínimo de npm/package.json. 20: anterior a los patrones de `node --test` (Node 21).
+        # 22: LTS.
+        node: ["18", "20", "22"]
     defaults:
       run:
         working-directory: npm
@@ -97,7 +101,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ matrix.node }}
 
       - name: Pruebas del lanzador
         run: npm test
@@ -109,3 +113,40 @@ jobs:
           npm install -g ./nexora-lang-*.tgz
           nex --version
           nex run ../nexora/examples/hello.nex
+
+  servidor:
+    name: Servidor y web · Node ${{ matrix.node }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        # 20.6: el mínimo de servidor/package.json. 22: LTS.
+        node: ["20.6", "22"]
+    defaults:
+      run:
+        working-directory: servidor
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # El playground ejecuta el intérprete con `python -I -m nexora.worker`. NEXORA_PYTHON le dice
+      # cuál: sin él buscaría nexora/.venv, que en el CI no existe.
+      - name: Instalar el intérprete
+        run: python -m pip install -e ../nexora
+
+      - name: Instalar las dependencias del servidor
+        run: npm ci
+
+      - name: Pruebas del servidor y la web
+        env:
+          NEXORA_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: npm test

@@ -147,3 +147,12 @@ test('the package carries every module of the interpreter and nothing else from 
     );
   }
 });
+
+test('npm test runs every test file of the package, and only files that exist', () => {
+  // `node --test` accepts glob patterns only from Node 21, and engines allows Node 18, so the test
+  // script names each file. A file added to test/ but not to the script would never run.
+  const listed = require('../package.json').scripts.test.split(/\s+/).filter((word) => word.startsWith('test/'));
+  const present = fs.readdirSync(__dirname).filter((name) => name.endsWith('.test.js')).map((name) => `test/${name}`);
+  assert.deepEqual(present.filter((file) => !listed.includes(file)), [], 'test files that `npm test` does not run');
+  assert.deepEqual(listed.filter((file) => !present.includes(file)), [], 'files in `npm test` that do not exist');
+});

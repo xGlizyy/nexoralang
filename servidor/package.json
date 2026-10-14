@@ -10,7 +10,7 @@
     "start": "node --env-file=.env src/index.js",
     "dev": "node --env-file=.env --watch src/index.js",
     "migrate": "node --env-file=.env src/migrate.js",
-    "test": "node --test \"test/*.test.js\""
+    "test": "node --test test/package-scripts.test.js test/playground-api.test.js test/playground-frontend.test.js test/web-guide.test.js"
   },
   "dependencies": {
     "express": "^5.1.0",

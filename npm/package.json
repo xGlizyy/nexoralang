@@ -17,7 +17,7 @@
   "scripts": {
     "sync": "node scripts/sync.js",
     "prepack": "node scripts/sync.js",
-    "test": "node scripts/sync.js && node --test \"test/*.test.js\""
+    "test": "node scripts/sync.js && node --test test/launcher.test.js"
   },
   "engines": {
     "node": ">=18"
