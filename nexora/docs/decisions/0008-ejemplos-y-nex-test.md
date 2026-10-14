@@ -180,7 +180,7 @@ pendientes":
 |---------------|--------|-----------|
 | Un diagnóstico de ejecución o de regla (`NexoraRuntimeError`: `E3001`–`E3006`, `E4001`–`E4003`) | El programa | Ejemplo en `error`; se sigue con el siguiente |
 | El programa agota la pila de Python antes del límite de 1000 llamadas (recursividad dentro de expresiones muy anidadas) | El programa | Se convierte en `E3004`, exactamente como hace hoy `Interpreter.run` con `RecursionError`. Ejemplo en `error`; se sigue |
-| `MemoryError` | El programa | **Excepción a la regla general.** `nex test` hereda el comportamiento actual de `nex run`, que no captura `MemoryError` y lo deja llegar al manejador de errores internos: se detiene, sin informe, con `70`. No es un fallo de NEXORA, pero en la 0.4.0 se informa igual que uno. Ver "Cuestiones pendientes" |
+| `MemoryError` | El programa | **Excepción a la regla general.** `nex test` hereda el comportamiento actual de `nex run`, que no captura `MemoryError` y lo deja llegar al manejador de errores internos: se detiene, sin informe, con `70`. No es un fallo de NEXORA, pero en la 0.4.0 se informa igual que uno. Ver "Cuestiones pendientes". Este comportamiento cambia con la [decisión 0009](0009-memoria-agotada.md) |
 | Ctrl+C (`KeyboardInterrupt`) | Quien usa el comando | Se detiene, sin informe, con `130`, como los demás comandos |
 | Cualquier otra excepción de Python | **NEXORA** (un defecto) | Se detiene, sin informe, con `70` y el mismo mensaje de error interno que los demás comandos |
 
@@ -241,7 +241,7 @@ Se conservan todos y se añade uno:
 | `2` | Uso incorrecto, incluida una función inexistente en `--function` |
 | `4` | Estado `not_run` porque el archivo no pudo leerse, con el `E0001`/`E0002` en `diagnostics` (la misma convención que `nex inspect`, `nex context` y `nex symbols`) |
 | **`6`** | **Nuevo.** Estado `failed` o `no_examples`: la prueba no se superó |
-| `70` | Error interno de NEXORA, o el programa agotó la memoria (`MemoryError`, excepción heredada de `nex run`; sección 3.4); sin informe |
+| `70` | Error interno de NEXORA, o el programa agotó la memoria (`MemoryError`, excepción heredada de `nex run`; sección 3.4); sin informe. Este comportamiento cambia con la [decisión 0009](0009-memoria-agotada.md) |
 | `130` | Interrumpido con Ctrl+C; sin informe |
 
 `nex test` **no devuelve `3` ni `5`**: un error de ejecución o una regla incumplida durante un ejemplo
@@ -869,3 +869,4 @@ la documentación comprobados por `tests/test_docs.py`.
    - Lo coherente es decidirlo para todos los comandos a la vez, por ejemplo con un diagnóstico de
      ejecución propio para el agotamiento de memoria. Esa decisión afecta también a `nex run` y queda
      **fuera del alcance de la 0.4.0**, para una decisión futura.
+   - Resuelta en la [decisión 0009](0009-memoria-agotada.md).
