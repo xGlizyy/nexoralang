@@ -19,7 +19,8 @@ explica con ejemplos; todos se comprueban en las pruebas del proyecto.
 
 `Int`, `Float`, `Bool` y `Text` son los **tipos de valor**: los que puede tener una variable, un
 parámetro o una expresión. `Void` solo puede usarse como tipo de retorno de una función que no
-devuelve nada.
+devuelve nada. Un programa puede declarar sus propios tipos de valor a partir de estos: los
+[tipos refinados](#tipos-refinados).
 
 Detalles de cada uno:
 
@@ -252,6 +253,7 @@ garantizar nada que dependa del **valor** concreto. Estas situaciones se detecta
 | Resultado `Int` fuera de rango | `E3002` |
 | Resultado `Float` demasiado grande | `E3003` |
 | `to_int` de un `Float` que no cabe en un `Int` | `E3005` |
+| `Percent(x)` con un valor que no cumple la condición de `Percent` | `E4003` |
 
 <!-- nex:fails exit=3 -->
 ```nex
@@ -274,7 +276,130 @@ runtime error[E3002]: Integer overflow
 error: program.nex: the program stopped because of a runtime error
 ```
 
+## Tipos refinados
+
+Un tipo refinado es un tipo de valor con una regla que cumplen todos sus valores:
+
+<!-- nex:run -->
+```nex
+type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
+type Cents = Int where value >= 0, "An amount of money cannot be negative"
+
+fn apply_discount(price: Cents, percent: Percent) -> Cents {
+    ensures result <= price, "A discount never raises the price"
+    return Cents(price * (100 - percent) / 100)
+}
+
+fn main() -> Void {
+    print(apply_discount(2000, 15))
+}
+```
+
+```text
+1700
+```
+
+- `type Percent = Int where ...` declara el tipo: su **base** (`Int`) y su **condición**, en la que
+  `value` es el valor que se comprueba. Tras una coma puede ir la explicación de la regla.
+- Las firmas dicen ahora más que antes: `apply_discount` no acepta cualquier `Int` como porcentaje,
+  y quien la llama lo ve sin leer el cuerpo.
+- **Todo valor de tipo `Percent` cumple la condición de `Percent`.** Esa es la garantía, y se
+  mantiene en todo el programa.
+
+### Cómo entra un valor en un tipo refinado
+
+Solo hay dos formas, y las dos están escritas en el código:
+
+1. **Una constante.** `apply_discount(2000, 15)` pasa el literal `15` donde se espera un
+   `Percent`. `nex check` evalúa la condición con ese valor **sin ejecutar el programa**, y si no se
+   cumple el programa no llega a ejecutarse:
+
+<!-- nex:check-fails -->
+```nex
+type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
+
+fn main() -> Void {
+    let discount: Percent = 150
+    print(discount)
+}
+```
+
+```text
+type error[E2017]: Value outside refined type
+ --> program.nex:4:29
+  |
+4 |     let discount: Percent = 150
+  |                             ^^^ 150 is not a valid Percent
+  = note: The condition of 'Percent' is false: where value >= 0 and value <= 100
+  = note: The value: 150
+  = note: Reason: A percentage goes from 0 to 100
+
+error: program.nex: check failed with 1 error
+```
+
+2. **La comprobación explícita `Percent(x)`** para cualquier valor calculado. Se hace al ejecutar,
+   y si la condición no se cumple el programa se detiene en esa línea (`E4003`, código de salida
+   `5`). En el ejemplo de arriba, `Cents(...)` comprueba que el precio rebajado no es negativo.
+
+Un valor calculado sin comprobar no se acepta donde se espera un tipo refinado, aunque su tipo sea
+la base:
+
+<!-- nex:check-fails -->
+```nex
+type Percent = Int where value >= 0 and value <= 100
+
+fn main() -> Void {
+    let half = 100 / 2
+    let discount: Percent = half
+    print(discount)
+}
+```
+
+```text
+type error[E2011]: Type mismatch
+ --> program.nex:5:29
+  |
+5 |     let discount: Percent = half
+  |                             ^^^^ Expected Percent, found Int
+  = note: 'discount' is declared as Percent.
+  = hint: Check the value explicitly with Percent(...). The program stops there if the value does not satisfy the condition of Percent.
+
+error: program.nex: check failed with 1 error
+```
+
+La razón es la misma que la de las [conversiones](#conversiones): nada cambia de tipo sin que el
+código lo diga. Cada punto donde una regla puede detener el programa es una llamada `Percent(...)`
+que se ve y se puede buscar.
+
+### Usar valores refinados
+
+- Un `Percent` se acepta en cualquier lugar donde se espera un `Int`: es un `Int` que además cumple
+  una regla.
+- Una operación con valores refinados da un valor de la base: `discount + 10` es un `Int`, porque
+  puede valer 110.
+- Dos tipos refinados diferentes son tipos diferentes, aunque tengan la misma base.
+- Un tipo puede refinar otro tipo refinado: `type Pass = Percent where value >= 50` exige las dos
+  condiciones.
+
+### Lo que la condición puede usar
+
+Solo `value`, literales, operadores y las conversiones integradas (`to_float`, `to_int`,
+`to_text`). No puede llamar a funciones del programa (`E2018`): un tipo refinado describe un valor
+por sí mismo. Una regla que depende de otros datos ("el descuento no puede superar el precio") es
+una relación entre argumentos y se escribe como [contrato](contracts.md).
+
+### Errores de los tipos refinados
+
+| Situación | Código | Cuándo |
+|-----------|--------|--------|
+| Nombre en minúscula, repetido, de un tipo integrado o cadena de tipos sin fin | `E2016` | Sin ejecutar |
+| Condición que no es `Bool`, o que usa otro nombre que `value` | `E2011`, `E2005` | Sin ejecutar |
+| Condición que llama a una función del programa | `E2018` | Sin ejecutar |
+| Constante que no cumple la condición | `E2017` | Sin ejecutar |
+| Valor calculado usado sin `Percent(...)` | `E2011` | Sin ejecutar |
+| `Percent(x)` con un valor que no cumple la condición | `E4003` | Al ejecutar |
+
 ## Lo que no existe
 
-Listas, registros, valores opcionales, tipos definidos por el usuario, genéricos y cualquier otro
+Listas, registros, valores opcionales, alias de tipos sin condición, genéricos y cualquier otro
 tipo compuesto. Están en la [hoja de ruta](roadmap.md) como trabajo previsto, y no funcionan hoy.

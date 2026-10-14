@@ -1,6 +1,7 @@
 # 0004 — Contratos al principio del cuerpo, comprobados en ejecución
 
-- **Estado:** experimental
+- **Estado:** aceptada. Fue experimental en la 0.2; la [decisión 0007](0007-contratos-estables-y-tipos-refinados.md)
+  la declara estable en la 0.3.0 sin cambiar su sintaxis
 - **Versión:** 0.2.0
 
 ## Decisión
@@ -50,3 +51,6 @@
 
 Al ser experimental, pueden cambiar la posición de las cláusulas, el nombre `result` y los nodos
 correspondientes del esquema de `nex inspect` (lo que cambiaría la versión del esquema).
+
+> Resuelto en la [decisión 0007](0007-contratos-estables-y-tipos-refinados.md): la posición de las
+> cláusulas y el nombre `result` se mantienen y pasan a ser estables.

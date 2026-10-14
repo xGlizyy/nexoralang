@@ -37,7 +37,9 @@ _COMPARISON_OPERATORS = ("==", "!=", "<", "<=", ">", ">=")
 _NAME_KEYWORDS = (
     TokenType.FN, TokenType.LET, TokenType.RETURN, TokenType.IF, TokenType.ELSE, TokenType.TRUE,
     TokenType.FALSE, TokenType.AND, TokenType.OR, TokenType.NOT, TokenType.REQUIRES, TokenType.ENSURES,
+    TokenType.TYPE, TokenType.WHERE,
 )
+_DECLARATION_KEYWORDS = (TokenType.FN, TokenType.TYPE)
 _CONTRACT_KEYWORDS = (TokenType.REQUIRES, TokenType.ENSURES)
 _STATEMENT_END = (TokenType.NEWLINE, TokenType.RBRACE, TokenType.EOF)
 
@@ -66,14 +68,18 @@ class Parser:
         When the list is not empty the program is partial: it holds the functions and
         statements that parsed, without the statements that have an error and without the
         functions whose declaration has one. It is for tools; it is never run."""
+        types: list[ast.TypeDecl] = []
         functions: list[ast.Function] = []
         self._skip_newlines()
         try:
             while not self._check(TokenType.EOF):
                 try:
-                    if not self._check(TokenType.FN):
+                    if self._check(TokenType.TYPE):
+                        types.append(self._type_declaration())
+                    elif self._check(TokenType.FN):
+                        functions.append(self._function())
+                    else:
                         raise self._top_level_error()
-                    functions.append(self._function())
                 except ParseError as error:
                     self._record(error)
                     self._nesting = 0
@@ -84,7 +90,7 @@ class Parser:
 
         end = self._peek().span
         start = self._tokens[0].span
-        return ast.Program(start.to(end), tuple(functions)), self._diagnostics
+        return ast.Program(start.to(end), tuple(types), tuple(functions)), self._diagnostics
 
     def _record(self, error: ParseError) -> None:
         """Keeps a syntax error. Stops the whole parse once the limit is reached."""
@@ -145,9 +151,9 @@ class Parser:
     # Recovery
 
     def _synchronize_to_function(self) -> None:
-        """Skips to the next `fn` that starts a line, where a new declaration can begin."""
+        """Skips to the next `fn` or `type` that starts a line, where a new declaration can begin."""
         while not self._check(TokenType.EOF):
-            if self._check(TokenType.FN) and self._starts_line():
+            if self._peek().type in _DECLARATION_KEYWORDS and self._starts_line():
                 return
             self._advance()
 
@@ -178,10 +184,53 @@ class Parser:
         return self._error(
             "E1101",
             f"Expected a function declaration, found {token.describe()}",
-            hint="All code goes inside a function. A program starts with: fn main() -> Void { ... }",
+            hint="At the top level there are only functions and types. "
+                 "All other code goes inside a function: fn main() -> Void { ... }",
         )
 
     # Declarations
+
+    def _type_declaration(self) -> ast.TypeDecl:
+        """`type Name = Base where condition` with an optional `, "explanation"`."""
+        keyword = self._advance()
+        name = self._expect_name("a type name after 'type'")
+        self._expect(TokenType.EQUAL, f"'=' after the type name '{name.lexeme}'",
+                     hint=f"A refined type is written: type {name.lexeme} = Int where value > 0")
+        base = self._type(f"the type that '{name.lexeme}' refines, after '='")
+        self._expect(
+            TokenType.WHERE,
+            f"'where' and the condition that the values of '{name.lexeme}' satisfy",
+            hint="A type without a condition would only be another name for the same type, and NEXORA "
+                 f"does not have those. Write the rule: type {name.lexeme} = {base.name} where ...",
+        )
+        self._depths.clear()
+        if self._peek().type in _STATEMENT_END:
+            raise self._error("E1101", f"Expected a condition after 'where', found {self._peek().describe()}")
+        condition = self._expression()
+        message, end = self._explanation("where", condition.span)
+        self._end_of_statement()
+        return ast.TypeDecl(keyword.span.to(end), name.lexeme, name.span, base, condition, message)
+
+    def _explanation(self, clause: str, end: Span) -> tuple[str | None, Span]:
+        """The optional `, "explanation"` after a condition. Returns it and where the clause ends."""
+        if not self._match(TokenType.COMMA):
+            return None, end
+        token = self._peek()
+        if token.type is not TokenType.STRING:
+            raise self._error(
+                "E1101",
+                f"Expected a text after ',' explaining the rule of '{clause}', found {token.describe()}",
+                hint=f'The explanation is a text literal: {clause} ..., "Why this rule exists"',
+            )
+        self._advance()
+        if not token.value.strip():
+            raise self._error(
+                "E1101",
+                f"The explanation of '{clause}' is empty",
+                token,
+                hint="Write why the rule exists, or remove the ',' and the text.",
+            )
+        return token.value, token.span
 
     def _function(self) -> ast.Function:
         keyword = self._expect(TokenType.FN, "'fn'")
@@ -236,8 +285,9 @@ class Parser:
                         f"Expected a condition after '{keyword.lexeme}', found {self._peek().describe()}",
                     )
                 condition = self._expression()
+                message, end = self._explanation(keyword.lexeme, condition.span)
                 self._end_of_statement()
-                contracts.append(ast.Contract(keyword.span.to(condition.span), keyword.lexeme, condition))
+                contracts.append(ast.Contract(keyword.span.to(end), keyword.lexeme, condition, message))
             except ParseError as error:
                 self._record(error)
                 self._nesting = level
@@ -330,6 +380,18 @@ class Parser:
             )
         if token.type is TokenType.FN:
             raise self._error("E1101", "A function cannot be declared inside another function")
+        if token.type is TokenType.TYPE:
+            raise self._error(
+                "E1101",
+                "A type cannot be declared inside a function",
+                hint="Declare it at the top level of the file, outside any function.",
+            )
+        if token.type is TokenType.WHERE:
+            raise self._error(
+                "E1101",
+                "'where' can only follow the base type in a type declaration",
+                hint="type Percent = Int where value >= 0 and value <= 100",
+            )
 
         expression = self._expression()
         return ast.ExprStatement(expression.span, expression)

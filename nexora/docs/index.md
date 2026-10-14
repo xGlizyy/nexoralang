@@ -18,9 +18,9 @@ resultado real del intérprete.
 
 | Guía | Contenido |
 |------|-----------|
-| [Tipos](types.md) | Los cinco tipos, inferencia, anotaciones, operadores y conversiones |
+| [Tipos](types.md) | Los cinco tipos, inferencia, anotaciones, operadores, conversiones y tipos refinados (`where`) |
 | [Funciones](functions.md) | Parámetros, `return`, rutas de retorno, `if` / `else`, recursividad |
-| [Contratos](contracts.md) | `requires` y `ensures` (experimental) |
+| [Contratos](contracts.md) | `requires` y `ensures`, con la explicación de cada regla |
 
 ## Referencia
 
@@ -55,7 +55,7 @@ resultado real del intérprete.
 | Estado | Significado en esta documentación |
 |--------|-----------------------------------|
 | Sin marca | Implementado y cubierto por pruebas |
-| **Experimental** | Implementado y probado, pero puede cambiar de forma incompatible (los contratos) |
+| **Experimental** | Implementado y probado, pero puede cambiar de forma incompatible (la API de Python, el servidor MCP y el playground; ninguna parte del lenguaje) |
 | **Previsto** | No existe. Solo aparece en [Limitaciones](limitations.md) y en la [hoja de ruta](roadmap.md) |
 
 La documentación está en español. Las palabras del lenguaje y los mensajes de error están en inglés.

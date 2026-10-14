@@ -99,7 +99,7 @@ def build_server():
     def nexora_inspect(source: str, filename: str = tooling.DEFAULT_FILENAME) -> dict[str, Any]:
         """Get the syntax tree of NEXORA source code, with the type of every expression. Does not run it.
 
-        Returns a nexora.inspect/1 document. If the code has syntax errors the tree is
+        Returns a nexora.inspect/2 document. If the code has syntax errors the tree is
         partial and "complete" is false; "program" is null if it has lexical errors. The tree
         can be large; prefer nexora_get_context for an overview.
         """

@@ -1,0 +1,11 @@
+contract error[E4003]: Refinement violated
+ --> examples/failing/refinement_violation.nex:9:12
+  |
+9 |     return Percent(part * 100 / whole)
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^ This value is not a valid Percent
+  = note: The condition of 'Percent' is false: where value >= 0 and value <= 100
+  = note: The value: 125
+  = note: Reason: A percentage goes from 0 to 100
+  = note: In 'as_percent', called at line 14, column 11.
+
+error: examples/failing/refinement_violation.nex: the program stopped because a contract was broken

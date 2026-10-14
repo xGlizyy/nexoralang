@@ -93,7 +93,7 @@ def _field_schema(annotation) -> dict:
     if origin in (typing.Union, types.UnionType):
         options = [option for option in typing.get_args(annotation) if option is not type(None)]
         nullable = len(options) != len(typing.get_args(annotation))
-        kinds = [{"$ref": f"#/$defs/{option.__name__}"} for option in options]
+        kinds = [_field_schema(option) for option in options]
         if nullable:
             kinds.append({"type": "null"})
         return kinds[0] if len(kinds) == 1 else {"oneOf": kinds}
@@ -114,8 +114,9 @@ def node_definitions() -> dict:
             required.append(field.name)
         if node_class in ast.EXPRESSION_NODES:
             properties["type"] = {
-                "enum": ["Int", "Float", "Bool", "Text", "Void", None],
-                "description": "The type the checker computed, or null if the expression has an error.",
+                "type": ["string", "null"],
+                "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a "
+                               "refined type the program declares. Null if the expression has an error.",
             }
             required.append("type")
         definitions[node_class.__name__] = {"type": "object", "required": required, "properties": properties}
@@ -165,9 +166,11 @@ _CONTEXT_FUNCTION = {
         "return_type": {"type": "string"},
         "span": {"$ref": "#/$defs/span"},
         "contracts": {"type": "array", "items": {
-            "type": "object", "required": ["clause", "condition", "line"],
+            "type": "object", "required": ["clause", "condition", "message", "line"],
             "properties": {"clause": {"enum": ["requires", "ensures"]},
                            "condition": {"type": "string", "description": "The condition, as written in the source."},
+                           "message": {**_NULLABLE_STRING, "description": "The explanation written after the "
+                                                                          "condition, if any."},
                            "line": {"type": "integer", "minimum": 1}}}},
         "variables": {"type": "array", "items": {
             "type": "object", "required": ["name", "type", "line"],
@@ -178,6 +181,21 @@ _CONTEXT_FUNCTION = {
         "builtins_called": {"type": "array", "items": {"type": "string"}},
         "called_by": {"type": "array", "items": {"type": "string"}},
         "recursive": {"type": "boolean", "description": "True if the function can reach itself through calls."},
+    },
+}
+
+
+_CONTEXT_TYPE = {
+    "type": "object",
+    "required": ["name", "base", "root", "condition", "message", "line"],
+    "properties": {
+        "name": {"type": "string"},
+        "base": {"type": "string", "description": "The type it refines, as written."},
+        "root": {**_NULLABLE_STRING, "description": "The built-in type its values have. Null when the declaration "
+                                                    "has an error."},
+        "condition": {"type": "string", "description": "The condition after 'where', as written in the source."},
+        "message": {**_NULLABLE_STRING, "description": "The explanation written after the condition, if any."},
+        "line": {"type": "integer", "minimum": 1},
     },
 }
 
@@ -199,8 +217,8 @@ def all_schemas() -> dict[str, dict]:
         _header("nexora.diagnostics/1"), _HEADER_REQUIRED, base,
     )
     inspect = _document(
-        "nexora-inspect", "nexora.inspect/1: the syntax tree of a program",
-        {**_header("nexora.inspect/1"),
+        "nexora-inspect", "nexora.inspect/2: the syntax tree of a program",
+        {**_header("nexora.inspect/2"),
          "complete": _COMPLETE,
          "program": {**nullable({"$ref": "#/$defs/Program"}),
                      "description": "Partial when 'complete' is false. Null when the source has lexical errors."}},
@@ -227,15 +245,17 @@ def all_schemas() -> dict[str, dict]:
                       "description": "False when the source has lexical errors: there is no structure."},
          "complete": _COMPLETE,
          "entry_point": _NULLABLE_STRING,
+         "types": {**nullable({"type": "array", "items": {"$ref": "#/$defs/type"}}),
+                   "description": "The refined types the program declares. Null when there is no structure."},
          "functions": nullable({"type": "array", "items": {"$ref": "#/$defs/function"}}),
          "features": nullable({"type": "array", "items": {"type": "string"}}),
          "reserved_words_used": {**nullable({"type": "array", "items": {"type": "string"}}),
                                  "description": "Words reserved for unimplemented features. Null if the text "
                                                 "could not be split into tokens."},
          "notes": {"type": "array", "items": {"type": "string"}}},
-        [*_HEADER_REQUIRED, "executed", "lines", "analysed", "complete", "entry_point", "functions", "features",
-         "reserved_words_used", "notes"],
-        {**base, "param": _PARAM, "function": _CONTEXT_FUNCTION},
+        [*_HEADER_REQUIRED, "executed", "lines", "analysed", "complete", "entry_point", "types", "functions",
+         "features", "reserved_words_used", "notes"],
+        {**base, "param": _PARAM, "function": _CONTEXT_FUNCTION, "type": _CONTEXT_TYPE},
     )
     spec = _document(
         "nexora-spec", "nexora.spec/1: the language specification, or one section of it",

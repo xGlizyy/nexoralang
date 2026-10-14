@@ -6,7 +6,8 @@ effect a program can have is writing text through `print`.
 The interpreter only accepts a `CheckedProgram`: names and types were verified by the
 checker and are not verified again here. What is checked here is exactly what cannot be
 known before running: division by zero, overflow, conversions out of range, the depth of
-the call stack, and whether the `requires` and `ensures` conditions hold.
+the call stack, whether the `requires` and `ensures` conditions hold, and whether a value
+checked with `Percent(x)` satisfies the condition of its refined type.
 """
 
 from __future__ import annotations
@@ -65,6 +66,8 @@ class Interpreter:
         """`write` receives the text produced by `print`. `text_limit`, if given, is the longest
         Text (in characters) a program may build; a host sets it to bound memory use."""
         self._functions = checked.functions
+        # Refined type -> the declarations whose conditions its values satisfy, root first.
+        self._refined = {name: refined.chain for name, refined in checked.refined.items()}
         self._write = write
         self._text_limit = text_limit
         # The calls in progress: (function name, where it was called from). main has no call site.
@@ -133,6 +136,7 @@ class Interpreter:
                     site,
                     notes=(
                         f"The condition at line {contract.span.line} is false: {self._source_of(contract)}",
+                        *self._reason_note(contract),
                         *self._values_note(function, arguments),
                     ),
                     # The callee never started: the trace begins at the caller.
@@ -151,6 +155,7 @@ class Interpreter:
                 environment.declare("result", result)
             if not self._evaluate(contract.condition, environment):
                 notes = [f"'{function.name}' finished, but its condition is false: {self._source_of(contract)}"]
+                notes.extend(self._reason_note(contract))
                 if result is not None:
                     notes.append(f"It returned: result = {show_value(result)}")
                 notes.extend(self._values_note(function, arguments))
@@ -173,8 +178,38 @@ class Interpreter:
         return (f"It was called with: {values}",)
 
     @staticmethod
+    def _reason_note(contract: ast.Contract) -> tuple[str, ...]:
+        return (f"Reason: {contract.message}",) if contract.message is not None else ()
+
+    @staticmethod
     def _source_of(contract: ast.Contract) -> str:
-        return f"{contract.clause} {_unparse(contract.condition)}"
+        return f"{contract.clause} {unparse(contract.condition)}"
+
+    # Refined types
+
+    def broken_rule(self, chain: tuple[ast.TypeDecl, ...], value: Value) -> ast.TypeDecl | None:
+        """The first declaration in `chain` whose condition `value` does not satisfy, or None."""
+        for declaration in chain:
+            environment = Environment()
+            environment.declare("value", value)
+            if not self._evaluate(declaration.condition, environment):
+                return declaration
+        return None
+
+    def _refine(self, node: ast.Call, value: Value) -> Value:
+        """`Percent(x)`: lets `value` through only if it satisfies the condition of the type."""
+        broken = self.broken_rule(self._refined[node.callee], value)
+        if broken is None:
+            return value
+        # Imported here: the checker is imported by this module at load time.
+        from .checker import refinement_notes
+
+        raise self._fail(
+            "E4003",
+            f"This value is not a valid {node.callee}",
+            node.span,
+            notes=refinement_notes(node.callee, broken, show_value(value)),
+        )
 
     # Statements. Each returns a _Returned when a 'return' ran inside it, and None otherwise.
 
@@ -303,6 +338,8 @@ class Interpreter:
         function = self._functions.get(node.callee)
         if function is not None:
             return self._invoke(function, arguments, node.span)
+        if node.callee in self._refined:
+            return self._refine(node, arguments[0])
 
         # Built-in functions.
         value = arguments[0]
@@ -327,8 +364,8 @@ class Interpreter:
         raise TypeError(f"call to '{node.callee}' reached the interpreter")
 
 
-def _unparse(node: ast.Expr) -> str:
-    """An expression written back as source text, for contract diagnostics."""
+def unparse(node: ast.Expr) -> str:
+    """An expression written back as source text, for contract and refinement diagnostics."""
     if isinstance(node, ast.TextLiteral):
         return show_value(node.value)
     if isinstance(node, (ast.IntLiteral, ast.FloatLiteral, ast.BoolLiteral)):
@@ -336,13 +373,23 @@ def _unparse(node: ast.Expr) -> str:
     if isinstance(node, ast.Name):
         return node.name
     if isinstance(node, ast.Group):
-        return f"({_unparse(node.expression)})"
+        return f"({unparse(node.expression)})"
     if isinstance(node, ast.Unary):
         separator = " " if node.operator == "not" else ""
-        return f"{node.operator}{separator}{_unparse(node.operand)}"
+        return f"{node.operator}{separator}{unparse(node.operand)}"
     if isinstance(node, ast.Binary):
-        return f"{_unparse(node.left)} {node.operator} {_unparse(node.right)}"
-    return f"{node.callee}({', '.join(_unparse(argument) for argument in node.arguments)})"
+        return f"{unparse(node.left)} {node.operator} {unparse(node.right)}"
+    return f"{node.callee}({', '.join(unparse(argument) for argument in node.arguments)})"
+
+
+def broken_rule(chain: tuple[ast.TypeDecl, ...], value: Value) -> ast.TypeDecl | None:
+    """The first declaration in `chain` whose condition `value` does not satisfy, or None.
+
+    Used by the checker on constants. The conditions of refined types call no function of the
+    program, so no program is needed to evaluate them. Raises NexoraRuntimeError if evaluating a
+    condition fails (a division by zero inside it, for instance)."""
+    bare = Interpreter(CheckedProgram(ast.Program(chain[0].span, (), ()), {}, {}), lambda text: None)
+    return bare.broken_rule(chain, value)
 
 
 def run(checked: CheckedProgram, write: Callable[[str], object], *, text_limit: int | None = None) -> None:

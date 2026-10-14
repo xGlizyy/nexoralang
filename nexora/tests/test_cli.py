@@ -276,7 +276,7 @@ def test_inspect_prints_the_program_as_json(program, capsys):
     document = json.loads(captured.out)
     assert captured.err == ""
     assert list(document) == ["schema", "nexora_version", "file", "ok", "diagnostics", "complete", "program"]
-    assert (document["schema"], document["file"], document["ok"]) == ("nexora.inspect/1", path, True)
+    assert (document["schema"], document["file"], document["ok"]) == ("nexora.inspect/2", path, True)
     assert document["complete"] is True
     assert document["program"]["kind"] == "Program"
     assert document["program"]["functions"][0]["name"] == "main"
@@ -347,7 +347,7 @@ def test_process_inspect_is_valid_json_for_every_example():
         name = path.relative_to(EXAMPLES).as_posix()
         result = nex("inspect", f"examples/{name}")
         document = json.loads(result.stdout)
-        assert document["schema"] == "nexora.inspect/1", name
+        assert document["schema"] == "nexora.inspect/2", name
         assert result.stderr == "", name
         # Inspecting never runs the program, so even the examples that fail at run time are 'ok'.
         assert result.returncode == (0 if document["ok"] else 1), name

@@ -39,7 +39,7 @@ DEFAULT_FILENAME = "playground.nex"
 SUCCESS = "success"                         # check: no errors. run: the program finished
 INVALID = "invalid"                         # static errors: the program was not started
 RUNTIME_ERROR = "runtime_error"             # the program started and failed
-CONTRACT_VIOLATION = "contract_violation"   # a 'requires' or 'ensures' condition was false
+CONTRACT_VIOLATION = "contract_violation"   # a contract or a refined type was broken while running
 OUTPUT_LIMIT = "output_limit"               # the program printed more than the host allows
 MEMORY_LIMIT = "memory_limit"               # the program needed more memory than the host allows
 

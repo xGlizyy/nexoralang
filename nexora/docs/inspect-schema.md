@@ -1,10 +1,11 @@
 # Esquema de `nex inspect`
 
-- **Nombre y versión del esquema:** `nexora.inspect/1`
-- **Disponible desde:** `nexora` 0.2.0
+- **Nombre y versión del esquema:** `nexora.inspect/2`
+- **Disponible desde:** `nexora` 0.3.0 (la versión 1 existió en la 0.2.0; los cambios están en el
+  [historial](#historial))
 
 `nex inspect archivo.nex` escribe en la salida estándar un único documento JSON con la estructura
-del programa: funciones, parámetros, contratos, sentencias y expresiones, cada una con su posición
+del programa: tipos refinados, funciones, parámetros, contratos, sentencias y expresiones, cada una con su posición
 y, cuando se conoce, su tipo.
 
 El comando **no ejecuta el programa**. Realiza el análisis léxico, sintáctico y estático, igual que
@@ -18,8 +19,8 @@ asistentes de IA). NEXORA no incluye ninguna de esas herramientas: solo proporci
 
 ```json
 {
-  "schema": "nexora.inspect/1",
-  "nexora_version": "0.2.0",
+  "schema": "nexora.inspect/2",
+  "nexora_version": "0.3.0",
   "file": "hello.nex",
   "ok": true,
   "diagnostics": [],
@@ -68,8 +69,8 @@ Hasta este cambio, `program` era `null` también con errores de sintaxis. Para s
 es válido hay que mirar `ok`, no si `program` existe.
 
 Que `ok` sea `true` significa que el programa supera el análisis estático. No dice nada sobre lo
-que ocurrirá al ejecutarlo: divisiones por cero, desbordamientos y contratos incumplidos solo se
-detectan con `nex run`.
+que ocurrirá al ejecutarlo: divisiones por cero, desbordamientos, contratos incumplidos y valores
+comprobados con `Tipo(x)` que no cumplen su condición solo se detectan con `nex run`.
 
 ## Nodos
 
@@ -90,11 +91,12 @@ Los campos de cada nodo aparecen siempre, en el orden indicado. Un campo opciona
 
 | `kind` | Campos | Significado |
 |--------|--------|-------------|
-| `Program` | `functions`: lista de `Function` | El archivo completo |
+| `Program` | `types`: lista de `TypeDecl` · `functions`: lista de `Function` | El archivo completo, con los tipos y las funciones en el orden en que aparecen |
+| `TypeDecl` | `name`: texto · `name_span`: posición · `base`: `TypeRef` · `condition`: expresión · `message`: texto o `null` | Un tipo refinado. `message` es la explicación escrita tras la coma |
 | `Function` | `name`: texto · `name_span`: posición · `params`: lista de `Param` · `return_type`: `TypeRef` · `contracts`: lista de `Contract` · `body`: `Block` | Una función |
 | `Param` | `name`: texto · `name_span`: posición · `type`: `TypeRef` | Un parámetro |
-| `TypeRef` | `name`: texto | Un tipo escrito en el código: `Int`, `Float`, `Bool`, `Text` o `Void` |
-| `Contract` | `clause`: `"requires"` o `"ensures"` · `condition`: expresión | Una cláusula de contrato (experimental) |
+| `TypeRef` | `name`: texto | Un tipo escrito en el código: `Int`, `Float`, `Bool`, `Text`, `Void` o un tipo refinado |
+| `Contract` | `clause`: `"requires"` o `"ensures"` · `condition`: expresión · `message`: texto o `null` | Una cláusula de contrato. `message` es la explicación escrita tras la coma |
 
 ### Sentencias
 
@@ -110,8 +112,9 @@ Los campos de cada nodo aparecen siempre, en el orden indicado. Un campo opciona
 ### Expresiones
 
 Además de sus campos, toda expresión termina con el campo `type`: el tipo que el análisis estático
-le asigna (`"Int"`, `"Float"`, `"Bool"`, `"Text"` o `"Void"`), o `null` si no pudo determinarlo
-porque la expresión contiene un error. Una llamada a una función que no devuelve nada tiene tipo
+le asigna (`"Int"`, `"Float"`, `"Bool"`, `"Text"`, `"Void"` o el nombre de un tipo refinado que
+declara el programa, como `"Percent"`), o `null` si no pudo determinarlo porque la expresión
+contiene un error. Una llamada a una función que no devuelve nada tiene tipo
 `"Void"`.
 
 | `kind` | Campos (antes de `type`) | Significado |
@@ -120,11 +123,11 @@ porque la expresión contiene un error. Una llamada a una función que no devuel
 | `FloatLiteral` | `value`: número decimal | |
 | `TextLiteral` | `value`: texto, con los escapes ya resueltos | |
 | `BoolLiteral` | `value`: booleano | |
-| `Name` | `name`: texto | Uso de una variable, un parámetro o `result` |
+| `Name` | `name`: texto | Uso de una variable, un parámetro, `result` (en `ensures`) o `value` (en la condición de un tipo refinado) |
 | `Unary` | `operator`: `"-"` o `"not"` · `operand`: expresión | |
 | `Binary` | `operator`: texto · `operator_span`: posición · `left`: expresión · `right`: expresión | `operator` es uno de `+ - * / == != < <= > >= and or` |
 | `Group` | `expression`: expresión | Una expresión entre paréntesis |
-| `Call` | `callee`: texto · `callee_span`: posición · `arguments`: lista de expresiones | Llamada a una función propia o integrada |
+| `Call` | `callee`: texto · `callee_span`: posición · `arguments`: lista de expresiones | Llamada a una función propia o integrada, o comprobación de un tipo refinado (`Percent(x)`), cuyo tipo es el del tipo refinado |
 
 ## Ejemplo
 
@@ -155,7 +158,8 @@ el nodo de la función es (se omiten las posiciones interiores para abreviar):
      "condition": {"kind": "Binary", "span": "...", "operator": ">=", "operator_span": "...",
                    "left": {"kind": "Name", "span": "...", "name": "n", "type": "Int"},
                    "right": {"kind": "IntLiteral", "span": "...", "value": 0, "type": "Int"},
-                   "type": "Bool"}}
+                   "type": "Bool"},
+     "message": null}
   ],
   "body": {
     "kind": "Block", "span": "...",
@@ -183,13 +187,11 @@ El esquema lleva un nombre y un número de versión en el campo `schema`.
   archivo produce siempre el mismo documento.
 
 Una prueba automatizada (`tests/test_inspect.py`) fija la lista exacta de nodos y campos de la
-versión 1, y otra comprueba que este documento los menciona todos.
-
-Los contratos son experimentales: el nodo `Contract` y el campo `contracts` pueden cambiar, y en
-ese caso cambiará el número de versión.
+versión 2, y otra comprueba que este documento los menciona todos.
 
 ### Historial
 
 | Versión | Publicada en | Cambios |
 |---------|--------------|---------|
 | `nexora.inspect/1` | `nexora` 0.2.0 | Primera versión |
+| `nexora.inspect/2` | `nexora` 0.3.0 | **Cambio incompatible:** el campo `type` de las expresiones deja de ser una lista cerrada (`Int`, `Float`, `Bool`, `Text`, `Void`) y puede ser el nombre de un tipo refinado. Añadidos: nodo `TypeDecl`, campo `types` en `Program`, campo `message` en `Contract` |

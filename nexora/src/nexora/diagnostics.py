@@ -54,7 +54,8 @@ SYNTAX = "syntax"        # the tokens do not follow the grammar
 SEMANTIC = "semantic"    # names, scopes and program structure, checked without running
 TYPE = "type"            # types, checked without running
 RUNTIME = "runtime"      # depends on the values computed while the program runs
-CONTRACT = "contract"    # a 'requires' or 'ensures' condition was false while running
+CONTRACT = "contract"    # a rule the program declares was broken while running: a 'requires' or
+                         # 'ensures' condition, or the condition of a refined type
 
 # Every diagnostic code: its title and its category. A code never changes meaning; a code that
 # stops being used is retired, not reused (E1104 and E2003 are retired, see the spec).
@@ -90,6 +91,9 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E2013": ("Invalid parameter", SEMANTIC),
     "E2014": ("Missing return", SEMANTIC),
     "E2015": ("Unreachable code", SEMANTIC),
+    "E2016": ("Invalid type declaration", SEMANTIC),
+    "E2017": ("Value outside refined type", TYPE),
+    "E2018": ("Invalid refinement condition", SEMANTIC),
 
     "E3001": ("Division by zero", RUNTIME),
     "E3002": ("Integer overflow", RUNTIME),
@@ -100,6 +104,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
 
     "E4001": ("Precondition violated", CONTRACT),
     "E4002": ("Postcondition violated", CONTRACT),
+    "E4003": ("Refinement violated", CONTRACT),
 }
 
 CODES: dict[str, str] = {code: title for code, (title, _) in _REGISTRY.items()}

@@ -2,7 +2,7 @@
 
 The `nex` command of the NEXORA programming language, installable with npm.
 
-NEXORA is a new language at an early stage (version 0.2.0, before 1.0). It is not ready for
+NEXORA is a new language at an early stage (version 0.3.0, before 1.0). It is not ready for
 production use and its syntax may change.
 
 ## Requirements

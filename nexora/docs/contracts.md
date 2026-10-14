@@ -1,8 +1,7 @@
-# Contratos — experimental
+# Contratos
 
-> **Estado: experimental.** Los contratos están implementados y probados, pero su sintaxis y sus
-> reglas pueden cambiar de forma incompatible en versiones futuras. No forman parte de la guía de
-> [primeros pasos](getting-started.md).
+> **Estado: estable desde la versión 0.3.0.** La posición de las cláusulas, el nombre `result` y la
+> explicación tras una coma son definitivos ([decisión 0007](decisions/0007-contratos-estables-y-tipos-refinados.md)).
 
 Un contrato es una condición que una función declara como parte de sí misma:
 
@@ -12,8 +11,13 @@ Un contrato es una condición que una función declara como parte de sí misma:
 Los contratos se evalúan con las reglas normales del lenguaje. Son deterministas y no interviene
 ningún modelo de IA.
 
-La definición formal está en la [especificación](language-spec.md#9-contratos--experimental). Todos
-los ejemplos de esta página se comprueban en las pruebas del proyecto.
+La definición formal está en la [especificación](language-spec.md#9-contratos). Todos los ejemplos
+de esta página se comprueban en las pruebas del proyecto.
+
+Para las reglas que describen **un valor** y no una llamada ("un porcentaje va de 0 a 100"), NEXORA
+tiene [tipos refinados](types.md#tipos-refinados). Los contratos y los tipos refinados se
+complementan: un tipo dice qué valores son válidos en cualquier parte del programa, y un contrato
+dice qué relación tienen los argumentos y el resultado de una función concreta.
 
 ## Un ejemplo
 
@@ -55,6 +59,55 @@ fn main() -> Void {
 - Una condición puede llamar a funciones.
 - `result` solo tiene este significado dentro de `ensures`. En el cuerpo es un nombre corriente.
   Un parámetro no puede llamarse `result`.
+- Detrás de la condición puede ir, tras una coma, la **explicación** de la regla (sección
+  siguiente).
+
+## La explicación de una regla
+
+Una condición dice *qué* se exige; su explicación dice *por qué*. Se escribe tras una coma, como un
+texto:
+
+```text
+requires amount <= balance, "An account cannot go below zero"
+```
+
+La explicación no cambia lo que se comprueba. Cuando la condición es falsa, aparece en el
+diagnóstico como `Reason: ...`, justo después de la condición, y las herramientas la reciben como
+dato (`message` en `nex inspect` y en `nex context`). Así, quien incumple la regla, sea una persona
+o un agente, no tiene que deducir de dónde sale:
+
+<!-- nex:fails exit=5 -->
+```nex
+fn withdraw(balance: Int, amount: Int) -> Int {
+    requires amount > 0, "A withdrawal moves some money"
+    requires amount <= balance, "An account cannot go below zero"
+    ensures result >= 0, "The balance after a withdrawal is never negative"
+    return balance - amount
+}
+
+fn main() -> Void {
+    print(withdraw(100, 30))
+    print(withdraw(100, 300))
+}
+```
+
+```text
+70
+contract error[E4001]: Precondition violated
+  --> program.nex:10:11
+   |
+10 |     print(withdraw(100, 300))
+   |           ^^^^^^^^^^^^^^^^^^ This call breaks a 'requires' condition of 'withdraw'
+   = note: The condition at line 3 is false: requires amount <= balance
+   = note: Reason: An account cannot go below zero
+   = note: It was called with: balance = 100, amount = 300
+
+error: program.nex: the program stopped because a contract was broken
+```
+
+Es opcional. Conviene escribirla cuando la condición no se explica sola: `requires b != 0.0` no la
+necesita; `requires amount <= balance` sí, porque la regla es del negocio, no de la aritmética. Un
+texto vacío es un error (`E1101`).
 
 ## Cuándo se comprueba cada cosa
 
@@ -180,6 +233,7 @@ Aquí el contrato ha encontrado un fallo real del cuerpo: suma el porcentaje en 
 | Condición `ensures` falsa | `E4002` | `contract` | `5` |
 | Condición mal tipada | `E2011` | `type` | `1` (no se ejecuta) |
 | Cláusula fuera del principio del cuerpo | `E1106` | `syntax` | `1` (no se ejecuta) |
+| Explicación vacía o que no es un texto | `E1101` | `syntax` | `1` (no se ejecuta) |
 
 Si evaluar la condición produce por sí mismo un error (por ejemplo, una división por cero dentro
 de la condición), el error comunicado es ese (`runtime`, código de salida `3`), no una violación
@@ -200,15 +254,20 @@ Lo que los contratos **no** hacen. Es importante no atribuirles más garantías 
   función que use `print`.
 - **No se pueden desactivar.** Se comprueban siempre, y cada comprobación tiene un coste de
   ejecución.
-- No hay invariantes, contratos sobre tipos ni condiciones sobre valores "antes" y "después":
-  no hacen falta mientras todos los valores sean inmutables.
+- No hay invariantes ni condiciones sobre valores "antes" y "después": no hacen falta mientras
+  todos los valores sean inmutables. Las reglas sobre los valores de un tipo se escriben con
+  [tipos refinados](types.md#tipos-refinados).
 
 ## Por qué existen
 
-NEXORA explora si hacer explícita la intención de una función, en una forma que una máquina puede
-evaluar, ayuda a las personas y a las herramientas a entender y validar el código. Los contratos
-son un primer experimento en esa dirección. Que esa ayuda sea real, y cuánta, **no se ha medido**:
+Los requisitos de una función forman parte verificable del programa: esa es la característica que
+distingue a NEXORA ([decisión 0006](decisions/0006-requisitos-verificables.md)). Un requisito que
+solo está en una instrucción en lenguaje natural no lo comprueba nadie y se pierde en la siguiente
+edición; escrito como contrato, se comprueba en cada llamada y dice quién lo incumplió.
+
+Que eso ayude de verdad a las personas y a las herramientas de IA, y cuánto, **no se ha medido**:
 es una hipótesis de trabajo, no un resultado.
 
 Las decisiones de diseño y sus alternativas están en
-[`decisions/0004`](decisions/0004-contratos-en-ejecucion.md).
+[`decisions/0004`](decisions/0004-contratos-en-ejecucion.md) y
+[`decisions/0007`](decisions/0007-contratos-estables-y-tipos-refinados.md).

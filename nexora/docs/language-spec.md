@@ -1,7 +1,7 @@
 # Especificación del lenguaje NEXORA
 
-- **Versión de la especificación:** 0.2
-- **Implementación de referencia:** `nexora` 0.2.0 (este repositorio, directorio `nexora/`)
+- **Versión de la especificación:** 0.3
+- **Implementación de referencia:** `nexora` 0.3.0 (este repositorio, directorio `nexora/`)
 - **Estado:** describe exactamente lo que el intérprete hace hoy.
 
 Este documento es la referencia del lenguaje: define la sintaxis y el significado de cada
@@ -12,7 +12,7 @@ Cómo leer el estado de cada parte:
 | Marca | Significado |
 |-------|-------------|
 | *(sin marca)* | **Implementado** y cubierto por pruebas |
-| **Experimental** | Implementado y probado, pero su sintaxis o sus reglas pueden cambiar (solo los contratos, sección 9) |
+| **Experimental** | Implementado y probado, pero su sintaxis o sus reglas pueden cambiar. En la versión 0.3 ninguna parte del lenguaje lo es |
 | **Previsto** | No existe. Reunido en la sección 14; no forma parte del lenguaje |
 
 Los cambios respecto a la versión 0.1 están en [`CHANGELOG.md`](../CHANGELOG.md) y sus motivos
@@ -30,8 +30,10 @@ decisiones:
 3. **Lo que puede comprobarse antes de ejecutar, se comprueba antes de ejecutar.** Nombres, ámbitos
    y tipos se verifican sin ejecutar el programa; lo que depende de los valores queda delimitado
    con precisión (sección 10).
-4. **La intención forma parte del código.** Una función puede declarar qué espera y qué promete
-   (contratos, experimental).
+4. **Las reglas forman parte del código.** Una función declara qué espera y qué promete
+   (contratos, sección 9), y un tipo puede declarar qué valores admite (tipos refinados,
+   sección 4.4). Cada regla puede llevar su explicación, y cuando se incumple el diagnóstico dice
+   cuál, dónde y con qué valores ([decisión 0006](decisions/0006-requisitos-verificables.md)).
 5. **Las herramientas reciben datos, no texto.** El programa y sus errores pueden obtenerse en JSON
    con un esquema versionado.
 
@@ -67,7 +69,7 @@ Solo se admiten letras ASCII. Se distinguen mayúsculas de minúsculas.
 Palabras clave:
 
 ```
-fn   let   return   if   else   true   false   and   or   not   requires   ensures
+fn   let   return   if   else   true   false   and   or   not   requires   ensures   type   where
 ```
 
 Palabras reservadas para versiones futuras. No pueden usarse como nombres y usarlas produce el
@@ -75,13 +77,14 @@ error `E1103`:
 
 ```
 ai       assert   break    const    continue enum     example  for
-import   in       match    pub      test     tool     try      type
-uses     var      where    while
+import   in       match    pub      test     tool     try      uses
+var      while
 ```
 
 No son palabras reservadas, sino nombres predefinidos: los tipos `Int`, `Float`, `Bool`, `Text` y
-`Void`; las funciones `print`, `to_text`, `to_float` y `to_int`; y `result`, que solo tiene un
-significado especial dentro de una cláusula `ensures`.
+`Void`; las funciones `print`, `to_text`, `to_float` y `to_int`; `result`, que solo tiene un
+significado especial dentro de una cláusula `ensures`; y `value`, que solo lo tiene dentro de la
+condición de un tipo refinado.
 
 ### 2.5 Literales
 
@@ -121,14 +124,16 @@ analizador nunca ignora un carácter desconocido.
 En notación EBNF. `NEWLINE` es uno o más finales de línea seguidos.
 
 ```ebnf
-program    = { NEWLINE } { function { NEWLINE } } ;
+program    = { NEWLINE } { ( type_decl | function ) { NEWLINE } } ;
 
+type_decl  = "type" NAME "=" type "where" expression [ explanation ] end ;
 function   = "fn" NAME "(" [ params ] ")" "->" type { NEWLINE }
              "{" { NEWLINE } { contract } { statement end } "}" ;
 params     = param { "," param } ;
 param      = NAME ":" type ;
 type       = NAME ;
-contract   = ( "requires" | "ensures" ) expression end ;
+contract   = ( "requires" | "ensures" ) expression [ explanation ] end ;
+explanation = "," TEXT ;
 
 block      = "{" { NEWLINE } { statement end } "}" ;
 end        = NEWLINE | (* nada, si lo siguiente es "}" *) ;
@@ -154,7 +159,10 @@ primary        = INT | FLOAT | TEXT | "true" | "false"
 
 Notas:
 
-- Solo las funciones pueden aparecer en el nivel superior del archivo.
+- En el nivel superior del archivo solo hay funciones y declaraciones de tipo, en cualquier orden.
+  Un tipo no puede declararse dentro de una función (`E1101`).
+- Una explicación (`explanation`) es un único texto literal no vacío. Un texto vacío o formado solo
+  por espacios es el error `E1101`.
 - Las cláusulas `requires` y `ensures` van **al principio del cuerpo** de una función, antes de
   cualquier sentencia. En cualquier otro lugar son el error `E1106`.
 - `else` se escribe en la misma línea que la `}` que cierra el bloque anterior: `} else {`.
@@ -177,8 +185,9 @@ Notas:
 | `Text` | Texto Unicode | Inmutable |
 | `Void` | Ningún valor | Solo puede ser el tipo de retorno de una función |
 
-`Int`, `Float`, `Bool` y `Text` son los **tipos de valor**: los que puede tener una variable, un
-parámetro o una expresión. `Void` no es un tipo de valor: una variable o un parámetro de tipo
+`Int`, `Float`, `Bool` y `Text` son los **tipos de valor** integrados. Un programa puede declarar
+otros a partir de ellos: los **tipos refinados** (sección 4.4). Los tipos de valor son los que puede
+tener una variable, un parámetro o una expresión. `Void` no es un tipo de valor: una variable o un parámetro de tipo
 `Void` es el error `E2012`, y usar una llamada a una función `Void` donde hace falta un valor es
 el error `E2011`.
 
@@ -192,11 +201,13 @@ dependa de un valor calculado, así que ningún error de tipos puede aparecer du
 
 ### 4.2 Compatibilidad
 
-**Dos tipos son compatibles solo si son el mismo tipo.** No hay subtipos, ni tipos numéricos
-"más anchos", ni conversión automática:
+**Un valor se acepta donde se espera un tipo solo si es de ese mismo tipo, o de un tipo refinado
+construido sobre él** (sección 4.4). No hay tipos numéricos "más anchos" ni conversión automática:
 
 - Un `Int` no se acepta donde se espera un `Float`, ni al revés.
 - Ningún tipo se convierte a `Bool` ni a `Text` por sí solo.
+- Un `Percent` (refinado sobre `Int`) se acepta donde se espera un `Int`. Un `Int` **no** se acepta
+  donde se espera un `Percent`, salvo que sea una constante que cumple su condición.
 
 Esta regla se aplica por igual a la anotación de una variable, a los argumentos de una llamada, al
 valor de un `return` y a los operandos de un operador.
@@ -223,6 +234,131 @@ print("Total: " + to_text(total))          // correcto: Text + Text
 ```nex
 let total = count * price                  // E2011: Int y Float no se mezclan
 print("Total: " + total)                   // E2011: '+' une Text con Text
+```
+
+### 4.4 Tipos refinados
+
+Un tipo refinado es un tipo de valor más una condición que cumplen todos sus valores:
+
+```text
+type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
+```
+
+Se declara en el nivel superior del archivo, antes o después de usarlo. `Percent` es el nombre,
+`Int` es la **base** y lo que sigue a `where` es la **condición**. Detrás de la condición puede ir,
+tras una coma, la explicación de la regla; aparece en los diagnósticos cuando la regla se incumple.
+
+**La garantía.** Todo valor cuyo tipo es un tipo refinado cumple su condición, en cualquier punto
+del programa. Para mantenerla, un valor solo puede llegar a tener un tipo refinado de dos formas:
+
+| Forma | Ejemplo | Cuándo se comprueba | Si no se cumple |
+|-------|---------|---------------------|-----------------|
+| Una **constante** donde se espera el tipo | `let p: Percent = 20`, `discount(20)`, `return 20` | Sin ejecutar, en `nex check` | `E2017`, el programa no se ejecuta |
+| La **comprobación explícita** `Percent(x)` | `let p = Percent(total / 2)` | Al ejecutar, cada vez que se evalúa | `E4003`, el programa se detiene ahí |
+
+Una constante es un literal, opcionalmente con `-` o `not` delante o entre paréntesis. Cualquier
+otro valor de la base (una variable, una operación, el resultado de una llamada) no se acepta donde
+se espera el tipo refinado (`E2011`): hay que comprobarlo con `Percent(...)`. Así, cada punto donde
+el programa puede detenerse por una regla está escrito en el código.
+
+Reglas de la declaración:
+
+- El nombre empieza por mayúscula (`E2016`) y no puede ser el de un tipo integrado (`E2016`), el de
+  otro tipo (`E2016`), ni usarse para una función, un parámetro o una variable (`E2006`).
+- La base es `Int`, `Float`, `Bool`, `Text` u otro tipo refinado. Una cadena de tipos que no llega
+  a un tipo integrado (`type A = B ...` y `type B = A ...`) es el error `E2016`.
+- La condición es una expresión `Bool` (`E2011`). En ella solo existe el nombre `value`, que es el
+  valor que se comprueba y tiene el tipo de la base (`E2005` para cualquier otro nombre).
+- La condición no puede llamar a funciones del programa ni comprobar otros tipos refinados
+  (`E2018`). Puede usar operadores, literales y las conversiones integradas. Un tipo refinado
+  describe un valor y nada más; las reglas que dependen de otros datos se escriben con `requires`.
+
+Uso de los valores:
+
+- Un valor refinado se acepta donde se espera su base, o cualquier tipo de la cadena de bases: un
+  `Percent` es un `Int`.
+- En una operación cuenta como un valor de su base: `p + 1` es un `Int`, no un `Percent`, porque el
+  resultado puede no cumplir la condición. Para volver a tener un `Percent` hay que comprobarlo.
+- Dos tipos refinados distintos son tipos distintos aunque tengan la misma base y la misma
+  condición.
+- `Percent(x)` recibe exactamente un argumento de la misma base (`E2009`, `E2011`) y devuelve un
+  `Percent`. El nombre de un tipo solo puede usarse así: escrito solo, sin paréntesis, es `E2011`.
+
+**Refinar un tipo refinado.** `type Pass = Percent where value >= 50` exige las dos condiciones.
+Se comprueban en orden, desde la base: primero la de `Percent` y después la de `Pass`. El
+diagnóstico indica cuál de las dos es falsa.
+
+<!-- nex:run -->
+```nex
+type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
+type Pass = Percent where value >= 50, "Passing starts at half"
+
+fn grade(points: Int, total: Int) -> Percent {
+    requires total > 0, "There is nothing to grade"
+    return Percent(points * 100 / total)
+}
+
+fn main() -> Void {
+    let minimum: Pass = 50
+    let score = grade(42, 60)
+    print(score)
+    print(score >= minimum)
+}
+```
+
+```text
+70
+true
+```
+
+Una constante que no cumple la condición se rechaza sin ejecutar nada:
+
+<!-- nex:check-fails -->
+```nex
+type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
+
+fn main() -> Void {
+    let discount: Percent = 120
+    print(discount)
+}
+```
+
+```text
+type error[E2017]: Value outside refined type
+ --> program.nex:4:29
+  |
+4 |     let discount: Percent = 120
+  |                             ^^^ 120 is not a valid Percent
+  = note: The condition of 'Percent' is false: where value >= 0 and value <= 100
+  = note: The value: 120
+  = note: Reason: A percentage goes from 0 to 100
+
+error: program.nex: check failed with 1 error
+```
+
+Y un valor calculado que no la cumple detiene el programa en el punto donde se comprueba:
+
+<!-- nex:fails exit=5 -->
+```nex
+type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
+
+fn main() -> Void {
+    let points = 130
+    print(Percent(points))
+}
+```
+
+```text
+contract error[E4003]: Refinement violated
+ --> program.nex:5:11
+  |
+5 |     print(Percent(points))
+  |           ^^^^^^^^^^^^^^^ This value is not a valid Percent
+  = note: The condition of 'Percent' is false: where value >= 0 and value <= 100
+  = note: The value: 130
+  = note: Reason: A percentage goes from 0 to 100
+
+error: program.nex: the program stopped because a contract was broken
 ```
 
 ## 5. Variables y ámbitos
@@ -261,7 +397,8 @@ let x: Void = 1               // E2012: una variable no puede ser Void
 - Las funciones son visibles en todo el archivo, también antes de la línea en la que se declaran.
 - **Un único espacio de nombres.** Funciones, parámetros y variables comparten los nombres: una
   variable o un parámetro no puede llamarse como una función del programa ni como una función
-  integrada (`E2006`).
+  integrada (`E2006`). Los nombres de los tipos refinados tampoco pueden usarse para otra cosa
+  (`E2006`).
 - **No hay ocultación de nombres (*shadowing*).** Declarar un nombre que ya es visible, sea del mismo
   bloque, de uno exterior o un parámetro, es el error `E2006`. Dos bloques hermanos sí pueden usar
   el mismo nombre, porque ninguno ve las variables del otro.
@@ -476,7 +613,7 @@ Texto que producen `print` y `to_text`:
 `print` es la única forma que tiene un programa de producir un efecto. Un programa NEXORA no puede
 leer archivos, abrir conexiones, ejecutar otros programas ni leer datos de entrada.
 
-## 9. Contratos — **experimental**
+## 9. Contratos
 
 Un contrato expresa una condición que una función **espera** de quien la llama o una condición que
 **promete** cumplir. Los contratos son deterministas y se evalúan con las mismas reglas que
@@ -509,8 +646,41 @@ fn absolute(value: Int) -> Int {
   retorno. En una función `Void` no existe `result`.
 - Los parámetros son inmutables, así que en `ensures` tienen el mismo valor que al entrar.
 - `result` es un nombre contextual: solo significa "el valor devuelto" dentro de `ensures`. En el
-  cuerpo de una función es un nombre de variable como cualquier otro.
+  cuerpo de una función es un nombre de variable como cualquier otro. Un parámetro no puede
+  llamarse `result` (`E2013`).
 - Una condición puede llamar a funciones.
+- Detrás de la condición puede ir, tras una coma, **la explicación de la regla**: un texto que dice
+  por qué existe. No cambia lo que se comprueba; aparece en el diagnóstico cuando la condición es
+  falsa, como `Reason: ...`.
+
+<!-- nex:fails exit=5 -->
+```nex
+fn withdraw(balance: Int, amount: Int) -> Int {
+    requires amount > 0, "A withdrawal moves some money"
+    requires amount <= balance, "An account cannot go below zero"
+    ensures result == balance - amount
+    return balance - amount
+}
+
+fn main() -> Void {
+    print(withdraw(100, 30))
+    print(withdraw(100, 300))
+}
+```
+
+```text
+70
+contract error[E4001]: Precondition violated
+  --> program.nex:10:11
+   |
+10 |     print(withdraw(100, 300))
+   |           ^^^^^^^^^^^^^^^^^^ This call breaks a 'requires' condition of 'withdraw'
+   = note: The condition at line 3 is false: requires amount <= balance
+   = note: Reason: An account cannot go below zero
+   = note: It was called with: balance = 100, amount = 300
+
+error: program.nex: the program stopped because a contract was broken
+```
 
 ### 9.2 Qué se comprueba y cuándo
 
@@ -567,8 +737,9 @@ contrato.
   use `print`.
 - Los contratos no se pueden desactivar: se comprueban siempre.
 
-La sintaxis (dónde se escriben las cláusulas, el nombre `result`) puede cambiar en versiones
-futuras.
+Desde la versión 0.3 la sintaxis de los contratos es estable: las cláusulas van al principio del
+cuerpo, el valor devuelto se llama `result` y la explicación va tras una coma. Los motivos están en
+la [decisión 0007](decisions/0007-contratos-estables-y-tipos-refinados.md).
 
 ## 10. Errores: antes de ejecutar y durante la ejecución
 
@@ -598,6 +769,8 @@ Todo lo siguiente lo comunica `nex check`, sin ejecutar una sola sentencia:
 - Llamadas a funciones inexistentes o con un número de argumentos incorrecto.
 - **Todos los errores de tipos**: anotaciones, operadores, argumentos, valores de retorno,
   condiciones, condiciones de contratos y uso de `Void` como valor.
+- Declaraciones de tipos refinados mal formadas, y **toda constante que no cumple la condición del
+  tipo refinado donde se usa** (`E2017`).
 - Funciones que pueden terminar sin `return`, y código inalcanzable tras un `return`.
 - Valores calculados y nunca usados.
 
@@ -616,6 +789,7 @@ análisis estático no afirma nada sobre ellas:
 | Un `Text` más largo que el límite del entorno, si este fija uno | `E3006` |
 | Condición `requires` falsa | `E4001` |
 | Condición `ensures` falsa | `E4002` |
+| Un valor comprobado con `Percent(x)` que no cumple la condición de su tipo | `E4003` |
 
 Tampoco se analiza si un programa termina: una recursividad sin fin se detiene con `E3004`.
 
@@ -710,6 +884,9 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E2013` | Invalid parameter | `semantic` | `main` con parámetros, o un parámetro llamado `result` |
 | `E2014` | Missing return | `semantic` | Una función que devuelve un valor puede terminar sin `return` |
 | `E2015` | Unreachable code | `semantic` | Código situado después de un `return` |
+| `E2016` | Invalid type declaration | `semantic` | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, o una cadena de tipos sin fin |
+| `E2017` | Value outside refined type | `type` | Una constante usada como valor de un tipo refinado no cumple su condición |
+| `E2018` | Invalid refinement condition | `semantic` | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado |
 | `E3001` | Division by zero | `runtime` | División por cero |
 | `E3002` | Integer overflow | `runtime` | Un resultado `Int` fuera del rango de 64 bits |
 | `E3003` | Float result out of range | `runtime` | Un resultado `Float` demasiado grande |
@@ -718,6 +895,7 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E3006` | Text too long | `runtime` | Un `Text` construido con `+` supera el límite fijado por el entorno. `nex run` no fija ninguno; el playground sí |
 | `E4001` | Precondition violated | `contract` | Una condición `requires` es falsa en una llamada |
 | `E4002` | Postcondition violated | `contract` | Una condición `ensures` es falsa al terminar una función |
+| `E4003` | Refinement violated | `contract` | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado |
 
 Códigos retirados (existieron en la versión 0.1 y ya no se emiten):
 
@@ -744,7 +922,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.2.0",
+  "nexora_version": "0.3.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -800,7 +978,7 @@ La representación del programa (`nex inspect`) está descrita en
 | `2` | Uso incorrecto de la línea de comandos |
 | `3` | El programa falló durante la ejecución |
 | `4` | El archivo no pudo leerse |
-| `5` | El programa incumplió un contrato durante la ejecución |
+| `5` | El programa incumplió durante la ejecución una regla que declara: un contrato o la condición de un tipo refinado |
 | `70` | Error interno de NEXORA (un fallo de la herramienta, no del programa) |
 | `130` | Interrumpido con Ctrl+C |
 
@@ -920,7 +1098,10 @@ Son limitaciones reales de esta versión, no fallos:
 - `print` recibe un solo argumento y siempre añade un salto de línea.
 - El programa no puede leer datos de entrada (teclado, argumentos o archivos).
 - Un programa es un único archivo: no hay módulos ni importaciones.
-- Los contratos no se verifican estáticamente (sección 9.3).
+- Los contratos no se verifican estáticamente (sección 9.3). De los tipos refinados, solo se
+  comprueban sin ejecutar las constantes.
+- La condición de un tipo refinado no puede llamar a funciones del programa.
+- No hay alias de tipos sin condición (`type Id = Int`): todo tipo declarado lleva `where`.
 - `nex inspect` solo tiene salida JSON, y no muestra el árbol si el programa tiene errores léxicos
   o sintácticos.
 - No hay formateador, servidor de lenguaje ni otras herramientas.
@@ -954,7 +1135,9 @@ Esta especificación manda sobre el borrador en lo que ya está implementado:
 | Tipo "sin valor" | `Unit` | `Void` |
 | Concatenar textos | No permitido; se usa interpolación | `+` une dos `Text`, porque la interpolación aún no existe |
 | Valor de una función | La última expresión del bloque | Siempre con `return` |
-| Contratos | Entre la firma y el cuerpo | Al principio del cuerpo |
+| Contratos | Entre la firma y el cuerpo | Al principio del cuerpo, con una explicación opcional tras una coma |
+| Valor dinámico a tipo refinado | `Percent.from(n)`, que devuelve un `Result` | `Percent(n)`, que detiene el programa con `E4003` si no se cumple la condición (no existe `Result`) |
+| Alias sin condición | `type UserId = Int` | No existen |
 | Conversión entre números | `Int.to_float(x)` | `to_float(x)`, `to_int(x)` |
 | Variables sin usar | Son un error | No se comprueba todavía |
 | Convenciones de nombres | Obligatorias (`snake_case`…) | No se comprueban todavía |

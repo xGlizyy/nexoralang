@@ -1,0 +1,47 @@
+semantic error[E2016]: Invalid type declaration
+ --> examples/invalid/refinement_errors.nex:6:6
+  |
+6 | type percent = Int where value >= 0
+  |      ^^^^^^^ The type name 'percent' must start with a capital letter
+  = hint: Write it as: Percent
+
+semantic error[E2018]: Invalid refinement condition
+ --> examples/invalid/refinement_errors.nex:7:27
+  |
+7 | type Positive = Int where is_positive(value)
+  |                           ^^^^^^^^^^^ The condition of 'Positive' cannot call the function 'is_positive'
+  = hint: A refinement only describes the value itself: it can use operators, literals and the built-in conversions. Write the rule there, or check it with 'requires'.
+
+type error[E2011]: Type mismatch
+  --> examples/invalid/refinement_errors.nex:14:12
+   |
+14 |     return p / 2
+   |            ^^^^^ Expected Percent, found Int
+   = note: 'half' is declared to return Percent.
+   = hint: Check the value explicitly with Percent(...). The program stops there if the value does not satisfy the condition of Percent.
+
+type error[E2017]: Value outside refined type
+  --> examples/invalid/refinement_errors.nex:18:25
+   |
+18 |     let full: Percent = 120
+   |                         ^^^ 120 is not a valid Percent
+   = note: The condition of 'Percent' is false: where value >= 0 and value <= 100
+   = note: The value: 120
+   = note: Reason: A percentage goes from 0 to 100
+
+type error[E2011]: Type mismatch
+  --> examples/invalid/refinement_errors.nex:20:28
+   |
+20 |     let checked: Percent = typed
+   |                            ^^^^^ Expected Percent, found Int
+   = note: 'checked' is declared as Percent.
+   = hint: Check the value explicitly with Percent(...). The program stops there if the value does not satisfy the condition of Percent.
+
+type error[E2011]: Type mismatch
+  --> examples/invalid/refinement_errors.nex:22:19
+   |
+22 |     print(Percent("fifty"))
+   |                   ^^^^^^^ Expected Int, found Text
+   = note: 'Percent' refines Int, so it checks values of type Int.
+
+error: examples/invalid/refinement_errors.nex: not run because of 6 errors

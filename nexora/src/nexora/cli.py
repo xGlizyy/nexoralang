@@ -21,7 +21,7 @@ EXIT_INVALID_PROGRAM = 1     # lexical, syntax, semantic or type errors, found w
 EXIT_USAGE = 2               # wrong command-line arguments (argparse's own convention)
 EXIT_RUNTIME_ERROR = 3       # the program started and then failed
 EXIT_UNREADABLE_FILE = 4     # the file does not exist or cannot be read as UTF-8
-EXIT_CONTRACT_VIOLATION = 5  # a 'requires' or 'ensures' condition was false while running
+EXIT_CONTRACT_VIOLATION = 5  # a rule the program declares was broken while running
 EXIT_INTERNAL_ERROR = 70     # a bug in NEXORA itself
 EXIT_INTERRUPTED = 130       # stopped by the user with Ctrl+C
 
@@ -32,7 +32,8 @@ exit codes:
   2   wrong command-line usage
   3   the program failed while running
   4   the file could not be read
-  5   the program broke a contract ('requires' or 'ensures') while running
+  5   the program broke a rule it declares while running: a contract
+      ('requires', 'ensures') or the condition of a refined type
   70  internal error in NEXORA (a bug, please report it)
   130 interrupted with Ctrl+C
 """

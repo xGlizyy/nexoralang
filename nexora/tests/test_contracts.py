@@ -1,4 +1,4 @@
-"""Contracts: 'requires' and 'ensures' (experimental)."""
+"""Contracts: 'requires' and 'ensures', and the explanation that can follow a condition."""
 
 import pytest
 
@@ -235,3 +235,55 @@ def test_violation_of_a_function_without_parameters_lists_no_values():
     functions = "fn never() -> Int {\n    requires 1 > 2\n    return 1\n}"
     _, error = run_failure(with_main(functions, "print(never())"))
     assert error.notes == ("The condition at line 2 is false: requires 1 > 2",)
+
+
+# Explanations
+
+def test_an_explanation_follows_the_condition_after_a_comma():
+    program, errors = parse_text(function('requires n > 0, "Counting starts at one"\nensures result >= n'))
+    assert errors == []
+    first, second = program.functions[0].contracts
+    assert (first.message, second.message) == ("Counting starts at one", None)
+    # The clause covers the explanation too.
+    assert (first.span.line, first.span.column, first.span.end_column) == (2, 5, 45)
+
+
+@pytest.mark.parametrize("clause, label", [
+    ("requires n > 0,", "Expected a text after ',' explaining the rule of 'requires', found the end of line"),
+    ("requires n > 0, n", "Expected a text after ',' explaining the rule of 'requires', found the name 'n'"),
+    ('ensures result > 0, ""', "The explanation of 'ensures' is empty"),
+    ('requires n > 0, "   "', "The explanation of 'requires' is empty"),
+    ('requires n > 0, "a" "b"', "Expected the end of the line after this statement, found a text literal"),
+])
+def test_an_explanation_is_one_non_empty_text(clause, label):
+    (error,) = diagnostics_of(with_main(function(clause), "print(f(1))"))
+    assert (error.code, error.label) == ("E1101", label)
+
+
+def test_a_broken_requires_shows_its_explanation():
+    divide = 'fn divide(a: Float, b: Float) -> Float {\n    requires b != 0.0, "Dividing by zero has no result"\n' \
+             "    return a / b\n}"
+    _, error = run_failure(with_main(divide, "print(divide(1.0, 0.0))"))
+    assert error.code == "E4001"
+    assert error.notes == (
+        "The condition at line 2 is false: requires b != 0.0",
+        "Reason: Dividing by zero has no result",
+        "It was called with: a = 1.0, b = 0.0",
+    )
+
+
+def test_a_broken_ensures_shows_its_explanation():
+    text = function('ensures result > n, "The next number is bigger"', "return n")
+    _, error = run_failure(with_main(text, "print(f(3))"))
+    assert error.code == "E4002"
+    assert error.notes[:3] == (
+        "'f' finished, but its condition is false: ensures result > n",
+        "Reason: The next number is bigger",
+        "It returned: result = 3",
+    )
+
+
+def test_an_explanation_does_not_change_what_is_checked():
+    text = function('requires n > 0, "Positive"')
+    assert run_text(with_main(text, "print(f(5))")) == "5\n"
+    assert check_codes(with_main(function('requires n, "Not a condition"'), "print(f(1))")) == ["E2011"]

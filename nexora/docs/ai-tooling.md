@@ -8,7 +8,7 @@ eso **hoy**, con precisión, y qué es todavía una intención.
 
 | | Qué incluye | Estado |
 |-|-------------|--------|
-| **Características del lenguaje** | Tipos estáticos sin conversiones implícitas, un solo significado por nombre, contratos | Implementado (los contratos, experimental) |
+| **Características del lenguaje** | Tipos estáticos sin conversiones implícitas, un solo significado por nombre, contratos y tipos refinados con la explicación de cada regla | Implementado |
 | **Datos estructurados para herramientas** | Diagnósticos, árbol de sintaxis, símbolos y resumen del programa en JSON, con [esquemas versionados](json-protocol.md) | Implementado y probado |
 | **API de Python** | El módulo `nexora.tooling`: las mismas salidas, sin pasar por la línea de comandos | Implementado y probado. **Experimental**: puede cambiar antes de la 1.0 |
 | **Servidor MCP** | Un servidor opcional que ofrece el análisis como herramientas a un asistente compatible ([MCP](mcp.md)) | Implementado y probado con el cliente del SDK oficial. Comprobado a mano en una sesión de Claude Code; **en ningún otro asistente** |
@@ -37,7 +37,7 @@ ejecuta el programa analizado.
 | Salida | Comando | Esquema | Contiene |
 |--------|---------|---------|----------|
 | Diagnósticos | `nex check archivo.nex --format json` | `nexora.diagnostics/1` | Los errores, con código, categoría, posición y sugerencia |
-| Estructura | `nex inspect archivo.nex` | `nexora.inspect/1` | El árbol de sintaxis, con el tipo de cada expresión |
+| Estructura | `nex inspect archivo.nex` | `nexora.inspect/2` | El árbol de sintaxis, con el tipo de cada expresión |
 | Símbolos | `nex symbols archivo.nex --format json` | `nexora.symbols/1` | Funciones, parámetros y variables, con su tipo, su ámbito y cada uso |
 | Contexto | `nex context archivo.nex --format json` | `nexora.context/1` | Un resumen: firmas, contratos, quién llama a quién, características usadas |
 
@@ -74,7 +74,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.2.0",
+  "nexora_version": "0.3.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -120,8 +120,8 @@ fn main() -> Void {
 
 ```json
 {
-  "schema": "nexora.inspect/1",
-  "nexora_version": "0.2.0",
+  "schema": "nexora.inspect/2",
+  "nexora_version": "0.3.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
@@ -134,6 +134,7 @@ fn main() -> Void {
       "end_line": 4,
       "end_column": 1
     },
+    "types": [],
     "functions": [
       {
         "kind": "Function",
@@ -258,7 +259,7 @@ cambiar antes de la versión 1.0. El resto de módulos (`lexer`, `parser`, `chec
 | Función | Devuelve |
 |---------|----------|
 | `check_source(source, filename="source.nex")` | Documento `nexora.diagnostics/1` |
-| `inspect_source(source, filename="source.nex")` | Documento `nexora.inspect/1` |
+| `inspect_source(source, filename="source.nex")` | Documento `nexora.inspect/2` |
 | `get_symbols(source, filename="source.nex", *, name=None, function=None)` | Documento `nexora.symbols/1` |
 | `get_context(source, filename="source.nex")` | Documento `nexora.context/1` |
 | `get_language_spec(section=None)` | Documento `nexora.spec/1`: el índice de la especificación, o una sección |
@@ -382,7 +383,7 @@ Las reglas completas, el historial y los archivos JSON Schema están en
 - **El servidor MCP solo se ha probado en un asistente** (Claude Code, una sesión manual), además
   de las pruebas automáticas con el cliente del SDK.
 - **No se ha evaluado ningún modelo de IA** con estas herramientas.
-- El nodo `Contract` es experimental y puede cambiar (con un cambio de versión del esquema).
+- Los nodos `Contract` y `TypeDecl` son estables desde `nexora.inspect/2`.
 
 ## Casos de uso que esto permite
 

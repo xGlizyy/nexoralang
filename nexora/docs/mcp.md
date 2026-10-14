@@ -51,7 +51,7 @@ llama, ni ejecuta nada.
 |-------------|------------|----------|
 | `nexora_check` | `source`, `filename`* | Documento `nexora.diagnostics/1`: `ok` y los diagnósticos |
 | `nexora_get_diagnostics` | `source`, `filename`* | Solo `ok`, `count` y la lista de diagnósticos |
-| `nexora_inspect` | `source`, `filename`* | Documento `nexora.inspect/1`: el árbol de sintaxis con tipos |
+| `nexora_inspect` | `source`, `filename`* | Documento `nexora.inspect/2`: el árbol de sintaxis con tipos |
 | `nexora_get_context` | `source`, `filename`* | Documento `nexora.context/1`: [resumen técnico](ai-context.md) |
 | `nexora_get_symbols` | `source`, `filename`*, `name`*, `function`* | Documento `nexora.symbols/1`: símbolos y referencias |
 | `nexora_get_language_spec` | `section`* | Documento `nexora.spec/1`: el índice de la especificación o el texto de una sección |

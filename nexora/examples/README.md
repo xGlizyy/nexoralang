@@ -25,7 +25,8 @@ Superan `nex check` y `nex run` termina con código `0`.
 | [`arithmetic.nex`](arithmetic.nex) | Precedencia, división entera y decimal, límites de `Int` |
 | [`types.nex`](types.nex) | Inferencia, anotaciones, comparaciones, lógica y conversiones |
 | [`functions.nex`](functions.nex) | Funciones, `if` / `else`, recursividad |
-| [`contracts.nex`](contracts.nex) | Contratos `requires` y `ensures` que se cumplen (experimental) |
+| [`contracts.nex`](contracts.nex) | Contratos `requires` y `ensures` que se cumplen, con su explicación |
+| [`refined_types.nex`](refined_types.nex) | Tipos refinados con `where`: constantes comprobadas sin ejecutar y comprobación explícita con `Percent(x)` |
 
 ## Inválidos (`invalid/`)
 
@@ -37,6 +38,7 @@ código `1` y el programa no llega a iniciarse.
 | [`invalid/syntax_error.nex`](invalid/syntax_error.nex) | `syntax`: el texto no sigue la gramática |
 | [`invalid/name_errors.nex`](invalid/name_errors.nex) | `semantic`: nombres, valores sin usar, rutas de retorno |
 | [`invalid/type_errors.nex`](invalid/type_errors.nex) | `type`: tipos incompatibles |
+| [`invalid/refinement_errors.nex`](invalid/refinement_errors.nex) | `semantic` y `type`: tipos refinados mal declarados y valores que no cumplen su condición |
 
 ## Fallan al ejecutarse (`failing/`)
 
@@ -46,3 +48,4 @@ Superan `nex check`, porque el fallo depende de valores que solo se conocen al e
 |---------|------------|-----------------------|
 | [`failing/runtime_error.nex`](failing/runtime_error.nex) | División por cero | `3` |
 | [`failing/contract_violation.nex`](failing/contract_violation.nex) | Una condición `requires` es falsa | `5` |
+| [`failing/refinement_violation.nex`](failing/refinement_violation.nex) | Un valor calculado no cumple la condición de un tipo refinado | `5` |

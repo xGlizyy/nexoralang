@@ -43,7 +43,8 @@ class BoolLiteral(Node):
 
 @dataclass(frozen=True)
 class Name(Node):
-    """A reference to a variable or a parameter (or to `result` inside `ensures`)."""
+    """A reference to a variable or a parameter (or to `result` inside `ensures`, or to `value`
+    inside the condition of a refined type)."""
     name: str
 
 
@@ -71,6 +72,7 @@ class Group(Node):
 
 @dataclass(frozen=True)
 class Call(Node):
+    """A call to a function, or `Percent(x)`: the check that turns a value into a refined type."""
     callee: str
     callee_span: Span
     arguments: tuple[Expr, ...]
@@ -84,8 +86,23 @@ EXPRESSION_NODES = (IntLiteral, FloatLiteral, TextLiteral, BoolLiteral, Name, Un
 
 @dataclass(frozen=True)
 class TypeRef(Node):
-    """A type written in the source: `Int`, `Text`..."""
+    """A type written in the source: `Int`, `Text`, `Percent`..."""
     name: str
+
+
+@dataclass(frozen=True)
+class TypeDecl(Node):
+    """`type Percent = Int where value >= 0 and value <= 100, "explanation"`: a refined type.
+
+    Its values are the values of `base` for which `condition` is true. Inside the condition,
+    `value` names the value being checked.
+    """
+    name: str
+    name_span: Span
+    base: TypeRef
+    condition: Expr
+    # The explanation written after the condition, or None.
+    message: str | None
 
 
 # Statements
@@ -148,6 +165,8 @@ class Contract(Node):
     # "requires" or "ensures". Not called 'kind': that is the name of the node type in the JSON form.
     clause: str
     condition: Expr
+    # The explanation written after the condition, or None.
+    message: str | None
 
 
 @dataclass(frozen=True)
@@ -162,6 +181,7 @@ class Function(Node):
 
 @dataclass(frozen=True)
 class Program(Node):
+    types: tuple[TypeDecl, ...]
     functions: tuple[Function, ...]
 
 

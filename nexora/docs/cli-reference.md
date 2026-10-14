@@ -1,7 +1,7 @@
 # Referencia de la CLI
 
 `nex` es la herramienta de línea de comandos de NEXORA. Esta página describe la versión
-`nexora` 0.2.0. Una prueba automatizada comprueba que todos los comandos, opciones y códigos de
+`nexora` 0.3.0. Una prueba automatizada comprueba que todos los comandos, opciones y códigos de
 salida que acepta el programa están documentados aquí.
 
 `python -m nexora` es equivalente a `nex` y acepta exactamente los mismos argumentos.
@@ -157,7 +157,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.2.0
+NEXORA 0.3.0
 ```
 
 ## `nex --help`
@@ -172,7 +172,7 @@ NEXORA 0.2.0
 |---------|------------|-------------------|
 | `text` | Personas | [Diagnósticos](diagnostics.md) |
 | `json` (diagnósticos) | Programas. Esquema `nexora.diagnostics/1` | [Especificación, sección 11.4](language-spec.md#114-formato-json) |
-| `json` (inspección) | Programas. Esquema `nexora.inspect/1` | [`inspect-schema.md`](inspect-schema.md) |
+| `json` (inspección) | Programas. Esquema `nexora.inspect/2` | [`inspect-schema.md`](inspect-schema.md) |
 | `json` (contexto y símbolos) | Programas. Esquemas `nexora.context/1` y `nexora.symbols/1` | [Contexto estructurado](ai-context.md) |
 
 Las reglas comunes a todos los documentos JSON y sus JSON Schema están en

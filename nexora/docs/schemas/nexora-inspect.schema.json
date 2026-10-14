@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://nexora.invalid/schemas/nexora-inspect.schema.json",
-  "title": "nexora.inspect/1: the syntax tree of a program",
+  "title": "nexora.inspect/2: the syntax tree of a program",
   "type": "object",
   "required": [
     "schema",
@@ -14,7 +14,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "nexora.inspect/1"
+      "const": "nexora.inspect/2"
     },
     "nexora_version": {
       "type": "string",
@@ -189,15 +189,11 @@
           "type": "integer"
         },
         "type": {
-          "enum": [
-            "Int",
-            "Float",
-            "Bool",
-            "Text",
-            "Void",
-            null
+          "type": [
+            "string",
+            "null"
           ],
-          "description": "The type the checker computed, or null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -220,15 +216,11 @@
           "type": "number"
         },
         "type": {
-          "enum": [
-            "Int",
-            "Float",
-            "Bool",
-            "Text",
-            "Void",
-            null
+          "type": [
+            "string",
+            "null"
           ],
-          "description": "The type the checker computed, or null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -251,15 +243,11 @@
           "type": "string"
         },
         "type": {
-          "enum": [
-            "Int",
-            "Float",
-            "Bool",
-            "Text",
-            "Void",
-            null
+          "type": [
+            "string",
+            "null"
           ],
-          "description": "The type the checker computed, or null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -282,15 +270,11 @@
           "type": "boolean"
         },
         "type": {
-          "enum": [
-            "Int",
-            "Float",
-            "Bool",
-            "Text",
-            "Void",
-            null
+          "type": [
+            "string",
+            "null"
           ],
-          "description": "The type the checker computed, or null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -313,15 +297,11 @@
           "type": "string"
         },
         "type": {
-          "enum": [
-            "Int",
-            "Float",
-            "Bool",
-            "Text",
-            "Void",
-            null
+          "type": [
+            "string",
+            "null"
           ],
-          "description": "The type the checker computed, or null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -376,15 +356,11 @@
           ]
         },
         "type": {
-          "enum": [
-            "Int",
-            "Float",
-            "Bool",
-            "Text",
-            "Void",
-            null
+          "type": [
+            "string",
+            "null"
           ],
-          "description": "The type the checker computed, or null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -475,15 +451,11 @@
           ]
         },
         "type": {
-          "enum": [
-            "Int",
-            "Float",
-            "Bool",
-            "Text",
-            "Void",
-            null
+          "type": [
+            "string",
+            "null"
           ],
-          "description": "The type the checker computed, or null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -534,15 +506,11 @@
           ]
         },
         "type": {
-          "enum": [
-            "Int",
-            "Float",
-            "Bool",
-            "Text",
-            "Void",
-            null
+          "type": [
+            "string",
+            "null"
           ],
-          "description": "The type the checker computed, or null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -604,15 +572,11 @@
           }
         },
         "type": {
-          "enum": [
-            "Int",
-            "Float",
-            "Bool",
-            "Text",
-            "Void",
-            null
+          "type": [
+            "string",
+            "null"
           ],
-          "description": "The type the checker computed, or null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -632,6 +596,76 @@
         },
         "name": {
           "type": "string"
+        }
+      }
+    },
+    "TypeDecl": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "base",
+        "condition",
+        "message"
+      ],
+      "properties": {
+        "kind": {
+          "const": "TypeDecl"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "base": {
+          "$ref": "#/$defs/TypeRef"
+        },
+        "condition": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "message": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -992,7 +1026,8 @@
         "kind",
         "span",
         "clause",
-        "condition"
+        "condition",
+        "message"
       ],
       "properties": {
         "kind": {
@@ -1032,6 +1067,16 @@
             },
             {
               "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "message": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
             }
           ]
         }
@@ -1087,6 +1132,7 @@
       "required": [
         "kind",
         "span",
+        "types",
         "functions"
       ],
       "properties": {
@@ -1095,6 +1141,12 @@
         },
         "span": {
           "$ref": "#/$defs/span"
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TypeDecl"
+          }
         },
         "functions": {
           "type": "array",

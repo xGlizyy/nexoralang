@@ -29,13 +29,16 @@ EXPECTED = {
     "types.nex": (0, 0),
     "functions.nex": (0, 0),
     "contracts.nex": (0, 0),
+    "refined_types.nex": (0, 0),
     # Rejected by the static analysis: never started.
     "invalid/syntax_error.nex": (1, 1),
     "invalid/name_errors.nex": (1, 1),
     "invalid/type_errors.nex": (1, 1),
+    "invalid/refinement_errors.nex": (1, 1),
     # Accepted by the static analysis, fail while running.
     "failing/runtime_error.nex": (3, 0),
     "failing/contract_violation.nex": (5, 0),
+    "failing/refinement_violation.nex": (5, 0),
 }
 
 

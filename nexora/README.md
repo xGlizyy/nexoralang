@@ -8,9 +8,11 @@ línea de comandos `nex`, la especificación, los ejemplos y las pruebas.
 
 <!-- nex:run -->
 ```nex
-fn average(total: Int, count: Int) -> Float {
-    requires count > 0
-    return to_float(total) / to_float(count)
+type Grade = Float where value >= 0.0 and value <= 100.0, "A grade goes from 0 to 100"
+
+fn average(total: Int, count: Int) -> Grade {
+    requires count > 0, "An average needs at least one mark"
+    return Grade(to_float(total) / to_float(count))
 }
 
 fn main() -> Void {
@@ -39,8 +41,11 @@ En esta versión, la pregunta se concreta en decisiones de diseño comprobables:
 - **Un nombre, un significado.** Dentro de una función un nombre no se redefine ni se oculta.
 - **Lo que puede comprobarse antes de ejecutar, se comprueba antes.** Todos los errores de tipos se
   detectan sin ejecutar el programa.
-- **La intención forma parte del código.** Una función puede declarar qué espera y qué promete
-  (contratos, experimental).
+- **Las reglas forman parte del código.** Es la característica que distingue a NEXORA: una función
+  declara qué espera y qué promete (contratos), un tipo declara qué valores admite (tipos
+  refinados), y cada regla puede llevar su explicación. Cuando una regla se incumple, el diagnóstico
+  dice cuál, dónde, con qué valores y por qué existe
+  ([decisión 0006](docs/decisions/0006-requisitos-verificables.md)).
 - **Las herramientas reciben datos, no texto.** El programa y sus errores pueden obtenerse en JSON,
   con un esquema versionado.
 
@@ -53,13 +58,13 @@ sin conexión. Lo que hay y lo que no, con precisión: [Herramientas automática
 
 ## Estado
 
-**Versión 0.2.0. Proyecto en fase temprana**, anterior a la 1.0: el lenguaje puede cambiar de forma
+**Versión 0.3.0. Proyecto en fase temprana**, anterior a la 1.0: el lenguaje puede cambiar de forma
 incompatible y no es apto para uso en producción.
 
 | Estado | Qué incluye |
 |--------|-------------|
-| **Implementado y probado** | Tipos estáticos `Int`, `Float`, `Bool`, `Text` y `Void`, con inferencia y anotaciones · variables inmutables y ámbitos · aritmética, comparaciones y lógica · conversiones explícitas · funciones con parámetros y `return` · `if` / `else` · recursividad · análisis estático de nombres, tipos y rutas de retorno · comandos `run`, `check`, `inspect`, `context` y `symbols` · diagnósticos con código y categoría, en texto y en JSON · formatos JSON versionados con JSON Schema |
-| **Experimental** | Contratos (`requires`, `ensures`): funcionan y están probados, pero su sintaxis puede cambiar. Se comprueban al ejecutar; no se demuestran · API de Python `nexora.tooling` · servidor MCP opcional (probado con el cliente del SDK y, a mano, en Claude Code; en ningún otro asistente) · [playground](docs/playground.md) web, solo en local |
+| **Implementado y probado** | Tipos estáticos `Int`, `Float`, `Bool`, `Text` y `Void`, con inferencia y anotaciones · **tipos refinados** (`type Percent = Int where ...`): las constantes se comprueban sin ejecutar y el resto con `Percent(x)` al ejecutar · **contratos** (`requires`, `ensures`), estables desde la 0.3, comprobados al ejecutar · explicación de cada regla en los diagnósticos · variables inmutables y ámbitos · aritmética, comparaciones y lógica · conversiones explícitas · funciones con parámetros y `return` · `if` / `else` · recursividad · análisis estático de nombres, tipos y rutas de retorno · comandos `run`, `check`, `inspect`, `context` y `symbols` · diagnósticos con código y categoría, en texto y en JSON · formatos JSON versionados con JSON Schema |
+| **Experimental** | API de Python `nexora.tooling` · servidor MCP opcional (probado con el cliente del SDK y, a mano, en Claude Code; en ningún otro asistente) · [playground](docs/playground.md) web, solo en local |
 | **Previsto** (no existe) | Bucles, variables reasignables, listas y otros tipos compuestos, operaciones sobre textos, entrada de datos, módulos, servidor de lenguaje (LSP) |
 | **En investigación** (no existe) | Verificación estática de contratos, características de IA dentro del lenguaje, y la evaluación de la hipótesis del proyecto |
 
@@ -94,7 +99,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.2.0
+NEXORA 0.3.0
 ```
 
 El comando `nex` queda instalado dentro del entorno virtual, no en todo el sistema: solo está

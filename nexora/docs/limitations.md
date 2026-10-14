@@ -1,6 +1,6 @@
 # Limitaciones
 
-Lo que NEXORA **no** hace en la versión 0.2.0, y los riesgos que conviene conocer antes de usarlo.
+Lo que NEXORA **no** hace en la versión 0.3.0, y los riesgos que conviene conocer antes de usarlo.
 Nada de lo que aparece aquí como "no existe" funciona hoy, aunque se mencione en el borrador de
 diseño o en la hoja de ruta.
 
@@ -59,12 +59,18 @@ El intérprete recorre el árbol de sintaxis directamente, sin compilar. Es una 
 referencia, pensada para ser correcta y fácil de entender, no rápida. **No se ha medido** su
 velocidad, y no se hace ninguna afirmación sobre ella.
 
-## Contratos
+## Contratos y tipos refinados
 
-Experimentales. Sus límites, en detalle, en [contratos](contracts.md#limitaciones):
+Estables desde la 0.3.0. Sus límites, en detalle, en [contratos](contracts.md#limitaciones) y en
+[tipos refinados](types.md#tipos-refinados):
 
-- Se comprueban al ejecutar, en las llamadas que se ejecutan. No se demuestran.
+- Los contratos se comprueban al ejecutar, en las llamadas que se ejecutan. No se demuestran.
 - `nex check` no afirma que un contrato se cumpla.
+- De los tipos refinados, `nex check` solo comprueba las constantes. Un valor calculado se comprueba
+  con `Percent(x)` al ejecutar, y `nex check` no afirma que vaya a cumplir la condición.
+- La condición de un tipo refinado no puede llamar a funciones del programa.
+- No hay alias de tipos sin condición, ni forma de comprobar un valor sin detener el programa si
+  falla (no existe `Result`).
 - No pueden desactivarse.
 
 ## Herramientas

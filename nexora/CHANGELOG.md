@@ -19,14 +19,38 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
-## Sin publicar
+## 0.3.0 — Contratos y tipos refinados
 
-Cambios posteriores a la 0.2.0: documentación, pruebas, calidad, playground y herramientas de
-análisis. El lenguaje no cambia. El número de versión sigue siendo 0.2.0 hasta que se decida
-publicar una nueva.
+Consolida la característica que distingue a NEXORA: los requisitos forman parte verificable del
+programa ([decisión 0006](docs/decisions/0006-requisitos-verificables.md)). Los contratos dejan de
+ser experimentales, cada regla puede llevar su explicación y llegan los tipos refinados. Los motivos
+de cada elección están en la [decisión 0007](docs/decisions/0007-contratos-estables-y-tipos-refinados.md).
+
+Esta versión incluye también todo lo hecho después de la 0.2.0 que no llegó a publicarse con otro
+número: documentación, pruebas, playground y herramientas de análisis.
 
 ### Añadido
 
+- **Tipos refinados:** `type Percent = Int where value >= 0 and value <= 100`. Todo valor de un
+  tipo refinado cumple su condición:
+  - Una constante usada como valor del tipo se comprueba **sin ejecutar** (`E2017`).
+  - Cualquier otro valor se comprueba explícitamente con `Percent(x)`, al ejecutar (`E4003`,
+    categoría `contract`, código de salida `5`).
+  - Un valor refinado se acepta donde se espera su base; una operación con él da un valor de la
+    base.
+  - Un tipo puede refinar otro (`type Pass = Percent where value >= 50`); se comprueban las dos
+    condiciones, desde la base.
+  - La condición solo puede usar `value`, literales, operadores y conversiones integradas
+    (`E2018`).
+- **Explicación de las reglas:** `requires amount <= balance, "An account cannot go below zero"`.
+  Sirve en `requires`, `ensures` y `where`, y aparece en el diagnóstico como `Reason: ...` cuando
+  la regla se incumple.
+- Códigos nuevos: `E2016` (declaración de tipo no válida), `E2017` (constante fuera del tipo
+  refinado), `E2018` (condición de refinamiento no válida) y `E4003` (refinamiento incumplido).
+- `nex context` lista los tipos refinados (campo `types`) y la explicación de cada contrato (campo
+  `message`). Característica nueva en `features`: `refined_types`.
+- Ejemplos `refined_types.nex`, `invalid/refinement_errors.nex` y
+  `failing/refinement_violation.nex`.
 - **Licencia MIT** (`LICENSE`).
 - **Paquete de npm** (`npm/`, nombre `nexora-lang`): instala el comando `nex` con un lanzador que
   ejecuta el intérprete incluido usando el Python 3.11+ de la máquina. Preparado y probado en
@@ -82,10 +106,18 @@ publicar una nueva.
 
 ### Cambios incompatibles
 
+- **`type` y `where` son palabras clave** (antes, palabras reservadas). Ningún programa válido de la
+  0.2 podía usarlas como nombres, así que ninguno deja de funcionar.
+- **`nex inspect` pasa a `nexora.inspect/2`.** El campo `type` de una expresión puede ser el nombre
+  de un tipo refinado, no solo `Int`, `Float`, `Bool`, `Text` o `Void`. Añadidos: nodo `TypeDecl`,
+  campo `types` en `Program` y campo `message` en `Contract`. Cómo actualizar: aceptar cualquier
+  texto en `type` y comprobar `schema`.
+- Los contratos dejan de ser experimentales: su sintaxis no cambia, pero a partir de ahora solo
+  cambiará siguiendo las reglas de los cambios incompatibles.
 - El paquete de Python pasa a llamarse `nexora-lang` (antes `nexora`), porque `nexora` ya existe en
   PyPI. El comando (`nex`) y el módulo (`import nexora`) no cambian. Cómo actualizar una
   instalación en modo desarrollo: `python -m pip uninstall nexora` y `python -m pip install -e .`.
-  Los archivos generados se llaman ahora `nexora_lang-0.2.0…`, y el extra opcional se instala con
+  Los archivos generados se llaman ahora `nexora_lang-0.3.0…`, y el extra opcional se instala con
   `nexora-lang[mcp]`.
 - En el documento de `nex inspect`, con errores de sintaxis, `program` es ahora un árbol parcial y
   no `null`. Sigue siendo `null` con errores léxicos o si el archivo no puede leerse. Cómo
@@ -107,9 +139,14 @@ publicar una nueva.
 - `CONTRIBUTING.md`, `SECURITY.md` y `CODE_OF_CONDUCT.md`.
 - Todos los programas de la documentación se ejecutan en las pruebas y su salida se compara con
   la real.
+- Especificación 0.3: sección 4.4 (tipos refinados), contratos estables (sección 9) y códigos
+  nuevos. Guías de tipos y contratos ampliadas. Decisiones 0006 y 0007.
 
 ### Limitaciones
 
+- De los tipos refinados, `nex check` solo comprueba las constantes; un valor calculado se comprueba
+  al ejecutar. No existe forma de comprobarlo sin detener el programa si falla (no hay `Result`).
+- No hay alias de tipos sin condición.
 - El proyecto sigue sin repositorio público y sin canal de contacto.
 - Solo se ha comprobado en Windows 11 con Python 3.12.
 

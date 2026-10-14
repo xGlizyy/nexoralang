@@ -14,6 +14,7 @@
     "analysed",
     "complete",
     "entry_point",
+    "types",
     "functions",
     "features",
     "reserved_words_used",
@@ -62,6 +63,20 @@
         "string",
         "null"
       ]
+    },
+    "types": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/type"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The refined types the program declares. Null when there is no structure."
     },
     "functions": {
       "oneOf": [
@@ -289,6 +304,7 @@
             "required": [
               "clause",
               "condition",
+              "message",
               "line"
             ],
             "properties": {
@@ -301,6 +317,13 @@
               "condition": {
                 "type": "string",
                 "description": "The condition, as written in the source."
+              },
+              "message": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The explanation written after the condition, if any."
               },
               "line": {
                 "type": "integer",
@@ -357,6 +380,48 @@
         "recursive": {
           "type": "boolean",
           "description": "True if the function can reach itself through calls."
+        }
+      }
+    },
+    "type": {
+      "type": "object",
+      "required": [
+        "name",
+        "base",
+        "root",
+        "condition",
+        "message",
+        "line"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "base": {
+          "type": "string",
+          "description": "The type it refines, as written."
+        },
+        "root": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The built-in type its values have. Null when the declaration has an error."
+        },
+        "condition": {
+          "type": "string",
+          "description": "The condition after 'where', as written in the source."
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The explanation written after the condition, if any."
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     }

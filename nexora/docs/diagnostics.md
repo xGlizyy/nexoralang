@@ -60,7 +60,7 @@ La categoría indica en qué etapa se encontró el problema.
 | `semantic` | Nombres, ámbitos o estructura del programa | Sin ejecutar | `1` |
 | `type` | Tipos | Sin ejecutar | `1` |
 | `runtime` | Depende de los valores calculados | Al ejecutar | `3` |
-| `contract` | Una condición `requires` o `ensures` fue falsa | Al ejecutar | `5` |
+| `contract` | Se incumplió una regla que el programa declara: una condición `requires` o `ensures`, o la condición de un tipo refinado | Al ejecutar | `5` |
 
 Las etapas se ejecutan en orden y cada una solo se realiza si la anterior no encontró errores.
 Por eso un archivo con un error de sintaxis no muestra a la vez errores de tipos: se corrige
@@ -114,6 +114,8 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E2013` | Invalid parameter | `main` tiene parámetros, o un parámetro se llama `result` | Quita los parámetros de `main`, o cambia el nombre |
 | `E2014` | Missing return | Una función que devuelve un valor puede terminar sin `return` | Asegúrate de que todas las ramas terminan con `return` |
 | `E2015` | Unreachable code | Código situado después de un `return` | Elimínalo o muévelo antes del `return` |
+| `E2016` | Invalid type declaration | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, o una cadena de tipos que no termina en un tipo integrado | Corrige el nombre o la base; el mensaje dice cuál de los casos es |
+| `E2018` | Invalid refinement condition | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado | Escribe la regla con operadores sobre `value`, o pásala a un `requires` |
 
 ### De tipos
 
@@ -122,7 +124,8 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E2004` | Invalid return type | `main` declara un tipo de retorno distinto de `Void` | Escribe `fn main() -> Void` |
 | `E2009` | Wrong number of arguments | La llamada no pasa tantos argumentos como parámetros tiene la función | La nota muestra la firma de la función |
 | `E2011` | Type mismatch | Un tipo no es el que exige la regla: anotación, operador, argumento, retorno, condición, o un `Void` usado como valor | El mensaje indica el tipo esperado y el encontrado. Convierte de forma explícita si existe una conversión |
-| `E2012` | Invalid type | Un nombre que no es un tipo, o `Void` donde hace falta un tipo de valor | Los tipos son `Int`, `Float`, `Bool`, `Text` y `Void` |
+| `E2012` | Invalid type | Un nombre que no es un tipo, o `Void` donde hace falta un tipo de valor | Los tipos son `Int`, `Float`, `Bool`, `Text` y `Void`, y los tipos refinados que declara el programa |
+| `E2017` | Value outside refined type | Una constante usada como valor de un tipo refinado no cumple su condición. Las notas muestran la condición, el valor y la explicación de la regla | Cambia el valor, o revisa la regla si era incorrecta |
 
 ### De ejecución
 
@@ -141,6 +144,9 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 |--------|--------|---------------|-----------|
 | `E4001` | Precondition violated | Una llamada no cumple una condición `requires`. Señala la llamada | Corrige los argumentos, o comprueba la condición antes de llamar |
 | `E4002` | Postcondition violated | Una función no cumple su propia condición `ensures`. Señala la cláusula | Corrige el cuerpo de la función (o la condición, si era incorrecta) |
+| `E4003` | Refinement violated | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado. Señala la comprobación | Corrige el cálculo que produce el valor, o compruébalo antes con un `if` |
+
+Cuando la regla incumplida tiene explicación, el diagnóstico la muestra en una nota `Reason: ...`.
 
 ### Códigos retirados
 
@@ -199,7 +205,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.2.0",
+  "nexora_version": "0.3.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

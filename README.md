@@ -2,7 +2,9 @@
 
 Lenguaje de programación orientado a la web y diseñado para el desarrollo con inteligencia artificial.
 
-Estado: existe un intérprete (versión 0.2.0) que ejecuta un subconjunto del lenguaje: tipos estáticos, variables inmutables, funciones con parámetros y retorno, `if`/`else`, recursividad y contratos experimentales. El resto del diseño aún no está implementado.
+Estado: existe un intérprete (versión 0.3.0) que ejecuta un subconjunto del lenguaje: tipos estáticos, variables inmutables, funciones con parámetros y retorno, `if`/`else`, recursividad, contratos (`requires`, `ensures`) y tipos refinados (`type Percent = Int where ...`), cada regla con su explicación. El resto del diseño aún no está implementado.
+
+Lo que distingue a NEXORA: los requisitos de un programa se escriben en el propio código y se comprueban de forma determinista ([decisión 0006](nexora/docs/decisions/0006-requisitos-verificables.md)).
 
 - [nexora/](nexora/): núcleo del lenguaje. Intérprete, comando `nex`, documentación ([nexora/docs/index.md](nexora/docs/index.md)), ejemplos ejecutables y pruebas. Empieza por [nexora/README.md](nexora/README.md).
 - [.github/workflows/nexora-ci.yml](.github/workflows/nexora-ci.yml): integración continua del núcleo para GitHub Actions. Está preparada, pero no se ha ejecutado nunca porque el proyecto aún no tiene repositorio remoto.

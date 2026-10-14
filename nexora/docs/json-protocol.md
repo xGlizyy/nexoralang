@@ -11,7 +11,7 @@ un **JSON Schema** en [`schemas/`](schemas/), y las pruebas validan con él la s
 | `schema` | Qué es | Lo produce | JSON Schema |
 |----------|--------|------------|-------------|
 | `nexora.diagnostics/1` | El resultado del análisis estático | `nex check --format json`, `nex run --format json`, `tooling.check_source` | [`nexora-diagnostics.schema.json`](schemas/nexora-diagnostics.schema.json) |
-| `nexora.inspect/1` | El árbol de sintaxis, con tipos | `nex inspect`, `tooling.inspect_source` | [`nexora-inspect.schema.json`](schemas/nexora-inspect.schema.json) |
+| `nexora.inspect/2` | El árbol de sintaxis, con tipos | `nex inspect`, `tooling.inspect_source` | [`nexora-inspect.schema.json`](schemas/nexora-inspect.schema.json) |
 | `nexora.symbols/1` | Los nombres declarados y sus usos | `nex symbols --format json`, `tooling.get_symbols` | [`nexora-symbols.schema.json`](schemas/nexora-symbols.schema.json) |
 | `nexora.context/1` | Un resumen técnico del programa | `nex context --format json`, `tooling.get_context` | [`nexora-context.schema.json`](schemas/nexora-context.schema.json) |
 | `nexora.spec/1` | La especificación del lenguaje, o una sección | `tooling.get_language_spec` | [`nexora-spec.schema.json`](schemas/nexora-spec.schema.json) |
@@ -118,7 +118,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.2.0",
+  "nexora_version": "0.3.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -189,7 +189,8 @@ Historial:
 | Formato | Desde | Cambios |
 |---------|-------|---------|
 | `nexora.diagnostics/1` | 0.1.0 | 0.2.0: campo `category` y campo `schema`. Versión actual: campo `nexora_version` |
-| `nexora.inspect/1` | 0.2.0 | Versión actual: campos `nexora_version` y `complete`; con errores de sintaxis, `program` es un árbol parcial en vez de `null` |
+| `nexora.inspect/1` | 0.2.0 | Campos `nexora_version` y `complete`; con errores de sintaxis, `program` es un árbol parcial en vez de `null` |
+| `nexora.inspect/2` | 0.3.0 | El campo `type` de una expresión puede ser el nombre de un tipo refinado (antes era una lista cerrada de cinco tipos). Nodo nuevo `TypeDecl`, campo `types` en `Program` y campo `message` en `Contract` |
 | `nexora.result/1` | Versión actual | |
 | `nexora.symbols/1`, `nexora.context/1`, `nexora.spec/1`, `nexora.capabilities/1` | Versión actual | |
 

@@ -1,4 +1,4 @@
-"""The structured view of a program used by `nex inspect` (schema nexora.inspect/1)."""
+"""The structured view of a program used by `nex inspect` (schema nexora.inspect/2)."""
 
 import json
 from pathlib import Path
@@ -27,14 +27,15 @@ PROGRAM = (
     "}\n"
 )
 
-# Every node kind and its fields, in order. This is the contract of schema version 1:
+# Every node kind and its fields, in order. This is the contract of schema version 2:
 # removing or renaming anything here requires a new schema version.
 EXPECTED_FIELDS = {
-    "Program": ["kind", "span", "functions"],
+    "Program": ["kind", "span", "types", "functions"],
+    "TypeDecl": ["kind", "span", "name", "name_span", "base", "condition", "message"],
     "Function": ["kind", "span", "name", "name_span", "params", "return_type", "contracts", "body"],
     "Param": ["kind", "span", "name", "name_span", "type"],
     "TypeRef": ["kind", "span", "name"],
-    "Contract": ["kind", "span", "clause", "condition"],
+    "Contract": ["kind", "span", "clause", "condition", "message"],
     "Block": ["kind", "span", "statements"],
     "Let": ["kind", "span", "name", "name_span", "declared_type", "value"],
     "Assign": ["kind", "span", "name", "name_span", "value"],
@@ -107,7 +108,8 @@ def test_statements_and_expressions_carry_kinds_types_and_positions():
 def test_every_node_has_exactly_the_documented_fields():
     # A program that uses every node kind except Assign (which is always an error).
     seen = {}
-    for node in walk(inspect(PROGRAM + "\nfn extra(n: Int) -> Int {\n    return (n) + 1\n}\n")):
+    refined = 'type Small = Int where value < 10, "Small numbers only"\n'
+    for node in walk(inspect(refined + PROGRAM + "\nfn extra(n: Small) -> Int {\n    return (n) + 1\n}\n")):
         seen.setdefault(node["kind"], list(node))
     assert_fields(seen)
     assert set(seen) == set(EXPECTED_FIELDS) - {"Assign"}
@@ -152,8 +154,25 @@ def test_output_is_deterministic():
 
 def test_the_schema_document_describes_every_node_kind_and_field():
     text = SCHEMA_DOC.read_text(encoding="utf-8")
-    assert "nexora.inspect/1" in text
+    assert "nexora.inspect/2" in text
     for kind, names in EXPECTED_FIELDS.items():
         assert f"`{kind}`" in text, kind
         for name in names:
             assert f"`{name}`" in text, (kind, name)
+
+
+def test_refined_types_appear_in_the_tree_with_their_names():
+    text = ('type Percent = Int where value >= 0 and value <= 100, "From 0 to 100"\n\n'
+            "fn main() -> Void {\n    let n = 40\n    let p = Percent(n)\n    print(p + 1)\n}\n")
+    program = inspect(text)
+    (declaration,) = program["types"]
+    assert (declaration["name"], declaration["base"]["name"], declaration["message"]) == ("Percent", "Int", "From 0 to 100")
+    assert declaration["condition"]["type"] == "Bool"
+    assert declaration["condition"]["left"]["left"] == {
+        "kind": "Name", "span": {"line": 1, "column": 26, "end_line": 1, "end_column": 31}, "name": "value", "type": "Int",
+    }
+    _, let_p, call = program["functions"][0]["body"]["statements"]
+    assert (let_p["value"]["kind"], let_p["value"]["callee"], let_p["value"]["type"]) == ("Call", "Percent", "Percent")
+    # Arithmetic on a refined value gives its base type.
+    assert call["expression"]["arguments"][0]["type"] == "Int"
+

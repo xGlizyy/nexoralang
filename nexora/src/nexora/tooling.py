@@ -37,7 +37,7 @@ from .values import INT, INT_MAX, INT_MIN, TEXT, VALUE_TYPES, VOID
 from .version import __version__
 
 DIAGNOSTICS_SCHEMA = "nexora.diagnostics/1"
-INSPECT_SCHEMA = "nexora.inspect/1"
+INSPECT_SCHEMA = "nexora.inspect/2"
 SYMBOLS_SCHEMA = "nexora.symbols/1"
 CONTEXT_SCHEMA = "nexora.context/1"
 SPEC_SCHEMA = "nexora.spec/1"
@@ -114,7 +114,7 @@ def inspect_document(analysis: Analysis) -> dict:
 def inspect_source(source: str, filename: str = DEFAULT_FILENAME) -> dict:
     """The syntax tree of a program, with the type of every expression the checker could type.
 
-    Returns a `nexora.inspect/1` document. With syntax errors the tree is partial and
+    Returns a `nexora.inspect/2` document. With syntax errors the tree is partial and
     `complete` is false: the statements with errors, and the functions whose declaration has
     them, are missing. `program` is null when the text has lexical errors.
     """
@@ -219,6 +219,7 @@ def _reaches(calls: dict[str, list[str]], start: str, target: str) -> bool:
 _FEATURES = (
     ("conditionals", lambda node, types: isinstance(node, ast.If)),
     ("contracts", lambda node, types: isinstance(node, ast.Contract)),
+    ("refined_types", lambda node, types: isinstance(node, ast.TypeDecl)),
     ("type_annotations", lambda node, types: isinstance(node, ast.Let) and node.declared_type is not None),
     ("arithmetic", lambda node, types: isinstance(node, ast.Binary) and node.operator in ("+", "-", "*", "/")
         and types.get(id(node)) != TEXT),
@@ -255,6 +256,10 @@ def _notes(analysis: Analysis, features: list[str], reserved_used: list[str]) ->
     if "contracts" in features:
         notes.append("Contracts ('requires', 'ensures') are checked while the program runs, on the calls "
                      "that execute. This analysis verified their types, not that they hold.")
+    if "refined_types" in features:
+        notes.append("Every value of a refined type satisfies its condition. This analysis checked the "
+                     "constants given to refined types; any other value is checked by 'Type(x)' while the "
+                     "program runs (E4003).")
     if "recursion" in features:
         notes.append(f"Recursion is limited to {MAX_CALL_DEPTH} nested calls (runtime error E3004).")
     types = analysis.types or {}
@@ -297,7 +302,7 @@ def _function_context(function: ast.Function, analysis: Analysis, calls: dict[st
         "span": _span(function.span),
         "contracts": [
             {"clause": contract.clause, "condition": _text_of(analysis.source, contract.condition.span),
-             "line": contract.span.line}
+             "message": contract.message, "line": contract.span.line}
             for contract in function.contracts
         ],
         "variables": variables,
@@ -307,6 +312,23 @@ def _function_context(function: ast.Function, analysis: Analysis, calls: dict[st
         "recursive": _reaches({name: [c for c in callees if c not in BUILTINS] for name, callees in calls.items()},
                               function.name, function.name),
     }
+
+
+def _type_entries(analysis: Analysis) -> list[dict]:
+    """The refined types the program declares, as written. `root` is null when the declaration
+    has an error that leaves the type unusable."""
+    refined = analysis.facts.refined
+    return [
+        {
+            "name": declaration.name,
+            "base": declaration.base.name,
+            "root": refined[declaration.name].root if declaration.name in refined else None,
+            "condition": _text_of(analysis.source, declaration.condition.span),
+            "message": declaration.message,
+            "line": declaration.span.line,
+        }
+        for declaration in analysis.program.types
+    ]
 
 
 def context_document(analysis: Analysis) -> dict:
@@ -319,7 +341,8 @@ def context_document(analysis: Analysis) -> dict:
     document["reserved_words_used"] = reserved_used if analysis.tokens is not None else None
 
     if analysis.facts is None:
-        document.update(analysed=False, complete=False, entry_point=None, functions=None, features=None)
+        document.update(analysed=False, complete=False, entry_point=None, types=None, functions=None,
+                        features=None)
         document["notes"] = _notes(analysis, [], reserved_used)
         return document
 
@@ -337,6 +360,7 @@ def context_document(analysis: Analysis) -> dict:
         analysed=True,
         complete=analysis.complete,
         entry_point="main" if "main" in facts.functions else None,
+        types=_type_entries(analysis),
         functions=functions,
         features=features,
     )
@@ -370,11 +394,21 @@ def render_context(document: dict) -> str:
         entry = document["entry_point"]
         lines.append(f"Entry point: {entry}" if entry else "Entry point: none (the program has no 'main').")
         lines.append("")
+        if document["types"]:
+            lines.append(f"Types ({len(document['types'])}):")
+            for kind in document["types"]:
+                lines.append(f"  type {kind['name']} = {kind['base']} where {kind['condition']}    "
+                             f"[line {kind['line']}]")
+                if kind["message"]:
+                    lines.append(f"      reason: {kind['message']}")
+            lines.append("")
         lines.append(f"Functions ({len(document['functions'])}):")
         for function in document["functions"]:
             lines.append(f"  {function['signature']}    [line {function['span']['line']}]")
             for contract in function["contracts"]:
                 lines.append(f"      {contract['clause']} {contract['condition']}")
+                if contract["message"]:
+                    lines.append(f"          reason: {contract['message']}")
             if function["variables"]:
                 variables = ", ".join(f"{v['name']}: {v['type'] or '?'}" for v in function["variables"])
                 lines.append(f"      variables: {variables}")

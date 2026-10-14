@@ -354,8 +354,8 @@ def test_context_describes_the_program():
     ]
     area = function_of(document, "area")
     assert area["contracts"] == [
-        {"clause": "requires", "condition": "width > 0 and height > 0", "line": 2},
-        {"clause": "ensures", "condition": "result > 0", "line": 3},
+        {"clause": "requires", "condition": "width > 0 and height > 0", "message": None, "line": 2},
+        {"clause": "ensures", "condition": "result > 0", "message": None, "line": 3},
     ]
     assert area["variables"] == [{"name": "size", "type": "Int", "line": 4}]
     assert (area["calls"], area["called_by"], area["recursive"]) == ([], ["main"], False)
@@ -473,10 +473,10 @@ def test_instructions_inside_a_program_are_data():
 def test_spec_index():
     document = tooling.get_language_spec()
     validate(document, "nexora-spec.schema.json")
-    assert (document["available"], document["spec_version"], document["language"], document["section"]) == (True, "0.2", "es", None)
+    assert (document["available"], document["spec_version"], document["language"], document["section"]) == (True, "0.3", "es", None)
     ids = [section["id"] for section in document["sections"]]
     assert len(ids) == len(set(ids))
-    for expected in ("4-tipos-de-datos", "7-funciones", "9-contratos--experimental", "113-códigos-de-error"):
+    for expected in ("4-tipos-de-datos", "7-funciones", "9-contratos", "44-tipos-refinados", "113-códigos-de-error"):
         assert expected in ids
 
 
@@ -547,8 +547,8 @@ def test_cli_context_and_symbols_text():
 
     symbols = nex("symbols", "examples/contracts.nex", "--name", "whole")
     assert symbols.stdout.splitlines() == [
-        "parameter  whole: Int    in percentage    [declared at 22:26]",
-        "    used at: 23:14, 24:36, 26:25",
+        "parameter  whole: Int    in percentage    [declared at 23:26]",
+        "    used at: 24:14, 25:36, 27:25",
     ]
     filtered = json.loads(nex("symbols", "examples/contracts.nex", "--function", "divide", "--format", "json").stdout)
     assert [s["name"] for s in filtered["symbols"]] == ["divide", "a", "b"]

@@ -26,11 +26,14 @@ hay una prueba que falla si deja de funcionar.
 | Variables inmutables, bloques y ámbitos | `tests/test_checker.py` |
 | Funciones con parámetros, `return`, rutas de retorno, recursividad | `tests/test_functions.py` |
 | `if` / `else if` / `else` | `tests/test_functions.py` |
+| **Contratos** (`requires`, `ensures`), estables desde la 0.3.0 | `tests/test_contracts.py` |
+| **Explicación de cada regla**, mostrada en el diagnóstico cuando se incumple | `tests/test_contracts.py`, `tests/test_refined_types.py` |
+| **Tipos refinados** (`type ... where ...`): constantes comprobadas sin ejecutar, `Tipo(x)` al ejecutar, cadenas de tipos | `tests/test_refined_types.py` |
 | Análisis estático separado de la ejecución | `tests/test_checker.py`, `tests/test_security.py` |
 | Intérprete | `tests/test_interpreter.py` |
 | Diagnósticos con código, categoría y posición, en texto y JSON | `tests/test_diagnostics.py`, `tests/test_cli.py` |
 | Comandos `nex run`, `nex check`, `nex inspect` | `tests/test_cli.py` |
-| Representación JSON del programa (`nexora.inspect/1`) | `tests/test_inspect.py` |
+| Representación JSON del programa (`nexora.inspect/2`) | `tests/test_inspect.py` |
 | Símbolos y referencias (`nex symbols`) y resumen del programa (`nex context`) | `tests/test_tooling.py` |
 | Formatos JSON versionados, con JSON Schema generados desde el código | `tests/test_tooling.py` valida con ellos la salida real |
 | Árbol, símbolos y resumen parciales cuando el programa tiene errores de sintaxis | `tests/test_tooling.py`, incluido el programa cortado en cada carácter |
@@ -44,7 +47,6 @@ hay una prueba que falla si deja de funcionar.
 
 | Elemento | Qué hay | Qué falta |
 |----------|---------|-----------|
-| **Contratos** (`requires`, `ensures`) | Implementados, comprobados al ejecutar, con pruebas (`tests/test_contracts.py`) | Estabilizar la sintaxis. Siguen marcados como experimentales |
 | **API de Python** (`nexora.tooling`) | Implementada y probada (`tests/test_tooling.py`) | Declararla estable. Hoy es experimental y puede cambiar |
 | **Servidor MCP** (opcional) | Siete herramientas de análisis, probadas con el cliente del SDK oficial (`tests/test_mcp.py`). Comprobado a mano una vez en Claude Code. No ejecuta código | Probarlo en otros asistentes. Incluir la especificación en el paquete instalable |
 | **Playground** (web) | Editor, API y ejecución en un proceso aparte con límites; probado en local ([Playground](playground.md)) | Desplegarlo. Verificar el aislamiento con contenedor y los límites POSIX, que no se han podido probar en Windows |
@@ -52,9 +54,30 @@ hay una prueba que falla si deja de funcionar.
 | **Verificación en otras plataformas** | Probado en Windows 11 con Python 3.12 | Linux, macOS, Python 3.11 y 3.13 |
 | **Preparación para colaboradores** | Licencia MIT, guía de contribución, política de seguridad, código de conducta | Publicar el repositorio y definir un canal de contacto |
 
+## Línea principal: requisitos verificables
+
+La característica que distingue a NEXORA es que los requisitos de una función forman parte
+verificable del programa ([decisión 0006](decisions/0006-requisitos-verificables.md)). Es la
+prioridad del proyecto. Su trabajo va en este orden, y cada paso empieza cuando el anterior es
+sólido:
+
+| # | Paso | Estado |
+|---|------|--------|
+| 1 | **Estabilizar los contratos** (`requires`, `ensures`): fijar su posición en el código y el nombre `result`, y dejar de marcarlos como experimentales | **Completado en la 0.3.0** ([decisión 0007](decisions/0007-contratos-estables-y-tipos-refinados.md)) |
+| 2 | **Una explicación en lenguaje natural unida a cada condición**, que aparece en el diagnóstico cuando la condición se incumple | **Completado en la 0.3.0**, en contratos y en tipos refinados |
+| 3 | **Casos concretos en la función (`example`)** y un comando que los ejecute sin escribir `main` | Planificado |
+| 4 | **Avisar cuando una edición elimina o debilita un requisito** | En investigación: no está decidido cómo detectar que una condición es más débil que otra |
+| 5 | **Tipos refinados** (`type Percent = Int where ...`) | **Completado en la 0.3.0** sobre los tipos integrados. Falta refinar registros, cuando existan |
+| 6 | **Evaluar si los requisitos en el código ayudan a un agente de IA** a no romperlos | Planificado; ver la última fila de [En investigación](#en-investigación) |
+
+Hasta que el paso 6 dé resultados, la característica es una hipótesis y no se presenta como una
+ventaja demostrada.
+
 ## Planificado
 
-En el orden en que tendría sentido abordarlo:
+El resto del lenguaje, en el orden en que tendría sentido abordarlo. Avanza junto a la línea
+principal; cuando un punto de esta lista es necesario para un paso de la línea principal, va
+primero:
 
 1. **Variables reasignables (`var`) y bucles (`while`).** Van juntos: uno no sirve sin el otro.
    Eliminan la dependencia de la recursividad.
@@ -79,11 +102,11 @@ Ideas del diseño original cuyo valor o cuya forma no están decididos:
 | Idea | Pregunta abierta |
 |------|------------------|
 | Verificación estática de contratos | ¿Qué parte puede demostrarse sin un demostrador completo, y sin dar falsas garantías? |
-| Ejemplos ejecutables en la firma (`example`) | ¿Aportan algo que no den ya las pruebas? |
+| Requisitos debilitados entre dos versiones de una función | ¿Cómo saber, sin un demostrador, que una condición nueva es más débil que la anterior? ¿Basta con avisar cuando una condición desaparece o cambia? |
 | Efectos declarados (`uses`) | ¿Compensa la carga de anotarlos? |
 | Funciones resueltas por un modelo de IA (`ai fn`, `tool fn`) | ¿Puede un lenguaje determinista incorporar una operación que no lo es, y cómo se prueba? |
 | Ediciones estructuradas en los diagnósticos | ¿Qué formato permitiría aplicar una corrección automáticamente con seguridad? |
-| **La hipótesis central del proyecto** | ¿Facilitan estas decisiones de diseño el trabajo de las herramientas de IA? **No se ha evaluado.** Requiere un experimento reproducible que compare resultados con y sin ellas; [qué haría falta](ai-tooling.md#tareas-de-referencia) |
+| **La hipótesis central del proyecto** | Cuando una IA modifica una función, ¿se detectan más incumplimientos si los requisitos están escritos en el código que si solo están en la instrucción? **No se ha evaluado.** El experimento está descrito en la [decisión 0006](decisions/0006-requisitos-verificables.md#cómo-se-sabrá-si-funciona); las [tareas de referencia](ai-tooling.md#tareas-de-referencia) son su punto de partida |
 | Ejecución de programas a través de MCP | ¿Con qué aislamiento y bajo qué activación explícita? Hoy el servidor solo analiza |
 | Compilación a JavaScript o WebAssembly | El borrador original lo proponía; hoy solo existe un intérprete, y el playground ejecuta en el servidor |
 
@@ -96,6 +119,7 @@ Ideas del diseño original cuyo valor o cuya forma no están decididos:
 | 3 | Documentación, pruebas y calidad | Completada en lo que puede comprobarse en local; integración continua y otras plataformas, pendientes de ejecutar |
 | 4 | Playground: editor web que ejecuta con el intérprete real | Implementada y probada en local; sin desplegar, y con el aislamiento por contenedor sin verificar |
 | 5 | Herramientas para agentes: protocolo JSON, `nex context`, `nex symbols`, API de Python, servidor MCP | Implementada y probada en local; el LSP queda planificado y ningún modelo de IA se ha evaluado |
+| 6 | Requisitos verificables: contratos estables, explicación de las reglas y tipos refinados | Completada (versión 0.3.0). Quedan los pasos 3, 4 y 6 de la [línea principal](#línea-principal-requisitos-verificables) |
 
 La web del proyecto (`web/`, en la raíz del repositorio) muestra una versión resumida de esta hoja
 de ruta. Este documento es la referencia.

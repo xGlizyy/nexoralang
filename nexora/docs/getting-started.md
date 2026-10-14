@@ -327,7 +327,8 @@ Result: passed
 
 - Más programas, listos para ejecutar: [`examples/`](../examples/README.md).
 - Las reglas, una por una: [tipos](types.md) y [funciones](functions.md).
-- Declarar lo que una función espera y promete: [contratos](contracts.md). Es una característica
-  **experimental**: funciona, pero su sintaxis puede cambiar.
+- Escribir las reglas en el código, que es lo que distingue a NEXORA: [contratos](contracts.md)
+  (lo que una función espera y promete) y [tipos refinados](types.md#tipos-refinados) (los valores
+  que admite un tipo).
 - La referencia completa del lenguaje: [especificación](language-spec.md).
 - Lo que NEXORA todavía no puede hacer (bucles, listas, leer datos…): [limitaciones](limitations.md).
