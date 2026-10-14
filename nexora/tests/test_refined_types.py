@@ -377,16 +377,31 @@ def chain_program(types: int, terms: int, uses: int) -> str:
     return chain + "fn main() -> Void {\n" + body + "\n}\n"
 
 
-def test_the_cost_of_checking_constants_is_bounded():
-    import time
+def test_the_cost_of_checking_constants_is_bounded(monkeypatch):
+    # The bound is checked by counting the work, not by timing it: a time limit would depend on the
+    # machine and on how loaded it is.
+    from nexora import interpreter
+    from nexora.checker import MAX_REFINEMENT_STEPS
+
+    evaluated = []
+    real = interpreter.broken_rule
+
+    def counting(chain, value):
+        evaluated.append(value)
+        return real(chain, value)
+
+    monkeypatch.setattr(interpreter, "broken_rule", counting)
 
     # Fits the playground's 64 KiB; in 0.3.0 its check took longer than the playground's 2 seconds.
     text = chain_program(60, 40, 1000)
-    start = time.perf_counter()
     errors = diagnostics_of(text)
-    assert time.perf_counter() - start < 1.0
     assert [error.code for error in errors] == ["E2019"]
-    assert errors[0].label == "Checking constants against refined types needs more than 100000 steps"
+    assert errors[0].label == f"Checking constants against refined types needs more than {MAX_REFINEMENT_STEPS} steps"
+    # Each constant of T59 costs 60 conditions of 159 nodes: only those that fit in the budget are
+    # evaluated, and none after the limit is reached.
+    cost = 60 * (40 * 3 + 39)
+    assert len(evaluated) == MAX_REFINEMENT_STEPS // cost
+    assert len(evaluated) * cost <= MAX_REFINEMENT_STEPS
 
 
 def test_ordinary_programs_are_far_from_the_limit():
