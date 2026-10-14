@@ -94,6 +94,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E2016": ("Invalid type declaration", SEMANTIC),
     "E2017": ("Value outside refined type", TYPE),
     "E2018": ("Invalid refinement condition", SEMANTIC),
+    "E2019": ("Too many refinement checks", SEMANTIC),
 
     "E3001": ("Division by zero", RUNTIME),
     "E3002": ("Integer overflow", RUNTIME),

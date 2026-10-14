@@ -1,7 +1,7 @@
 # Especificación del lenguaje NEXORA
 
 - **Versión de la especificación:** 0.3
-- **Implementación de referencia:** `nexora` 0.3.0 (este repositorio, directorio `nexora/`)
+- **Implementación de referencia:** `nexora` 0.3.1 (este repositorio, directorio `nexora/`)
 - **Estado:** describe exactamente lo que el intérprete hace hoy.
 
 Este documento es la referencia del lenguaje: define la sintaxis y el significado de cada
@@ -161,8 +161,8 @@ Notas:
 
 - En el nivel superior del archivo solo hay funciones y declaraciones de tipo, en cualquier orden.
   Un tipo no puede declararse dentro de una función (`E1101`).
-- Una explicación (`explanation`) es un único texto literal no vacío. Un texto vacío o formado solo
-  por espacios es el error `E1101`.
+- Una explicación (`explanation`) es un único texto literal no vacío, de una sola línea. Un texto
+  vacío, formado solo por espacios o con un salto de línea (`\n`) es el error `E1101`.
 - Las cláusulas `requires` y `ensures` van **al principio del cuerpo** de una función, antes de
   cualquier sentencia. En cualquier otro lugar son el error `E1106`.
 - `else` se escribe en la misma línea que la `}` que cierra el bloque anterior: `} else {`.
@@ -256,7 +256,11 @@ del programa. Para mantenerla, un valor solo puede llegar a tener un tipo refina
 | Una **constante** donde se espera el tipo | `let p: Percent = 20`, `discount(20)`, `return 20` | Sin ejecutar, en `nex check` | `E2017`, el programa no se ejecuta |
 | La **comprobación explícita** `Percent(x)` | `let p = Percent(total / 2)` | Al ejecutar, cada vez que se evalúa | `E4003`, el programa se detiene ahí |
 
-Una constante es un literal, opcionalmente con `-` o `not` delante o entre paréntesis. Cualquier
+Una constante es un literal, opcionalmente con `-` o `not` delante o entre paréntesis. Comprobar una
+constante cuesta tanto como las condiciones de toda la cadena de su tipo; si el total de un
+programa supera 100 000 nodos de condición evaluados, el programa se rechaza con `E2019` en vez
+de quedar comprobado a medias. Es un límite de la implementación, como los de la sección 3, y un
+programa corriente queda muy por debajo. Cualquier
 otro valor de la base (una variable, una operación, el resultado de una llamada) no se acepta donde
 se espera el tipo refinado (`E2011`): hay que comprobarlo con `Percent(...)`. Así, cada punto donde
 el programa puede detenerse por una regla está escrito en el código.
@@ -755,8 +759,12 @@ encontró errores:
 | 3. Análisis estático | Comprueba nombres, ámbitos, tipos y rutas de retorno | `semantic`, `type` |
 | 4. Ejecución | Recorre el AST | `runtime`, `contract` |
 
-`nex check` y `nex inspect` realizan las etapas 1 a 3 y **no ejecutan nada**. `nex run` realiza las
-cuatro, y nunca inicia un programa que tenga algún error de las etapas 1 a 3.
+`nex check` y `nex inspect` realizan las etapas 1 a 3 y **no ejecutan el programa**: ninguna
+sentencia ni ninguna función se ejecuta. Lo único que la etapa 3 evalúa son las condiciones de los
+tipos refinados sobre las constantes escritas en el código (sección 4.4). Esas condiciones solo
+pueden usar `value`, literales, operadores y conversiones integradas, no llaman a funciones del
+programa, y el trabajo total está acotado (`E2019`). `nex run` realiza las cuatro etapas, y nunca
+inicia un programa que tenga algún error de las etapas 1 a 3.
 
 ### 10.2 Lo que se detecta antes de ejecutar
 
@@ -887,6 +895,7 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E2016` | Invalid type declaration | `semantic` | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, o una cadena de tipos sin fin |
 | `E2017` | Value outside refined type | `type` | Una constante usada como valor de un tipo refinado no cumple su condición |
 | `E2018` | Invalid refinement condition | `semantic` | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado |
+| `E2019` | Too many refinement checks | `semantic` | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (sección 4.4) |
 | `E3001` | Division by zero | `runtime` | División por cero |
 | `E3002` | Integer overflow | `runtime` | Un resultado `Int` fuera del rango de 64 bits |
 | `E3003` | Float result out of range | `runtime` | Un resultado `Float` demasiado grande |
@@ -922,7 +931,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.3.0",
+  "nexora_version": "0.3.1",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

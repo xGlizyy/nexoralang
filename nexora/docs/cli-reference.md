@@ -1,7 +1,7 @@
 # Referencia de la CLI
 
 `nex` es la herramienta de línea de comandos de NEXORA. Esta página describe la versión
-`nexora` 0.3.0. Una prueba automatizada comprueba que todos los comandos, opciones y códigos de
+`nexora` 0.3.1. Una prueba automatizada comprueba que todos los comandos, opciones y códigos de
 salida que acepta el programa están documentados aquí.
 
 `python -m nexora` es equivalente a `nex` y acepta exactamente los mismos argumentos.
@@ -157,7 +157,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.3.0
+NEXORA 0.3.1
 ```
 
 ## `nex --help`

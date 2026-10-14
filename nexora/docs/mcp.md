@@ -209,8 +209,10 @@ Lo que hace el servidor, y lo que comprueban sus pruebas:
 
 Lo que **no** cubre:
 
-- **El servidor no es una sandbox** y no hace falta que lo sea, porque no ejecuta nada. Pero se
-  ejecuta con los permisos del usuario que lo arranca.
+- **El servidor no es una sandbox** y no hace falta que lo sea, porque no ejecuta los programas que
+  analiza. Lo único que evalúa son las condiciones de los tipos refinados sobre constantes: expresiones
+  sin llamadas a funciones del programa y con el trabajo acotado (`E2019`). Pero se ejecuta con los
+  permisos del usuario que lo arranca.
 - **Los permisos que el asistente pida al usuario no son una medida de seguridad de NEXORA.** Que un
   asistente pregunte antes de llamar a una herramienta es cosa del asistente.
 - **Los resultados vuelven al modelo.** El árbol y los diagnósticos contienen fragmentos del código

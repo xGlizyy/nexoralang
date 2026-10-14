@@ -27,7 +27,7 @@ import re
 from pathlib import Path
 
 from . import ast_nodes as ast
-from .checker import BUILTINS, CheckedProgram, Signature
+from .checker import BUILTINS, MAX_REFINEMENT_STEPS, CheckedProgram, Signature
 from .diagnostics import CATEGORIES, CODES, MAX_DIAGNOSTICS, Source, Span
 from .interpreter import MAX_CALL_DEPTH
 from .parser import MAX_EXPRESSION_DEPTH, MAX_NESTING
@@ -545,6 +545,7 @@ def get_capabilities() -> dict:
             "max_nesting": MAX_NESTING,
             "max_expression_depth": MAX_EXPRESSION_DEPTH,
             "max_diagnostics_per_stage": MAX_DIAGNOSTICS,
+            "max_refinement_steps": MAX_REFINEMENT_STEPS,
             "int_min": INT_MIN,
             "int_max": INT_MAX,
         },

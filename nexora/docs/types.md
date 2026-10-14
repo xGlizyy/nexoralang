@@ -396,6 +396,7 @@ una relación entre argumentos y se escribe como [contrato](contracts.md).
 | Condición que no es `Bool`, o que usa otro nombre que `value` | `E2011`, `E2005` | Sin ejecutar |
 | Condición que llama a una función del programa | `E2018` | Sin ejecutar |
 | Constante que no cumple la condición | `E2017` | Sin ejecutar |
+| Demasiadas constantes que comprobar (límite de trabajo del análisis) | `E2019` | Sin ejecutar |
 | Valor calculado usado sin `Percent(...)` | `E2011` | Sin ejecutar |
 | `Percent(x)` con un valor que no cumple la condición | `E4003` | Al ejecutar |
 

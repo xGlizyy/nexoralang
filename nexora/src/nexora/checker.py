@@ -29,6 +29,12 @@ KNOWN_TYPES = (VOID, *VALUE_TYPES)
 # Parameter "type" of the built-in functions that accept a value of any type.
 ANY_VALUE = "Int | Float | Bool | Text"
 
+# The most work the analysis may spend checking constants against refined types, counted as the
+# nodes of the conditions it evaluates. Checking one constant costs the size of every condition in
+# its type's chain, so without a bound the work would grow with types x conditions x constants.
+# Ordinary programs stay far below it; a program above it is rejected (E2019), never half-checked.
+MAX_REFINEMENT_STEPS = 100_000
+
 ARITHMETIC = ("+", "-", "*", "/")
 EQUALITY = ("==", "!=")
 ORDERING = ("<", "<=", ">", ">=")
@@ -86,6 +92,24 @@ class RefinedType:
     # The declarations whose conditions a value must satisfy, from the root outwards: for
     # `type Small = Positive where ...` it is (Positive, Small).
     chain: tuple[ast.TypeDecl, ...]
+
+    @property
+    def cost(self) -> int:
+        """The number of condition nodes evaluated to check one value."""
+        return sum(_size(declaration.condition) for declaration in self.chain)
+
+
+def _size(node: ast.Expr) -> int:
+    """The number of nodes of an expression."""
+    if isinstance(node, ast.Binary):
+        return 1 + _size(node.left) + _size(node.right)
+    if isinstance(node, ast.Unary):
+        return 1 + _size(node.operand)
+    if isinstance(node, ast.Group):
+        return 1 + _size(node.expression)
+    if isinstance(node, ast.Call):
+        return 1 + sum(_size(argument) for argument in node.arguments)
+    return 1
 
 
 @dataclass(frozen=True)
@@ -210,6 +234,10 @@ class Checker:
         # Every declared type name, including those whose declaration has an error.
         self._type_names: dict[str, ast.TypeDecl] = {}
         self._refined: dict[str, RefinedType] = {}
+        # Every function name the program declares, known before any condition is checked.
+        self._function_names: set[str] = set()
+        # Work spent so far checking constants (see MAX_REFINEMENT_STEPS); None once over the limit.
+        self._refinement_steps: int | None = 0
         # The function being checked.
         self._function_name = ""
         self._return_type: str | None = None
@@ -229,8 +257,13 @@ class Checker:
         return checked, self._diagnostics
 
     def _check_program(self, program: ast.Program, declared: dict[str, ast.Function]) -> None:
-        # Types first: any signature or annotation may name one, wherever it is declared.
+        # Types first: any signature or annotation may name one, wherever it is declared. Their
+        # conditions are checked before the signatures, so that a type whose condition is wrong is
+        # already unusable when a signature names it: its error is reported once, not at every use.
         self._declare_types(program.types)
+        self._function_names = {function.name for function in program.functions}
+        for declaration in program.types:
+            self._type_condition(declaration)
         own_signatures: list[tuple[ast.Function, Signature]] = []
 
         # Signatures first: a function can be called before the line that declares it.
@@ -266,9 +299,6 @@ class Checker:
                 self._function_symbols[function.name] = symbol
                 self._symbols.append(symbol)
 
-        # The conditions of the types are checked once every name they could mention is known.
-        for declaration in program.types:
-            self._type_condition(declaration)
         self._main(declared.get("main"))
         for function, signature in own_signatures:
             self._function(function, signature)
@@ -394,7 +424,18 @@ class Checker:
         """Reports E2017 if the constant `node` is not a valid value of the refined type `kind`."""
         refined = self._refined.get(kind)
         constant = self._constant(node)
-        if refined is None or constant is None:
+        if refined is None or constant is None or self._refinement_steps is None:
+            return
+        self._refinement_steps += refined.cost
+        if self._refinement_steps > MAX_REFINEMENT_STEPS:
+            self._refinement_steps = None
+            self._report(
+                "E2019",
+                f"Checking constants against refined types needs more than {MAX_REFINEMENT_STEPS} steps",
+                node.span,
+                hint="Use fewer constants of long chains of refined types, or shorter conditions. "
+                     "The limit keeps the analysis fast; every constant is still checked before running.",
+            )
             return
         # Imported here: the interpreter depends on this module.
         from .interpreter import broken_rule
@@ -828,8 +869,7 @@ class Checker:
         argument_types = [self._expression(argument, scope) for argument in node.arguments]
         if node.callee in self._type_names:
             return self._refinement_check(node, argument_types)
-        signature = BUILTINS.get(node.callee) or self._signatures.get(node.callee)
-        if self._refining is not None and signature is not None and not signature.builtin:
+        if self._refining is not None and node.callee in self._function_names and node.callee not in BUILTINS:
             self._report(
                 "E2018",
                 f"The condition of '{self._refining}' cannot call the function '{node.callee}'",
@@ -837,7 +877,8 @@ class Checker:
                 hint="A refinement only describes the value itself: it can use operators, literals and the "
                      "built-in conversions. Write the rule there, or check it with 'requires'.",
             )
-            return signature.return_type
+            return None
+        signature = BUILTINS.get(node.callee) or self._signatures.get(node.callee)
 
         if signature is None:
             if scope.find(node.callee) is not None:

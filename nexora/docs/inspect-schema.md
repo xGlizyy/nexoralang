@@ -20,7 +20,7 @@ asistentes de IA). NEXORA no incluye ninguna de esas herramientas: solo proporci
 ```json
 {
   "schema": "nexora.inspect/2",
-  "nexora_version": "0.3.0",
+  "nexora_version": "0.3.1",
   "file": "hello.nex",
   "ok": true,
   "diagnostics": [],

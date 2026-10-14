@@ -230,6 +230,14 @@ class Parser:
                 token,
                 hint="Write why the rule exists, or remove the ',' and the text.",
             )
+        if "\n" in token.value:
+            # Diagnostics show the explanation on one line, after "Reason:".
+            raise self._error(
+                "E1101",
+                "An explanation is a single line: it cannot contain '\\n'",
+                token,
+                hint="Say it in one sentence.",
+            )
         return token.value, token.span
 
     def _function(self) -> ast.Function:

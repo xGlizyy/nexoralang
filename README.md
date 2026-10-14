@@ -2,7 +2,7 @@
 
 Lenguaje de programación orientado a la web y diseñado para el desarrollo con inteligencia artificial.
 
-Estado: existe un intérprete (versión 0.3.0) que ejecuta un subconjunto del lenguaje: tipos estáticos, variables inmutables, funciones con parámetros y retorno, `if`/`else`, recursividad, contratos (`requires`, `ensures`) y tipos refinados (`type Percent = Int where ...`), cada regla con su explicación. El resto del diseño aún no está implementado.
+Estado: existe un intérprete (versión 0.3.1) que ejecuta un subconjunto del lenguaje: tipos estáticos, variables inmutables, funciones con parámetros y retorno, `if`/`else`, recursividad, contratos (`requires`, `ensures`) y tipos refinados (`type Percent = Int where ...`), cada regla con su explicación. El resto del diseño aún no está implementado.
 
 Lo que distingue a NEXORA: los requisitos de un programa se escriben en el propio código y se comprueban de forma determinista ([decisión 0006](nexora/docs/decisions/0006-requisitos-verificables.md)).
 

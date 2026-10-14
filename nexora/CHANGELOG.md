@@ -19,6 +19,40 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
+## 0.3.1 — Revisión de los tipos refinados
+
+Resultado de intentar romper las garantías de la 0.3.0. La garantía principal resistió: ningún
+camino permite que un valor llegue a un tipo refinado sin cumplir su condición, y la comprobación
+sin ejecutar y la ejecución coinciden en los casos límite (`-0.0`, redondeo de `Float`, división
+por cero evitada con `and`, desbordamiento). Esos ataques forman parte ahora de las pruebas.
+La revisión encontró cuatro defectos alrededor de esa garantía, corregidos aquí.
+
+### Corregido
+
+- **`nex check` podía tardar demasiado con tipos refinados.** Cada constante evalúa las condiciones
+  de toda la cadena de su tipo, así que el trabajo crecía con tipos × condiciones × constantes: un
+  programa válido de 60 KB tardaba 2,5 s y agotaba el tiempo del playground (2 s). Ahora el
+  trabajo está acotado a 100 000 nodos de condición evaluados; por encima, el programa se rechaza
+  con el código nuevo `E2019` en vez de quedar comprobado a medias. El mismo programa se rechaza
+  ahora en 0,18 s, y uno corriente se comprueba en centésimas.
+- **Una condición de tipo mal escrita producía errores falsos en cada uso del tipo** ("Cannot apply
+  '+' to Bad and Int", "Expected Bad, found Int"). Las condiciones se comprueban ahora antes que las
+  firmas, y un tipo con la condición incorrecta queda fuera sin más errores.
+- **Un error de ejecución dentro de una condición no decía dónde se pidió la comprobación.** Si
+  `Huge(n)` desbordaba dentro de la condición de `Huge`, el diagnóstico señalaba la declaración del
+  tipo y nada más. Ahora añade la nota `While checking that a value is a valid Huge, at line …`.
+- **Una explicación con `\n` rompía el formato de texto del diagnóstico.** Una explicación es ahora
+  una sola línea: un `\n` en ella es el error `E1101`.
+
+### Documentación
+
+- La especificación (sección 10.1), la guía del servidor MCP y la descripción de
+  `analysis_executes_code` decían que el análisis "no ejecuta nada". Ahora dicen con precisión lo
+  que hace: no ejecuta el programa, pero evalúa las condiciones de los tipos refinados sobre las
+  constantes, sin llamadas a funciones del programa y con el trabajo acotado.
+- Nuevo límite en el documento de capacidades (`get_capabilities()` en Python y en el servidor
+  MCP): `max_refinement_steps`.
+
 ## 0.3.0 — Contratos y tipos refinados
 
 Consolida la característica que distingue a NEXORA: los requisitos forman parte verificable del

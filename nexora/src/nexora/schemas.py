@@ -288,7 +288,11 @@ def all_schemas() -> dict[str, dict]:
                             "category": {"type": "string"}}}},
          "limits": {"type": "object", "additionalProperties": {"type": "integer"}},
          "schemas": {"type": "array", "items": {"type": "string"}},
-         "analysis_executes_code": {"const": False}},
+         "analysis_executes_code": {
+             "const": False,
+             "description": "The analysis never runs the program: no statement or function is executed. It only "
+                            "evaluates the conditions of refined types on literal constants; those conditions call "
+                            "no function of the program, and the work is bounded (limit max_refinement_steps)."}},
         ["schema", "nexora_version", "language", "diagnostics", "limits", "schemas", "analysis_executes_code"],
         {"param": _PARAM, "builtin": _BUILTIN},
     )

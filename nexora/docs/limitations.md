@@ -1,6 +1,6 @@
 # Limitaciones
 
-Lo que NEXORA **no** hace en la versión 0.3.0, y los riesgos que conviene conocer antes de usarlo.
+Lo que NEXORA **no** hace en la versión 0.3.1, y los riesgos que conviene conocer antes de usarlo.
 Nada de lo que aparece aquí como "no existe" funciona hoy, aunque se mencione en el borrador de
 diseño o en la hoja de ruta.
 
@@ -45,6 +45,7 @@ lenguaje. No sirve todavía para escribir aplicaciones.
 | Llamadas anidadas con expresiones muy profundas | Menos de 1000 | El mismo error `E3004`; el mensaje indica cuántas había |
 | Anidamiento de paréntesis, bloques, `else if` u operadores unarios | 64 niveles | Error `E1105` |
 | Profundidad de una expresión (por ejemplo, términos de una suma) | 256 | Error `E1105` |
+| Trabajo de `nex check` comprobando constantes contra tipos refinados | 100 000 nodos de condición evaluados | Error `E2019`; el programa no se ejecuta |
 | Errores comunicados por etapa y archivo | 100 | El análisis se detiene; el resumen lo indica |
 | Rango de `Int` | 64 bits con signo | Error de ejecución `E3002` |
 | Entero literal más pequeño | `-9223372036854775807` | `-9223372036854775808` solo puede obtenerse calculándolo: `-9223372036854775807 - 1` |

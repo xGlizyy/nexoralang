@@ -106,8 +106,8 @@ error: program.nex: the program stopped because a contract was broken
 ```
 
 Es opcional. Conviene escribirla cuando la condición no se explica sola: `requires b != 0.0` no la
-necesita; `requires amount <= balance` sí, porque la regla es del negocio, no de la aritmética. Un
-texto vacío es un error (`E1101`).
+necesita; `requires amount <= balance` sí, porque la regla es del negocio, no de la aritmética. Es
+una sola frase: un texto vacío o con un salto de línea es un error (`E1101`).
 
 ## Cuándo se comprueba cada cosa
 
@@ -233,7 +233,7 @@ Aquí el contrato ha encontrado un fallo real del cuerpo: suma el porcentaje en 
 | Condición `ensures` falsa | `E4002` | `contract` | `5` |
 | Condición mal tipada | `E2011` | `type` | `1` (no se ejecuta) |
 | Cláusula fuera del principio del cuerpo | `E1106` | `syntax` | `1` (no se ejecuta) |
-| Explicación vacía o que no es un texto | `E1101` | `syntax` | `1` (no se ejecuta) |
+| Explicación vacía, de más de una línea o que no es un texto | `E1101` | `syntax` | `1` (no se ejecuta) |
 
 Si evaluar la condición produce por sí mismo un error (por ejemplo, una división por cero dentro
 de la condición), el error comunicado es ese (`runtime`, código de salida `3`), no una violación

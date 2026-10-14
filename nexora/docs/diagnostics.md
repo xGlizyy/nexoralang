@@ -116,6 +116,7 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E2015` | Unreachable code | Código situado después de un `return` | Elimínalo o muévelo antes del `return` |
 | `E2016` | Invalid type declaration | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, o una cadena de tipos que no termina en un tipo integrado | Corrige el nombre o la base; el mensaje dice cuál de los casos es |
 | `E2018` | Invalid refinement condition | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado | Escribe la regla con operadores sobre `value`, o pásala a un `requires` |
+| `E2019` | Too many refinement checks | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (100 000 nodos de condición). Solo ocurre con muchas constantes de cadenas largas de tipos refinados | Usa menos constantes de esos tipos o condiciones más cortas |
 
 ### De tipos
 
@@ -205,7 +206,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.3.0",
+  "nexora_version": "0.3.1",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

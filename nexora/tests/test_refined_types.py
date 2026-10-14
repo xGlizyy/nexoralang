@@ -304,3 +304,90 @@ def test_check_never_claims_that_a_computed_value_is_valid():
     assert check_codes(text) == []
     _, error = run_failure(text)
     assert error.code == "E4003"
+
+
+# Attacks on the guarantee (the review of 0.3.0). Each one tries to give a refined type to a value
+# that was never checked, or to make the static check and the run disagree.
+
+@pytest.mark.parametrize("statement", [
+    "let p: Percent = -(-(150))",
+    "let p: Percent = ((150))",
+    "print(Percent(-(-(150))))",
+])
+def test_disguised_constants_are_still_checked(statement):
+    assert check_codes(program(PERCENT, statement)) == ["E2017"]
+
+
+@pytest.mark.parametrize("statement", [
+    "let p: Percent = 50 + 100",       # an operation is not a constant
+    "let n = 150\nlet p: Percent = n",
+    "let q: Pass = 70\nlet p: Percent = q\nlet r: Pass = p",   # back down from the parent
+])
+def test_no_unchecked_path_into_a_refined_type(statement):
+    declarations = PERCENT + '\ntype Pass = Percent where value >= 50'
+    assert "E2011" in check_codes(program(declarations, statement))
+
+
+def test_a_function_cannot_return_its_base_type_as_the_refined_type():
+    text = PERCENT + "\nfn f(n: Int) -> Percent {\n    return n\n}\n\nfn main() -> Void {\n}\n"
+    assert check_codes(text) == ["E2011"]
+
+
+@pytest.mark.parametrize("declaration, constant, runtime_value", [
+    ("type Pos = Float where value > 0.0", "-0.0", "-0.0"),
+    ("type Small = Float where value < 0.1 + 0.2", "0.30000000000000004", "0.30000000000000004"),
+    ("type Inv = Int where value != 0 and 10 / value > 1", "0", "0"),
+])
+def test_the_static_check_and_the_run_agree(declaration, constant, runtime_value):
+    name = declaration.split()[1]
+    assert check_codes(program(declaration, f"let x: {name} = {constant}")) == ["E2017"]
+    _, error = run_failure(program(declaration, f"let v = {runtime_value}\nprint({name}(v))"))
+    assert error.code == "E4003"
+
+
+# Fixes of 0.3.1
+
+def test_a_runtime_error_inside_a_condition_says_where_the_check_was_asked():
+    text = program("type Huge = Int where value * value > 0", "let n = 9223372036854775807\nprint(Huge(n))")
+    _, error = run_failure(text)
+    assert (error.code, error.span.line) == ("E3002", 1)
+    assert "While checking that a value is a valid Huge, at line 5, column 11." in error.notes
+
+
+def test_an_invalid_condition_is_reported_once_and_not_at_every_use():
+    functions = "type Bad = Int where value + 1\nfn f(x: Bad) -> Int {\n    return x + 1\n}"
+    errors = diagnostics_of(program(functions, "print(f(3))\nlet y: Bad = 4"))
+    assert [(error.code, error.span.line) for error in errors] == [("E2011", 1)]
+
+
+def test_an_explanation_is_one_line():
+    (error,) = diagnostics_of(program('type Even = Int where value / 2 * 2 == value, "One\\ntwo"', ""))
+    assert (error.code, error.label) == ("E1101", "An explanation is a single line: it cannot contain '\\n'")
+    (error,) = diagnostics_of('fn f(n: Int) -> Int {\n    requires n > 0, "a\\nb"\n    return n\n}\n\n'
+                              "fn main() -> Void {\n}\n")
+    assert error.code == "E1101"
+
+
+def chain_program(types: int, terms: int, uses: int) -> str:
+    chain = "".join(
+        f"type T{i} = {'Int' if i == 0 else f'T{i - 1}'} where " + " and ".join(["value >= 0"] * terms) + "\n"
+        for i in range(types)
+    )
+    body = "\n".join(f"    let v{i}: T{types - 1} = {i}" for i in range(uses))
+    return chain + "fn main() -> Void {\n" + body + "\n}\n"
+
+
+def test_the_cost_of_checking_constants_is_bounded():
+    import time
+
+    # Fits the playground's 64 KiB; in 0.3.0 its check took longer than the playground's 2 seconds.
+    text = chain_program(60, 40, 1000)
+    start = time.perf_counter()
+    errors = diagnostics_of(text)
+    assert time.perf_counter() - start < 1.0
+    assert [error.code for error in errors] == ["E2019"]
+    assert errors[0].label == "Checking constants against refined types needs more than 100000 steps"
+
+
+def test_ordinary_programs_are_far_from_the_limit():
+    assert check_codes(chain_program(5, 3, 300)) == []

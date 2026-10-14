@@ -15,9 +15,10 @@ from __future__ import annotations
 import math
 import sys
 from collections.abc import Callable
+from dataclasses import replace
 
 from . import ast_nodes as ast
-from .checker import CheckedProgram
+from .checker import CheckedProgram, refinement_notes
 from .diagnostics import Diagnostic, NexoraRuntimeError, Span
 from .values import INT_MAX, INT_MIN, Value, format_value, show_value
 
@@ -198,12 +199,16 @@ class Interpreter:
 
     def _refine(self, node: ast.Call, value: Value) -> Value:
         """`Percent(x)`: lets `value` through only if it satisfies the condition of the type."""
-        broken = self.broken_rule(self._refined[node.callee], value)
+        try:
+            broken = self.broken_rule(self._refined[node.callee], value)
+        except NexoraRuntimeError as error:
+            # The error points into the type's declaration; say which check led there.
+            site = node.span
+            where = f"While checking that a value is a valid {node.callee}, at line {site.line}, column {site.column}."
+            diagnostic = error.diagnostic
+            raise NexoraRuntimeError(replace(diagnostic, notes=(where, *diagnostic.notes))) from None
         if broken is None:
             return value
-        # Imported here: the checker is imported by this module at load time.
-        from .checker import refinement_notes
-
         raise self._fail(
             "E4003",
             f"This value is not a valid {node.callee}",
