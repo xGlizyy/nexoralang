@@ -267,10 +267,12 @@ code { font-family: var(--mono); font-size: 0.9em; }
 .site-header.is-scrolled { padding-top: 10px; }
 
 .site-header.is-scrolled .site-header__row {
-  max-width: 1010px;
+  /* Wide enough for the side columns to stay equal: the links remain centred and the
+     actions keep their distance from the last link. */
+  max-width: 1120px;
   min-height: 56px;
-  padding-inline: 22px;
-  gap: 16px;
+  padding-inline: 24px;
+  gap: 28px;
   border-color: rgba(255, 255, 255, 0.2);
   background: rgba(16, 16, 24, 0.84);
   box-shadow: 0 20px 50px -24px rgba(0, 0, 0, 0.95), 0 0 60px -30px rgba(139, 117, 255, 0.5);
