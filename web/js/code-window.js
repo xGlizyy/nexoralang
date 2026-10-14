@@ -13,7 +13,9 @@ export function sourceOf(code) {
 function renderCode(code) {
   const source = code.textContent.replace(/\n+$/, '');
   sources.set(code, source);
-  code.innerHTML = highlight(source)
+  // Only NEXORA is highlighted; anything else (shell commands) is shown as plain text.
+  const html = code.dataset.lang === 'nex' ? highlight(source) : code.innerHTML.replace(/\n+$/, '');
+  code.innerHTML = html
     .split('\n')
     .map((line) => `<span class="line">${line}</span>`)
     .join('');
@@ -41,6 +43,14 @@ async function copyText(text) {
 function setupTabs(root) {
   const tabs = [...root.querySelectorAll('[role="tab"]')];
   if (tabs.length === 0) return;
+  const list = root.querySelector('[role="tablist"]');
+  // Tab lists marked --slide have one short underline that glides to the selected tab.
+  const slides = list.classList.contains('window__tabs--slide');
+
+  function placeIndicator(tab) {
+    list.style.setProperty('--ind-x', `${tab.offsetLeft + tab.offsetWidth * 0.25}px`);
+    list.style.setProperty('--ind-w', `${tab.offsetWidth * 0.5}px`);
+  }
 
   function select(tab) {
     for (const other of tabs) {
@@ -49,13 +59,24 @@ function setupTabs(root) {
       other.tabIndex = active ? 0 : -1;
       document.getElementById(other.getAttribute('aria-controls')).hidden = !active;
     }
+    if (slides) placeIndicator(tab);
+  }
+
+  if (slides) {
+    // Widths change once the web fonts load: re-place without animating.
+    new ResizeObserver(() => {
+      list.classList.add('is-jumping');
+      placeIndicator(tabs.find((tab) => tab.getAttribute('aria-selected') === 'true'));
+      void list.offsetWidth;
+      list.classList.remove('is-jumping');
+    }).observe(list);
   }
 
   for (const tab of tabs) {
     tab.addEventListener('click', () => select(tab));
   }
 
-  root.querySelector('[role="tablist"]').addEventListener('keydown', (event) => {
+  list.addEventListener('keydown', (event) => {
     const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
     if (!step) return;
     const next = tabs[(tabs.indexOf(document.activeElement) + step + tabs.length) % tabs.length];

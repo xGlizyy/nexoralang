@@ -4,6 +4,10 @@ import { site } from '../config.js';
 import { createClient } from './client.js';
 import { createController } from './controller.js';
 import { mountView } from './view.js';
+import { setupSiteHeader } from '../site-header.js';
+
+document.documentElement.classList.add('js');
+setupSiteHeader();
 
 function sessionStore() {
   try {

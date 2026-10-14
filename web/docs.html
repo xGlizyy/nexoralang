@@ -43,15 +43,22 @@
           <a class="nav-link" href="docs.html" aria-current="page">Documentation</a>
           <div class="nav-menu">
             <div class="nav-menu__panel">
-              <a class="nav-menu__root" href="docs.html">Documentation</a>
-              <ol class="nav-menu__list">
-                <li><a href="docs.html#what"><span>01</span><strong>What is NEXORA</strong><small>The project, and what it is not</small></a></li>
-                <li><a href="docs.html#status"><span>02</span><strong>Current status</strong><small>What exists today, and what doesn't</small></a></li>
-                <li><a href="docs.html#philosophy"><span>03</span><strong>Design philosophy</strong><small>The ideas guiding the language</small></a></li>
-                <li><a href="docs.html#example"><span>04</span><strong>Conceptual example</strong><small>A first look at the syntax</small></a></li>
-                <li><a href="docs.html#roadmap"><span>05</span><strong>Roadmap</strong><small>The phases, in order</small></a></li>
-                <li><a href="docs.html#follow"><span>06</span><strong>Following the project</strong><small>How to keep up with it</small></a></li>
-              </ol>
+              <div class="nav-menu__tree">
+                <a class="nav-menu__root" href="docs.html">Documentation</a>
+                <ol class="nav-menu__list">
+                  <li><a href="docs.html#what"><span>01</span><strong>What is NEXORA</strong><small>The project, and what it is not</small></a></li>
+                  <li><a href="docs.html#status"><span>02</span><strong>Current status</strong><small>What exists today, and what doesn't</small></a></li>
+                  <li><a href="docs.html#philosophy"><span>03</span><strong>Design philosophy</strong><small>The ideas guiding the language</small></a></li>
+                  <li><a href="docs.html#example"><span>04</span><strong>Conceptual example</strong><small>A first look at the syntax</small></a></li>
+                  <li><a href="docs.html#roadmap"><span>05</span><strong>Roadmap</strong><small>The phases, in order</small></a></li>
+                  <li><a href="docs.html#follow"><span>06</span><strong>Following the project</strong><small>How to keep up with it</small></a></li>
+                </ol>
+              </div>
+              <div class="nav-menu__tree">
+                <a class="nav-menu__root" href="guide.html">Language guide</a>
+                <!-- Filled by site-header.js from the outline of guide.html, so it follows the guide. -->
+                <ol class="nav-menu__list nav-menu__list--grid" data-guide-outline></ol>
+              </div>
             </div>
           </div>
         </li>
@@ -282,6 +289,6 @@
 </footer>
 
 <script type="module" src="js/main.js"></script>
-<script src="auth.js" defer></script>
+<script src="js/auth.js" defer></script>
 </body>
 </html>

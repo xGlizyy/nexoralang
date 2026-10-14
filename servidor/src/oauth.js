@@ -10,7 +10,7 @@ import { readCookie, startSession } from './sessions.js';
 const STATE_COOKIE = 'nexora_oauth_state';
 const STATE_MINUTES = 10;
 
-/** Fallo que se muestra al usuario: `code` viaja a /login?error=code y web/auth.js lo traduce. */
+/** Fallo que se muestra al usuario: `code` viaja a /login?error=code y web/js/auth.js lo traduce. */
 class OAuthError extends Error {
   constructor(code) {
     super(code);

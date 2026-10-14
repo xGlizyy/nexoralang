@@ -1,204 +1,10 @@
-import { playgroundRuntime, roadmap, site, statusLabels } from './config.js';
+import { playgroundRuntime, roadmap, statusLabels } from './config.js';
 import { mountCodeWindows } from './code-window.js';
 import { mountPlayground } from './playground.js';
+import { setupDocsPages } from './docs-pages.js';
+import { setupSiteHeader } from './site-header.js';
 
 document.documentElement.classList.add('js');
-
-function setupNav() {
-  const toggle = document.querySelector('.nav-toggle');
-  const nav = document.getElementById('site-nav');
-  if (!toggle || !nav) return;
-
-  function setOpen(open) {
-    nav.classList.toggle('is-open', open);
-    toggle.setAttribute('aria-expanded', String(open));
-    toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
-  }
-
-  toggle.addEventListener('click', () => setOpen(toggle.getAttribute('aria-expanded') !== 'true'));
-  nav.addEventListener('click', (event) => {
-    if (event.target.closest('a')) setOpen(false);
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
-      setOpen(false);
-      toggle.focus();
-    }
-  });
-}
-
-// The header bar shrinks once the page is scrolled. Two thresholds keep it from flickering at the edge.
-// The brand mark also turns with the scroll position, so it only moves while the page does.
-function setupHeader() {
-  const header = document.querySelector('.site-header');
-  if (!header) return;
-  const spins = !matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  function update() {
-    if (scrollY > 56) header.classList.add('is-scrolled');
-    else if (scrollY < 16) header.classList.remove('is-scrolled');
-    if (spins) header.style.setProperty('--brand-spin', `${Math.round(scrollY * 0.4)}deg`);
-  }
-
-  addEventListener('scroll', update, { passive: true });
-  update();
-}
-
-// A highlight slides under the nav link being hovered or focused.
-function setupNavHighlight() {
-  const list = document.querySelector('.site-nav__links');
-  if (!list) return;
-  let current = null;
-
-  function place(link) {
-    list.style.setProperty('--hl-x', `${link.offsetLeft - 12}px`);
-    list.style.setProperty('--hl-w', `${link.offsetWidth + 24}px`);
-  }
-
-  function show(link) {
-    if (current) {
-      place(link);
-    } else {
-      // First link: appear in place instead of sliding in from wherever it was last.
-      list.classList.add('is-jumping');
-      place(link);
-      void list.offsetWidth;
-      list.classList.remove('is-jumping');
-    }
-    current?.classList.remove('is-highlighted');
-    current = link;
-    link.classList.add('is-highlighted');
-    list.classList.add('has-highlight');
-  }
-
-  function hide() {
-    current?.classList.remove('is-highlighted');
-    current = null;
-    list.classList.remove('has-highlight');
-  }
-
-  for (const link of list.querySelectorAll('.nav-link')) {
-    link.addEventListener('pointerenter', () => show(link));
-    link.addEventListener('focus', () => show(link));
-    link.addEventListener('blur', hide);
-  }
-  list.addEventListener('pointerleave', hide);
-
-  // The links move when the header shrinks or grows: keep the highlight on the hovered one.
-  list.addEventListener('transitionend', (event) => {
-    if (current && !event.pseudoElement) place(current);
-  });
-}
-
-// Clicking "Documentation" opens its outline instead of leaving the page. Where the outline is not
-// shown (the collapsed mobile menu) the link keeps working as a normal link.
-function setupNavMenu() {
-  const item = document.querySelector('.nav-item--menu');
-  if (!item) return;
-  const link = item.querySelector('.nav-link');
-  const menu = item.querySelector('.nav-menu');
-
-  function setOpen(open) {
-    item.classList.toggle('is-open', open);
-    link.setAttribute('aria-expanded', String(open));
-  }
-
-  link.setAttribute('aria-haspopup', 'true');
-  link.setAttribute('aria-expanded', 'false');
-
-  link.addEventListener('click', (event) => {
-    if (getComputedStyle(menu).display === 'none') return;
-    event.preventDefault();
-    setOpen(true);
-  });
-  // Choosing a section closes the outline, even while the pointer is still over it
-  // (on the documentation page the choice only swaps the section, the page does not reload).
-  menu.addEventListener('click', (event) => {
-    if (!event.target.closest('a')) return;
-    setOpen(false);
-    item.classList.add('is-dismissed');
-    document.activeElement?.blur();
-  });
-  item.addEventListener('pointerleave', () => item.classList.remove('is-dismissed'));
-  document.addEventListener('click', (event) => {
-    if (!item.contains(event.target)) setOpen(false);
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape' || !item.classList.contains('is-open')) return;
-    setOpen(false);
-    link.blur();
-  });
-}
-
-// Documentation: each section is shown on its own, as a page of its own (docs.html#status, …).
-// Without JavaScript the whole document stays visible as one long page.
-function setupDocsPages() {
-  const article = document.querySelector('.docs__article');
-  if (!article) return;
-  const sections = [...article.querySelectorAll(':scope > section[id]')];
-  if (sections.length === 0) return;
-
-  // Everything outside the sections (page title, lead, notice) belongs to the first page.
-  const intro = [...article.children].filter((element) => !sections.includes(element));
-  const tocLinks = [...document.querySelectorAll('.docs__toc a')];
-  const baseTitle = document.title;
-  const titleOf = (section) => section.querySelector('h2').textContent;
-
-  const pager = document.createElement('nav');
-  pager.className = 'docs__pager';
-  pager.setAttribute('aria-label', 'Documentation pages');
-  article.append(pager);
-  article.classList.add('docs__article--paged');
-
-  function pagerLink(section, label, className) {
-    const link = document.createElement('a');
-    link.href = `#${section.id}`;
-    link.className = className;
-    const small = document.createElement('small');
-    small.textContent = label;
-    const strong = document.createElement('strong');
-    strong.textContent = titleOf(section);
-    link.append(small, strong);
-    return link;
-  }
-
-  function show(index) {
-    sections.forEach((section, i) => { section.hidden = i !== index; });
-    for (const element of intro) element.hidden = index !== 0;
-
-    for (const link of tocLinks) {
-      if (link.hash === `#${sections[index].id}`) link.setAttribute('aria-current', 'page');
-      else link.removeAttribute('aria-current');
-    }
-    document.title = index === 0 ? baseTitle : `${titleOf(sections[index])} — NEXORA`;
-
-    const links = [];
-    if (index > 0) links.push(pagerLink(sections[index - 1], '← Previous', 'docs__pager-prev'));
-    if (index < sections.length - 1) links.push(pagerLink(sections[index + 1], 'Next →', 'docs__pager-next'));
-    pager.replaceChildren(...links);
-
-    scrollTo({ top: 0, behavior: 'instant' });
-  }
-
-  // A hash that is not a section (the skip link, for instance) leaves the current page alone.
-  addEventListener('hashchange', () => {
-    const index = sections.findIndex((section) => `#${section.id}` === location.hash);
-    if (index !== -1) show(index);
-  });
-
-  show(Math.max(0, sections.findIndex((section) => `#${section.id}` === location.hash)));
-  // On arrival the browser scrolls to the section named in the URL; a page starts from its top instead.
-  if (location.hash) addEventListener('load', () => scrollTo({ top: 0, behavior: 'instant' }), { once: true });
-}
-
-function setupGithubLinks() {
-  if (!site.githubUrl) return;
-  for (const link of document.querySelectorAll('[data-github]')) {
-    link.href = site.githubUrl;
-    link.hidden = false;
-  }
-  for (const fallback of document.querySelectorAll('[data-no-github]')) fallback.hidden = true;
-}
 
 function renderRoadmap() {
   for (const list of document.querySelectorAll('[data-roadmap]')) {
@@ -249,13 +55,67 @@ function setupReveal() {
   }
 }
 
+// Section titles on the landing page: as each one scrolls in, its eyebrow decodes from random
+// characters and the heading's words rise out of a blur one after another.
+function setupHeadingEffects() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) return;
+  const eyebrows = [...document.querySelectorAll('#main > .section .eyebrow')]
+    .filter((eyebrow) => eyebrow.nextElementSibling?.tagName === 'H2');
+  if (eyebrows.length === 0) return;
+
+  const glyphs = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ<>/_#*+=';
+
+  function decode(eyebrow) {
+    const text = eyebrow.textContent;
+    const frames = 22;
+    let frame = 0;
+    const timer = setInterval(() => {
+      frame += 1;
+      eyebrow.textContent = [...text].map((char, i) => {
+        if (char === ' ' || frame >= frames * (0.35 + 0.65 * (i / text.length))) return char;
+        return glyphs[Math.floor(Math.random() * glyphs.length)];
+      }).join('');
+      if (frame >= frames) {
+        clearInterval(timer);
+        eyebrow.textContent = text;
+      }
+    }, 38);
+  }
+
+  function splitWords(heading) {
+    const words = heading.textContent.trim().split(/\s+/);
+    heading.setAttribute('aria-label', words.join(' '));
+    heading.replaceChildren(...words.flatMap((word, i) => {
+      const span = document.createElement('span');
+      span.className = 'fx-word';
+      span.setAttribute('aria-hidden', 'true');
+      span.style.setProperty('--i', String(i));
+      span.textContent = word;
+      return i === 0 ? [span] : [' ', span];
+    }));
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      observer.unobserve(entry.target);
+      entry.target.classList.add('is-shown');
+      decode(entry.target.querySelector('.eyebrow'));
+    }
+  }, { rootMargin: '0px 0px -15% 0px' });
+
+  for (const eyebrow of eyebrows) {
+    const head = eyebrow.parentElement;
+    splitWords(eyebrow.nextElementSibling);
+    head.classList.add('fx-head');
+    observer.observe(head);
+  }
+}
+
+setupSiteHeader();
 mountCodeWindows();
+setupHeadingEffects();
 mountPlayground(playgroundRuntime);
-setupNav();
-setupHeader();
-setupNavHighlight();
-setupNavMenu();
-setupGithubLinks();
 renderRoadmap();
 setupDocsPages();
 setupReveal();

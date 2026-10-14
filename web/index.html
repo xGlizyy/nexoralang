@@ -43,15 +43,22 @@
           <a class="nav-link" href="docs.html">Documentation</a>
           <div class="nav-menu">
             <div class="nav-menu__panel">
-              <a class="nav-menu__root" href="docs.html">Documentation</a>
-              <ol class="nav-menu__list">
-                <li><a href="docs.html#what"><span>01</span><strong>What is NEXORA</strong><small>The project, and what it is not</small></a></li>
-                <li><a href="docs.html#status"><span>02</span><strong>Current status</strong><small>What exists today, and what doesn't</small></a></li>
-                <li><a href="docs.html#philosophy"><span>03</span><strong>Design philosophy</strong><small>The ideas guiding the language</small></a></li>
-                <li><a href="docs.html#example"><span>04</span><strong>Conceptual example</strong><small>A first look at the syntax</small></a></li>
-                <li><a href="docs.html#roadmap"><span>05</span><strong>Roadmap</strong><small>The phases, in order</small></a></li>
-                <li><a href="docs.html#follow"><span>06</span><strong>Following the project</strong><small>How to keep up with it</small></a></li>
-              </ol>
+              <div class="nav-menu__tree">
+                <a class="nav-menu__root" href="docs.html">Documentation</a>
+                <ol class="nav-menu__list">
+                  <li><a href="docs.html#what"><span>01</span><strong>What is NEXORA</strong><small>The project, and what it is not</small></a></li>
+                  <li><a href="docs.html#status"><span>02</span><strong>Current status</strong><small>What exists today, and what doesn't</small></a></li>
+                  <li><a href="docs.html#philosophy"><span>03</span><strong>Design philosophy</strong><small>The ideas guiding the language</small></a></li>
+                  <li><a href="docs.html#example"><span>04</span><strong>Conceptual example</strong><small>A first look at the syntax</small></a></li>
+                  <li><a href="docs.html#roadmap"><span>05</span><strong>Roadmap</strong><small>The phases, in order</small></a></li>
+                  <li><a href="docs.html#follow"><span>06</span><strong>Following the project</strong><small>How to keep up with it</small></a></li>
+                </ol>
+              </div>
+              <div class="nav-menu__tree">
+                <a class="nav-menu__root" href="guide.html">Language guide</a>
+                <!-- Filled by site-header.js from the outline of guide.html, so it follows the guide. -->
+                <ol class="nav-menu__list nav-menu__list--grid" data-guide-outline></ol>
+              </div>
             </div>
           </div>
         </li>
@@ -87,86 +94,49 @@
       </p>
       <p class="hero__note">Language development begins here. The implementation is under development.</p>
       <div class="actions actions--center">
-        <a class="btn btn--fill" href="#why" data-label="Discover NEXORA">Discover NEXORA</a>
+        <a class="btn btn--fill" href="#why" data-label="Discover">Discover</a>
         <a class="btn" href="#code">Explore the language</a>
       </div>
     </div>
 
-    <!-- Decorative mock of an editor. The same example is readable in the "Syntax preview" section. -->
-    <div class="hero__stage" aria-hidden="true">
-      <div class="orb"></div>
-      <div class="device">
-        <div class="device__side">
-          <p class="device__project"><i class="ico ico--round"></i>nexora</p>
-          <p class="device__new"><i class="ico ico--dot"></i>New file</p>
-          <ul>
-            <li><i class="ico"></i>hello.nex</li>
-            <li><i class="ico"></i>types.nex</li>
-            <li><i class="ico"></i>contracts.nex</li>
-            <li><i class="ico"></i>errors.nex</li>
-          </ul>
-          <p class="device__group">Documents</p>
-          <ul>
-            <li><i class="ico"></i>Overview</li>
-            <li><i class="ico"></i>Design draft</li>
-            <li><i class="ico"></i>Roadmap</li>
-            <li>··· More</li>
-          </ul>
+    <div class="hero__stage">
+      <div class="orb" aria-hidden="true"></div>
+      <div class="window install__window" id="install" data-code-window>
+        <div class="window__bar">
+          <span class="window__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <div class="window__tabs window__tabs--slide" role="tablist" aria-label="Ways to install">
+            <button class="window__tab" role="tab" id="tab-npm" aria-controls="panel-npm" aria-selected="true"><svg class="window__tab-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="#CB3837" d="M0 0h16v16H0z"/><path fill="#fff" d="M3 3h10v10h-2.5V5.5H8V13H3z"/></svg>npm</button>
+            <button class="window__tab" role="tab" id="tab-npx" aria-controls="panel-npx" aria-selected="false" tabindex="-1"><svg class="window__tab-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="#CB3837" d="M0 0h16v16H0z"/><path fill="#fff" d="M3 3h10v10h-2.5V5.5H8V13H3z"/></svg>npx</button>
+            <button class="window__tab" role="tab" id="tab-pipx" aria-controls="panel-pipx" aria-selected="false" tabindex="-1"><svg class="window__tab-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="#3776AB" d="M7.9 1C5 1 5.2 2.3 5.2 2.3v1.3h2.8V4H4.1S2 3.8 2 6.9s1.8 3 1.8 3h1.1V8.4s-.1-1.8 1.8-1.8h3c1.7 0 1.7-1.7 1.7-1.7V2.7S11.6 1 7.9 1zM6.3 1.9a.5.5 0 1 1 0 1 .5.5 0 0 1 0-1z"/><path fill="#FFD43B" transform="rotate(180 8 8)" d="M7.9 1C5 1 5.2 2.3 5.2 2.3v1.3h2.8V4H4.1S2 3.8 2 6.9s1.8 3 1.8 3h1.1V8.4s-.1-1.8 1.8-1.8h3c1.7 0 1.7-1.7 1.7-1.7V2.7S11.6 1 7.9 1zM6.3 1.9a.5.5 0 1 1 0 1 .5.5 0 0 1 0-1z"/></svg>pipx</button>
+            <button class="window__tab" role="tab" id="tab-pip" aria-controls="panel-pip" aria-selected="false" tabindex="-1"><svg class="window__tab-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="#3776AB" d="M7.9 1C5 1 5.2 2.3 5.2 2.3v1.3h2.8V4H4.1S2 3.8 2 6.9s1.8 3 1.8 3h1.1V8.4s-.1-1.8 1.8-1.8h3c1.7 0 1.7-1.7 1.7-1.7V2.7S11.6 1 7.9 1zM6.3 1.9a.5.5 0 1 1 0 1 .5.5 0 0 1 0-1z"/><path fill="#FFD43B" transform="rotate(180 8 8)" d="M7.9 1C5 1 5.2 2.3 5.2 2.3v1.3h2.8V4H4.1S2 3.8 2 6.9s1.8 3 1.8 3h1.1V8.4s-.1-1.8 1.8-1.8h3c1.7 0 1.7-1.7 1.7-1.7V2.7S11.6 1 7.9 1zM6.3 1.9a.5.5 0 1 1 0 1 .5.5 0 0 1 0-1z"/></svg>pip</button>
+          </div>
+          <button class="copy" type="button" data-copy>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>
+            <span data-copy-label aria-live="polite">Copy</span>
+          </button>
         </div>
 
-        <div class="device__main">
-          <div class="device__bar">
-            <span class="device__brand">
-              <i class="ico"></i>
-              <svg class="brand__mark" viewBox="0 0 24 24">
-                <path d="M12 2.5 21.5 12 12 21.5 2.5 12Z"/>
-                <path class="brand__core" d="M12 8.5 15.5 12 12 15.5 8.5 12Z"/>
-              </svg>
-              NEXORA
-            </span>
-            <span>Design draft</span>
-          </div>
+        <div role="tabpanel" id="panel-npm" aria-labelledby="tab-npm">
+          <pre class="code"><code data-lang="sh">npm install -g nexora-lang
+nex --version</code></pre>
+          <p class="install__hint">Installs <code>nex</code> globally. Needs Node.js and Python 3.11+.</p>
+        </div>
 
-          <div class="device__cards">
-            <div class="device__card">
-              <p class="device__label">Language design <span>Phase 1</span></p>
-              <p class="device__value">v0.2</p>
-              <p class="device__line">In progress</p>
-              <p class="device__hint">Syntax may still change</p>
-            </div>
-            <div class="device__card">
-              <p class="device__label">Interpreter <span>Phase 2</span></p>
-              <p class="device__value">v0.2</p>
-              <p class="device__line">Runs a subset</p>
-              <p class="device__hint">Types, functions, contracts</p>
-            </div>
-            <div class="device__card">
-              <p class="device__label">Tooling <span>Phase 3</span></p>
-              <p class="device__value">Started</p>
-              <p class="device__line">CLI and reference</p>
-              <p class="device__hint">More tools planned</p>
-            </div>
-            <div class="device__card">
-              <p class="device__label">Playground <span>Phase 4</span></p>
-              <p class="device__value">Live</p>
-              <p class="device__line">Run code in the browser</p>
-              <p class="device__hint">Early version</p>
-            </div>
-          </div>
+        <div role="tabpanel" id="panel-npx" aria-labelledby="tab-npx" hidden>
+          <pre class="code"><code data-lang="sh">npx nexora-lang --version</code></pre>
+          <p class="install__hint">Runs <code>nex</code> without installing it. Needs Node.js and Python 3.11+.</p>
+        </div>
 
-          <div class="device__panel">
-            <div class="device__panel-head">
-              <div>
-                <p class="device__title">hello.nex</p>
-                <p class="device__hint">Runs with the reference interpreter</p>
-              </div>
-              <p class="device__segments"><span>hello.nex</span><span>types.nex</span><span>errors.nex</span></p>
-            </div>
-            <pre class="code"><code data-lang="nex">fn main() -&gt; Void {
-    let goal = "Build something new"
-    print(goal)
-}</code></pre>
-          </div>
+        <div role="tabpanel" id="panel-pipx" aria-labelledby="tab-pipx" hidden>
+          <pre class="code"><code data-lang="sh">pipx install nexora-lang
+nex --version</code></pre>
+          <p class="install__hint">Installs <code>nex</code> in its own environment. Only needs Python 3.11+.</p>
+        </div>
+
+        <div role="tabpanel" id="panel-pip" aria-labelledby="tab-pip" hidden>
+          <pre class="code"><code data-lang="sh">python -m pip install nexora-lang
+nex --version</code></pre>
+          <p class="install__hint">Installs into the active Python environment. Only needs Python 3.11+.</p>
         </div>
       </div>
     </div>
@@ -480,6 +450,6 @@ fn checkout(items: List&lt;Product&gt;) -&gt; Result&lt;Int, OrderError&gt; {
 </footer>
 
 <script type="module" src="js/main.js"></script>
-<script src="auth.js" defer></script>
+<script src="js/auth.js" defer></script>
 </body>
 </html>
