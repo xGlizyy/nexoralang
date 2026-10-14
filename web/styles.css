@@ -238,13 +238,18 @@ code { font-family: var(--mono); font-size: 0.9em; }
   transition: padding var(--shrink);
 }
 
+/* The bar is at least 1280px wide and grows when its contents need more room (longer labels, as in
+   a translated page), so the links never press against the actions. When even the whole width is
+   not enough, site-header.js folds the links into the menu (.nav-collapsed, below). */
 .site-header__row {
   position: relative;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 24px;
-  max-width: 1280px;
+  column-gap: 56px;
+  width: fit-content;
+  min-width: min(1280px, 100%);
+  max-width: 100%;
   min-height: 78px;
   padding-inline: 34px;
   border: 1px solid var(--line-strong);
@@ -255,10 +260,10 @@ code { font-family: var(--mono); font-size: 0.9em; }
   box-shadow: 0 24px 60px -34px rgba(0, 0, 0, 0.9);
   pointer-events: auto;
   transition:
-    max-width var(--shrink),
+    min-width var(--shrink),
     min-height var(--shrink),
     padding var(--shrink),
-    gap var(--shrink),
+    column-gap var(--shrink),
     background-color var(--shrink),
     border-color var(--shrink),
     box-shadow var(--shrink);
@@ -269,10 +274,10 @@ code { font-family: var(--mono); font-size: 0.9em; }
 .site-header.is-scrolled .site-header__row {
   /* Wide enough for the side columns to stay equal: the links remain centred and the
      actions keep their distance from the last link. */
-  max-width: 1120px;
+  min-width: min(1120px, 100%);
   min-height: 56px;
   padding-inline: 24px;
-  gap: 28px;
+  column-gap: 44px;
   border-color: rgba(255, 255, 255, 0.2);
   background: rgba(16, 16, 24, 0.84);
   box-shadow: 0 20px 50px -24px rgba(0, 0, 0, 0.95), 0 0 60px -30px rgba(139, 117, 255, 0.5);
@@ -1772,48 +1777,56 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
 /* Responsive */
 
 /* Below this width the full nav no longer fits in the bar, so it collapses into a menu. */
+/* Collapsed header: a toggle opens the links and the actions as a panel under the bar.
+   site-header.js sets .nav-collapsed on <html> below 1180px, and above it whenever the links and
+   the actions do not fit side by side. */
+.nav-collapsed { --header: 84px; }
+
+.nav-collapsed .nav-toggle { display: inline-flex; border-radius: 50%; }
+
+.nav-collapsed .site-nav {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 10px);
+  display: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 8px 24px 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: 26px;
+  background: #101018;
+  box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.95);
+}
+
+.nav-collapsed .site-nav.is-open { display: flex; }
+.nav-collapsed .site-nav__links { flex-direction: column; gap: 0; }
+.nav-collapsed .site-nav__links .nav-link { display: block; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 1rem; transition: color 0.15s, padding 0.25s; }
+.nav-collapsed .site-nav__links .nav-link:hover { padding-left: 10px; color: #b5a6ff; }
+.nav-collapsed .site-nav__links::before { display: none; }
+.nav-collapsed .nav-menu { display: none; }
+.nav-collapsed .site-nav__actions { flex-direction: column; align-items: stretch; gap: 16px; padding-top: 20px; }
+.nav-collapsed .site-nav__session .pill { justify-content: center; padding-block: 9px; }
+.nav-collapsed .site-nav__session { justify-content: space-between; }
+
+.nav-collapsed .site-header { padding-inline: 14px; }
+.nav-collapsed .site-header.is-scrolled { padding-inline: 26px; }
+.nav-collapsed .site-header__row { display: flex; flex-wrap: wrap; row-gap: 0; width: auto; min-height: 62px; padding-inline: 22px; }
+.nav-collapsed .site-header.is-scrolled .site-header__row { min-height: 50px; padding-inline: 18px; }
+
+/* While site-header.js measures whether the full bar fits, nothing animates. */
+.nav-measuring .site-header, .nav-measuring .site-header * { transition: none !important; }
+
+/* Without JavaScript there is no toggle: on narrow screens the links wrap under the brand instead. */
 @media (max-width: 1180px) {
-  :root { --header: 84px; }
-
-  .js .nav-toggle { display: inline-flex; }
-
-  .js .site-nav {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(100% + 10px);
-    display: none;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0;
-    padding: 8px 24px 24px;
-    border: 1px solid var(--line-strong);
-    border-radius: 26px;
-    background: #101018;
-    box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.95);
-  }
-
-  .js .site-nav.is-open { display: flex; }
-  .js .site-nav__links { flex-direction: column; gap: 0; }
-  .js .site-nav__links .nav-link { display: block; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 1rem; transition: color 0.15s, padding 0.25s; }
-  .js .site-nav__links .nav-link:hover { padding-left: 10px; color: #b5a6ff; }
-  .site-nav__links::before { display: none; }
-  .nav-menu { display: none; }
-  .js .site-nav__actions { flex-direction: column; align-items: stretch; gap: 16px; padding-top: 20px; }
-  .js .site-nav__session .pill { justify-content: center; padding-block: 9px; }
-  .js .site-nav__session { justify-content: space-between; }
-
-  .site-header { padding-inline: 14px; }
-  .site-header.is-scrolled { padding-inline: 26px; }
-  .site-header__row { display: flex; flex-wrap: wrap; row-gap: 0; min-height: 62px; padding-inline: 22px; }
-  .site-header.is-scrolled .site-header__row { min-height: 50px; padding-inline: 18px; }
-  .nav-toggle { border-radius: 50%; }
-
-  /* Without JavaScript there is no toggle: the links wrap under the brand instead. */
-  html:not(.js) .site-header { height: auto; }
-  html:not(.js) .site-header__row { padding-block: 10px; border-radius: 28px; }
+  html:not(.js) { --header: 84px; }
+  html:not(.js) .site-header { height: auto; padding-inline: 14px; }
+  html:not(.js) .site-header__row { display: flex; flex-wrap: wrap; row-gap: 0; width: auto; min-height: 62px; padding: 10px 22px; border-radius: 28px; }
   html:not(.js) .site-nav { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 8px 20px; padding-bottom: 4px; }
   html:not(.js) .site-nav__links { flex-wrap: wrap; gap: 4px 20px; }
+  html:not(.js) .site-nav__links::before { display: none; }
+  html:not(.js) .nav-menu { display: none; }
 }
 
 @media (max-width: 960px) {

@@ -1,5 +1,5 @@
-// Site header shared by every page: mobile menu, shrinking bar, link highlight, the Documentation
-// outline and the GitHub links.
+// Site header shared by every page: folding into a menu when it does not fit, the menu itself,
+// the shrinking bar, the link highlight, the Documentation outline and the GitHub links.
 
 import { site } from './config.js';
 
@@ -24,6 +24,72 @@ function setupNav() {
       toggle.focus();
     }
   });
+}
+
+// Below 1180px the links always fold into the menu. Above it they fold only when they do not fit
+// beside the actions in the full-size bar, because labels can be longer than the English ones: a
+// page translated by the browser, or a long name once someone has signed in.
+function setupCollapse() {
+  const root = document.documentElement;
+  const header = document.querySelector('.site-header');
+  const row = header?.querySelector('.site-header__row');
+  const brand = header?.querySelector('.brand');
+  const links = header?.querySelector('.site-nav__links');
+  const actions = header?.querySelector('.site-nav__actions');
+  const nav = document.getElementById('site-nav');
+  const toggle = header?.querySelector('.nav-toggle');
+  if (!row || !brand || !links || !actions) return;
+
+  const narrow = matchMedia('(max-width: 1180px)');
+  const MIN_GAP = 40;
+
+  // The actions sit at the end of a wider grid cell: what matters is where their content starts.
+  function contentLeft(element) {
+    const lefts = [...element.children].map((child) => child.getBoundingClientRect())
+      .filter((box) => box.width > 0).map((box) => box.left);
+    return lefts.length ? Math.min(...lefts) : element.getBoundingClientRect().right;
+  }
+
+  // Lays the bar out at full size for a moment (no paint happens in between) and checks the room.
+  function fullBarFits() {
+    const scrolled = header.classList.contains('is-scrolled');
+    root.classList.remove('nav-collapsed');
+    header.classList.remove('is-scrolled');
+    const brandBox = brand.getBoundingClientRect();
+    const linksBox = links.getBoundingClientRect();
+    const fits = row.scrollWidth <= row.clientWidth + 1
+      && linksBox.left - brandBox.right >= MIN_GAP
+      && contentLeft(actions) - linksBox.right >= MIN_GAP;
+    header.classList.toggle('is-scrolled', scrolled);
+    return fits;
+  }
+
+  function update() {
+    root.classList.add('nav-measuring');
+    const collapse = narrow.matches || !fullBarFits();
+    root.classList.toggle('nav-collapsed', collapse);
+    void row.offsetWidth;   // settle the final layout while transitions are still off
+    root.classList.remove('nav-measuring');
+    if (!collapse && nav?.classList.contains('is-open')) {
+      nav.classList.remove('is-open');
+      toggle?.setAttribute('aria-expanded', 'false');
+      toggle?.setAttribute('aria-label', 'Open menu');
+    }
+  }
+
+  let pending = false;
+  function schedule() {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; update(); });
+  }
+
+  update();
+  narrow.addEventListener('change', update);
+  addEventListener('resize', schedule);
+  document.fonts?.ready.then(schedule);
+  // Text that changes after load: a translation, or the session area filled in by auth.js.
+  new MutationObserver(schedule).observe(header, { subtree: true, childList: true, characterData: true });
 }
 
 // The header bar shrinks once the page is scrolled. Two thresholds keep it from flickering at the edge.
@@ -167,6 +233,7 @@ function setupGithubLinks() {
 }
 
 export function setupSiteHeader() {
+  setupCollapse();
   setupNav();
   setupHeader();
   setupNavHighlight();
