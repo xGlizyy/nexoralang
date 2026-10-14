@@ -6,12 +6,14 @@
 // the lists below are the fallback for when the server cannot be reached.
 
 export const FALLBACK_LANGUAGE = Object.freeze({
-  keywords: ['and', 'else', 'ensures', 'false', 'fn', 'if', 'let', 'not', 'or', 'requires', 'return', 'true'],
+  keywords: [
+    'and', 'else', 'ensures', 'false', 'fn', 'if', 'let', 'not', 'or', 'requires', 'return', 'true', 'type', 'where',
+  ],
   types: ['Void', 'Int', 'Float', 'Bool', 'Text'],
   builtins: ['print', 'to_float', 'to_int', 'to_text'],
   reserved_words: [
     'ai', 'assert', 'break', 'const', 'continue', 'enum', 'example', 'for', 'import', 'in', 'match', 'pub',
-    'test', 'tool', 'try', 'type', 'uses', 'var', 'where', 'while',
+    'test', 'tool', 'try', 'uses', 'var', 'while',
   ],
 });
 

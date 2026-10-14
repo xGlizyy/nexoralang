@@ -89,6 +89,7 @@
       <li><a href="#operators">Operators</a></li>
       <li><a href="#functions">Functions</a></li>
       <li><a href="#contracts">Contracts</a></li>
+      <li><a href="#refined-types">Refined types</a></li>
       <li><a href="#diagnostics">Diagnostics</a></li>
       <li><a href="#limitations">Limitations</a></li>
     </ol>
@@ -98,7 +99,7 @@
     <p class="eyebrow">Language guide</p>
     <h1>NEXORA, as it works today</h1>
     <p class="lead">
-      A short tour of what the current interpreter (version 0.2) accepts. Every program on this page is
+      A short tour of what the current interpreter (version 0.3) accepts. Every program on this page is
       run by the project's tests, and every one can be tried in the <a href="playground.html">playground</a>.
     </p>
 
@@ -257,16 +258,19 @@ negative</pre></div>
     </section>
 
     <section id="contracts">
-      <h2>Contracts <span class="chip chip--experimental">Experimental</span></h2>
+      <h2>Contracts</h2>
       <p>
         A function can state what it expects from its caller (<code>requires</code>) and what it promises
         (<code>ensures</code>, where <code>result</code> is the value returned). The clauses go at the start
         of the body. They are checked while the program runs, on every call: they are not proven in advance.
-        This part of the language may change.
+      </p>
+      <p>
+        After a comma, a rule can carry its explanation. It does not change what is checked: when the rule
+        is broken, the error shows it as the reason, so whoever broke it does not have to guess why it exists.
       </p>
       <figure class="window">
         <pre class="code" data-example="run"><code>fn divide(a: Float, b: Float) -&gt; Float {
-    requires b != 0.0
+    requires b != 0.0, "Dividing by zero has no result"
     return a / b
 }
 
@@ -284,6 +288,47 @@ fn main() -&gt; Void {
 }</code></pre>
         <div class="guide-output"><pre data-expected>4.5
 42</pre></div>
+      </figure>
+    </section>
+
+    <section id="refined-types">
+      <h2>Refined types</h2>
+      <p>
+        A refined type is a built-in type plus a rule that all its values follow. Every value of the type
+        satisfies the rule, everywhere in the program. A value can only get the type in two ways, and both are
+        written in the code:
+      </p>
+      <ul class="bullets">
+        <li>A constant, such as <code>15</code> below: it is checked before the program runs.</li>
+        <li>An explicit check, such as <code>Cents(...)</code>: it happens while running, and stops the program if the value breaks the rule.</li>
+      </ul>
+      <figure class="window">
+        <pre class="code" data-example="run"><code>type Percent = Int where value &gt;= 0 and value &lt;= 100, "A percentage goes from 0 to 100"
+type Cents = Int where value &gt;= 0, "An amount of money cannot be negative"
+
+fn apply_discount(price: Cents, percent: Percent) -&gt; Cents {
+    ensures result &lt;= price, "A discount never raises the price"
+    return Cents(price * (100 - percent) / 100)
+}
+
+fn main() -&gt; Void {
+    print(apply_discount(2000, 15))
+}</code></pre>
+        <div class="guide-output"><pre data-expected>1700</pre></div>
+      </figure>
+      <p>
+        A <code>Percent</code> can be used wherever an <code>Int</code> is expected, but not the other way round.
+        Arithmetic on refined values gives the base type. A constant that breaks the rule is found without running:
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="check-fails" data-code="E2017" data-line="4"><code>type Percent = Int where value &gt;= 0 and value &lt;= 100
+
+fn main() -&gt; Void {
+    let discount: Percent = 150
+    print(discount)
+}</code></pre>
+        <div class="guide-output guide-output--error"><pre>type error[E2017]: Value outside refined type
+  line 4, column 29: 150 is not a valid Percent</pre></div>
       </figure>
     </section>
 
@@ -309,7 +354,7 @@ fn main() -&gt; Void {
           <tr><td><code>semantic</code></td><td>Names, scopes, return paths</td><td>Before running</td></tr>
           <tr><td><code>type</code></td><td>Types that do not match</td><td>Before running</td></tr>
           <tr><td><code>runtime</code></td><td>Division by zero, overflow, endless recursion</td><td>While running</td></tr>
-          <tr><td><code>contract</code></td><td>A <code>requires</code> or <code>ensures</code> condition was false</td><td>While running</td></tr>
+          <tr><td><code>contract</code></td><td>A rule the program declares was broken: a <code>requires</code> or <code>ensures</code> condition, or the rule of a refined type</td><td>While running</td></tr>
         </tbody>
       </table>
       <p>In the playground, selecting a diagnostic shows its position in the editor.</p>

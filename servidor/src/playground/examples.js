@@ -11,10 +11,12 @@ const CATALOGUE = [
   { id: 'arithmetic', file: 'arithmetic.nex', title: 'Arithmetic', expect: 'success' },
   { id: 'types', file: 'types.nex', title: 'Types and conversions', expect: 'success' },
   { id: 'functions', file: 'functions.nex', title: 'Functions and recursion', expect: 'success' },
-  { id: 'contracts', file: 'contracts.nex', title: 'Contracts (experimental)', expect: 'success' },
+  { id: 'contracts', file: 'contracts.nex', title: 'Contracts', expect: 'success' },
+  { id: 'refined-types', file: 'refined_types.nex', title: 'Refined types', expect: 'success' },
   { id: 'type-errors', file: 'invalid/type_errors.nex', title: 'Type errors, on purpose', expect: 'invalid' },
   { id: 'runtime-error', file: 'failing/runtime_error.nex', title: 'A runtime error, on purpose', expect: 'runtime_error' },
   { id: 'contract-violation', file: 'failing/contract_violation.nex', title: 'A broken contract, on purpose', expect: 'contract_violation' },
+  { id: 'refinement-violation', file: 'failing/refinement_violation.nex', title: 'A broken refined type, on purpose', expect: 'contract_violation' },
 ];
 
 // La descripción es el comentario con el que empieza el propio archivo.
