@@ -158,7 +158,7 @@ _BUILTIN = {
 _CONTEXT_FUNCTION = {
     "type": "object",
     "required": ["name", "signature", "params", "return_type", "span", "contracts", "variables", "calls",
-                 "builtins_called", "called_by", "recursive"],
+                 "builtins_called", "called_by", "recursive", "examples"],
     "properties": {
         "name": {"type": "string"},
         "signature": {"type": "string"},
@@ -181,6 +181,14 @@ _CONTEXT_FUNCTION = {
         "builtins_called": {"type": "array", "items": {"type": "string"}},
         "called_by": {"type": "array", "items": {"type": "string"}},
         "recursive": {"type": "boolean", "description": "True if the function can reach itself through calls."},
+        "examples": {"type": "array", "description": "The 'example' clauses of the function, as written. The "
+                                                     "analysis never evaluates them; only `nex test` does.",
+                     "items": {
+                         "type": "object", "required": ["condition", "message", "line"],
+                         "properties": {"condition": {"type": "string", "description": "The expression, as written."},
+                                        "message": {**_NULLABLE_STRING,
+                                                    "description": "The explanation written after it, if any."},
+                                        "line": {"type": "integer", "minimum": 1}}}},
     },
 }
 
@@ -196,6 +204,58 @@ _CONTEXT_TYPE = {
         "condition": {"type": "string", "description": "The condition after 'where', as written in the source."},
         "message": {**_NULLABLE_STRING, "description": "The explanation written after the condition, if any."},
         "line": {"type": "integer", "minimum": 1},
+    },
+}
+
+
+_TEST_CALL = {
+    "type": "object",
+    "required": ["call", "span", "type", "status", "value"],
+    "properties": {
+        "call": {"type": "string", "description": "The call, as written in the source."},
+        "span": {"$ref": "#/$defs/span"},
+        "type": {**_NULLABLE_STRING, "description": "Its type, from the static analysis."},
+        "status": {"enum": ["returned", "stopped"],
+                   "description": "'returned': it returned a value. 'stopped': it was invoked, but the evaluation "
+                                  "stopped inside it."},
+        "value": {**_NULLABLE_STRING, "description": "The value it returned, written as in the source. Null only "
+                                                    "when status is 'stopped': NEXORA has no null value."},
+    },
+}
+
+_TEST_SKIPPED_CALL = {
+    "type": "object",
+    "required": ["call", "span", "type", "reason"],
+    "properties": {
+        "call": {"type": "string"},
+        "span": {"$ref": "#/$defs/span"},
+        "type": _NULLABLE_STRING,
+        "reason": {"enum": ["short_circuit", "stopped_before"],
+                   "description": "'short_circuit': in an operand that 'and' or 'or' did not need. "
+                                  "'stopped_before': the evaluation stopped before reaching it."},
+    },
+}
+
+_TEST_EXAMPLE = {
+    "type": "object",
+    "required": ["function", "index", "span", "expression", "message", "status", "values", "not_evaluated",
+                 "diagnostic", "output"],
+    "properties": {
+        "function": {"type": "string", "description": "The function that declares the example."},
+        "index": {"type": "integer", "minimum": 1,
+                  "description": "Its position among the examples of that function, from 1."},
+        "span": {"$ref": "#/$defs/span"},
+        "expression": {"type": "string", "description": "The expression of the example, as written."},
+        "message": {**_NULLABLE_STRING, "description": "The explanation written after it, if any."},
+        "status": {"enum": ["passed", "failed", "error"]},
+        "values": {"type": "array", "items": {"$ref": "#/$defs/call"},
+                   "description": "The own calls that were invoked, in the order they were invoked."},
+        "not_evaluated": {"type": "array", "items": {"$ref": "#/$defs/skipped_call"},
+                          "description": "The own calls that were never invoked, in the order of the text."},
+        "diagnostic": {"oneOf": [{"$ref": "#/$defs/diagnostic"}, {"type": "null"}],
+                       "description": "Null if passed; E4004 if failed; the original diagnostic, with a note "
+                                      "naming the example, if error."},
+        "output": {"type": "string", "description": "What was printed while the example was evaluated."},
     },
 }
 
@@ -296,6 +356,23 @@ def all_schemas() -> dict[str, dict]:
         ["schema", "nexora_version", "language", "diagnostics", "limits", "schemas", "analysis_executes_code"],
         {"param": _PARAM, "builtin": _BUILTIN},
     )
+    test = _document(
+        "nexora-test", "nexora.test/1: the outcome of evaluating the 'example' clauses of a program (nex test)",
+        {**_header("nexora.test/1"),
+         "status": {"enum": ["passed", "failed", "no_examples", "not_run"],
+                    "description": "'ok' is the result of the static analysis; this is the result of the examples."},
+         "filter": {"type": "object", "required": ["function"], "properties": {"function": _NULLABLE_STRING}},
+         "summary": {"oneOf": [{"type": "object", "required": ["total", "passed", "failed", "error"],
+                                "properties": {name: {"type": "integer", "minimum": 0}
+                                               for name in ("total", "passed", "failed", "error")}},
+                               {"type": "null"}],
+                     "description": "Counts of the selected examples. Null when nothing was evaluated."},
+         "examples": {"oneOf": [{"type": "array", "items": {"$ref": "#/$defs/example"}}, {"type": "null"}],
+                      "description": "One result per selected example, in the order of evaluation. Null when "
+                                     "nothing was evaluated (not_run)."}},
+        [*_HEADER_REQUIRED, "status", "filter", "summary", "examples"],
+        {**base, "example": _TEST_EXAMPLE, "call": _TEST_CALL, "skipped_call": _TEST_SKIPPED_CALL},
+    )
     result = _document(
         "nexora-result", "nexora.result/1: the outcome of checking or running a program (nexora.api, playground)",
         {"schema": {"const": "nexora.result/1"},
@@ -316,4 +393,5 @@ def all_schemas() -> dict[str, dict]:
         "nexora-spec.schema.json": spec,
         "nexora-capabilities.schema.json": capabilities,
         "nexora-result.schema.json": result,
+        "nexora-test.schema.json": test,
     }

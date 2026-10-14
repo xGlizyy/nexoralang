@@ -1,0 +1,380 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexora.invalid/schemas/nexora-test.schema.json",
+  "title": "nexora.test/1: the outcome of evaluating the 'example' clauses of a program (nex test)",
+  "type": "object",
+  "required": [
+    "schema",
+    "nexora_version",
+    "file",
+    "ok",
+    "diagnostics",
+    "status",
+    "filter",
+    "summary",
+    "examples"
+  ],
+  "properties": {
+    "schema": {
+      "const": "nexora.test/1"
+    },
+    "nexora_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "file": {
+      "type": "string",
+      "description": "The name the source was given. A label, not necessarily a path."
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "True when the static analysis found no errors."
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "failed",
+        "no_examples",
+        "not_run"
+      ],
+      "description": "'ok' is the result of the static analysis; this is the result of the examples."
+    },
+    "filter": {
+      "type": "object",
+      "required": [
+        "function"
+      ],
+      "properties": {
+        "function": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "summary": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "total",
+            "passed",
+            "failed",
+            "error"
+          ],
+          "properties": {
+            "total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "passed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "error": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Counts of the selected examples. Null when nothing was evaluated."
+    },
+    "examples": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/example"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "One result per selected example, in the order of evaluation. Null when nothing was evaluated (not_run)."
+    }
+  },
+  "$defs": {
+    "span": {
+      "description": "A region of the source. Lines and columns start at 1; the end is exclusive. Columns count Unicode code points.",
+      "type": "object",
+      "required": [
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": [
+        "severity",
+        "category",
+        "code",
+        "message",
+        "label",
+        "hint",
+        "notes",
+        "file",
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "severity": {
+          "const": "error"
+        },
+        "category": {
+          "enum": [
+            "contract",
+            "file",
+            "lexical",
+            "runtime",
+            "semantic",
+            "syntax",
+            "test",
+            "type"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^E[0-9]{4}$",
+          "description": "Stable identifier of the problem."
+        },
+        "message": {
+          "type": "string",
+          "description": "Fixed title of the code."
+        },
+        "label": {
+          "type": "string",
+          "description": "What is wrong in this particular case."
+        },
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A suggested fix, only when a rule of the language supports it."
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Related information."
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    },
+    "example": {
+      "type": "object",
+      "required": [
+        "function",
+        "index",
+        "span",
+        "expression",
+        "message",
+        "status",
+        "values",
+        "not_evaluated",
+        "diagnostic",
+        "output"
+      ],
+      "properties": {
+        "function": {
+          "type": "string",
+          "description": "The function that declares the example."
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Its position among the examples of that function, from 1."
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "expression": {
+          "type": "string",
+          "description": "The expression of the example, as written."
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The explanation written after it, if any."
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "error"
+          ]
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/call"
+          },
+          "description": "The own calls that were invoked, in the order they were invoked."
+        },
+        "not_evaluated": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/skipped_call"
+          },
+          "description": "The own calls that were never invoked, in the order of the text."
+        },
+        "diagnostic": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/diagnostic"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Null if passed; E4004 if failed; the original diagnostic, with a note naming the example, if error."
+        },
+        "output": {
+          "type": "string",
+          "description": "What was printed while the example was evaluated."
+        }
+      }
+    },
+    "call": {
+      "type": "object",
+      "required": [
+        "call",
+        "span",
+        "type",
+        "status",
+        "value"
+      ],
+      "properties": {
+        "call": {
+          "type": "string",
+          "description": "The call, as written in the source."
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Its type, from the static analysis."
+        },
+        "status": {
+          "enum": [
+            "returned",
+            "stopped"
+          ],
+          "description": "'returned': it returned a value. 'stopped': it was invoked, but the evaluation stopped inside it."
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The value it returned, written as in the source. Null only when status is 'stopped': NEXORA has no null value."
+        }
+      }
+    },
+    "skipped_call": {
+      "type": "object",
+      "required": [
+        "call",
+        "span",
+        "type",
+        "reason"
+      ],
+      "properties": {
+        "call": {
+          "type": "string"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "short_circuit",
+            "stopped_before"
+          ],
+          "description": "'short_circuit': in an operand that 'and' or 'or' did not need. 'stopped_before': the evaluation stopped before reaching it."
+        }
+      }
+    }
+  }
+}

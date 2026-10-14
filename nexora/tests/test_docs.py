@@ -15,6 +15,8 @@ produces. A code block is tied to a check by an HTML comment on the line before 
     <!-- nex:context -->        the `text` block is exactly the output of `nex context`
     <!-- nex:context-json -->   the `json` block is exactly the output of `nex context --format json`
     <!-- nex:symbols-json -->   the `json` block is exactly the output of `nex symbols --format json`
+    <!-- nex:test exit=6 -->    `nex test` evaluates the examples of the program with that exit code;
+                                the `text` block is its standard output followed by its errors
     <!-- nex:valid -->          the program passes `nex check` (no output is shown)
     <!-- nex:body -->           statements that pass `nex check` once placed inside `main`
     <!-- nex:body-fails codes=E2011,E2005 -->
@@ -48,7 +50,7 @@ MARKER = re.compile(r"<!--\s*nex:([\w-]+)((?:\s+\w+=[\w,]+)*)\s*-->")
 FENCE = re.compile(r"^```(\w*)\s*$")
 EXPECTS_OUTPUT = {
     "run": "text", "fails": "text", "check-fails": "text", "check-json": "json", "inspect": "json",
-    "context": "text", "context-json": "json", "symbols-json": "json",
+    "context": "text", "context-json": "json", "symbols-json": "json", "test": "text",
 }
 MARKERS = {*EXPECTS_OUTPUT, "valid", "body", "body-fails"}
 
@@ -186,6 +188,10 @@ def test_documented_example(block, tmp_path, monkeypatch, capsys):
         code, out, err = run(command, *(["--format", "json"] if block.marker.endswith("json") else []))
         assert err == "", block.label
         assert_expected(block, out)
+    elif block.marker == "test":
+        code, out, err = run("test")
+        assert code == int(block.options["exit"]), f"{block.label}: exit code {code}: {err}"
+        assert_expected(block, out + err)
     elif block.marker == "valid":
         code, out, err = run("check")
         assert code == 0, f"{block.label}: {err}"

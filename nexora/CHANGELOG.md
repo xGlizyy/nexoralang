@@ -19,6 +19,37 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
+## Sin publicar — 0.4.0 en desarrollo
+
+Trabajo de la rama de la 0.4.0. El número de versión sigue siendo 0.3.1 hasta que se publique.
+Implementa la [decisión 0008](docs/decisions/0008-ejemplos-y-nex-test.md).
+
+### Añadido
+
+- **Ejemplos en las funciones:** `example double(2) == 4, "Two doubled"`, una cláusula del principio
+  del cuerpo junto a `requires` y `ensures`. Es una expresión `Bool` que tiene que llamar a su propia
+  función (`E2020` si no lo hace) y que no ve los parámetros ni `result`. El análisis nunca la evalúa.
+- **`nex test`**: evalúa los ejemplos, cada uno en un intérprete nuevo, comprobando los contratos de
+  todo lo que se ejecuta. No exige `main` ni lo ejecuta. Opciones `--format text|json` y
+  `--function FUNCION`. Cada ejemplo termina en `passed`, `failed` (`E4004`, categoría nueva `test`) o
+  `error` (el diagnóstico original, con una nota que identifica el ejemplo).
+- Código de salida `6`: algún ejemplo no pasó, o no había ningún ejemplo que evaluar.
+- Formato `nexora.test/1` y `nexora.api.test_source`, que devuelve el mismo documento.
+- `nex inspect`: nodo `Example` y campo `examples` al final de `Function` (sigue siendo
+  `nexora.inspect/2`). `nex context`: campo `examples` y valor `examples` en `features`.
+- Ejemplo `examples/checked_examples.nex`.
+
+### Cambios incompatibles
+
+- `example` pasa de palabra reservada a palabra clave. Ningún programa válido podía usarla como
+  nombre.
+
+### Limitaciones
+
+- `nex test` no tiene límite de tiempo ni de memoria por ejemplo.
+- Si un programa agota la memoria, `nex test` termina con `70`, como `nex run`: es una excepción
+  heredada a la regla de que `70` es un fallo de NEXORA, pendiente de una decisión futura.
+
 ## 0.3.1 — Revisión de los tipos refinados
 
 Resultado de intentar romper las garantías de la 0.3.0. La garantía principal resistió: ningún

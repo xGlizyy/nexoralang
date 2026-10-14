@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import tooling
+from . import api, tooling
 from .diagnostics import CONTRACT, MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Source, render
 from .interpreter import run
 from .pipeline import Analysis, analyze
@@ -22,7 +22,8 @@ EXIT_USAGE = 2               # wrong command-line arguments (argparse's own conv
 EXIT_RUNTIME_ERROR = 3       # the program started and then failed
 EXIT_UNREADABLE_FILE = 4     # the file does not exist or cannot be read as UTF-8
 EXIT_CONTRACT_VIOLATION = 5  # a rule the program declares was broken while running
-EXIT_INTERNAL_ERROR = 70     # a bug in NEXORA itself
+EXIT_TEST_FAILED = 6         # nex test: an example did not pass, or there was no example to run
+EXIT_INTERNAL_ERROR = 70     # a bug in NEXORA itself (and, inherited from nex run, MemoryError)
 EXIT_INTERRUPTED = 130       # stopped by the user with Ctrl+C
 
 _EPILOG = """\
@@ -34,7 +35,9 @@ exit codes:
   4   the file could not be read
   5   the program broke a rule it declares while running: a contract
       ('requires', 'ensures') or the condition of a refined type
-  70  internal error in NEXORA (a bug, please report it)
+  6   nex test: an example did not pass, or there was no example to run
+  70  internal error in NEXORA (a bug, please report it); also when a
+      program runs out of memory
   130 interrupted with Ctrl+C
 """
 
@@ -135,6 +138,24 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     symbols_parser.add_argument("--name", help="only the symbols with this name")
     symbols_parser.add_argument("--function", help="only this function and what is declared inside it")
+
+    test_parser = commands.add_parser(
+        "test",
+        help="evaluate the 'example' clauses of a .nex file",
+        description=(
+            "Check a NEXORA program and, if it is valid, evaluate the 'example' clauses of its functions, "
+            "each one on its own. 'main' is not required and is never run. The contracts of every "
+            "function called while evaluating an example are checked as usual."
+        ),
+    )
+    test_parser.add_argument("file", help="path to the .nex file to test")
+    test_parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="how to write the report (default: text). 'json' writes one nexora.test/1 document to standard output",
+    )
+    test_parser.add_argument("--function", help="only the examples declared in this function")
     return parser
 
 
@@ -242,6 +263,84 @@ def _run(path: str, output_format: str) -> int:
     return EXIT_OK
 
 
+def _count(number: int, noun: str) -> str:
+    return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+
+
+def _test(path: str, output_format: str, function: str | None) -> int:
+    """`nex test` (decision 0008). Nothing is written until every selected example was evaluated,
+    so an internal error or Ctrl+C never leaves a partial report behind."""
+    source, failure = _load(path)
+    if source is None:
+        analysis = Analysis(Source(path, ""), (failure,))
+    else:
+        analysis = analyze(source, require_main=False)
+    try:
+        report = api.run_examples(analysis, function)
+    except tooling.ToolingError as error:
+        # A usage error, like any other: a message, no document.
+        print(f"error: {error}", file=sys.stderr)
+        return EXIT_USAGE
+
+    if output_format == "json":
+        _print_json(api.test_document(report), sys.stdout)
+    else:
+        _report_test(report, path)
+
+    if report.status == api.NOT_RUN:
+        return EXIT_UNREADABLE_FILE if source is None else EXIT_INVALID_PROGRAM
+    return EXIT_OK if report.status == api.PASSED else EXIT_TEST_FAILED
+
+
+def _report_test(report: api.TestReport, path: str) -> None:
+    source = report.analysis.source
+    if report.status == api.NOT_RUN:
+        _report(report.analysis.diagnostics, source)
+        if source.text or report.analysis.diagnostics[0].category != "file":
+            print(f"error: {path}: not tested because of {_plural(len(report.analysis.diagnostics))}", file=sys.stderr)
+        else:
+            print(f"error: {path}: the file could not be read", file=sys.stderr)
+        return
+    if report.status == api.NO_EXAMPLES:
+        print(f"{path}: no examples to run")
+        print(f"error: {path}: nothing was tested", file=sys.stderr)
+        return
+
+    results = report.results
+    functions: dict[str, list] = {}
+    for result in results:
+        functions.setdefault(result.function, []).append(result)
+    if report.function is not None:
+        print(f"{path}: {_count(len(results), 'example')} of '{report.function}'")
+    else:
+        print(f"{path}: {_count(len(results), 'example')} in {_count(len(functions), 'function')}")
+    width = max(len(name) for name in functions)
+    for name, own in functions.items():
+        counts = [f"{sum(r.status == status for r in own)} {status}"
+                  for status in (api.PASSED, api.FAILED, api.ERROR) if any(r.status == status for r in own)]
+        print(f"  {name.ljust(width)}   {', '.join(counts)}")
+    sys.stdout.flush()
+
+    for result in results:
+        if result.status == api.PASSED:
+            continue
+        print(file=sys.stderr)
+        print(render(result.diagnostic, source), file=sys.stderr)
+        if result.output:
+            print(f"\noutput of example {result.index} of '{result.function}':", file=sys.stderr)
+            for line in result.output.rstrip("\n").split("\n"):
+                print(f"    {line}", file=sys.stderr)
+
+    summary = api.summary_of(report)
+    if report.status == api.PASSED:
+        print(f"✓ {_count(summary['total'], 'example')} passed: {path}")
+    else:
+        not_passed = summary["failed"] + summary["error"]
+        print(file=sys.stderr)
+        print(f"error: {path}: {not_passed} of {_count(summary['total'], 'example')} did not pass "
+              f"({summary['failed']} failed, {_count(summary['error'], 'error')})", file=sys.stderr)
+
+
 def _use_utf8() -> None:
     """Program output and diagnostics are always UTF-8, whatever the console's code page."""
     for stream in (sys.stdout, sys.stderr):
@@ -294,6 +393,8 @@ def main(argv: list[str] | None = None) -> int:
         if arguments.command == "context":
             return _analysis_command(arguments.file, arguments.format, tooling.context_document,
                                      tooling.render_context)
+        if arguments.command == "test":
+            return _test(arguments.file, arguments.format, arguments.function)
         if arguments.command == "symbols":
             return _analysis_command(
                 arguments.file, arguments.format,

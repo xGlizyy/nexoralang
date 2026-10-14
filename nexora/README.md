@@ -63,7 +63,7 @@ incompatible y no es apto para uso en producción.
 
 | Estado | Qué incluye |
 |--------|-------------|
-| **Implementado y probado** | Tipos estáticos `Int`, `Float`, `Bool`, `Text` y `Void`, con inferencia y anotaciones · **tipos refinados** (`type Percent = Int where ...`): las constantes se comprueban sin ejecutar y el resto con `Percent(x)` al ejecutar · **contratos** (`requires`, `ensures`), estables desde la 0.3, comprobados al ejecutar · explicación de cada regla en los diagnósticos · variables inmutables y ámbitos · aritmética, comparaciones y lógica · conversiones explícitas · funciones con parámetros y `return` · `if` / `else` · recursividad · análisis estático de nombres, tipos y rutas de retorno · comandos `run`, `check`, `inspect`, `context` y `symbols` · diagnósticos con código y categoría, en texto y en JSON · formatos JSON versionados con JSON Schema |
+| **Implementado y probado** | Tipos estáticos `Int`, `Float`, `Bool`, `Text` y `Void`, con inferencia y anotaciones · **tipos refinados** (`type Percent = Int where ...`): las constantes se comprueban sin ejecutar y el resto con `Percent(x)` al ejecutar · **contratos** (`requires`, `ensures`), estables desde la 0.3, comprobados al ejecutar · **ejemplos** en las funciones (`example`), evaluados con `nex test` · explicación de cada regla en los diagnósticos · variables inmutables y ámbitos · aritmética, comparaciones y lógica · conversiones explícitas · funciones con parámetros y `return` · `if` / `else` · recursividad · análisis estático de nombres, tipos y rutas de retorno · comandos `run`, `check`, `inspect`, `context`, `symbols` y `test` · diagnósticos con código y categoría, en texto y en JSON · formatos JSON versionados con JSON Schema |
 | **Experimental** | API de Python `nexora.tooling` · servidor MCP opcional (probado con el cliente del SDK y, a mano, en Claude Code; en ningún otro asistente) · [playground](docs/playground.md) web, solo en local |
 | **Previsto** (no existe) | Bucles, variables reasignables, listas y otros tipos compuestos, operaciones sobre textos, entrada de datos, módulos, servidor de lenguaje (LSP) |
 | **En investigación** (no existe) | Verificación estática de contratos, características de IA dentro del lenguaje, y la evaluación de la hipótesis del proyecto |
@@ -173,10 +173,11 @@ funciones y cómo leer un error.
 | `nex inspect archivo.nex` | Escribe la estructura del programa en JSON, **sin ejecutarlo** |
 | `nex context archivo.nex` | Resume el programa: firmas, contratos, llamadas, características. **Sin ejecutarlo** |
 | `nex symbols archivo.nex` | Lista funciones, parámetros y variables, y dónde se usa cada uno. **Sin ejecutarlo** |
+| `nex test archivo.nex` | Evalúa los ejemplos (`example`) de las funciones, cada uno por separado. No exige `main` ni lo ejecuta |
 | `nex --version` | Muestra la versión |
 | `nex --help` | Muestra la ayuda |
 
-`nex check`, `nex run`, `nex context` y `nex symbols` aceptan `--format json` para entregar el
+`nex check`, `nex run`, `nex context`, `nex symbols` y `nex test` aceptan `--format json` para entregar el
 resultado como datos.
 
 | Código de salida | Significado |
@@ -187,6 +188,7 @@ resultado como datos.
 | `3` | El programa falló durante la ejecución |
 | `4` | El archivo no pudo leerse |
 | `5` | El programa incumplió un contrato |
+| `6` | `nex test`: algún ejemplo no pasó, o no había ningún ejemplo que evaluar |
 | `70` | Error interno de NEXORA |
 | `130` | Interrumpido con Ctrl+C |
 
@@ -230,8 +232,8 @@ del SDK oficial y, a mano, en una sesión de Claude Code; no en otros asistentes
 
 ## Ejemplos
 
-En [`examples/`](examples/README.md) hay once programas: seis válidos, tres con errores detectados
-sin ejecutar y dos que fallan al ejecutarse. Todos se ejecutan en las pruebas, que comparan su
+En [`examples/`](examples/README.md) hay quince programas: ocho válidos, cuatro con errores detectados
+sin ejecutar y tres que fallan al ejecutarse. Todos se ejecutan en las pruebas, que comparan su
 salida con la registrada.
 
 ```bash

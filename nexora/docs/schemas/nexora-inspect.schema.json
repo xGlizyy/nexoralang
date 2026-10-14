@@ -107,6 +107,7 @@
             "runtime",
             "semantic",
             "syntax",
+            "test",
             "type"
           ]
         },
@@ -1082,6 +1083,64 @@
         }
       }
     },
+    "Example": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "condition",
+        "message"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Example"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "condition": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "message": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
     "Function": {
       "type": "object",
       "required": [
@@ -1092,7 +1151,8 @@
         "params",
         "return_type",
         "contracts",
-        "body"
+        "body",
+        "examples"
       ],
       "properties": {
         "kind": {
@@ -1124,6 +1184,12 @@
         },
         "body": {
           "$ref": "#/$defs/Block"
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Example"
+          }
         }
       }
     },

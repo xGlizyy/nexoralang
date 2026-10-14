@@ -518,7 +518,10 @@ def test_capabilities_come_from_the_implementation():
     assert [b["name"] for b in document["language"]["builtins"]] == sorted(BUILTINS)
     assert document["limits"]["max_call_depth"] == 1000
     assert document["analysis_executes_code"] is False
-    assert set(document["schemas"]) == {s["properties"]["schema"]["const"] for n, s in SCHEMAS.items() if "result" not in n}
+    # The formats of analysis. nexora.result/1 and nexora.test/1 come from running code (nexora.api), and
+    # nexora.tooling never runs anything (decision 0008, section 7).
+    execution = ("nexora-result.schema.json", "nexora-test.schema.json")
+    assert set(document["schemas"]) == {s["properties"]["schema"]["const"] for n, s in SCHEMAS.items() if n not in execution}
 
 
 # The command line returns the same documents

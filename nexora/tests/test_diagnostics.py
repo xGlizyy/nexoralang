@@ -119,7 +119,7 @@ def test_the_header_names_the_kind_of_problem(text, header):
 
 def test_every_category_has_a_stage_and_codes_follow_their_ranges():
     prefixes = {"file": "E0", "lexical": "E10", "syntax": "E11", "semantic": "E2", "type": "E2",
-                "runtime": "E3", "contract": "E4"}
+                "runtime": "E3", "contract": "E4", "test": "E4"}
     assert set(CATEGORIES.values()) == set(prefixes)
     for code, category in CATEGORIES.items():
         assert code.startswith(prefixes[category]), code

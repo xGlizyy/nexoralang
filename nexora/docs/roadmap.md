@@ -65,7 +65,7 @@ sólido:
 |---|------|--------|
 | 1 | **Estabilizar los contratos** (`requires`, `ensures`): fijar su posición en el código y el nombre `result`, y dejar de marcarlos como experimentales | **Completado en la 0.3.0** ([decisión 0007](decisions/0007-contratos-estables-y-tipos-refinados.md)) |
 | 2 | **Una explicación en lenguaje natural unida a cada condición**, que aparece en el diagnóstico cuando la condición se incumple | **Completado en la 0.3.0**, en contratos y en tipos refinados |
-| 3 | **Casos concretos en la función (`example`)** y un comando que los ejecute sin escribir `main` | Planificado |
+| 3 | **Casos concretos en la función (`example`)** y un comando que los ejecute sin escribir `main` | En desarrollo: implementado y probado en la rama de la 0.4.0 según la [decisión 0008](decisions/0008-ejemplos-y-nex-test.md), sin publicar |
 | 4 | **Avisar cuando una edición elimina o debilita un requisito** | En investigación: no está decidido cómo detectar que una condición es más débil que otra |
 | 5 | **Tipos refinados** (`type Percent = Int where ...`) | **Completado en la 0.3.0** sobre los tipos integrados. Falta refinar registros, cuando existan |
 | 6 | **Evaluar si los requisitos en el código ayudan a un agente de IA** a no romperlos | Planificado; ver la última fila de [En investigación](#en-investigación) |

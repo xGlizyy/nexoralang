@@ -86,12 +86,7 @@ def _signature_text(function: ast.Function) -> str:
 
 def _text_of(source: Source, span: Span) -> str:
     """The source text a span covers, exactly as it was written."""
-    if span.line == span.end_line:
-        return source.line_text(span.line)[span.column - 1:span.end_column - 1]
-    lines = [source.line_text(span.line)[span.column - 1:]]
-    lines.extend(source.line_text(number) for number in range(span.line + 1, span.end_line))
-    lines.append(source.line_text(span.end_line)[:span.end_column - 1])
-    return "\n".join(lines)
+    return source.text_of(span)
 
 
 # check and inspect
@@ -220,6 +215,7 @@ _FEATURES = (
     ("conditionals", lambda node, types: isinstance(node, ast.If)),
     ("contracts", lambda node, types: isinstance(node, ast.Contract)),
     ("refined_types", lambda node, types: isinstance(node, ast.TypeDecl)),
+    ("examples", lambda node, types: isinstance(node, ast.Example)),
     ("type_annotations", lambda node, types: isinstance(node, ast.Let) and node.declared_type is not None),
     ("arithmetic", lambda node, types: isinstance(node, ast.Binary) and node.operator in ("+", "-", "*", "/")
         and types.get(id(node)) != TEXT),
@@ -311,6 +307,13 @@ def _function_context(function: ast.Function, analysis: Analysis, calls: dict[st
         "called_by": sorted(set(callers.get(function.name, ()))),
         "recursive": _reaches({name: [c for c in callees if c not in BUILTINS] for name, callees in calls.items()},
                               function.name, function.name),
+        # Last: a field added to an object goes at the end (decision 0008, section 8). The examples
+        # are listed as written; the analysis never evaluates them.
+        "examples": [
+            {"condition": _text_of(analysis.source, example.condition.span), "message": example.message,
+             "line": example.span.line}
+            for example in function.examples
+        ],
     }
 
 
@@ -420,6 +423,10 @@ def render_context(document: dict) -> str:
                 lines.append(f"      called by: {', '.join(function['called_by'])}")
             if function["recursive"]:
                 lines.append("      recursive")
+            for example in function["examples"]:
+                lines.append(f"      example {example['condition']}")
+                if example["message"]:
+                    lines.append(f"          reason: {example['message']}")
         lines.append("")
         lines.append("Features used: " + (", ".join(document["features"]) or "none"))
 

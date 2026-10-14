@@ -170,6 +170,15 @@ class Contract(Node):
 
 
 @dataclass(frozen=True)
+class Example(Node):
+    """An `example` clause at the start of a function body: a Bool expression that calls the
+    function with concrete inputs. Only `nex test` evaluates it; the analysis never does."""
+    condition: Expr
+    # The explanation written after the condition, or None.
+    message: str | None
+
+
+@dataclass(frozen=True)
 class Function(Node):
     name: str
     name_span: Span
@@ -177,6 +186,9 @@ class Function(Node):
     return_type: TypeRef
     contracts: tuple[Contract, ...]
     body: Block
+    # Last, after body: in the `nex inspect` JSON a new field is only ever added at the end, so the
+    # order of the existing fields stays the same (docs/inspect-schema.md).
+    examples: tuple[Example, ...] = ()
 
 
 @dataclass(frozen=True)

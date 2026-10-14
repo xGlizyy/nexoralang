@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 import sys
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 
 from . import ast_nodes as ast
 from .checker import CheckedProgram, refinement_notes
@@ -37,6 +37,29 @@ class _Returned:
 
     def __init__(self, value: Value | None) -> None:
         self.value = value
+
+
+@dataclass
+class OwnCall:
+    """An own call of an example (decision 0008, 6.3) that was invoked: its arguments were evaluated
+    and the function was entered. It stays "stopped" unless the function returns a value."""
+
+    node: ast.Call
+    status: str = "stopped"          # "stopped" or "returned"
+    value: Value | None = None
+
+
+@dataclass
+class ExampleRun:
+    """What happened when one example was evaluated. `value` is None when the evaluation stopped
+    with `error`. Nothing here is guessed: a call is listed only if it was really invoked."""
+
+    value: bool | None
+    invoked: list[OwnCall] = field(default_factory=list)
+    # id() of the own calls that an 'and' or an 'or' did not need to evaluate.
+    short_circuited: set[int] = field(default_factory=set)
+    error: Diagnostic | None = None
+    output: str = ""
 
 
 class Environment:
@@ -73,13 +96,29 @@ class Interpreter:
         self._text_limit = text_limit
         # The calls in progress: (function name, where it was called from). main has no call site.
         self._stack: list[tuple[str, Span | None]] = []
+        # While an example is evaluated: id() of its own calls, and what is observed about them.
+        self._own_calls: dict[int, ast.Call] = {}
+        self._invoked: list[OwnCall] = []
+        self._short_circuited: set[int] = set()
 
     def run(self) -> None:
         """Runs `main`. Raises NexoraRuntimeError if the program fails."""
+        self._guarded(lambda: self._invoke(self._functions["main"], [], None))
+
+    def evaluate_example(self, example: ast.Example, own_calls: list[ast.Call]) -> bool:
+        """Evaluates the expression of an example, outside any call, and records its own calls.
+        Raises NexoraRuntimeError if the evaluation fails. Meant for a fresh interpreter: one per
+        example, so that a failure cannot leave its call stack behind (decision 0008, 3.3)."""
+        self._own_calls = {id(call): call for call in own_calls}
+        return self._guarded(lambda: self._evaluate(example.condition, Environment()))
+
+    def _guarded(self, action: Callable[[], Value | None]) -> Value | None:
+        """Runs `action` with enough Python stack for MAX_CALL_DEPTH calls, and turns running out of
+        Python's own stack into the program's error E3004 instead of an internal error."""
         previous_limit = sys.getrecursionlimit()
         sys.setrecursionlimit(max(previous_limit, _PYTHON_RECURSION_LIMIT))
         try:
-            self._invoke(self._functions["main"], [], None)
+            return action()
         except RecursionError:
             # Calls combined with deeply nested expressions can exhaust Python's own stack before
             # MAX_CALL_DEPTH is reached. Same error code; the message says what actually happened.
@@ -277,10 +316,11 @@ class Interpreter:
         left = self._evaluate(node.left, environment)
 
         # 'and' and 'or' only evaluate their right side when it can change the result.
-        if operator == "and":
-            return left and self._evaluate(node.right, environment)
-        if operator == "or":
-            return left or self._evaluate(node.right, environment)
+        if operator in ("and", "or"):
+            if left if operator == "or" else not left:
+                self._skipped(node.right)
+                return left
+            return self._evaluate(node.right, environment)
 
         right = self._evaluate(node.right, environment)
         if operator == "==":
@@ -342,7 +382,15 @@ class Interpreter:
         arguments = [self._evaluate(argument, environment) for argument in node.arguments]
         function = self._functions.get(node.callee)
         if function is not None:
-            return self._invoke(function, arguments, node.span)
+            if id(node) not in self._own_calls:
+                return self._invoke(function, arguments, node.span)
+            # An own call of the example being evaluated: recorded when it is invoked, so the list
+            # follows the real order of invocation, and marked "returned" only if it returns.
+            record = OwnCall(node)
+            self._invoked.append(record)
+            result = self._invoke(function, arguments, node.span)
+            record.status, record.value = "returned", result
+            return result
         if node.callee in self._refined:
             return self._refine(node, arguments[0])
 
@@ -367,6 +415,25 @@ class Interpreter:
                 )
             return whole
         raise TypeError(f"call to '{node.callee}' reached the interpreter")
+
+
+    def _skipped(self, node: ast.Expr) -> None:
+        """Marks the own calls inside an operand that 'and' or 'or' did not need to evaluate."""
+        if not self._own_calls:
+            return
+        pending = [node]
+        while pending:
+            current = pending.pop()
+            if isinstance(current, ast.Call):
+                if id(current) in self._own_calls:
+                    self._short_circuited.add(id(current))
+                pending.extend(current.arguments)
+            elif isinstance(current, ast.Binary):
+                pending.extend((current.left, current.right))
+            elif isinstance(current, ast.Unary):
+                pending.append(current.operand)
+            elif isinstance(current, ast.Group):
+                pending.append(current.expression)
 
 
 def unparse(node: ast.Expr) -> str:
@@ -400,3 +467,18 @@ def broken_rule(chain: tuple[ast.TypeDecl, ...], value: Value) -> ast.TypeDecl |
 def run(checked: CheckedProgram, write: Callable[[str], object], *, text_limit: int | None = None) -> None:
     """Runs a program that passed the static checks."""
     Interpreter(checked, write, text_limit).run()
+
+
+def run_example(checked: CheckedProgram, example: ast.Example, own_calls: list[ast.Call]) -> ExampleRun:
+    """Evaluates one example of a program that passed the static checks, in a new interpreter.
+
+    A diagnostic of the program (a runtime error or a broken rule, including E3004 for running out
+    of Python's stack) is returned in `error`. Anything else, such as an exception that reveals a
+    defect in NEXORA, MemoryError or KeyboardInterrupt, propagates: decision 0008, 3.4."""
+    output: list[str] = []
+    interpreter = Interpreter(checked, output.append)
+    try:
+        value = interpreter.evaluate_example(example, own_calls)
+    except NexoraRuntimeError as error:
+        return ExampleRun(None, interpreter._invoked, interpreter._short_circuited, error.diagnostic, "".join(output))
+    return ExampleRun(bool(value), interpreter._invoked, interpreter._short_circuited, None, "".join(output))

@@ -69,16 +69,17 @@ Solo se admiten letras ASCII. Se distinguen mayúsculas de minúsculas.
 Palabras clave:
 
 ```
-fn   let   return   if   else   true   false   and   or   not   requires   ensures   type   where
+fn   let   return   if   else   true   false   and   or   not   requires   ensures   example   type
+where
 ```
 
 Palabras reservadas para versiones futuras. No pueden usarse como nombres y usarlas produce el
 error `E1103`:
 
 ```
-ai       assert   break    const    continue enum     example  for
-import   in       match    pub      test     tool     try      uses
-var      while
+ai       assert   break    const    continue enum     for      import
+in       match    pub      test     tool     try      uses     var
+while
 ```
 
 No son palabras reservadas, sino nombres predefinidos: los tipos `Int`, `Float`, `Bool`, `Text` y
@@ -132,7 +133,7 @@ function   = "fn" NAME "(" [ params ] ")" "->" type { NEWLINE }
 params     = param { "," param } ;
 param      = NAME ":" type ;
 type       = NAME ;
-contract   = ( "requires" | "ensures" ) expression [ explanation ] end ;
+contract   = ( "requires" | "ensures" | "example" ) expression [ explanation ] end ;
 explanation = "," TEXT ;
 
 block      = "{" { NEWLINE } { statement end } "}" ;
@@ -745,6 +746,34 @@ Desde la versión 0.3 la sintaxis de los contratos es estable: las cláusulas va
 cuerpo, el valor devuelto se llama `result` y la explicación va tras una coma. Los motivos están en
 la [decisión 0007](decisions/0007-contratos-estables-y-tipos-refinados.md).
 
+### 9.4 Ejemplos (`example`)
+
+Un ejemplo es una cláusula más del principio del cuerpo, junto a `requires` y `ensures`: dice qué
+resultado concreto da la función con unas entradas concretas. La definición completa (estados,
+formato del informe, códigos de salida) está en la [decisión 0008](decisions/0008-ejemplos-y-nex-test.md).
+
+```text
+fn double(n: Int) -> Int {
+    requires n >= 0, "Only natural numbers"
+    example double(2) == 4, "Two doubled"
+    return n * 2
+}
+```
+
+- La expresión es de tipo `Bool` (`E2011`) y puede llevar su explicación tras una coma.
+- **Tiene que contener una llamada propia**: una llamada a su función escrita en la propia expresión
+  (`double(2)`, también anidada, como en `double(double(1))`). Sin ella, `E2020`. Una llamada que
+  solo ocurre dentro de otra función no cuenta.
+- No ve los parámetros ni `result` (`E2005`): sus entradas y el resultado esperado se escriben como
+  valores. Puede usar cualquier función del programa, las integradas y comprobaciones `Tipo(x)`.
+- **El análisis nunca evalúa un ejemplo.** `nex check`, `nex inspect`, `nex context` y `nex symbols`
+  comprueban que esté bien escrito y nada más; las llamadas de un ejemplo no forman parte del grafo
+  de llamadas de la función. `nex run` los ignora.
+- **Solo `nex test` los evalúa**, cada uno en un intérprete nuevo, comprobando los contratos de todas
+  las funciones que se ejecutan. Un ejemplo termina en `passed` (vale `true`), `failed` (vale
+  `false`: `E4004`, categoría `test`) o `error` (un error de ejecución o una regla incumplida, que
+  conserva su código y gana una nota con el ejemplo que lo provocó).
+
 ## 10. Errores: antes de ejecutar y durante la ejecución
 
 ### 10.1 Etapas
@@ -757,14 +786,16 @@ encontró errores:
 | 1. Análisis léxico | Divide el texto en tokens | `lexical` |
 | 2. Análisis sintáctico | Construye el árbol de sintaxis (AST) | `syntax` |
 | 3. Análisis estático | Comprueba nombres, ámbitos, tipos y rutas de retorno | `semantic`, `type` |
-| 4. Ejecución | Recorre el AST | `runtime`, `contract` |
+| 4. Ejecución | Recorre el AST | `runtime`, `contract`; con `nex test`, también `test` |
 
 `nex check` y `nex inspect` realizan las etapas 1 a 3 y **no ejecutan el programa**: ninguna
 sentencia ni ninguna función se ejecuta. Lo único que la etapa 3 evalúa son las condiciones de los
 tipos refinados sobre las constantes escritas en el código (sección 4.4). Esas condiciones solo
 pueden usar `value`, literales, operadores y conversiones integradas, no llaman a funciones del
-programa, y el trabajo total está acotado (`E2019`). `nex run` realiza las cuatro etapas, y nunca
-inicia un programa que tenga algún error de las etapas 1 a 3.
+programa, y el trabajo total está acotado (`E2019`). Tampoco evalúan los ejemplos (sección 9.4).
+`nex run` realiza las cuatro etapas, y nunca inicia un programa que tenga algún error de las etapas
+1 a 3. `nex test` también, pero en la etapa 4 evalúa los ejemplos en lugar de `main`, y en la etapa 3
+no exige `main`.
 
 ### 10.2 Lo que se detecta antes de ejecutar
 
@@ -859,6 +890,7 @@ un resumen del comando, no un diagnóstico.
 | `type` | Tipos | Sin ejecutar |
 | `runtime` | Depende de los valores calculados | Al ejecutar |
 | `contract` | Una condición `requires` o `ensures` fue falsa | Al ejecutar |
+| `test` | Un ejemplo evaluado por `nex test` resultó falso | Al ejecutar `nex test` |
 
 ### 11.3 Códigos de error
 
@@ -896,6 +928,7 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E2017` | Value outside refined type | `type` | Una constante usada como valor de un tipo refinado no cumple su condición |
 | `E2018` | Invalid refinement condition | `semantic` | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado |
 | `E2019` | Too many refinement checks | `semantic` | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (sección 4.4) |
+| `E2020` | Example without its function | `semantic` | Un ejemplo no contiene ninguna llamada a su función (sección 9.4) |
 | `E3001` | Division by zero | `runtime` | División por cero |
 | `E3002` | Integer overflow | `runtime` | Un resultado `Int` fuera del rango de 64 bits |
 | `E3003` | Float result out of range | `runtime` | Un resultado `Float` demasiado grande |
@@ -905,6 +938,7 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E4001` | Precondition violated | `contract` | Una condición `requires` es falsa en una llamada |
 | `E4002` | Postcondition violated | `contract` | Una condición `ensures` es falsa al terminar una función |
 | `E4003` | Refinement violated | `contract` | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado |
+| `E4004` | Example failed | `test` | Un ejemplo evaluado por `nex test` vale `false` (sección 9.4) |
 
 Códigos retirados (existieron en la versión 0.1 y ya no se emiten):
 
@@ -988,7 +1022,8 @@ La representación del programa (`nex inspect`) está descrita en
 | `3` | El programa falló durante la ejecución |
 | `4` | El archivo no pudo leerse |
 | `5` | El programa incumplió durante la ejecución una regla que declara: un contrato o la condición de un tipo refinado |
-| `70` | Error interno de NEXORA (un fallo de la herramienta, no del programa) |
+| `6` | `nex test`: algún ejemplo no pasó, o no había ningún ejemplo que evaluar |
+| `70` | Error interno de NEXORA (un fallo de la herramienta, no del programa). Excepción heredada: también cuando el programa agota la memoria ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md), sección 3.4) |
 | `130` | Interrumpido con Ctrl+C |
 
 Los comandos, sus opciones y sus formatos de salida están descritos en la
@@ -1127,7 +1162,7 @@ Nada de lo que sigue funciona hoy. Es la dirección del diseño, tomada del borr
 - `if` y `match` como expresiones.
 - Interpolación de textos (`"Hello {name}"`), para la que ya está reservada la `{`.
 - Tipos compuestos: listas, mapas, registros, enumeraciones, `Option` y `Result`.
-- Ejemplos ejecutables en la firma (`example`) y verificación estática de contratos.
+- Verificación estática de contratos, y bloques de prueba (`test`) fuera de las funciones.
 - Efectos declarados (`uses`), módulos e importaciones.
 - Características relacionadas con IA (`ai fn`, `tool fn`). No existe ninguna integración con
   modelos de IA: lo que hay son las representaciones estructuradas (`nex inspect`, diagnósticos en
@@ -1145,6 +1180,7 @@ Esta especificación manda sobre el borrador en lo que ya está implementado:
 | Concatenar textos | No permitido; se usa interpolación | `+` une dos `Text`, porque la interpolación aún no existe |
 | Valor de una función | La última expresión del bloque | Siempre con `return` |
 | Contratos | Entre la firma y el cuerpo | Al principio del cuerpo, con una explicación opcional tras una coma |
+| Ejemplos | `example` entre la firma y el cuerpo; `nexora test` | Al principio del cuerpo, con las mismas reglas que los contratos; `nex test` |
 | Valor dinámico a tipo refinado | `Percent.from(n)`, que devuelve un `Result` | `Percent(n)`, que detiene el programa con `E4003` si no se cumple la condición (no existe `Result`) |
 | Alias sin condición | `type UserId = Int` | No existen |
 | Conversión entre números | `Int.to_float(x)` | `to_float(x)`, `to_int(x)` |

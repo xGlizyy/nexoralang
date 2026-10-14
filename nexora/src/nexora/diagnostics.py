@@ -42,6 +42,15 @@ class Source:
             return self._lines[line - 1]
         return ""
 
+    def text_of(self, span: Span) -> str:
+        """The source text a span covers, exactly as it was written."""
+        if span.line == span.end_line:
+            return self.line_text(span.line)[span.column - 1:span.end_column - 1]
+        lines = [self.line_text(span.line)[span.column - 1:]]
+        lines.extend(self.line_text(number) for number in range(span.line + 1, span.end_line))
+        lines.append(self.line_text(span.end_line)[:span.end_column - 1])
+        return "\n".join(lines)
+
 
 # The most errors one stage reports for one file. Past this point more errors do not help
 # anyone, and a file that is not NEXORA at all could produce one per character or per line.
@@ -56,6 +65,7 @@ TYPE = "type"            # types, checked without running
 RUNTIME = "runtime"      # depends on the values computed while the program runs
 CONTRACT = "contract"    # a rule the program declares was broken while running: a 'requires' or
                          # 'ensures' condition, or the condition of a refined type
+TEST = "test"            # an 'example' evaluated by `nex test` turned out false
 
 # Every diagnostic code: its title and its category. A code never changes meaning; a code that
 # stops being used is retired, not reused (E1104 and E2003 are retired, see the spec).
@@ -95,6 +105,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E2017": ("Value outside refined type", TYPE),
     "E2018": ("Invalid refinement condition", SEMANTIC),
     "E2019": ("Too many refinement checks", SEMANTIC),
+    "E2020": ("Example without its function", SEMANTIC),
 
     "E3001": ("Division by zero", RUNTIME),
     "E3002": ("Integer overflow", RUNTIME),
@@ -106,6 +117,8 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E4001": ("Precondition violated", CONTRACT),
     "E4002": ("Postcondition violated", CONTRACT),
     "E4003": ("Refinement violated", CONTRACT),
+
+    "E4004": ("Example failed", TEST),
 }
 
 CODES: dict[str, str] = {code: title for code, (title, _) in _REGISTRY.items()}

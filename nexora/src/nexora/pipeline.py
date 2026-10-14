@@ -47,8 +47,11 @@ class Analysis:
         return not self.diagnostics
 
 
-def analyze(source: Source) -> Analysis:
+def analyze(source: Source, *, require_main: bool = True) -> Analysis:
     """Lexes, parses and checks a program. Nothing in it is executed.
+
+    `require_main=False` drops the one rule that only matters for running a program, that it has a
+    'main' (E2001). Only `nex test` uses it: it evaluates examples and never runs 'main'.
 
     The errors of each stage are reported only if the previous one found none, so one
     mistake is not reported again in a different form by a later stage.
@@ -62,9 +65,9 @@ def analyze(source: Source) -> Analysis:
         # The tree is partial. The checker still runs over it, for what it can tell about the
         # code that did parse, but its errors are dropped: on a tree with pieces missing they
         # would describe the gaps, not the program.
-        facts, _ = check(program)
+        facts, _ = check(program, require_main=require_main)
         return Analysis(source, tuple(diagnostics), program, facts.types, None, facts, tuple(tokens))
 
-    checked, diagnostics = check(program)
+    checked, diagnostics = check(program, require_main=require_main)
     runnable = None if diagnostics else checked
     return Analysis(source, tuple(diagnostics), program, checked.types, runnable, checked, tuple(tokens), True)

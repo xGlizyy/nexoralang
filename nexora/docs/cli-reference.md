@@ -14,6 +14,7 @@ nex check <archivo> [--format text|json]
 nex inspect <archivo> [--format json]
 nex context <archivo> [--format text|json]
 nex symbols <archivo> [--format text|json] [--name NOMBRE] [--function FUNCION]
+nex test <archivo> [--format text|json] [--function FUNCION]
 nex --version
 nex --help
 ```
@@ -25,6 +26,7 @@ nex --help
 | `nex inspect` | Sí | **No** | El árbol de sintaxis en JSON |
 | `nex context` | Sí | **No** | Un resumen del programa |
 | `nex symbols` | Sí | **No** | Los nombres declarados y dónde se usan |
+| `nex test` | Sí | Sus ejemplos, no `main` | El resultado de cada ejemplo |
 
 Todos los comandos usan el mismo analizador léxico, el mismo parser y el mismo comprobador
 estático. Lo que `nex check` acepta es exactamente lo que `nex run` ejecuta.
@@ -150,6 +152,45 @@ nex symbols examples/functions.nex --name factorial --format json
 Un filtro que no coincide con nada no es un error: la lista queda vacía (`No symbols match.`). Detalles en
 [Contexto estructurado](ai-context.md#nex-symbols).
 
+## `nex test`
+
+Analiza el programa y, si no tiene errores, evalúa las cláusulas `example` de sus funciones, cada
+una por separado ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)). **No exige `main` y nunca
+lo ejecuta.** Durante cada ejemplo se comprueban los contratos y los tipos refinados de todas las
+funciones que se ejecutan.
+
+```bash
+nex test examples/checked_examples.nex
+nex test examples/checked_examples.nex --function apply_discount --format json
+```
+
+| Opción | Efecto |
+|--------|--------|
+| `--format text` | Por defecto. El resumen va a la salida estándar; los ejemplos que no pasan, a la de error |
+| `--format json` | Un único documento JSON (`nexora.test/1`) en la salida estándar |
+| `--function FUNCION` | Solo los ejemplos declarados en esa función |
+
+Cada ejemplo termina en `passed`, `failed` (`E4004`) o `error` (el diagnóstico original, con una nota
+que identifica el ejemplo). El resultado global es:
+
+| Estado | Cuándo | Código de salida |
+|--------|--------|------------------|
+| `passed` | Se evaluó al menos un ejemplo y todos pasaron | `0` |
+| `failed` | Algún ejemplo terminó en `failed` o `error` | `6` |
+| `no_examples` | El programa es correcto, pero no había ningún ejemplo seleccionado | `6`: no se ha probado nada |
+| `not_run` | El programa tiene errores estáticos (código `1`) o el archivo no pudo leerse (código `4`) | `1` o `4` |
+
+- Con errores estáticos no se evalúa nada, y se informan antes que cualquier problema con
+  `--function`.
+- **Una función inexistente en `--function` es un error de uso** (código `2`): un mensaje en la salida
+  de error, sin documento JSON. Es distinto de `nex symbols --function`, que describe y devuelve una
+  lista vacía; `nex test` verifica, y no probar nada por un nombre mal escrito no puede parecer un
+  resultado.
+- **Nada se escribe hasta que han terminado todos los ejemplos.** Si `nex test` se interrumpe (Ctrl+C,
+  código `130`) o encuentra un error interno (código `70`), no deja ningún informe parcial.
+- Lo que imprime una función durante un ejemplo se muestra solo si el ejemplo no pasa; en JSON está
+  siempre, en el campo `output`.
+
 ## `nex --version`
 
 ```bash
@@ -174,6 +215,7 @@ NEXORA 0.3.1
 | `json` (diagnósticos) | Programas. Esquema `nexora.diagnostics/1` | [Especificación, sección 11.4](language-spec.md#114-formato-json) |
 | `json` (inspección) | Programas. Esquema `nexora.inspect/2` | [`inspect-schema.md`](inspect-schema.md) |
 | `json` (contexto y símbolos) | Programas. Esquemas `nexora.context/1` y `nexora.symbols/1` | [Contexto estructurado](ai-context.md) |
+| `json` (pruebas) | Programas. Esquema `nexora.test/1` | [Decisión 0008](decisions/0008-ejemplos-y-nex-test.md), sección 6 |
 
 Las reglas comunes a todos los documentos JSON y sus JSON Schema están en
 [Protocolo JSON](json-protocol.md).
@@ -189,18 +231,20 @@ Dónde aparece cada cosa:
 | `nex check --format json` | El documento JSON | Nada |
 | `nex inspect` | El documento JSON | Nada |
 | `nex context`, `nex symbols` | El resumen o la lista (texto o JSON), con los diagnósticos | Nada, salvo el error de un archivo ilegible en formato `text` |
+| `nex test` | El resumen, o el documento JSON | Los ejemplos que no pasan, los diagnósticos y los errores de uso |
 
 ## Códigos de salida
 
 | Código | Significado | Comandos |
 |--------|-------------|----------|
 | `0` | Correcto | Todos |
-| `1` | El programa tiene errores léxicos, sintácticos, semánticos o de tipos | `run`, `check`, `inspect`, `context`, `symbols` |
+| `1` | El programa tiene errores léxicos, sintácticos, semánticos o de tipos | `run`, `check`, `inspect`, `context`, `symbols`, `test` |
 | `2` | Uso incorrecto de la línea de comandos | Todos |
 | `3` | El programa falló durante la ejecución (categoría `runtime`) | `run` |
-| `4` | El archivo no existe, no puede leerse o no es UTF-8 | `run`, `check`, `inspect`, `context`, `symbols` |
+| `4` | El archivo no existe, no puede leerse o no es UTF-8 | `run`, `check`, `inspect`, `context`, `symbols`, `test` |
 | `5` | El programa incumplió un contrato durante la ejecución (categoría `contract`) | `run` |
-| `70` | Error interno de NEXORA: un fallo de la herramienta, no del programa | Todos |
+| `6` | Algún ejemplo no pasó (`failed` o `error`), o no había ningún ejemplo que evaluar | `test` |
+| `70` | Error interno de NEXORA: un fallo de la herramienta, no del programa. Excepción heredada: también cuando el programa agota la memoria | Todos |
 | `130` | Interrumpido con Ctrl+C | Todos |
 
 El código de salida nunca es `0` si el programa no se ejecutó correctamente.

@@ -37,10 +37,11 @@ _COMPARISON_OPERATORS = ("==", "!=", "<", "<=", ">", ">=")
 _NAME_KEYWORDS = (
     TokenType.FN, TokenType.LET, TokenType.RETURN, TokenType.IF, TokenType.ELSE, TokenType.TRUE,
     TokenType.FALSE, TokenType.AND, TokenType.OR, TokenType.NOT, TokenType.REQUIRES, TokenType.ENSURES,
-    TokenType.TYPE, TokenType.WHERE,
+    TokenType.TYPE, TokenType.WHERE, TokenType.EXAMPLE,
 )
 _DECLARATION_KEYWORDS = (TokenType.FN, TokenType.TYPE)
-_CONTRACT_KEYWORDS = (TokenType.REQUIRES, TokenType.ENSURES)
+# The clauses that open a function body: the contracts and the examples.
+_CONTRACT_KEYWORDS = (TokenType.REQUIRES, TokenType.ENSURES, TokenType.EXAMPLE)
 _STATEMENT_END = (TokenType.NEWLINE, TokenType.RBRACE, TokenType.EOF)
 
 
@@ -264,10 +265,11 @@ class Parser:
         self._enter(brace)
         level = self._nesting
         self._skip_newlines()
-        contracts = self._contracts(level)
+        contracts, examples = self._clauses(level)
         body = self._block_rest(brace, level)
         return ast.Function(
             keyword.span.to(body.span), name.lexeme, name.span, tuple(params), return_type, tuple(contracts), body,
+            tuple(examples),
         )
 
     def _param(self) -> ast.Param:
@@ -280,9 +282,11 @@ class Parser:
         param_type = self._type(f"a type for the parameter '{name.lexeme}'")
         return ast.Param(name.span.to(param_type.span), name.lexeme, name.span, param_type)
 
-    def _contracts(self, level: int) -> list[ast.Contract]:
-        """The `requires` and `ensures` clauses that open a function body."""
+    def _clauses(self, level: int) -> tuple[list[ast.Contract], list[ast.Example]]:
+        """The `requires`, `ensures` and `example` clauses that open a function body, in any order.
+        All three share one form: a condition and an optional explanation."""
         contracts: list[ast.Contract] = []
+        examples: list[ast.Example] = []
         while self._peek().type in _CONTRACT_KEYWORDS:
             try:
                 keyword = self._advance()
@@ -295,12 +299,15 @@ class Parser:
                 condition = self._expression()
                 message, end = self._explanation(keyword.lexeme, condition.span)
                 self._end_of_statement()
-                contracts.append(ast.Contract(keyword.span.to(end), keyword.lexeme, condition, message))
+                if keyword.type is TokenType.EXAMPLE:
+                    examples.append(ast.Example(keyword.span.to(end), condition, message))
+                else:
+                    contracts.append(ast.Contract(keyword.span.to(end), keyword.lexeme, condition, message))
             except ParseError as error:
                 self._record(error)
                 self._nesting = level
                 self._synchronize_statement()
-        return contracts
+        return contracts, examples
 
     def _block(self, what: str = "a block") -> ast.Block:
         opening = self._expect(TokenType.LBRACE, f"'{{' to start {what}")

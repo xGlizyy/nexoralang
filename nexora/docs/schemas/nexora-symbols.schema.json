@@ -139,6 +139,7 @@
             "runtime",
             "semantic",
             "syntax",
+            "test",
             "type"
           ]
         },

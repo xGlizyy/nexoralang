@@ -225,6 +225,90 @@ error: program.nex: the program stopped because a contract was broken
 
 Aquí el contrato ha encontrado un fallo real del cuerpo: suma el porcentaje en vez de restarlo.
 
+## Ejemplos (`example`)
+
+Un contrato dice qué relación cumplen siempre la entrada y la salida. Un **ejemplo** dice qué resultado
+concreto da la función con unas entradas concretas. Se escribe junto a los contratos, con la misma
+forma, y lo evalúa `nex test` ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)):
+
+<!-- nex:test exit=0 -->
+```nex
+fn double(n: Int) -> Int {
+    requires n >= 0, "Only natural numbers"
+    example double(2) == 4, "Two doubled"
+    example double(double(1)) == 4
+    return n * 2
+}
+```
+
+```text
+program.nex: 2 examples in 1 function
+  double   2 passed
+✓ 2 examples passed: program.nex
+```
+
+- La expresión es `Bool` y tiene que llamar a su propia función, escrita en la propia expresión
+  (`E2020` si no lo hace). No ve los parámetros ni `result`: las entradas y el resultado se escriben
+  como valores.
+- `nex check` y las demás herramientas de análisis **nunca** evalúan un ejemplo. `nex run` los
+  ignora. `nex test` no exige `main` y no lo ejecuta.
+- Cada ejemplo se evalúa por separado, comprobando los contratos de todo lo que se ejecuta.
+
+Si un ejemplo resulta falso, `nex test` dice qué devolvió la función y termina con el código `6`:
+
+<!-- nex:test exit=6 -->
+```nex
+fn double(n: Int) -> Int {
+    requires n >= 0, "Only natural numbers"
+    example double(3) == 7, "Three doubled is seven"
+    example double(-1) == -2
+    return n * 2
+}
+```
+
+```text
+program.nex: 2 examples in 1 function
+  double   1 failed, 1 error
+
+test error[E4004]: Example failed
+ --> program.nex:3:13
+  |
+3 |     example double(3) == 7, "Three doubled is seven"
+  |             ^^^^^^^^^^^^^^ This example of 'double' is false
+  = note: double(3) returned 6
+  = note: Reason: Three doubled is seven
+
+contract error[E4001]: Precondition violated
+ --> program.nex:4:13
+  |
+4 |     example double(-1) == -2
+  |             ^^^^^^^^^^ This call breaks a 'requires' condition of 'double'
+  = note: The condition at line 2 is false: requires n >= 0
+  = note: Reason: Only natural numbers
+  = note: It was called with: n = -1
+  = note: While evaluating example 2 of 'double', at line 4.
+
+error: program.nex: 2 of 2 examples did not pass (1 failed, 1 error)
+```
+
+El primer ejemplo es `failed` (`E4004`): la función respondió, pero no lo esperado. El segundo es
+`error`: no llegó a responder, porque la llamada incumple el `requires`; conserva el `E4001` y gana
+una nota con el ejemplo que lo provocó.
+
+Un archivo sin ejemplos no se da por probado:
+
+<!-- nex:test exit=6 -->
+```nex
+fn double(n: Int) -> Int {
+    return n * 2
+}
+```
+
+```text
+program.nex: no examples to run
+error: program.nex: nothing was tested
+```
+
 ## Códigos y salida
 
 | Situación | Código | Categoría | `nex run` termina con |

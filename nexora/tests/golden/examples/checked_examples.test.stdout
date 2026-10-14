@@ -1,0 +1,4 @@
+examples/checked_examples.nex: 4 examples in 2 functions
+  apply_discount   2 passed
+  total            2 passed
+✓ 4 examples passed: examples/checked_examples.nex

@@ -26,6 +26,7 @@ Superan `nex check` y `nex run` termina con código `0`.
 | [`types.nex`](types.nex) | Inferencia, anotaciones, comparaciones, lógica y conversiones |
 | [`functions.nex`](functions.nex) | Funciones, `if` / `else`, recursividad |
 | [`contracts.nex`](contracts.nex) | Contratos `requires` y `ensures` que se cumplen, con su explicación |
+| [`checked_examples.nex`](checked_examples.nex) | Funciones con sus propios ejemplos (`example`), que evalúa `nex test` |
 | [`refined_types.nex`](refined_types.nex) | Tipos refinados con `where`: constantes comprobadas sin ejecutar y comprobación explícita con `Percent(x)` |
 
 ## Inválidos (`invalid/`)

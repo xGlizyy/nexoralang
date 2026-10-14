@@ -18,7 +18,7 @@ wherever an Int is expected.
 from __future__ import annotations
 
 import difflib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 
 from . import ast_nodes as ast
 from .diagnostics import MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Span
@@ -179,6 +179,26 @@ def _conversion_hint(found: str, expected: str) -> str | None:
     return None
 
 
+def own_calls(example: ast.Example, function: str) -> list[ast.Call]:
+    """The calls to `function` written in the expression of `example`, in the order they start in the
+    text (decision 0008, 1.4). Calls made while running other functions are not in the expression,
+    so they are never counted: this looks at the tree, it does not run anything."""
+    found: list[ast.Call] = []
+
+    def walk(node) -> None:
+        if isinstance(node, ast.Call) and node.callee == function:
+            found.append(node)
+        if isinstance(node, ast.Node):
+            for field in fields(node):
+                walk(getattr(node, field.name))
+        elif isinstance(node, tuple):
+            for item in node:
+                walk(item)
+
+    walk(example.condition)
+    return sorted(found, key=lambda call: (call.span.line, call.span.column))
+
+
 def refinement_notes(kind: str, broken: ast.TypeDecl, written: str) -> tuple[str, ...]:
     """The notes that explain why a value is not a valid `kind`: which condition is false, and why
     it exists. `broken` is the declaration whose condition failed: `kind` itself or one it refines."""
@@ -243,6 +263,10 @@ class Checker:
         self._return_type: str | None = None
         # The refined type whose condition is being checked, if any.
         self._refining: str | None = None
+        # The function whose 'example' clause is being checked, if any.
+        self._in_example: str | None = None
+        # `nex test` analyses programs without 'main' (decision 0008); every other command needs one.
+        self.require_main = True
 
     def check(self, program: ast.Program) -> tuple[CheckedProgram, list[Diagnostic]]:
         """Checks a program. The CheckedProgram may only be run when the list is empty."""
@@ -299,7 +323,8 @@ class Checker:
                 self._function_symbols[function.name] = symbol
                 self._symbols.append(symbol)
 
-        self._main(declared.get("main"))
+        if self.require_main or "main" in declared:
+            self._main(declared.get("main"))
         for function, signature in own_signatures:
             self._function(function, signature)
 
@@ -576,6 +601,9 @@ class Checker:
                 )
             self._condition(contract.condition, contract_scope, f"'{contract.clause}'")
 
+        for example in function.examples:
+            self._example(example, function.name)
+
         returns = self._block(function.body, _Scope(scope))
         if signature.return_type not in (None, VOID) and not returns:
             self._report(
@@ -585,6 +613,23 @@ class Checker:
                 function.name_span,
                 hint="Make sure every path through the function ends with 'return'. "
                      "An 'if' without 'else' can be skipped.",
+            )
+
+    def _example(self, example: ast.Example, function: str) -> None:
+        """An 'example' clause (decision 0008). It is checked, never evaluated. It does not happen
+        inside a call, so it sees no parameter and no 'result', only the functions and types of the
+        program; and the calls it makes are references, not edges of the call graph."""
+        self._in_example = function
+        try:
+            self._condition(example.condition, _Scope(), "'example'")
+        finally:
+            self._in_example = None
+        if not own_calls(example, function):
+            self._report(
+                "E2020",
+                f"This example of '{function}' never calls '{function}'",
+                example.condition.span,
+                hint=f"Write the call with its inputs, for example: example {function}(2) == 4",
             )
 
     def _name_is_free(self, name: str, span: Span, scope: _Scope) -> bool:
@@ -762,6 +807,14 @@ class Checker:
         self._report("E2011", f"The condition of {owner} must be Bool, found {found}", condition.span, hint=hint)
 
     def _unknown_variable(self, name: str, span: Span, scope: _Scope) -> None:
+        if self._in_example is not None:
+            self._report(
+                "E2005",
+                f"There is no variable named '{name}' here",
+                span,
+                hint=f"An example has no parameters: write its inputs as values, for example: {self._in_example}(2)",
+            )
+            return
         if self._refining is not None:
             self._report(
                 "E2005",
@@ -890,8 +943,11 @@ class Checker:
                 self._report("E2008", f"There is no function named '{node.callee}'", node.callee_span, hint=hint)
             return None
 
-        # The call is resolved: it is recorded even if its arguments turn out to be wrong.
-        self._calls.append((self._function_name, signature.name))
+        # The call is resolved: it is recorded even if its arguments turn out to be wrong. A call
+        # written in an example is a reference to the function, but not an edge of the call graph:
+        # the function does not make that call when it runs (decision 0008, section 2).
+        if self._in_example is None:
+            self._calls.append((self._function_name, signature.name))
         if not signature.builtin:
             self._function_symbols[signature.name].references.append(node.callee_span)
 
@@ -958,5 +1014,8 @@ class Checker:
         return name
 
 
-def check(program: ast.Program) -> tuple[CheckedProgram, list[Diagnostic]]:
-    return Checker().check(program)
+def check(program: ast.Program, *, require_main: bool = True) -> tuple[CheckedProgram, list[Diagnostic]]:
+    """Checks a program. `require_main=False` is only for `nex test`, which runs examples, not 'main'."""
+    checker = Checker()
+    checker.require_main = require_main
+    return checker.check(program)

@@ -155,7 +155,8 @@ fn main() -> Void {
       "called_by": [
         "main"
       ],
-      "recursive": false
+      "recursive": false,
+      "examples": []
     },
     {
       "name": "main",
@@ -177,7 +178,8 @@ fn main() -> Void {
         "print"
       ],
       "called_by": [],
-      "recursive": false
+      "recursive": false,
+      "examples": []
     }
   ],
   "features": [

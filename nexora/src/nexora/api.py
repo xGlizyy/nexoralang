@@ -5,8 +5,8 @@ It goes through exactly the same stages as the `nex` command: `pipeline.analyze`
 for the static analysis and `interpreter.run` for the execution. There is no second
 implementation of the language behind it.
 
-Both functions return a plain dictionary, ready for `json.dumps`, with this shape
-(schema `nexora.result/1`, documented in docs/playground.md):
+`check_source` and `run_source` return a plain dictionary, ready for `json.dumps`, with this
+shape (schema `nexora.result/1`, documented in docs/playground.md):
 
     {
       "schema": "nexora.result/1",
@@ -18,21 +18,29 @@ Both functions return a plain dictionary, ready for `json.dumps`, with this shap
       "message": null | "<explanation of a status that is not a diagnostic>"
     }
 
+`test_source` evaluates the `example` clauses of a program and returns a `nexora.test/1`
+document, the same one `nex test --format json` writes (decision 0008).
+
 Nothing here reads or writes files: `filename` is only the name shown in diagnostics.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import difflib
+from dataclasses import dataclass, replace
 
-from .checker import BUILTINS, KNOWN_TYPES
-from .diagnostics import CONTRACT, MAX_DIAGNOSTICS, NexoraRuntimeError, Source
-from .interpreter import MAX_CALL_DEPTH, run
-from .pipeline import analyze
+from . import ast_nodes as ast
+from . import tooling
+from .checker import BUILTINS, KNOWN_TYPES, own_calls
+from .diagnostics import CONTRACT, MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Source
+from .interpreter import MAX_CALL_DEPTH, ExampleRun, run, run_example
+from .pipeline import Analysis, analyze
 from .tokens import KEYWORDS, RESERVED_WORDS
+from .values import show_value
 from .version import __version__
 
 RESULT_SCHEMA = "nexora.result/1"
+TEST_SCHEMA = "nexora.test/1"
 DEFAULT_FILENAME = "playground.nex"
 
 # Every value "status" can take in a result.
@@ -130,6 +138,172 @@ def run_source(source: str, filename: str = DEFAULT_FILENAME, *, limits: Limits 
             message="The program needed more memory than this environment allows and was stopped.",
         )
     return _result("run", SUCCESS, filename, output=output.text())
+
+
+# Testing: the `example` clauses (decision 0008)
+
+# The global status of a test run, and of each example.
+PASSED = "passed"            # at least one example was evaluated, and all passed
+FAILED = "failed"            # some example ended in "failed" or "error" (global); the example is false (one)
+NO_EXAMPLES = "no_examples"  # the analysis is clean, but no example was selected
+NOT_RUN = "not_run"          # static errors, or an unreadable file: nothing was evaluated
+ERROR = "error"              # an example whose evaluation stopped with a runtime error or a broken rule
+
+
+@dataclass(frozen=True)
+class ExampleResult:
+    """The outcome of one example, with everything a report shows about it."""
+
+    function: str
+    index: int                       # its position among the examples of its function, from 1
+    example: ast.Example
+    status: str                      # PASSED, FAILED or ERROR
+    values: tuple[dict, ...]         # the own calls that were invoked, in order of invocation
+    not_evaluated: tuple[dict, ...]  # the own calls that were never invoked, in the order of the text
+    diagnostic: Diagnostic | None    # None if passed; E4004 if failed; the original one, with a note, if error
+    output: str
+
+
+@dataclass(frozen=True)
+class TestReport:
+    """Everything `nex test` and `test_source` know once all the selected examples were evaluated."""
+
+    analysis: Analysis
+    function: str | None             # the --function filter, if any
+    status: str                      # PASSED, FAILED, NO_EXAMPLES or NOT_RUN
+    results: tuple[ExampleResult, ...] | None   # None when NOT_RUN
+
+    __test__ = False                 # not a pytest test class, despite its name
+
+
+def run_examples(analysis: Analysis, function: str | None = None) -> TestReport:
+    """Evaluates the examples of an analysed program, each in a new interpreter, in the order of
+    the file. `analysis` should come from `analyze(source, require_main=False)`.
+
+    Raises tooling.ToolingError("unknown_function") if `function` names no function of a program
+    without static errors. Any exception that is not a diagnostic of the program propagates: a
+    defect of NEXORA, MemoryError or KeyboardInterrupt (decision 0008, 3.4). Since the report is
+    built only at the end, such an exception never leaves a partial report behind."""
+    checked = analysis.checked
+    if checked is None:
+        return TestReport(analysis, function, NOT_RUN, None)
+    if function is not None and function not in checked.functions:
+        close = difflib.get_close_matches(function, list(checked.functions), n=1)
+        suggestion = f". Did you mean '{close[0]}'?" if close else ""
+        raise tooling.ToolingError(
+            "unknown_function", f"{analysis.source.name} has no function named '{function}'{suggestion}",
+        )
+
+    results = []
+    for declared in checked.functions.values():
+        if function is not None and declared.name != function:
+            continue
+        for index, example in enumerate(declared.examples, start=1):
+            calls = own_calls(example, declared.name)
+            results.append(_example_result(analysis, declared.name, index, example, calls,
+                                            run_example(checked, example, calls)))
+
+    if not results:
+        status = NO_EXAMPLES
+    elif all(result.status == PASSED for result in results):
+        status = PASSED
+    else:
+        status = FAILED
+    return TestReport(analysis, function, status, tuple(results))
+
+
+def _example_result(analysis: Analysis, function: str, index: int, example: ast.Example,
+                    calls: list[ast.Call], run: ExampleRun) -> ExampleResult:
+    source = analysis.source
+    values = tuple(
+        {
+            "call": source.text_of(record.node.span),
+            "span": ast.to_dict(record.node.span),
+            "type": analysis.types.get(id(record.node)),
+            "status": record.status,
+            "value": show_value(record.value) if record.status == "returned" else None,
+        }
+        for record in run.invoked
+    )
+    invoked = {id(record.node) for record in run.invoked}
+    not_evaluated = tuple(
+        {
+            "call": source.text_of(call.span),
+            "span": ast.to_dict(call.span),
+            "type": analysis.types.get(id(call)),
+            "reason": "short_circuit" if id(call) in run.short_circuited else "stopped_before",
+        }
+        for call in calls if id(call) not in invoked
+    )
+
+    if run.error is not None:
+        note = f"While evaluating example {index} of '{function}', at line {example.condition.span.line}."
+        diagnostic = replace(run.error, notes=(*run.error.notes, note))
+        status = ERROR
+    elif run.value:
+        diagnostic, status = None, PASSED
+    else:
+        notes = [f"{value['call']} returned {value['value']}" for value in values]
+        if example.message is not None:
+            notes.append(f"Reason: {example.message}")
+        diagnostic = Diagnostic("E4004", f"This example of '{function}' is false", example.condition.span,
+                                notes=tuple(notes))
+        status = FAILED
+    return ExampleResult(function, index, example, status, values, not_evaluated, diagnostic, run.output)
+
+
+def summary_of(report: TestReport) -> dict | None:
+    if report.results is None:
+        return None
+    counts = {"total": len(report.results), PASSED: 0, FAILED: 0, ERROR: 0}
+    for result in report.results:
+        counts[result.status] += 1
+    return counts
+
+
+def test_document(report: TestReport) -> dict:
+    """The `nexora.test/1` document of a report. `ok` and `diagnostics` keep their meaning in every
+    format: the result of the static analysis. `status` says what happened to the examples."""
+    analysis = report.analysis
+    name = analysis.source.name
+    document = tooling.diagnostics_document(name, analysis.diagnostics)
+    document["schema"] = TEST_SCHEMA
+    document["status"] = report.status
+    document["filter"] = {"function": report.function}
+    document["summary"] = summary_of(report)
+    document["examples"] = None if report.results is None else [
+        {
+            "function": result.function,
+            "index": result.index,
+            "span": ast.to_dict(result.example.condition.span),
+            "expression": analysis.source.text_of(result.example.condition.span),
+            "message": result.example.message,
+            "status": result.status,
+            "values": list(result.values),
+            "not_evaluated": list(result.not_evaluated),
+            "diagnostic": None if result.diagnostic is None else result.diagnostic.to_dict(name),
+            "output": result.output,
+        }
+        for result in report.results
+    ]
+    return document
+
+
+test_document.__test__ = False   # not a pytest test, despite its name
+
+
+def test_source(source: str, filename: str = DEFAULT_FILENAME, *, function: str | None = None) -> dict:
+    """Analyses a program and evaluates its `example` clauses; returns a `nexora.test/1` document.
+
+    The analysis does not require 'main', and 'main' is never run. `function` keeps only the
+    examples declared in that function; the functions they call still check their contracts. A
+    function that does not exist raises tooling.ToolingError("unknown_function"). An internal
+    error is not turned into a document: the exception reaches the caller."""
+    analysis = analyze(Source(filename, source), require_main=False)
+    return test_document(run_examples(analysis, function))
+
+
+test_source.__test__ = False     # not a pytest test, despite its name
 
 
 def language_info() -> dict:

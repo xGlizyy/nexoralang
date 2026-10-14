@@ -24,6 +24,7 @@ class TokenType(Enum):
     ENSURES = "ensures"
     TYPE = "type"
     WHERE = "where"
+    EXAMPLE = "example"
     # A word reserved for a future version: recognised so it can be rejected clearly.
     RESERVED = "reserved word"
 
@@ -70,17 +71,18 @@ KEYWORDS: dict[str, TokenType] = {
     "ensures": TokenType.ENSURES,
     "type": TokenType.TYPE,
     "where": TokenType.WHERE,
+    "example": TokenType.EXAMPLE,
 }
 
 # Keywords that can only start a statement or a declaration, never appear inside parentheses.
 STATEMENT_KEYWORDS: frozenset[str] = frozenset({
-    "fn", "let", "return", "if", "else", "requires", "ensures", "type", "where",
+    "fn", "let", "return", "if", "else", "requires", "ensures", "example", "type", "where",
 })
 
 # Words the language design sets aside for features that are not implemented yet.
 # Reserving them now means adding those features later cannot break existing programs.
 RESERVED_WORDS: frozenset[str] = frozenset({
-    "ai", "assert", "break", "const", "continue", "enum", "example", "for", "import", "in",
+    "ai", "assert", "break", "const", "continue", "enum", "for", "import", "in",
     "match", "pub", "test", "tool", "try", "uses", "var", "while",
 })
 

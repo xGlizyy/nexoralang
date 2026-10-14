@@ -59,8 +59,9 @@ La categoría indica en qué etapa se encontró el problema.
 | `syntax` | El código no sigue la gramática | Sin ejecutar | `1` |
 | `semantic` | Nombres, ámbitos o estructura del programa | Sin ejecutar | `1` |
 | `type` | Tipos | Sin ejecutar | `1` |
-| `runtime` | Depende de los valores calculados | Al ejecutar | `3` |
-| `contract` | Se incumplió una regla que el programa declara: una condición `requires` o `ensures`, o la condición de un tipo refinado | Al ejecutar | `5` |
+| `runtime` | Depende de los valores calculados | Al ejecutar | `3` (con `nex test`, `6`) |
+| `contract` | Se incumplió una regla que el programa declara: una condición `requires` o `ensures`, o la condición de un tipo refinado | Al ejecutar | `5` (con `nex test`, `6`) |
+| `test` | Un ejemplo evaluado por `nex test` resultó falso | Al ejecutar `nex test` | `6` |
 
 Las etapas se ejecutan en orden y cada una solo se realiza si la anterior no encontró errores.
 Por eso un archivo con un error de sintaxis no muestra a la vez errores de tipos: se corrige
@@ -117,6 +118,7 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E2016` | Invalid type declaration | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, o una cadena de tipos que no termina en un tipo integrado | Corrige el nombre o la base; el mensaje dice cuál de los casos es |
 | `E2018` | Invalid refinement condition | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado | Escribe la regla con operadores sobre `value`, o pásala a un `requires` |
 | `E2019` | Too many refinement checks | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (100 000 nodos de condición). Solo ocurre con muchas constantes de cadenas largas de tipos refinados | Usa menos constantes de esos tipos o condiciones más cortas |
+| `E2020` | Example without its function | Un ejemplo no contiene ninguna llamada a su propia función: su expresión no la nombra en ningún punto. Una llamada que solo ocurre dentro de otra función no cuenta | Escribe la llamada con sus entradas: `example f(2) == 4` |
 
 ### De tipos
 
@@ -146,6 +148,17 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E4001` | Precondition violated | Una llamada no cumple una condición `requires`. Señala la llamada | Corrige los argumentos, o comprueba la condición antes de llamar |
 | `E4002` | Postcondition violated | Una función no cumple su propia condición `ensures`. Señala la cláusula | Corrige el cuerpo de la función (o la condición, si era incorrecta) |
 | `E4003` | Refinement violated | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado. Señala la comprobación | Corrige el cálculo que produce el valor, o compruébalo antes con un `if` |
+
+### De prueba
+
+Solo los produce `nex test` ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)).
+
+| Código | Título | Qué significa | Qué hacer |
+|--------|--------|---------------|-----------|
+| `E4004` | Example failed | Un ejemplo se evaluó sin errores, pero vale `false`. Señala la expresión del ejemplo; las notas dan lo que devolvió cada llamada a la función y la explicación del ejemplo | Corrige la función, o el ejemplo si el resultado esperado era el incorrecto |
+
+Un ejemplo que se detiene por un error de ejecución o por una regla incumplida no da `E4004`: da el
+diagnóstico de ese error, con una nota más que dice qué ejemplo lo provocó.
 
 Cuando la regla incumplida tiene explicación, el diagnóstico la muestra en una nota `Reason: ...`.
 

@@ -17,9 +17,11 @@ un **JSON Schema** en [`schemas/`](schemas/), y las pruebas validan con él la s
 | `nexora.spec/1` | La especificación del lenguaje, o una sección | `tooling.get_language_spec` | [`nexora-spec.schema.json`](schemas/nexora-spec.schema.json) |
 | `nexora.capabilities/1` | Qué es esta versión de NEXORA | `tooling.get_capabilities` | [`nexora-capabilities.schema.json`](schemas/nexora-capabilities.schema.json) |
 | `nexora.result/1` | El resultado de comprobar o **ejecutar** un programa | `nexora.api`, el [playground](playground.md) | [`nexora-result.schema.json`](schemas/nexora-result.schema.json) |
+| `nexora.test/1` | El resultado de **evaluar** los ejemplos de un programa | `nex test --format json`, `nexora.api.test_source` | [`nexora-test.schema.json`](schemas/nexora-test.schema.json) |
 
-Los seis primeros son de **análisis**: producirlos nunca ejecuta el programa. El último es el único
-que puede proceder de una ejecución, y no lo usa ninguna herramienta de análisis.
+Los seis primeros son de **análisis**: producirlos nunca ejecuta el programa. Los dos últimos son
+los únicos que pueden proceder de una ejecución, y no los usa ninguna herramienta de análisis.
+`nexora.test/1` está definido en la [decisión 0008](decisions/0008-ejemplos-y-nex-test.md), sección 6.
 
 Todas las herramientas del servidor [MCP](mcp.md) devuelven estos mismos documentos.
 
@@ -192,6 +194,7 @@ Historial:
 | `nexora.inspect/1` | 0.2.0 | Campos `nexora_version` y `complete`; con errores de sintaxis, `program` es un árbol parcial en vez de `null` |
 | `nexora.inspect/2` | 0.3.0 | El campo `type` de una expresión puede ser el nombre de un tipo refinado (antes era una lista cerrada de cinco tipos). Nodo nuevo `TypeDecl`, campo `types` en `Program` y campo `message` en `Contract` |
 | `nexora.result/1` | Versión actual | |
+| `nexora.test/1` | Sin publicar (0.4.0) | Primera versión |
 | `nexora.symbols/1`, `nexora.context/1`, `nexora.spec/1`, `nexora.capabilities/1` | Versión actual | |
 
 Casi todos los cambios han sido campos añadidos. La excepción es `program` en `nexora.inspect/1`:

@@ -240,7 +240,8 @@ fn main() -> Void {
               }
             }
           ]
-        }
+        },
+        "examples": []
       }
     ]
   }

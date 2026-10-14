@@ -32,7 +32,8 @@ PROGRAM = (
 EXPECTED_FIELDS = {
     "Program": ["kind", "span", "types", "functions"],
     "TypeDecl": ["kind", "span", "name", "name_span", "base", "condition", "message"],
-    "Function": ["kind", "span", "name", "name_span", "params", "return_type", "contracts", "body"],
+    "Function": ["kind", "span", "name", "name_span", "params", "return_type", "contracts", "body", "examples"],
+    "Example": ["kind", "span", "condition", "message"],
     "Param": ["kind", "span", "name", "name_span", "type"],
     "TypeRef": ["kind", "span", "name"],
     "Contract": ["kind", "span", "clause", "condition", "message"],
@@ -109,7 +110,8 @@ def test_every_node_has_exactly_the_documented_fields():
     # A program that uses every node kind except Assign (which is always an error).
     seen = {}
     refined = 'type Small = Int where value < 10, "Small numbers only"\n'
-    for node in walk(inspect(refined + PROGRAM + "\nfn extra(n: Small) -> Int {\n    return (n) + 1\n}\n")):
+    extra = 'fn extra(n: Small) -> Int {\n    example extra(1) == 2, "One more"\n    return (n) + 1\n}\n'
+    for node in walk(inspect(refined + PROGRAM + "\n" + extra)):
         seen.setdefault(node["kind"], list(node))
     assert_fields(seen)
     assert set(seen) == set(EXPECTED_FIELDS) - {"Assign"}

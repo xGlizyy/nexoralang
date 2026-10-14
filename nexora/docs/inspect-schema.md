@@ -93,7 +93,8 @@ Los campos de cada nodo aparecen siempre, en el orden indicado. Un campo opciona
 |--------|--------|-------------|
 | `Program` | `types`: lista de `TypeDecl` · `functions`: lista de `Function` | El archivo completo, con los tipos y las funciones en el orden en que aparecen |
 | `TypeDecl` | `name`: texto · `name_span`: posición · `base`: `TypeRef` · `condition`: expresión · `message`: texto o `null` | Un tipo refinado. `message` es la explicación escrita tras la coma |
-| `Function` | `name`: texto · `name_span`: posición · `params`: lista de `Param` · `return_type`: `TypeRef` · `contracts`: lista de `Contract` · `body`: `Block` | Una función |
+| `Function` | `name`: texto · `name_span`: posición · `params`: lista de `Param` · `return_type`: `TypeRef` · `contracts`: lista de `Contract` · `body`: `Block` · `examples`: lista de `Example` | Una función. `examples` es el último campo |
+| `Example` | `condition`: expresión · `message`: texto o `null` | Una cláusula `example`. `nex inspect` nunca la evalúa |
 | `Param` | `name`: texto · `name_span`: posición · `type`: `TypeRef` | Un parámetro |
 | `TypeRef` | `name`: texto | Un tipo escrito en el código: `Int`, `Float`, `Bool`, `Text`, `Void` o un tipo refinado |
 | `Contract` | `clause`: `"requires"` o `"ensures"` · `condition`: expresión · `message`: texto o `null` | Una cláusula de contrato. `message` es la explicación escrita tras la coma |
@@ -194,4 +195,5 @@ versión 2, y otra comprueba que este documento los menciona todos.
 | Versión | Publicada en | Cambios |
 |---------|--------------|---------|
 | `nexora.inspect/1` | `nexora` 0.2.0 | Primera versión |
+| `nexora.inspect/2`, sin publicar (0.4.0) | — | Añadidos, sin cambiar la versión: nodo `Example` y campo `examples` al final de `Function` ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
 | `nexora.inspect/2` | `nexora` 0.3.0 | **Cambio incompatible:** el campo `type` de las expresiones deja de ser una lista cerrada (`Int`, `Float`, `Bool`, `Text`, `Void`) y puede ser el nombre de un tipo refinado. Añadidos: nodo `TypeDecl`, campo `types` en `Program`, campo `message` en `Contract` |

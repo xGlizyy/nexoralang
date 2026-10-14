@@ -182,6 +182,7 @@
             "runtime",
             "semantic",
             "syntax",
+            "test",
             "type"
           ]
         },
@@ -276,7 +277,8 @@
         "calls",
         "builtins_called",
         "called_by",
-        "recursive"
+        "recursive",
+        "examples"
       ],
       "properties": {
         "name": {
@@ -380,6 +382,35 @@
         "recursive": {
           "type": "boolean",
           "description": "True if the function can reach itself through calls."
+        },
+        "examples": {
+          "type": "array",
+          "description": "The 'example' clauses of the function, as written. The analysis never evaluates them; only `nex test` does.",
+          "items": {
+            "type": "object",
+            "required": [
+              "condition",
+              "message",
+              "line"
+            ],
+            "properties": {
+              "condition": {
+                "type": "string",
+                "description": "The expression, as written."
+              },
+              "message": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The explanation written after it, if any."
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
         }
       }
     },
