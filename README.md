@@ -30,6 +30,10 @@ npm run migrate          # crea las tablas users, sessions y oauth_accounts
 npm start
 ```
 
+Con la configuración copiada de `.env.example`, el playground queda desactivado (`PLAYGROUND_ENABLED=false`) y su API responde 503. Para probarlo en tu equipo, establece `PLAYGROUND_ENABLED=true` en `servidor/.env` y reinicia el servidor.
+
+Úsalo solo para pruebas locales controladas. Como el servidor escucha en todas las interfaces de red, mantén el playground desactivado en servidores accesibles desde Internet hasta completar la [comprobación del aislamiento](nexora/docs/playground.md#comprobar-el-aislamiento).
+
 ## Inicio de sesión con Google y GitHub
 
 Es opcional: sin credenciales, los botones llevan a un aviso y el registro con email sigue funcionando.
