@@ -265,10 +265,15 @@ python -m venv .venv
 # 2. El servidor
 cd ../servidor
 npm install
-cp .env.example .env                          # y rellena los datos de la base de datos
+cp .env.example .env                          # rellena la base de datos y pon PLAYGROUND_ENABLED=true
 npm run migrate
 npm start
 ```
+
+`.env.example` deja el playground desactivado (`PLAYGROUND_ENABLED=false`): con ese valor la API
+responde 503 (`playground_disabled`). Para usarlo en tu equipo, escribe `PLAYGROUND_ENABLED=true` en
+tu `servidor/.env` y reinicia el servidor. El servidor escucha en todas las interfaces del equipo: si
+tu cortafuegos deja entrar conexiones al puerto 3000, otros equipos de tu red también podrán usarlo.
 
 Abre <http://localhost:3000/playground>.
 
@@ -370,10 +375,16 @@ En `servidor/.env`:
 NODE_ENV=production
 TRUST_PROXY=1
 PUBLIC_URL=https://tu-dominio.example
-PLAYGROUND_ENABLED=true
+PLAYGROUND_ENABLED=false
 PLAYGROUND_WORKER_COMMAND=["docker","run","--rm","-i","--network","none","--read-only","--cap-drop","ALL","--security-opt","no-new-privileges","--pids-limit","32","--memory","256m","--memory-swap","256m","--cpus","0.5","--user","65534:65534","--tmpfs","/tmp:rw,size=1m,noexec","nexora-worker"]
 PLAYGROUND_TIMEOUT_MS=4000
 ```
+
+**El playground queda desactivado** hasta completar la
+[comprobación del aislamiento](#comprobar-el-aislamiento). Solo el valor exacto `false` lo desactiva:
+`False`, `0`, un valor vacío o no definir la variable lo dejan activado. Tampoco la definas en el
+entorno del servicio (`Environment=` en systemd o una variable exportada): ese valor tiene prioridad
+sobre `servidor/.env`.
 
 Notas:
 
@@ -455,6 +466,20 @@ El servidor escribe una línea por cada fallo del playground, con el tipo de fal
 
 ### 7. Verificar el despliegue
 
+Mientras el playground esté desactivado, comprueba que de verdad lo está:
+
+```bash
+curl -s https://tu-dominio.example/api/playground/info
+```
+
+Tiene que responder con el estado HTTP 503 y el código `playground_disabled`.
+
+Las comprobaciones siguientes, y las de la sección siguiente que usan la página o la API, necesitan
+el playground activado. **Hazlas en un entorno controlado, sin exposición pública**: un servidor de
+pruebas al que no se pueda llegar desde Internet, o este mismo servidor antes de abrir el sitio
+(con el nombre de dominio sin publicar o el proxy cerrado al exterior). Usa en ese entorno su propia
+dirección en lugar de `https://tu-dominio.example`.
+
 ```bash
 curl -s https://tu-dominio.example/api/playground/info
 ```
@@ -474,7 +499,10 @@ ejemplo inicial.
 ### Comprobar el aislamiento
 
 Antes de anunciar el playground, comprueba **en el servidor real** cada punto. Ninguno se ha
-comprobado todavía.
+comprobado todavía. Las filas que usan la página o la API necesitan el playground activado: hazlas
+en un entorno controlado, sin exposición pública (ver el paso 7). Solo cuando todas den el resultado
+esperado, cambia `PLAYGROUND_ENABLED` a `true` en `servidor/.env` del servidor público y reinicia el
+servicio.
 
 | Comprobación | Cómo | Resultado esperado |
 |--------------|------|--------------------|
@@ -495,7 +523,7 @@ nexora/.venv/bin/python -m pip install ./nexora
 docker build -f servidor/playground/Dockerfile -t nexora-worker .
 cd servidor && npm ci --omit=dev && npm run migrate
 sudo systemctl restart nexora
-curl -s https://tu-dominio.example/api/playground/info     # la versión tiene que ser la nueva
+curl -s https://tu-dominio.example/api/playground/info     # activado: la versión nueva; desactivado: 503
 ```
 
 La imagen del worker hay que reconstruirla en cada actualización del lenguaje: contiene su propia
