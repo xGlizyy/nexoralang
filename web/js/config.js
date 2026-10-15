@@ -29,11 +29,10 @@ export const roadmap = [
     status: 'in-progress',
     available: [
       'A language specification, version 0.5, that describes exactly what the interpreter does.',
-      'Ten accepted design records, each with its reasons, the alternatives it rejected and what it does not guarantee.',
+      'Eleven accepted design records, each with its reasons, the alternatives it rejected and what it does not guarantee.',
       'A broader design draft of where the language is going.',
     ],
     next: [
-      'Operations on text: length, ordering and reading numbers. A proposal is being written.',
       'Lists and `for`, then records and `Option` / `Result`.',
       'Reading input, and modules.',
     ],
@@ -46,6 +45,7 @@ export const roadmap = [
       'Static types (`Int`, `Float`, `Bool`, `Text`) with no implicit conversions.',
       'Functions, `if`, `let` and `var`, and `while` loops that declare why they end.',
       'Contracts (`requires`, `ensures`), refined types and examples checked with `nex test`.',
+      'Operations on text (`Text.length`, `Text.slice`, ordering) and reading numbers with `Int.parse`, each with the requirements it checks.',
       'Diagnostics with a stable code, a position and a hint, as text or JSON.',
       'More than 1,300 automated tests.',
     ],
