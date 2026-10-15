@@ -515,15 +515,17 @@ cambia.
 - **Aparecen nombres de función con punto** en `callee` y en `builtins_called`, solo en los programas
   que usan la sintaxis nueva.
 - **Un consumidor que tenga escrita su propia lista de funciones integradas** verá nombres que no
-  conoce. Ningún documento promete una lista cerrada: la lista vigente está en `builtins` de
-  `nex symbols` y `nex context` y en `get_capabilities()`. Le pasaría lo mismo con cualquier función
-  integrada nueva, con cualquier forma de nombrarla.
+  conoce. Ningún documento promete una lista cerrada: la lista vigente está en el campo `builtins` de
+  `nex symbols` y en `get_capabilities()`, que la da en `language.builtins`. Le pasaría lo mismo con
+  cualquier función integrada nueva, con cualquier forma de nombrarla. `nex context` no expone esa
+  lista: solo nombra, en `builtins_called`, las que el programa llama.
 - **Consumidores existentes**: solo en este repositorio (`tooling.py`, el servidor MCP, que reenvía el
   documento, las pruebas y los documentos con salidas registradas). El servidor web, la web y el
   paquete npm no leen `nex inspect`. No hay consumidores publicados.
 
-**`nex symbols` y `nex context`.** Cada función integrada de la lista `builtins` se describe con su
-nombre completo y gana el campo `contracts`, vacío si no tiene ninguno:
+**`nex symbols`.** Cada función integrada de la lista `builtins` se describe con su nombre completo y
+gana el campo `contracts`, vacío si no tiene ninguno. `get_capabilities()` publica la misma lista en
+`language.builtins`; `nex context` no expone `builtins`:
 
 ```json
 {
@@ -695,8 +697,9 @@ su título y su categoría.
   o `E2008` (sección 9).
 - **`nexora.inspect/2`**: campo `qualifier` añadido a `Call`, sin cambiar la versión (sección 7.4).
   Una fila nueva en el historial de `inspect-schema.md`.
-- **`nexora.symbols/1` y `nexora.context/1`**: campo `contracts` y nombres cualificados en `builtins`;
-  valor `text_operations` en `features`. Sin cambiar la versión.
+- **`nexora.symbols/1`**: campo `contracts` y nombres cualificados en `builtins`. **`nexora.context/1`**:
+  nombres cualificados en `builtins_called` y valor `text_operations` en `features`. Sin cambiar la
+  versión de ninguna de las dos.
 - **`nexora.diagnostics/1`**: sin cambios de formato.
 
 ## Cambios necesarios si se aprueba
@@ -775,9 +778,10 @@ su título y su categoría.
     `test_inspect.py` gana `qualifier`); el documento valida con el esquema nuevo y con el de la 0.5.1,
     con y sin llamadas cualificadas; un consumidor que resuelve `callee` contra las funciones del
     programa y la lista `builtins` nunca atribuye `Text.length` a una variable o un parámetro `length`.
-21. `nex symbols` y `nex context`: nombres cualificados en `builtins`, `contracts` con
-    `checked_at_run_time`, `builtins_called` y `features`, validados con sus esquemas; `nex context` en
-    texto muestra los `requires` de las funciones integradas llamadas.
+21. `nex symbols`: nombres cualificados en `builtins` y `contracts` con `checked_at_run_time`;
+    `get_capabilities()`: la misma lista con `contracts`. `nex context`: nombres cualificados en
+    `builtins_called`, valor `text_operations` en `features` y los `requires` de las funciones
+    integradas llamadas en la salida de texto. Cada documento validado con su esquema.
 
 ## Revisión
 
@@ -806,6 +810,7 @@ su título y su categoría.
 | Una fila decía "lo que no es un error" e incluía un caso que da `E2010` | Sección 9: "Otros casos" |
 | Faltaban el coste de los textos enormes y las garantías de redondeo | Sección 6.4 (nueva), con mediciones; casos límite añadidos a la tabla de la sección 6.2; pruebas 4 y 5 |
 | La compatibilidad de `nex inspect` no separaba protocolo, esquema y salida | Sección 7.4: tres niveles comprobados, y los cambios observables aparte |
+| «La lista vigente está en `builtins` de `nex symbols` y `nex context`», y el título «`nex symbols` y `nex context`», atribuían a `nex context` una lista y un campo que no expone | Sección 7.4, sección de compatibilidad y prueba 21: `builtins` y `contracts` en `nex symbols` y en `get_capabilities()` (`language.builtins`); `nex context` solo nombra en `builtins_called` las funciones llamadas y muestra sus `requires` en la salida de texto. El alcance de la decisión no cambia: es donde se nombra cada campo, no qué campos hay |
 | Un fragmento de código partido entre dos líneas (sección 3.3) | Unido |
 
 ### Aprobación
