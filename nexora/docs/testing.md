@@ -32,10 +32,10 @@ Realizada el 15 de octubre de 2026, en Windows 11 con Python 3.12.10:
 | Comprobación | Resultado |
 |--------------|-----------|
 | `python -m ruff check src tests` | Sin errores |
-| `python -m pytest` | 1372 pruebas superadas, 4 omitidas, 0 fallos |
-| Cobertura de líneas y ramas (`--cov`) | 94,23 % |
+| `python -m pytest` | 1600 pruebas superadas, 4 omitidas, 0 fallos |
+| Cobertura de líneas y ramas (`--cov`) | 94,48 % |
 | Umbral configurado (`fail_under` en `pyproject.toml`) | 90 % |
-| Pruebas del servidor web (`node --test "test/*.test.js"`, en `servidor/`) | 109 superadas, 0 fallos |
+| Pruebas del servidor web (`node --test "test/*.test.js"`, en `servidor/`) | 112 superadas, 0 fallos |
 
 Las cuatro pruebas omitidas necesitan funciones de POSIX que Windows no tiene, y **no se han
 ejecutado nunca**: una comprueba un archivo sin permiso de lectura (el mismo caso se cubre en
@@ -53,13 +53,13 @@ Estas cifras son una fotografía de ese día. Para conocer las actuales, ejecuta
 |--------|--------------------------|
 | `lexer.py` | 100 % |
 | `parser.py` | 99 % |
-| `checker.py` | 100 % |
-| `interpreter.py` | 100 % |
+| `checker.py` | 99 % |
+| `interpreter.py` | 99 % |
 | `diagnostics.py` | 98 % |
-| `cli.py` | 97 % |
-| `api.py` | 97 % |
-| `tooling.py` | 97 % |
-| `ast_nodes.py`, `pipeline.py`, `schemas.py`, `tokens.py`, `values.py` | 100 % |
+| `cli.py` | 92 % |
+| `api.py` | 100 % |
+| `tooling.py` | 96 % |
+| `ast_nodes.py`, `pipeline.py`, `prelude.py`, `schemas.py`, `tokens.py`, `values.py` | 100 % |
 | `mcp_server.py` | 30 % medido (ver abajo) |
 | `__main__.py`, `worker.py` | 0 % medido (ver abajo) |
 
@@ -69,8 +69,9 @@ Lo que queda sin cubrir, y por qué:
   `tests/test_worker.py` lanza el proceso y le envía peticiones, y `tests/test_mcp.py` arranca el
   servidor y habla con él por el protocolo MCP. La medición no sigue a los procesos hijos, así que
   su porcentaje no refleja lo que se ejecuta.
-- **`tooling.py`**: el recorte de una condición de contrato escrita en varias líneas y dos mensajes
-  de la presentación en texto de `nex symbols`.
+- **`tooling.py`**: en la salida de texto, el camino de un programa que no llegó a analizarse, el
+  bloque de los tipos refinados de `nex context`, una cláusula de bucle escrita sin explicación, y
+  los dos mensajes de `nex symbols` cuando no hay símbolos que mostrar.
 - **`__main__.py`** (dos líneas) se ejecuta en todas las pruebas que lanzan `python -m nexora` en
   un proceso aparte, pero la medición no sigue a los procesos hijos.
 - **`cli.py`**: la rama que se ejecuta si la terminal no permite cambiar la codificación a UTF-8, y
@@ -91,15 +92,19 @@ ejecuta en alguna prueba; no que se hayan probado todas las combinaciones de ent
 | `test_parser.py` | 68 | Programas válidos, precedencia, forma del árbol, cada error de sintaxis con su posición, recuperación tras un error, límites de anidamiento |
 | `test_checker.py` | 56 | `main`, variables, ámbitos, declaraciones duplicadas, llamadas, orden de las etapas |
 | `test_types.py` | 140 | Inferencia, anotaciones, cada operador con cada combinación de tipos, conversiones, condiciones |
+| `test_refined_types.py` | 68 | Tipos refinados (`type Name = Base where condition`): que las constantes los comprueba el análisis estático (`E2017`) y cualquier otro valor solo al comprobarlo con `Name(x)` mientras el programa corre (`E4003`) |
 | `test_functions.py` | 56 | Parámetros, argumentos, retornos, rutas de retorno, `if` / `else`, funciones `Void`, recursividad y su límite |
 | `test_contracts.py` | 50 | `requires` y `ensures` que se cumplen y que fallan, tipos de las condiciones, `result`, contenido de los diagnósticos |
+| `test_example_clauses.py` | 43 | La cláusula `example` tal y como la ve el análisis estático: sintaxis, tipos, nombres, la regla de llamada propia y el grafo de llamadas. No evalúa ningún ejemplo ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
 | `test_text_operations.py` | 181 | Las funciones de un tipo (`Text.length`, `Int.parse`…) y el orden entre textos: cada caso de la decisión, sus requisitos y sugerencias, textos enormes, redondeo y límites de `Float`, la sintaxis del punto y sus errores, que los programas de la 0.5.1 no cambian, y `inspect`, `symbols`, `context` y las capacidades ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)) |
 | `test_loops.py` | 96 | `var`, asignaciones, bucles con su medida y sus invariantes: análisis, cada diagnóstico con su vuelta y sus valores, que ningún bucle se queda colgado (tampoco en `nex test`), y lo que muestran `inspect`, `symbols` y `context` ([decisión 0010](decisions/0010-var-y-while.md)) |
 | `test_interpreter.py` | 47 | Salida de los programas, aritmética entera y decimal, desbordamiento, división por cero |
+| `test_out_of_memory.py` | 20 | Un programa que se queda sin memoria mientras corre: el `E3007`. El `MemoryError` se provoca a propósito, así que ninguna prueba agota la memoria real ([decisión 0009](decisions/0009-memoria-agotada.md)) |
 | `test_diagnostics.py` | 16 | Formato de texto, formato JSON, y que el registro de códigos coincide con la especificación |
 | `test_inspect.py` | 9 | El esquema JSON de `nex inspect`: nodos, campos, tipos y posiciones |
 | `test_cli.py` | 74 | Comandos, opciones, códigos de salida y formatos; también con el comando real en un proceso aparte, desde otros directorios |
 | `test_examples.py` | 68 | Cada programa de `examples/`: salida, diagnósticos y código de salida, comparados con los registrados |
+| `test_nex_test.py` | 46 | La evaluación de ejemplos: el motor, `nexora.api.test_source` y el comando `nex test`, con los casos de la matriz de la decisión ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
 | `test_docs.py` | 163 | Cada programa de la documentación y su salida; enlaces; versión; que la referencia de la CLI y la lista de códigos están completas |
 | `test_security.py` | 70 | Que el intérprete no evalúa código Python, qué puede hacer un programa, qué módulos puede importar cada archivo, que las herramientas de análisis no ejecutan |
 | `test_robustness.py` | 86 | Entradas truncadas, mutadas, aleatorias, binarias, enormes o muy anidadas; regresiones de defectos reales |
