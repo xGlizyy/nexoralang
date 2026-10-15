@@ -1,7 +1,7 @@
 # Especificación del lenguaje NEXORA
 
 - **Versión de la especificación:** 0.5
-- **Implementación de referencia:** `nexora` 0.5.0 (este repositorio, directorio `nexora/`)
+- **Implementación de referencia:** `nexora` 0.5.1 (este repositorio, directorio `nexora/`)
 - **Estado:** describe exactamente lo que el intérprete hace hoy.
 
 Este documento es la referencia del lenguaje: define la sintaxis y el significado de cada
@@ -1117,7 +1117,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.5.0",
+  "nexora_version": "0.5.1",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

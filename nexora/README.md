@@ -58,7 +58,7 @@ sin conexión. Lo que hay y lo que no, con precisión: [Herramientas automática
 
 ## Estado
 
-**Versión 0.5.0. Proyecto en fase temprana**, anterior a la 1.0: el lenguaje puede cambiar de forma
+**Versión 0.5.1. Proyecto en fase temprana**, anterior a la 1.0: el lenguaje puede cambiar de forma
 incompatible y no es apto para uso en producción.
 
 | Estado | Qué incluye |
@@ -99,7 +99,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.5.0
+NEXORA 0.5.1
 ```
 
 El comando `nex` queda instalado dentro del entorno virtual, no en todo el sistema: solo está

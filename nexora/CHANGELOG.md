@@ -19,6 +19,34 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
+## 0.5.1 — Revisión de la memoria agotada
+
+Resultado de auditar la [decisión 0009](docs/decisions/0009-memoria-agotada.md) después de
+implementarla. Su garantía se cumple: `E3007` se sigue construyendo sin retener los valores del
+programa que falló, y cada ejemplo de `nex test` se evalúa aislado. La auditoría encontró dos
+defectos alrededor de ella, corregidos aquí. Ningún programa cambia de resultado ni de código de
+salida.
+
+### Corregido
+
+- **`E3007` y el `E3004` por falta de pila no decían en qué bucle ocurrieron.** La
+  [decisión 0010](docs/decisions/0010-var-y-while.md) (sección 7) da a todo error de ejecución
+  dentro de un bucle una nota por bucle (`In turn 3 of the loop at line 6.`). Estos dos se
+  construyen cuando el error ya ha salido de los bucles, y llegaban sin ellas. Ahora llevan las
+  mismas notas que cualquier otro error en el mismo punto, del bucle más interior al exterior y con
+  el mismo máximo de seis.
+- **`nex test` en texto podía dejar un resumen sin terminar.** El informe se escribía a medida que
+  se preparaba: si fallaba después del resumen (un error interno, la memoria agotada), ese resumen
+  quedaba en la salida estándar igual que en un informe completo, con el código `70`. Ahora el
+  informe se prepara entero y se escribe al final, como el documento JSON: si algo falla, la salida
+  estándar queda vacía. Los informes normales no cambian.
+
+### Limitaciones
+
+- La prueba que agota memoria real (la del worker, con `RLIMIT_AS`) solo puede ejecutarse en Linux
+  y macOS, y no se ha ejecutado todavía: en Windows se omite y la integración continua no ha
+  funcionado nunca. Las demás pruebas de `E3007` provocan el `MemoryError` a propósito.
+
 ## 0.5.0 — `var` y bucles que dicen por qué terminan
 
 La repetición deja de depender de la recursividad y del límite de 1000 llamadas. Y lo hace a la
