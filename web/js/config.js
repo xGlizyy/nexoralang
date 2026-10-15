@@ -2,7 +2,7 @@
 
 /**
  * @typedef {'in-progress' | 'planned' | 'done'} PhaseStatus
- * @typedef {{ title: string, description: string, status: PhaseStatus }} Phase
+ * @typedef {{ title: string, summary: string, status: PhaseStatus, available: string[], next: string[] }} Phase
  * @typedef {{ run(source: string): Promise<string> }} PlaygroundRuntime
  */
 
@@ -16,27 +16,73 @@ export const site = {
   githubUrl: null,
 };
 
-/** @type {Phase[]} */
+/**
+ * The phases of the project. `summary` is one sentence, shown everywhere; `available` and `next`
+ * are shown in the documentation. Only facts that can be checked in the repository go here.
+ * Text between backticks is shown as code.
+ * @type {Phase[]}
+ */
 export const roadmap = [
   {
     title: 'Language design',
-    description: 'A specification (version 0.5) describes exactly what the interpreter does, and ten design records explain each decision. Operations on text, collections and modules are still to come, and the syntax can still change.',
+    summary: 'The rules are written down before they are built, and the specification follows the interpreter exactly. The syntax can still change.',
     status: 'in-progress',
+    available: [
+      'A language specification, version 0.5, that describes exactly what the interpreter does.',
+      'Ten accepted design records, each with its reasons, the alternatives it rejected and what it does not guarantee.',
+      'A broader design draft of where the language is going.',
+    ],
+    next: [
+      'Operations on text: length, ordering and reading numbers. A proposal is being written.',
+      'Lists and `for`, then records and `Option` / `Result`.',
+      'Reading input, and modules.',
+    ],
   },
   {
     title: 'First interpreter',
-    description: 'A reference interpreter in Python, version 0.5: static types, functions, conditions, loops that declare why they end, contracts, refined types and examples checked with nex test. More than 1,300 automated tests check it.',
+    summary: 'A reference interpreter in Python runs every program the specification describes.',
     status: 'done',
+    available: [
+      'Static types (`Int`, `Float`, `Bool`, `Text`) with no implicit conversions.',
+      'Functions, `if`, `let` and `var`, and `while` loops that declare why they end.',
+      'Contracts (`requires`, `ensures`), refined types and examples checked with `nex test`.',
+      'Diagnostics with a stable code, a position and a hint, as text or JSON.',
+      'More than 1,300 automated tests.',
+    ],
+    next: [
+      'Measuring its speed: it has never been benchmarked.',
+      'Checking it on Linux and macOS: so far it is verified on Windows only.',
+    ],
   },
   {
     title: 'Tooling and documentation',
-    description: 'The nex command runs, checks and tests programs, and describes them as versioned JSON for editors and AI agents. An optional MCP server is experimental, and there is no editor integration yet.',
+    summary: 'The `nex` command and versioned JSON formats let people, editors and AI agents work with programs.',
     status: 'in-progress',
+    available: [
+      '`nex run`, `nex check` and `nex test`.',
+      '`nex inspect`, `nex symbols` and `nex context`: the program as versioned JSON, with a schema for each format.',
+      'A language guide, a full reference and this documentation.',
+      'An optional MCP server for AI assistants. It is experimental.',
+    ],
+    next: [
+      'Editor integration through a language server.',
+      'A formatter.',
+      'Continuous integration, once the repository is public.',
+    ],
   },
   {
     title: 'Playground and ecosystem',
-    description: 'The playground runs each program with the real interpreter, in a separate process with time and output limits. A public repository and published packages do not exist yet.',
+    summary: 'The playground runs real programs; a public repository and published packages are still to come.',
     status: 'in-progress',
+    available: [
+      'A playground that runs each program with the real interpreter, in a separate process with time and output limits.',
+      'Accounts with an email address, and optionally Google or GitHub.',
+    ],
+    next: [
+      'A public repository.',
+      'Publishing the packages for npm and Python. The npm package is prepared but not published.',
+      'Stronger isolation for the playground, verified on Linux.',
+    ],
   },
 ];
 

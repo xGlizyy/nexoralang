@@ -1106,6 +1106,43 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
 .docs__article .phase h3 { margin-top: 6px; }
 .docs__article .phase p { margin-top: 6px; }
 
+/* In the documentation each phase also lists what is available today and what comes next. */
+.phase__details {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.docs__article .phase__group h4 {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.phase__list { margin-top: 10px; }
+.phase__list li { position: relative; padding-left: 20px; color: var(--muted); font-size: 0.94rem; }
+.phase__list li + li { margin-top: 8px; }
+
+/* A filled dot for what exists, a hollow one for what is still to come. */
+.phase__list li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.68em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.phase__group--available .phase__list li::before { background: var(--green); }
+.phase__group--next .phase__list li::before { border: 1.5px solid var(--faint); }
+
 .callout {
   margin-top: 28px;
   padding: 18px 20px;

@@ -6,8 +6,38 @@ import { setupSiteHeader } from './site-header.js';
 
 document.documentElement.classList.add('js');
 
+// Text with `code` between backticks, as nodes: the text is never parsed as HTML.
+function withCode(text) {
+  return text.split('`').map((part, index) => {
+    if (index % 2 === 0) return document.createTextNode(part);
+    const code = document.createElement('code');
+    code.textContent = part;
+    return code;
+  });
+}
+
+// One list of a phase in the documentation: what is available, or what comes next.
+function phaseList(label, items, kind) {
+  const group = document.createElement('div');
+  group.className = `phase__group phase__group--${kind}`;
+  const heading = document.createElement('h4');
+  heading.textContent = label;
+  const list = document.createElement('ul');
+  list.className = 'phase__list';
+  list.append(...items.map((text) => {
+    const item = document.createElement('li');
+    item.append(...withCode(text));
+    return item;
+  }));
+  group.append(heading, list);
+  return group;
+}
+
+// `data-roadmap` shows each phase with its summary; `data-roadmap="full"` (the documentation) also
+// lists what is available today and what comes next.
 function renderRoadmap() {
   for (const list of document.querySelectorAll('[data-roadmap]')) {
+    const full = list.dataset.roadmap === 'full';
     list.replaceChildren(...roadmap.map((phase, index) => {
       const item = document.createElement('li');
       item.className = `phase phase--${phase.status}`;
@@ -20,14 +50,21 @@ function renderRoadmap() {
       const title = document.createElement('h3');
       title.textContent = phase.title;
 
-      const description = document.createElement('p');
-      description.textContent = phase.description;
+      const summary = document.createElement('p');
+      summary.append(...withCode(phase.summary));
 
       const status = document.createElement('span');
       status.className = `chip chip--${phase.status}`;
       status.textContent = statusLabels[phase.status];
 
-      item.append(number, title, description, status);
+      item.append(number, title, summary, status);
+      if (full) {
+        const details = document.createElement('div');
+        details.className = 'phase__details';
+        details.append(phaseList('Available today', phase.available, 'available'));
+        if (phase.next.length > 0) details.append(phaseList('Next', phase.next, 'next'));
+        item.append(details);
+      }
       return item;
     }));
   }
