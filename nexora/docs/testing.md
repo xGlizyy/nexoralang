@@ -87,25 +87,25 @@ ejecuta en alguna prueba; no que se hayan probado todas las combinaciones de ent
 
 | Archivo | Pruebas | Qué comprueba |
 |---------|---------|---------------|
-| `test_lexer.py` | 45 | Tokens, literales, comentarios, finales de línea, posiciones, caracteres inválidos, textos sin cerrar |
+| `test_lexer.py` | 51 | Tokens, literales, comentarios, finales de línea, posiciones, caracteres inválidos, textos sin cerrar |
 | `test_parser.py` | 68 | Programas válidos, precedencia, forma del árbol, cada error de sintaxis con su posición, recuperación tras un error, límites de anidamiento |
 | `test_checker.py` | 56 | `main`, variables, ámbitos, declaraciones duplicadas, llamadas, orden de las etapas |
-| `test_types.py` | 139 | Inferencia, anotaciones, cada operador con cada combinación de tipos, conversiones, condiciones |
+| `test_types.py` | 140 | Inferencia, anotaciones, cada operador con cada combinación de tipos, conversiones, condiciones |
 | `test_functions.py` | 56 | Parámetros, argumentos, retornos, rutas de retorno, `if` / `else`, funciones `Void`, recursividad y su límite |
-| `test_contracts.py` | 41 | `requires` y `ensures` que se cumplen y que fallan, tipos de las condiciones, `result`, contenido de los diagnósticos |
+| `test_contracts.py` | 50 | `requires` y `ensures` que se cumplen y que fallan, tipos de las condiciones, `result`, contenido de los diagnósticos |
 | `test_text_operations.py` | 181 | Las funciones de un tipo (`Text.length`, `Int.parse`…) y el orden entre textos: cada caso de la decisión, sus requisitos y sugerencias, textos enormes, redondeo y límites de `Float`, la sintaxis del punto y sus errores, que los programas de la 0.5.1 no cambian, y `inspect`, `symbols`, `context` y las capacidades ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)) |
-| `test_loops.py` | 81 | `var`, asignaciones, bucles con su medida y sus invariantes: análisis, cada diagnóstico con su vuelta y sus valores, que ningún bucle se queda colgado (tampoco en `nex test`), y lo que muestran `inspect`, `symbols` y `context` ([decisión 0010](decisions/0010-var-y-while.md)) |
+| `test_loops.py` | 96 | `var`, asignaciones, bucles con su medida y sus invariantes: análisis, cada diagnóstico con su vuelta y sus valores, que ningún bucle se queda colgado (tampoco en `nex test`), y lo que muestran `inspect`, `symbols` y `context` ([decisión 0010](decisions/0010-var-y-while.md)) |
 | `test_interpreter.py` | 47 | Salida de los programas, aritmética entera y decimal, desbordamiento, división por cero |
 | `test_diagnostics.py` | 16 | Formato de texto, formato JSON, y que el registro de códigos coincide con la especificación |
-| `test_inspect.py` | 8 | El esquema JSON de `nex inspect`: nodos, campos, tipos y posiciones |
+| `test_inspect.py` | 9 | El esquema JSON de `nex inspect`: nodos, campos, tipos y posiciones |
 | `test_cli.py` | 74 | Comandos, opciones, códigos de salida y formatos; también con el comando real en un proceso aparte, desde otros directorios |
-| `test_examples.py` | 39 | Cada programa de `examples/`: salida, diagnósticos y código de salida, comparados con los registrados |
-| `test_docs.py` | 129 | Cada programa de la documentación y su salida; enlaces; versión; que la referencia de la CLI y la lista de códigos están completas |
-| `test_security.py` | 68 | Que el intérprete no evalúa código Python, qué puede hacer un programa, qué módulos puede importar cada archivo, que las herramientas de análisis no ejecutan |
-| `test_robustness.py` | 78 | Entradas truncadas, mutadas, aleatorias, binarias, enormes o muy anidadas; regresiones de defectos reales |
-| `test_api.py` | 30 | Comprobar y ejecutar código en memoria (`nexora.api`), con sus límites de salida y de texto |
+| `test_examples.py` | 68 | Cada programa de `examples/`: salida, diagnósticos y código de salida, comparados con los registrados |
+| `test_docs.py` | 163 | Cada programa de la documentación y su salida; enlaces; versión; que la referencia de la CLI y la lista de códigos están completas |
+| `test_security.py` | 70 | Que el intérprete no evalúa código Python, qué puede hacer un programa, qué módulos puede importar cada archivo, que las herramientas de análisis no ejecutan |
+| `test_robustness.py` | 86 | Entradas truncadas, mutadas, aleatorias, binarias, enormes o muy anidadas; regresiones de defectos reales |
+| `test_api.py` | 38 | Comprobar y ejecutar código en memoria (`nexora.api`), con sus límites de salida y de texto |
 | `test_worker.py` | 23 | El proceso de un solo uso del playground: peticiones válidas e inválidas, límites, entorno |
-| `test_tooling.py` | 72 | Los JSON Schema y que la salida real los cumple; símbolos, referencias y contexto; el análisis parcial con errores de sintaxis, incluido un programa cortado en cada carácter; que el análisis no ejecuta ni abre archivos; que la CLI y la API devuelven lo mismo |
+| `test_tooling.py` | 81 | Los JSON Schema y que la salida real los cumple; símbolos, referencias y contexto; el análisis parcial con errores de sintaxis, incluido un programa cortado en cada carácter; que el análisis no ejecuta ni abre archivos; que la CLI y la API devuelven lo mismo |
 | `test_tooling_tasks.py` | 19 | Las nueve [tareas de referencia](ai-tooling.md#tareas-de-referencia) contra las herramientas reales |
 | `test_mcp.py` | 35 | El servidor MCP por su protocolo real: inicio, descubrimiento de herramientas, llamadas, argumentos rechazados, que ninguna herramienta ejecuta código, cierre |
 
