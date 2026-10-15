@@ -20,22 +20,22 @@ export const site = {
 export const roadmap = [
   {
     title: 'Language design',
-    description: 'Define the syntax and the rules of the language. A first specification exists; the language is still small and changing.',
+    description: 'A specification (version 0.5) describes exactly what the interpreter does, and ten design records explain each decision. Operations on text, collections and modules are still to come, and the syntax can still change.',
     status: 'in-progress',
   },
   {
     title: 'First interpreter',
-    description: 'A reference interpreter runs a subset of the language: types, functions, conditions, loops that declare why they end, contracts, refined types and examples checked with nex test.',
+    description: 'A reference interpreter in Python, version 0.5: static types, functions, conditions, loops that declare why they end, contracts, refined types and examples checked with nex test. More than 1,300 automated tests check it.',
     status: 'done',
   },
   {
     title: 'Tooling and documentation',
-    description: 'A command-line tool, guides and a language reference exist. More tools are still to come.',
+    description: 'The nex command runs, checks and tests programs, and describes them as versioned JSON for editors and AI agents. An optional MCP server is experimental, and there is no editor integration yet.',
     status: 'in-progress',
   },
   {
     title: 'Playground and ecosystem',
-    description: 'A first playground runs code in the browser with the real interpreter. The ecosystem around the language is still to come.',
+    description: 'The playground runs each program with the real interpreter, in a separate process with time and output limits. A public repository and published packages do not exist yet.',
     status: 'in-progress',
   },
 ];
