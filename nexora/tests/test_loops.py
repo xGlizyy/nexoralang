@@ -10,7 +10,7 @@ import jsonschema
 import pytest
 
 from helpers import check_codes, diagnostics_of, in_main, parse_text, run_failure, run_text, with_main
-from nexora import api, ast_nodes as ast, schemas, tooling
+from nexora import api, ast_nodes as ast, interpreter, schemas, tooling
 from nexora.interpreter import MAX_CALL_DEPTH
 
 SCHEMAS = schemas.all_schemas()
@@ -369,6 +369,91 @@ def test_loop_notes_are_limited():
         lines += [f"{indent}    v{level} = 1", f"{indent}}}"]
     _, error = run_failure(in_main("\n".join(lines)))
     assert len(error.notes) == 7 and error.notes[-1] == "... and more loops."
+
+
+# E3007 and the E3004 for Python's own stack are built outside every loop, after MemoryError or
+# RecursionError has left them. They still name the loops, with the notes any other diagnostic gets
+# at the same point. The failure is raised on purpose exactly where a division by zero (E3001) would be.
+
+def fail_divisions(monkeypatch, failure):
+    """A division by zero raises `failure` instead of E3001."""
+    original = interpreter.Interpreter._fail
+
+    def fail(self, code, *arguments, **options):
+        if code == "E3001":
+            raise failure
+        return original(self, code, *arguments, **options)
+
+    monkeypatch.setattr(interpreter.Interpreter, "_fail", fail)
+
+
+NESTED_IN_A_CALL = with_main(
+    "fn inner(limit: Int) -> Int {\n    var j = 0\n    while j < limit {\n        decreases limit - j\n"
+    "        if j == 1 {\n            print(10 / (j - 1))\n        }\n        j = j + 1\n    }\n    return j\n}",
+    "var i = 0\nwhile i < 3 {\n    decreases 3 - i\n    print(inner(i))\n    i = i + 1\n}",
+)
+
+
+def deep_loops(depth: int) -> str:
+    lines, indent = [], ""
+    for level in range(depth):
+        lines += [f"{indent}var v{level} = 0", f"{indent}while v{level} < 1 {{", f"{indent}    decreases 1 - v{level}"]
+        indent += "    "
+    lines.append(f"{indent}print(1 / 0)")
+    for level in reversed(range(depth)):
+        indent = indent[:-4]
+        lines += [f"{indent}    v{level} = 1", f"{indent}}}"]
+    return in_main("\n".join(lines))
+
+
+@pytest.mark.parametrize("failure, code", [(MemoryError, "E3007"), (RecursionError, "E3004")])
+@pytest.mark.parametrize("text", [
+    NESTED_IN_A_CALL,                                                       # loops in two functions
+    loop("invariant 10 / (2 - i) > 0", "decreases 3 - i", "i = i + 1"),     # in an invariant
+    loop("decreases 6 / (1 - i)", "i = i + 1"),                             # in the measure
+    loop("decreases 3 - i", "i = i + 1", condition="i < 6 / (2 - i)"),      # in the condition
+    deep_loops(9),                                                          # more loops than notes
+    deep_loops(6),                                                          # exactly as many
+], ids=["call", "invariant", "measure", "condition", "nine-loops", "six-loops"])
+def test_e3007_and_stack_e3004_name_the_loops_like_any_other_error(monkeypatch, text, failure, code):
+    output, expected = run_failure(text)
+    assert expected.code == "E3001" and any(" of the loop at line " in note for note in expected.notes)
+    fail_divisions(monkeypatch, failure)
+    same_output, error = run_failure(text)
+    assert error.code == code and same_output == output
+    assert error.notes == expected.notes
+
+
+@pytest.mark.parametrize("failure, code", [(MemoryError, "E3007"), (RecursionError, "E3004")])
+def test_a_loop_that_ended_leaves_no_note(monkeypatch, failure, code):
+    finished = loop("decreases 3 - i", "i = i + 1", after="print(1 / (i - 3))")
+    returned = with_main(
+        "fn first(n: Int) -> Int {\n    var i = 0\n    while i < n {\n        decreases n - i\n"
+        "        return i\n    }\n    return n\n}",
+        "print(first(3))\nprint(1 / first(3))",
+    )
+    fail_divisions(monkeypatch, failure)
+    for text in (finished, returned):
+        _, error = run_failure(text)
+        assert (error.code, error.notes) == (code, ())
+
+
+def test_a_real_stack_exhaustion_names_the_loops():
+    # No injection: recursion through a nested expression, inside a loop of main and of every call.
+    nested = "(" * 50 + "deep(n - 1)" + ")" * 50
+    text = with_main(
+        "fn deep(n: Int) -> Int {\n    if n == 0 {\n        return 0\n    }\n    var total = 0\n    var i = 0\n"
+        f"    while i < 1 {{\n        decreases 1 - i\n        total = {nested} + 1\n        i = i + 1\n    }}\n"
+        "    return total\n}",
+        f"var k = 0\nwhile k < 1 {{\n    decreases 1 - k\n    print(deep({MAX_CALL_DEPTH - 100}))\n    k = k + 1\n}}",
+    )
+    _, error = run_failure(text)
+    assert error.code == "E3004" and "ran out of stack space after" in error.label
+    loop_notes = [note for note in error.notes if " of the loop at line " in note]
+    assert loop_notes == ["In turn 1 of the loop at line 7."] * 6
+    assert error.notes[-1] == "... and more loops."
+    # Shallow, the same program works: nothing is left behind by the loops that ended.
+    assert run_text(text.replace(f"deep({MAX_CALL_DEPTH - 100})", "deep(20)")) == "20\n"
 
 
 def test_e4005_and_e4006_stop_the_program_with_exit_code_5(tmp_path):

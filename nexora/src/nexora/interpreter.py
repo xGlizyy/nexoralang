@@ -119,6 +119,11 @@ class Interpreter:
         self._text_limit = text_limit
         # The calls in progress: (function name, where it was called from). main has no call site.
         self._stack: list[tuple[str, Span | None]] = []
+        # Where each loop in progress is, outermost first: the note _in_loop adds for it. Like _stack,
+        # it is left as it was when MemoryError or RecursionError leaves the loops, so that _guarded
+        # can add the same notes to E3004 and E3007 (decision 0010, section 7). Only text: no value
+        # of the program is kept alive by it (decision 0009, 3.1).
+        self._loops: list[str] = []
         # While an example is evaluated: id() of its own calls, and what is observed about them.
         self._own_calls: dict[int, ast.Call] = {}
         self._invoked: list[OwnCall] = []
@@ -152,24 +157,36 @@ class Interpreter:
             # Calls combined with deeply nested expressions can exhaust Python's own stack before
             # MAX_CALL_DEPTH is reached. Same error code; the message says what actually happened.
             depth = len(self._stack)
-            raise self._fail(
+            raise self._with_loop_notes(self._fail(
                 "E3004",
                 f"The program ran out of stack space after {depth} nested calls",
                 None,
                 hint="Calls that sit inside deeply nested expressions use more stack. "
                      "Reduce the recursion depth, or move parts of the expression into 'let' declarations.",
-            ) from None
+            )) from None
         finally:
             sys.setrecursionlimit(previous_limit)
         # Only reached after a MemoryError. If building the diagnostic runs out of memory again, that
         # second MemoryError leaves unconverted (decision 0009, 3.5).
-        raise self._fail(
+        raise self._with_loop_notes(self._fail(
             "E3007",
             "The program needed more memory than is available.",
             None,
             hint="Reduce the size of values created by the program, especially values that grow with "
                  "each function call.",
-        )
+        ))
+
+    def _with_loop_notes(self, error: NexoraRuntimeError) -> NexoraRuntimeError:
+        """`error` with the notes of the loops it left, innermost first: the ones _in_loop would have
+        added if the error had passed through it. For E3004 and E3007, which are built here, after
+        MemoryError or RecursionError has left every loop."""
+        if not self._loops:
+            return error
+        notes = self._loops[::-1]
+        if len(notes) > _TRACE_LENGTH:
+            notes = [*notes[:_TRACE_LENGTH], _MORE_LOOPS]
+        diagnostic = error.diagnostic
+        return NexoraRuntimeError(replace(diagnostic, notes=(*diagnostic.notes, *notes)))
 
     # Errors
 
@@ -390,19 +407,23 @@ class Interpreter:
             if outcome is not None:
                 return outcome
 
-    @staticmethod
-    def _in_loop(where: str, action: Callable[[], object]):
+    def _in_loop(self, where: str, action: Callable[[], object]):
         """Runs part of a loop. A diagnostic raised inside it gains a note saying where in the loop it
-        happened, so an error nested in several loops names each one, innermost first."""
+        happened, so an error nested in several loops names each one, innermost first. Anything else
+        that leaves it (MemoryError, RecursionError) leaves `where` in _loops for _guarded."""
+        self._loops.append(where)
         try:
-            return action()
+            result = action()
         except NexoraRuntimeError as error:
+            self._loops.pop()
             diagnostic = error.diagnostic
             if _MORE_LOOPS in diagnostic.notes:
                 raise
             loops = sum(1 for note in diagnostic.notes if _LOOP_NOTE in note)
             note = where if loops < _TRACE_LENGTH else _MORE_LOOPS
             raise NexoraRuntimeError(replace(diagnostic, notes=(*diagnostic.notes, note))) from None
+        self._loops.pop()
+        return result
 
     @staticmethod
     def _loop_values(environment: Environment) -> tuple[str, ...]:
