@@ -695,6 +695,11 @@ su título y su categoría.
   reserva ningún nombre.
 - **Diagnósticos de programas inválidos**: los que contienen un `.` suelto pasan de `E1001` a `E1101`
   o `E2008` (sección 9).
+- **La sugerencia de `E2011` cambia cuando un lado es un `Text` y el otro un número**: ahora dice
+  convertir uno de los dos lados (`to_text(...)` convierte un número en un texto, `Int.parse(...)` lee
+  un número de un texto) en lugar de decir que el operador solo compara `Int` y `Float`. El código, el
+  título y la categoría no cambian, y solo ocurre en un programa que ya era inválido. Se ve en
+  `tests/golden/examples/invalid__type_errors.run.stderr`. Ordenar dos `Text` ya no da `E2011`.
 - **`nexora.inspect/2`**: campo `qualifier` añadido a `Call`, sin cambiar la versión (sección 7.4).
   Una fila nueva en el historial de `inspect-schema.md`.
 - **`nexora.symbols/1`**: campo `contracts` y nombres cualificados en `builtins`. **`nexora.context/1`**:
@@ -812,6 +817,7 @@ su título y su categoría.
 | La compatibilidad de `nex inspect` no separaba protocolo, esquema y salida | Sección 7.4: tres niveles comprobados, y los cambios observables aparte |
 | «La lista vigente está en `builtins` de `nex symbols` y `nex context`», y el título «`nex symbols` y `nex context`», atribuían a `nex context` una lista y un campo que no expone | Sección 7.4, sección de compatibilidad y prueba 21: `builtins` y `contracts` en `nex symbols` y en `get_capabilities()` (`language.builtins`); `nex context` solo nombra en `builtins_called` las funciones llamadas y muestra sus `requires` en la salida de texto. El alcance de la decisión no cambia: es donde se nombra cada campo, no qué campos hay |
 | Un fragmento de código partido entre dos líneas (sección 3.3) | Unido |
+| La sección de compatibilidad no enumeraba el cambio de la sugerencia de `E2011` al ordenar un `Text` con un número, que sí ocurrió | Sección de compatibilidad: el texto de la sugerencia se registra como cambio observable. No cambia el alcance: `E2011` sigue siendo el mismo código, con el mismo título y la misma categoría |
 
 ### Aprobación
 
