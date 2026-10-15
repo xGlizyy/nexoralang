@@ -19,6 +19,83 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
+## 0.6.0 — Operaciones sobre textos que declaran sus requisitos
+
+Un programa puede medir un texto, cortarlo, buscar en él, ordenarlo y leer los números escritos en
+él. Las funciones nuevas pertenecen a un tipo y se llaman con su nombre (`Text.length`,
+`Int.parse`…), y las que pueden no tener respuesta declaran cuándo la tienen con un `requires`
+escrito en NEXORA, igual que una función del programa. Implementa la
+[decisión 0011](docs/decisions/0011-operaciones-sobre-textos.md). Ningún programa válido en la 0.5.1
+deja de serlo ni cambia de resultado, y no se reserva ningún nombre. Para un programa válido solo
+cambian los documentos de las herramientas, que ganan campos y entradas sin cambiar de versión:
+`"qualifier": null` en los nodos `Call` de `nex inspect`, y las funciones nuevas en `nex symbols`.
+
+### Añadido
+
+- **Funciones de un tipo**, llamadas como `Tipo.función(…)`:
+  - `Text.length`, `Text.slice`, `Text.contains`, `Text.starts_with` y `Text.ends_with`. Trabajan
+    con caracteres (puntos de código Unicode), sin normalizar y distinguiendo mayúsculas.
+  - `Int.can_parse`, `Int.parse`, `Float.can_parse` y `Float.parse`. Leen una única forma de
+    número, la misma en cualquier máquina: `Int.parse` un entero dentro del rango de `Int`
+    (`"-42"`), y `Float.parse` un número con parte decimal o exponente (`"2.5"`, `"2.5e3"`, pero no
+    `"42"`). No admiten espacios, `+` delante, separadores ni otras bases.
+- **Las funciones del lenguaje tienen `requires`.** `Text.slice`, `Int.parse` y `Float.parse`
+  declaran sus condiciones en NEXORA, con su explicación, y una llamada que las incumple se detiene
+  con el mismo `E4001` que una función del programa (código de salida `5`). En `Int.parse` y
+  `Float.parse`, el diagnóstico añade una sugerencia según lo que falló: comprobar antes el texto con
+  `Int.can_parse` o `Float.can_parse`, o el rango de `Int` si el número no cabe. Un programa puede
+  usar las mismas funciones en sus propios `requires` (`requires Int.can_parse(written)`) y en sus
+  tipos refinados (`type Code = Text where Text.length(value) == 3`).
+- **Orden entre textos:** `<`, `<=`, `>` y `>=` entre dos `Text` (también de tipos refinados con
+  base `Text`). Se comparan carácter a carácter por punto de código, y un texto va antes que
+  cualquier otro que empiece por él (`"ab" < "abc"`, `"" < "a"`). No depende del idioma ni de la
+  configuración del sistema (`"Z" < "a"`), y compara caracteres, no números (`"10" < "9"`).
+- Diagnósticos para la nueva sintaxis, sin códigos nuevos: `E1101` cuando la forma está mal
+  (`Text.length` sin paréntesis, espacios alrededor del `.`, más de un punto) y `E2008` cuando el
+  nombre no existe, con sugerencias como `Did you mean 'Text.length'?` para `length(t)`.
+- `nex inspect`: campo `qualifier` en cada nodo `Call` (`null` en las llamadas sin cualificar),
+  sin cambiar la versión del esquema (`nexora.inspect/2`). `nex symbols` y las capacidades
+  (`language.builtins`): nombres cualificados y campo `contracts` con los requisitos de cada función
+  integrada. `nex context`: nombres cualificados en `builtins_called` y valor `text_operations` en
+  `features`.
+- Ejemplos `texts.nex` y `failing/parse_number.nex`.
+
+### Cambiado
+
+Solo en programas que ya eran inválidos:
+
+- Un `.` fuera de un número, un texto o un comentario pasa a ser un token. Donde antes había `E1001`
+  (`x.y`), ahora hay `E1101` o `E2008`.
+- `E2011` mantiene su código, su título y su categoría, pero su sugerencia, cuando se compara un
+  `Text` con un número, propone convertir uno de los lados con `to_text(...)` o `Int.parse(...)`.
+  Ordenar dos `Text` ya no es un error.
+
+### Corregido
+
+- **El paquete de código fuente no podía ejecutar su propia batería de pruebas.** `MANIFEST.in` no
+  incluía los esquemas JSON de `tests/golden/schemas/`, y las pruebas que los leen fallaban en una
+  copia generada con `python -m build`. El paquete instalable (`.whl`) no estaba afectado.
+
+### Documentación
+
+- Especificación 0.6: sección 8.1 (funciones de un tipo y orden entre textos).
+- Guías: requisitos de las funciones del lenguaje en
+  [contratos](docs/contracts.md#las-funciones-del-lenguaje-también-tienen-requires), y límites
+  actualizados en [limitaciones](docs/limitations.md).
+- El ejemplo de bucles de la guía web y de la especificación suma hasta 10 000 en lugar de 100 000:
+  así se ejecuta con holgura dentro del límite de tiempo del playground.
+
+### Limitaciones
+
+- Un carácter es un punto de código, no lo que una persona ve como una letra: una `e` con el acento
+  combinado tiene longitud 2, y dos textos que se ven iguales pueden ser distintos para `==`.
+- El orden entre textos no es alfabético en ningún idioma.
+- Los requisitos de las funciones integradas se comprueban al ejecutar; `nex check` no avisa aunque
+  los argumentos sean constantes.
+- `Float.parse` redondea al `Float` más cercano: el valor que devuelve puede no ser exactamente el
+  número escrito (`"0.1"`).
+- No hay `trim`, mayúsculas, `split`, `replace`, interpolación ni búsqueda de posiciones.
+
 ## 0.5.1 — Revisión de la memoria agotada
 
 Resultado de auditar la [decisión 0009](docs/decisions/0009-memoria-agotada.md) después de
