@@ -15,6 +15,7 @@ una decisión se revisa, se añade otra que la sustituye y se indica en ambas.
 | [0007](0007-contratos-estables-y-tipos-refinados.md) | Contratos estables, explicación de las reglas y tipos refinados | Aceptada | No |
 | [0008](0008-ejemplos-y-nex-test.md) | Ejemplos en las funciones (`example`) y el comando `nex test` | Aceptada | No |
 | [0009](0009-memoria-agotada.md) | Un programa que agota la memoria al ejecutarse: diagnóstico `E3007` | Aceptada | Sí |
+| [0010](0010-var-y-while.md) | Variables reasignables (`var`) y bucles con requisitos (`while`, `invariant`, `decreases`) | Aceptada | Sí |
 
 ## Posibles cambios incompatibles en el futuro
 
