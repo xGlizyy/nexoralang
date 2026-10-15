@@ -58,14 +58,14 @@ sin conexión. Lo que hay y lo que no, con precisión: [Herramientas automática
 
 ## Estado
 
-**Versión 0.4.0. Proyecto en fase temprana**, anterior a la 1.0: el lenguaje puede cambiar de forma
+**Versión 0.5.0. Proyecto en fase temprana**, anterior a la 1.0: el lenguaje puede cambiar de forma
 incompatible y no es apto para uso en producción.
 
 | Estado | Qué incluye |
 |--------|-------------|
-| **Implementado y probado** | Tipos estáticos `Int`, `Float`, `Bool`, `Text` y `Void`, con inferencia y anotaciones · **tipos refinados** (`type Percent = Int where ...`): las constantes se comprueban sin ejecutar y el resto con `Percent(x)` al ejecutar · **contratos** (`requires`, `ensures`), estables desde la 0.3, comprobados al ejecutar · **ejemplos** en las funciones (`example`), evaluados con `nex test` · explicación de cada regla en los diagnósticos · variables inmutables y ámbitos · aritmética, comparaciones y lógica · conversiones explícitas · funciones con parámetros y `return` · `if` / `else` · recursividad · análisis estático de nombres, tipos y rutas de retorno · comandos `run`, `check`, `inspect`, `context`, `symbols` y `test` · diagnósticos con código y categoría, en texto y en JSON · formatos JSON versionados con JSON Schema |
+| **Implementado y probado** | Tipos estáticos `Int`, `Float`, `Bool`, `Text` y `Void`, con inferencia y anotaciones · **tipos refinados** (`type Percent = Int where ...`): las constantes se comprueban sin ejecutar y el resto con `Percent(x)` al ejecutar · **contratos** (`requires`, `ensures`), estables desde la 0.3, comprobados al ejecutar · **ejemplos** en las funciones (`example`), evaluados con `nex test` · explicación de cada regla en los diagnósticos · variables inmutables (`let`) y reasignables (`var`), y ámbitos · **bucles** `while` con su medida (`decreases`) e invariantes (`invariant`), comprobados en cada vuelta · aritmética, comparaciones y lógica · conversiones explícitas · funciones con parámetros y `return` · `if` / `else` · recursividad · análisis estático de nombres, tipos y rutas de retorno · comandos `run`, `check`, `inspect`, `context`, `symbols` y `test` · diagnósticos con código y categoría, en texto y en JSON · formatos JSON versionados con JSON Schema |
 | **Experimental** | API de Python `nexora.tooling` · servidor MCP opcional (probado con el cliente del SDK y, a mano, en Claude Code; en ningún otro asistente) · [playground](docs/playground.md) web, solo en local |
-| **Previsto** (no existe) | Bucles, variables reasignables, listas y otros tipos compuestos, operaciones sobre textos, entrada de datos, módulos, servidor de lenguaje (LSP) |
+| **Previsto** (no existe) | `for`, `break` y `continue`, listas y otros tipos compuestos, operaciones sobre textos, entrada de datos, módulos, servidor de lenguaje (LSP) |
 | **En investigación** (no existe) | Verificación estática de contratos, características de IA dentro del lenguaje, y la evaluación de la hipótesis del proyecto |
 
 Detalle: [hoja de ruta](docs/roadmap.md) y [limitaciones](docs/limitations.md).
@@ -99,7 +99,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.4.0
+NEXORA 0.5.0
 ```
 
 El comando `nex` queda instalado dentro del entorno virtual, no en todo el sistema: solo está

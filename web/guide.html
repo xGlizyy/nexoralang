@@ -90,6 +90,7 @@
       <li><a href="#functions">Functions</a></li>
       <li><a href="#contracts">Contracts</a></li>
       <li><a href="#refined-types">Refined types</a></li>
+      <li><a href="#loops">Loops</a></li>
       <li><a href="#diagnostics">Diagnostics</a></li>
       <li><a href="#limitations">Limitations</a></li>
     </ol>
@@ -99,7 +100,7 @@
     <p class="eyebrow">Language guide</p>
     <h1>NEXORA, as it works today</h1>
     <p class="lead">
-      A short tour of what the current interpreter (version 0.4) accepts. Every program on this page is
+      A short tour of what the current interpreter (version 0.5) accepts. Every program on this page is
       run by the project's tests, and every one can be tried in the <a href="playground.html">playground</a>.
     </p>
 
@@ -139,7 +140,7 @@
         <li>Text is written between double quotes, on one line.</li>
       </ul>
       <figure class="window">
-        <pre class="code" data-example="run"><code>// Variables are declared with let and never change.
+        <pre class="code" data-example="run"><code>// Variables declared with let never change. The ones that do are declared with var.
 fn main() -&gt; Void {
     let name = "Ada"
     let year = 1843
@@ -332,6 +333,55 @@ fn main() -&gt; Void {
       </figure>
     </section>
 
+    <section id="loops">
+      <h2>Loops</h2>
+      <p>
+        A variable that has to change is declared with <code>var</code>; <code>let</code> never changes, and
+        neither do parameters. A <code>while</code> loop repeats its body while its condition is true, and says at
+        the start of its body why it is correct:
+      </p>
+      <ul class="bullets">
+        <li><code>decreases</code>: a whole number that never goes below 0 and gets smaller on every turn. It is the reason the loop ends. Every loop has exactly one.</li>
+        <li><code>invariant</code>: a condition that holds before every check of the loop condition. As many as needed.</li>
+      </ul>
+      <figure class="window">
+        <pre class="code" data-example="run"><code>fn sum_to(n: Int) -&gt; Int {
+    requires n &gt;= 0, "Only natural numbers"
+    ensures result == n * (n + 1) / 2
+    var total = 0
+    var i = 0
+    while i &lt; n {
+        invariant total == i * (i + 1) / 2, "total is the sum of the numbers already added"
+        decreases n - i, "Each turn moves i one step closer to n"
+        i = i + 1
+        total = total + i
+    }
+    return total
+}
+
+fn main() -&gt; Void {
+    print(sum_to(100000))
+}</code></pre>
+        <div class="guide-output"><pre data-expected>5000050000</pre></div>
+      </figure>
+      <p>
+        Both are checked on every turn while the program runs. A loop never hangs: it ends, or it stops on the turn
+        where its measure did not get smaller, and the error says which turn and which values the variables had.
+        A loop without a measure is found before running:
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="check-fails" data-code="E2021" data-line="3"><code>fn main() -&gt; Void {
+    var count = 3
+    while count &gt; 0 {
+        print(count)
+        count = count - 1
+    }
+}</code></pre>
+        <div class="guide-output guide-output--error"><pre>semantic error[E2021]: Missing loop measure
+  line 3, column 5: This loop does not say why it ends</pre></div>
+      </figure>
+    </section>
+
     <section id="diagnostics">
       <h2>Diagnostics</h2>
       <p>
@@ -354,7 +404,7 @@ fn main() -&gt; Void {
           <tr><td><code>semantic</code></td><td>Names, scopes, return paths</td><td>Before running</td></tr>
           <tr><td><code>type</code></td><td>Types that do not match</td><td>Before running</td></tr>
           <tr><td><code>runtime</code></td><td>Division by zero, overflow, endless recursion</td><td>While running</td></tr>
-          <tr><td><code>contract</code></td><td>A rule the program declares was broken: a <code>requires</code> or <code>ensures</code> condition, or the rule of a refined type</td><td>While running</td></tr>
+          <tr><td><code>contract</code></td><td>A rule the program declares was broken: a <code>requires</code> or <code>ensures</code> condition, the rule of a refined type, a loop invariant or a loop measure</td><td>While running</td></tr>
         </tbody>
       </table>
       <p>In the playground, selecting a diagnostic shows its position in the editor.</p>
@@ -364,7 +414,7 @@ fn main() -&gt; Void {
       <h2>Limitations</h2>
       <p>These do not exist yet. Using them is an error, not something the playground pretends to support:</p>
       <ul class="bullets">
-        <li>Loops and variables that can be reassigned.</li>
+        <li><code>for</code>, <code>break</code> and <code>continue</code>: every loop is a <code>while</code> with its measure.</li>
         <li>Lists, records and any other compound type.</li>
         <li>Operations on text other than joining and comparing for equality.</li>
         <li>Reading input, files or the network: a program can only print.</li>

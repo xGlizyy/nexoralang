@@ -130,7 +130,8 @@ _PARAM = {"type": "object", "required": ["name", "type"],
 
 _SYMBOL = {
     "type": "object",
-    "required": ["name", "category", "type", "function", "declaration", "scope", "references"],
+    "required": ["name", "category", "type", "function", "declaration", "scope", "references", "mutable",
+                 "assignments"],
     "properties": {
         "name": {"type": "string"},
         "category": {"enum": ["function", "parameter", "variable"]},
@@ -142,6 +143,9 @@ _SYMBOL = {
                   "description": "The block where the name is visible. Null for a function (visible everywhere)."},
         "references": {"type": "array", "items": {"$ref": "#/$defs/span"},
                        "description": "Every use the checker resolved to this symbol."},
+        "mutable": {"type": "boolean", "description": "True only for a variable declared with 'var'."},
+        "assignments": {"type": "array", "items": {"$ref": "#/$defs/span"},
+                        "description": "Where a 'var' is given a new value. Each one is also in references."},
         "signature": {"type": "string", "description": "Functions only."},
         "params": {"type": "array", "items": {"$ref": "#/$defs/param"}, "description": "Functions only."},
         "return_type": {"type": "string", "description": "Functions only."},
@@ -158,7 +162,7 @@ _BUILTIN = {
 _CONTEXT_FUNCTION = {
     "type": "object",
     "required": ["name", "signature", "params", "return_type", "span", "contracts", "variables", "calls",
-                 "builtins_called", "called_by", "recursive", "examples"],
+                 "builtins_called", "called_by", "recursive", "examples", "loops"],
     "properties": {
         "name": {"type": "string"},
         "signature": {"type": "string"},
@@ -173,9 +177,10 @@ _CONTEXT_FUNCTION = {
                                                                           "condition, if any."},
                            "line": {"type": "integer", "minimum": 1}}}},
         "variables": {"type": "array", "items": {
-            "type": "object", "required": ["name", "type", "line"],
+            "type": "object", "required": ["name", "type", "line", "mutable"],
             "properties": {"name": {"type": "string"}, "type": _NULLABLE_STRING,
-                           "line": {"type": "integer", "minimum": 1}}}},
+                           "line": {"type": "integer", "minimum": 1},
+                           "mutable": {"type": "boolean", "description": "True if declared with 'var'."}}}},
         "calls": {"type": "array", "items": {"type": "string"},
                   "description": "Functions of the program this one calls, sorted, without repetitions."},
         "builtins_called": {"type": "array", "items": {"type": "string"}},
@@ -189,7 +194,26 @@ _CONTEXT_FUNCTION = {
                                         "message": {**_NULLABLE_STRING,
                                                     "description": "The explanation written after it, if any."},
                                         "line": {"type": "integer", "minimum": 1}}}},
+        "loops": {"type": "array", "description": "The loops of the function, in source order, with the "
+                                                  "requirements each one declares. Checked on every turn when "
+                                                  "the program runs; the analysis never evaluates them.",
+                  "items": {
+                      "type": "object", "required": ["line", "condition", "invariants", "measure"],
+                      "properties": {
+                          "line": {"type": "integer", "minimum": 1},
+                          "condition": {"type": "string", "description": "The loop condition, as written."},
+                          "invariants": {"type": "array", "items": {"$ref": "#/$defs/loop_clause"}},
+                          "measure": {"oneOf": [{"$ref": "#/$defs/loop_clause"}, {"type": "null"}],
+                                      "description": "The 'decreases' clause. Null only in a program with "
+                                                     "errors (E2021)."}}}},
     },
+}
+
+_LOOP_CLAUSE = {
+    "type": "object", "required": ["condition", "message", "line"],
+    "properties": {"condition": {"type": "string", "description": "The expression, as written."},
+                   "message": {**_NULLABLE_STRING, "description": "The explanation written after it, if any."},
+                   "line": {"type": "integer", "minimum": 1}},
 }
 
 
@@ -315,7 +339,7 @@ def all_schemas() -> dict[str, dict]:
          "notes": {"type": "array", "items": {"type": "string"}}},
         [*_HEADER_REQUIRED, "executed", "lines", "analysed", "complete", "entry_point", "types", "functions",
          "features", "reserved_words_used", "notes"],
-        {**base, "param": _PARAM, "function": _CONTEXT_FUNCTION, "type": _CONTEXT_TYPE},
+        {**base, "param": _PARAM, "function": _CONTEXT_FUNCTION, "type": _CONTEXT_TYPE, "loop_clause": _LOOP_CLAUSE},
     )
     spec = _document(
         "nexora-spec", "nexora.spec/1: the language specification, or one section of it",

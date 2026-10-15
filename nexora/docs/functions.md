@@ -231,7 +231,7 @@ semantic error[E2014]: Missing return
   |
 1 | fn sign(n: Int) -> Int {
   |    ^^^^ 'sign' must return a value of type Int, but its body can end without a 'return'
-  = hint: Make sure every path through the function ends with 'return'. An 'if' without 'else' can be skipped.
+  = hint: Make sure every path through the function ends with 'return'. An 'if' without 'else' can be skipped, and a loop may not run at all.
 
 error: program.nex: check failed with 1 error
 ```
@@ -252,8 +252,9 @@ error (`E2015`).
 
 ## Recursividad
 
-Una función puede llamarse a sí misma, y dos funciones pueden llamarse entre sí. Como no hay
-bucles, la recursividad es la única forma de repetir.
+Una función puede llamarse a sí misma, y dos funciones pueden llamarse entre sí. Para repetir algo
+muchas veces es mejor un bucle `while` ([contratos](contracts.md#bucles-invariant-y-decreases)): sus
+vueltas no son llamadas y no tienen el límite de 1000.
 
 <!-- nex:run -->
 ```nex

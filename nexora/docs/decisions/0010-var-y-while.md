@@ -168,29 +168,38 @@ Consecuencias:
 
 ```text
 contract error[E4006]: Loop measure did not decrease
- --> program.nex:6:19
-  |
-6 |         decreases n - i, "Each turn moves i one step closer to n"
-  |                   ^^^^^ The measure was 3 and is still 3
-  = note: In turn 4 of the loop at line 5
-  = note: The values: n = 10, i = 7, total = 28
-  = note: Reason: Each turn moves i one step closer to n
+  --> examples/failing/loop_measure.nex:11:19
+   |
+11 |         decreases limit - i, "Each turn moves i one step closer to limit"
+   |                   ^^^^^^^^^ The measure was 9 and is still 9
+   = note: The measure at line 11: decreases limit - i
+   = note: Reason: Each turn moves i one step closer to limit
+   = note: Before turn 3 of the loop at line 10.
+   = note: The values: limit = 10, i = 1, even = 1
+   = note: In 'count_even', called at line 21, column 11.
 ```
 
 | Campo | `E4005` Loop invariant violated | `E4006` Loop measure did not decrease |
 |-------|--------------------------------|---------------------------------------|
-| Posición | La cláusula `invariant` | La cláusula `decreases` |
-| Etiqueta | `This condition is false` y, si es al salir, `This condition is false when the loop ends` | `The measure was A and is now B` · `The measure was A and is still A` · `The measure is B; it must be 0 or more` |
-| Notas | `The condition at line N is false: invariant …` · `In turn K of the loop at line L` (`Before the first turn…`, `After the last turn…`) · `The values: …` · `Reason: …` | `In turn K of the loop at line L` · `The values: …` · `Reason: …` |
+| Posición | La condición de la cláusula `invariant` | La expresión de la cláusula `decreases` |
+| Etiqueta | `This condition is false` | `The measure was A and is now B` · `The measure was A and is still A` · `The measure is B; it must be 0 or more` |
+| Notas, en orden | `The condition at line N is false: invariant …` · `Reason: …` (si tiene explicación) · `Before the first turn of the loop at line L.` o `After turn K of the loop at line L.` · `The values: …` · la cadena de llamadas | `The measure at line N: decreases …` · `Reason: …` (si tiene explicación) · `Before turn K of the loop at line L.` · `The values: …` · la cadena de llamadas |
+
+El orden sigue al de los contratos (`E4001`): primero la regla y su motivo, después cuándo y con qué
+valores. Un invariante se comprueba antes de evaluar la condición, así que en ese momento no se sabe
+si el bucle va a salir: la nota dice después de qué vuelta, no si era la última.
 
 **`The values:`** muestra las variables y los parámetros visibles en el punto del bucle, en el
-orden en que se declararon, con el formato de `print`. Es lo que una persona o un agente necesita para
-saber qué vuelta falló y por qué, sin añadir `print` para depurar. Los textos largos se recortan con
-la misma regla que las notas de los contratos.
+orden en que se declararon, con el formato de los valores de los contratos (los textos, entre
+comillas). Es lo que una persona o un agente necesita para saber qué vuelta falló y por qué, sin
+añadir `print` para depurar. No incluye lo declarado dentro del cuerpo, que no existe entre vueltas.
 
-**Errores de ejecución dentro de un bucle.** Un `E3xxx` producido dentro del cuerpo o de sus cláusulas
-gana la nota `In turn K of the loop at line L`, una por cada bucle que lo contiene, del más interior
-al más exterior. Ningún otro campo cambia.
+**Otros errores dentro de un bucle.** Cualquier diagnóstico de ejecución (`E3xxx` o `E4xxx`) producido
+dentro del cuerpo, de la condición o de las cláusulas de un bucle gana una nota al final, una por cada
+bucle que lo contiene, del más interior al más exterior: `In turn K of the loop at line L.` (en el
+cuerpo), `Before turn K …` (en la medida) o `Before the first turn …` / `After turn K …` (en la
+condición o en un invariante). Como la cadena de llamadas, se muestran como máximo seis; si hay más,
+una nota `... and more loops.` Ningún otro campo cambia.
 
 ### 8. Rutas de retorno y código inalcanzable
 
@@ -233,9 +242,9 @@ no cambia. `E2007` conserva código y título; cambian su etiqueta y su sugerenc
 
 | Formato | Cambio | Versión |
 |---------|--------|---------|
-| `nexora.inspect/2` | Nodos nuevos `Var` (campos de `Let`), `While` (`condition`, `invariants`, `measure`, `body`) y `LoopClause` (`kind`: `"invariant"` o `"decreases"`, `condition`, `message`). `Assign` no cambia de campos; su descripción deja de decir que siempre va con `E2007` | Sigue en `/2`: solo se añaden tipos de nodo, como `Example` en la 0.4.0 |
-| `nexora.symbols/1` | Campo `mutable` en cada símbolo (`true` solo en las `var`) y campo `assignments` con la posición de cada asignación (que también están en `references`) | Sin cambio: campos añadidos |
-| `nexora.context/1` | Valores `mutable_variables`, `loops` y `loop_invariants` en `features`; con bucles, la nota: `Every loop declares a measure ('decreases') that is checked on every turn: a loop ends, or stops with E4006. Invariants are checked before every evaluation of the loop condition (E4005).` | Sin cambio: valores añadidos |
+| `nexora.inspect/2` | Nodos nuevos `Var` (campos de `Let`), `While` (`condition`, `clauses`, `body`) y `LoopClause` (`clause`: `"invariant"` o `"decreases"`, `condition`, `message`; como en `Contract`, no se llama `kind` porque ese es el nombre del tipo de nodo). Las cláusulas se guardan todas, en el orden del código, para que un programa con dos medidas pueda representarse. `Assign` no cambia de campos; su descripción deja de decir que siempre va con `E2007` | Sigue en `/2`: solo se añaden tipos de nodo, como `Example` en la 0.4.0 |
+| `nexora.symbols/1` | Campos `mutable` (`true` solo en las `var`) y `assignments` (la posición de cada asignación, que también está en `references`) en cada símbolo | Sin cambio: campos añadidos |
+| `nexora.context/1` | Campo `mutable` en cada variable; campo `loops` al final de cada función, con `line`, `condition`, `invariants` y `measure` (cada cláusula con `condition` tal como está escrita, `message` y `line`; `measure` es `null` solo si falta); valores `mutable_variables`, `loops` y `loop_invariants` en `features`; con bucles, la nota: `Every loop declares a measure ('decreases') that is checked on every turn: a loop ends, or stops with E4006. Invariants are checked before every evaluation of the loop condition (E4005). This analysis verified their types, not that they hold.` | Sin cambio: campos y valores añadidos |
 | `nexora.diagnostics/1`, `nexora.result/1`, `nexora.test/1` | Solo códigos nuevos | Sin cambio |
 
 Un nodo `Var` en lugar de un campo `mutable` en `Let`: una herramienta escrita para la 0.4 nota un
@@ -355,7 +364,8 @@ inmutable.
     los valores.
 14. Invariante falso al llegar, en una vuelta intermedia y al salir: `E4005` con cada nota.
 15. Un bucle interior vuelve a empezar la comparación de la medida en cada entrada.
-16. Un `E3001` dentro de dos bucles anidados lleva las dos notas de vuelta, de dentro afuera.
+16. Un `E3001` dentro de dos bucles anidados lleva las dos notas de vuelta, de dentro afuera; con
+    más de seis bucles, la séptima nota es `... and more loops.`
 17. `return` dentro de un bucle termina la función y se comprueban sus `ensures`.
 18. `while true { decreases 1 }` se detiene con `E4006` en la segunda vuelta; `nex test` con un
     ejemplo así termina con el ejemplo en `error` y sigue con los demás.

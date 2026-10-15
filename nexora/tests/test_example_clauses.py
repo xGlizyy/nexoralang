@@ -251,7 +251,8 @@ def test_context_lists_examples_last_and_keeps_the_call_graph():
 
     document = tooling.get_context(TWO_EXAMPLES)
     function = next(f for f in document["functions"] if f["name"] == "double")
-    assert list(function)[-1] == "examples"
+    # Each field was added at the end: the examples in 0.4.0, the loops in 0.5.0 (decision 0010).
+    assert list(function)[-2:] == ["examples", "loops"]
     assert function["examples"] == [
         {"condition": "double(2) == 4", "message": "Two doubled", "line": 6},
         {"condition": "double(g(1)) == 4", "message": None, "line": 7},

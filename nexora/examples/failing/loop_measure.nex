@@ -1,0 +1,22 @@
+// Fails while running on purpose: a loop that would never end. When i is odd, the body forgets to
+// move i forward, so the measure stays the same. Instead of hanging, the program stops on the turn
+// where the measure did not decrease, and says which values it had. `nex check` accepts it: whether
+// a measure decreases depends on values. `nex run` exits with code 5.
+
+fn count_even(limit: Int) -> Int {
+    requires limit >= 0, "There is nothing to count below zero"
+    var i = 0
+    var even = 0
+    while i < limit {
+        decreases limit - i, "Each turn moves i one step closer to limit"
+        if i / 2 * 2 == i {
+            even = even + 1
+            i = i + 1
+        }
+    }
+    return even
+}
+
+fn main() -> Void {
+    print(count_even(10))
+}

@@ -97,9 +97,9 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 |--------|--------|---------------|-----------|
 | `E1101` | Unexpected token | El código no sigue la gramática | El mensaje dice qué se esperaba en ese punto |
 | `E1102` | Unclosed block | Se llegó al final del archivo con una `{` sin cerrar | Añade la `}`. La nota indica dónde se abrió el bloque |
-| `E1103` | Reserved word | Se usa una palabra reservada para el futuro (`var`, `while`, `match`…) | Esa construcción no existe todavía; elige otro nombre o reescribe el código |
+| `E1103` | Reserved word | Se usa una palabra reservada para el futuro (`for`, `break`, `match`…) | Esa construcción no existe todavía; elige otro nombre o reescribe el código. Para `for`, `break` y `continue` la sugerencia dice cómo escribirlo con `while` |
 | `E1105` | Expression too deeply nested | Más de 64 niveles de anidamiento, o una expresión de más de 256 niveles | Divide el código en variables o funciones |
-| `E1106` | Misplaced contract clause | `requires` o `ensures` fuera del principio del cuerpo de una función | Mueve la cláusula a las primeras líneas de la función |
+| `E1106` | Misplaced contract clause | `requires`, `ensures` o `example` fuera del principio del cuerpo de una función, o `invariant` o `decreases` fuera del principio del cuerpo de un `while` | Mueve la cláusula a las primeras líneas de la función o del bucle |
 
 ### Semánticos
 
@@ -109,7 +109,7 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E2002` | Duplicate function | Dos funciones con el mismo nombre, o con el de una integrada | Cambia el nombre de una |
 | `E2005` | Unknown variable | Se usa un nombre que no está declarado o que ya no es visible | Decláralo antes con `let`, o corrige el nombre |
 | `E2006` | Name already declared | Se declara un nombre que ya es visible, o el de una función | Elige otro nombre |
-| `E2007` | Cannot reassign variable | Se intenta cambiar el valor de una variable o de un parámetro | Declara una variable nueva con otro nombre |
+| `E2007` | Cannot reassign variable | Se asigna un valor nuevo a una variable declarada con `let` o a un parámetro | Declara la variable con `var`; un parámetro se copia antes en una `var` |
 | `E2008` | Unknown function | Se llama a una función que no existe | Corrige el nombre o declara la función |
 | `E2010` | Unused value | Un valor calculado que se pierde: una operación suelta o una llamada cuyo resultado no se usa | Guárdalo con `let` o pásalo a una función |
 | `E2013` | Invalid parameter | `main` tiene parámetros, o un parámetro se llama `result` | Quita los parámetros de `main`, o cambia el nombre |
@@ -119,6 +119,7 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E2018` | Invalid refinement condition | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado | Escribe la regla con operadores sobre `value`, o pásala a un `requires` |
 | `E2019` | Too many refinement checks | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (100 000 nodos de condición). Solo ocurre con muchas constantes de cadenas largas de tipos refinados | Usa menos constantes de esos tipos o condiciones más cortas |
 | `E2020` | Example without its function | Un ejemplo no contiene ninguna llamada a su propia función: su expresión no la nombra en ningún punto. Una llamada que solo ocurre dentro de otra función no cuenta | Escribe la llamada con sus entradas: `example f(2) == 4` |
+| `E2021` | Missing loop measure | Un `while` no declara su medida (`decreases`), o declara más de una. Sin medida, nada dice por qué el bucle termina | Añade `decreases` con un `Int` que baje en cada vuelta y no pase de 0, por ejemplo `decreases n - i` |
 
 ### De tipos
 
@@ -126,7 +127,7 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 |--------|--------|---------------|-----------|
 | `E2004` | Invalid return type | `main` declara un tipo de retorno distinto de `Void` | Escribe `fn main() -> Void` |
 | `E2009` | Wrong number of arguments | La llamada no pasa tantos argumentos como parámetros tiene la función | La nota muestra la firma de la función |
-| `E2011` | Type mismatch | Un tipo no es el que exige la regla: anotación, operador, argumento, retorno, condición, o un `Void` usado como valor | El mensaje indica el tipo esperado y el encontrado. Convierte de forma explícita si existe una conversión |
+| `E2011` | Type mismatch | Un tipo no es el que exige la regla: anotación, asignación, operador, argumento, retorno, condición, medida de un bucle (`Int`), o un `Void` usado como valor | El mensaje indica el tipo esperado y el encontrado. Convierte de forma explícita si existe una conversión |
 | `E2012` | Invalid type | Un nombre que no es un tipo, o `Void` donde hace falta un tipo de valor | Los tipos son `Int`, `Float`, `Bool`, `Text` y `Void`, y los tipos refinados que declara el programa |
 | `E2017` | Value outside refined type | Una constante usada como valor de un tipo refinado no cumple su condición. Las notas muestran la condición, el valor y la explicación de la regla | Cambia el valor, o revisa la regla si era incorrecta |
 
@@ -149,6 +150,8 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E4001` | Precondition violated | Una llamada no cumple una condición `requires`. Señala la llamada | Corrige los argumentos, o comprueba la condición antes de llamar |
 | `E4002` | Postcondition violated | Una función no cumple su propia condición `ensures`. Señala la cláusula | Corrige el cuerpo de la función (o la condición, si era incorrecta) |
 | `E4003` | Refinement violated | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado. Señala la comprobación | Corrige el cálculo que produce el valor, o compruébalo antes con un `if` |
+| `E4005` | Loop invariant violated | Un `invariant` es falso antes de evaluar la condición de su bucle: al llegar, o después de una vuelta. Señala la cláusula; las notas dicen después de qué vuelta y con qué valores | Corrige el cuerpo del bucle, o el invariante si no describía lo que el bucle mantiene |
+| `E4006` | Loop measure did not decrease | La medida (`decreases`) es negativa, o no es menor que en la vuelta anterior: el bucle no iba a terminar. Señala la medida; la etiqueta da los dos valores y las notas, la vuelta y las variables | Haz que cada vuelta avance hacia el final del bucle, o corrige la medida |
 
 ### De prueba
 
@@ -204,6 +207,10 @@ error: program.nex: the program stopped because of a runtime error
 
 Se muestran como máximo seis llamadas; si hay más, una nota indica cuántas se omiten.
 
+Un error que ocurre dentro de un bucle añade una nota por cada bucle que lo contiene, del más
+interior al más exterior, como máximo seis: `In turn 3 of the loop at line 6.` Si el error está en
+una cláusula o en la condición, la nota dice `Before turn …` o `After turn …`.
+
 ## Formato JSON
 
 Con `--format json` los diagnósticos se entregan como datos, para que un programa no tenga que
@@ -220,7 +227,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.4.0",
+  "nexora_version": "0.5.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

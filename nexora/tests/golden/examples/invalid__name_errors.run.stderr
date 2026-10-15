@@ -3,7 +3,7 @@ semantic error[E2014]: Missing return
   |
 5 | fn area(width: Int, height: Int) -> Int {
   |    ^^^^ 'area' must return a value of type Int, but its body can end without a 'return'
-  = hint: Make sure every path through the function ends with 'return'. An 'if' without 'else' can be skipped.
+  = hint: Make sure every path through the function ends with 'return'. An 'if' without 'else' can be skipped, and a loop may not run at all.
 
 semantic error[E2006]: Name already declared
   --> examples/invalid/name_errors.nex:13:9
@@ -24,8 +24,9 @@ semantic error[E2007]: Cannot reassign variable
   --> examples/invalid/name_errors.nex:15:5
    |
 15 |     name = "changed"
-   |     ^^^^ 'name' cannot be given a new value: variables are immutable
-   = hint: Declare a new variable with a different name instead.
+   |     ^^^^ 'name' was declared with 'let' and cannot be given a new value
+   = note: 'name' is declared at line 12, column 9.
+   = hint: Declare it with 'var' if its value has to change.
 
 semantic error[E2010]: Unused value
   --> examples/invalid/name_errors.nex:16:5
@@ -47,11 +48,18 @@ semantic error[E2008]: Unknown function
 18 |     launch()
    |     ^^^^^^ There is no function named 'launch'
 
-semantic error[E2015]: Unreachable code
-  --> examples/invalid/name_errors.nex:20:5
+semantic error[E2021]: Missing loop measure
+  --> examples/invalid/name_errors.nex:19:5
    |
-20 |     print("never runs")
+19 |     while true {
+   |     ^^^^^ This loop does not say why it ends
+   = hint: Add 'decreases <expression>' with an Int that gets smaller on every turn and never goes below 0, for example 'decreases n - i'.
+
+semantic error[E2015]: Unreachable code
+  --> examples/invalid/name_errors.nex:23:5
+   |
+23 |     print("never runs")
    |     ^^^^^^^^^^^^^^^^^^^ This code can never run: the function has already returned
    = hint: Remove it, or move it before the 'return'.
 
-error: examples/invalid/name_errors.nex: not run because of 8 errors
+error: examples/invalid/name_errors.nex: not run because of 9 errors

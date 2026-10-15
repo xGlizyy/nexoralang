@@ -116,8 +116,17 @@ class Let(Node):
 
 
 @dataclass(frozen=True)
+class Var(Node):
+    """`var name = value`: a variable whose value can be changed later with an assignment."""
+    name: str
+    name_span: Span
+    declared_type: TypeRef | None
+    value: Expr
+
+
+@dataclass(frozen=True)
 class Assign(Node):
-    """`name = value`. Parsed so it can be rejected with a precise message: variables are immutable."""
+    """`name = value`: gives a new value to a variable declared with `var`."""
     name: str
     name_span: Span
     value: Expr
@@ -147,7 +156,27 @@ class Block(Node):
     statements: tuple[Statement, ...]
 
 
-Statement = Let | Assign | Return | If | ExprStatement | Block
+@dataclass(frozen=True)
+class LoopClause(Node):
+    """An `invariant` or `decreases` clause at the start of the body of a `while` (decision 0010)."""
+    # "invariant" or "decreases". Not called 'kind': that is the name of the node type in the JSON form.
+    clause: str
+    # A Bool for 'invariant'; the Int measure for 'decreases'.
+    condition: Expr
+    # The explanation written after the condition, or None.
+    message: str | None
+
+
+@dataclass(frozen=True)
+class While(Node):
+    """`while condition { clauses statements }`. Every loop declares one `decreases` measure, checked
+    on every turn, and any number of invariants (decision 0010)."""
+    condition: Expr
+    clauses: tuple[LoopClause, ...]
+    body: Block
+
+
+Statement = Let | Var | Assign | Return | If | While | ExprStatement | Block
 
 
 # Declarations

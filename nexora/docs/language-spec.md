@@ -1,7 +1,7 @@
 # Especificación del lenguaje NEXORA
 
-- **Versión de la especificación:** 0.4
-- **Implementación de referencia:** `nexora` 0.4.0 (este repositorio, directorio `nexora/`)
+- **Versión de la especificación:** 0.5
+- **Implementación de referencia:** `nexora` 0.5.0 (este repositorio, directorio `nexora/`)
 - **Estado:** describe exactamente lo que el intérprete hace hoy.
 
 Este documento es la referencia del lenguaje: define la sintaxis y el significado de cada
@@ -12,7 +12,7 @@ Cómo leer el estado de cada parte:
 | Marca | Significado |
 |-------|-------------|
 | *(sin marca)* | **Implementado** y cubierto por pruebas |
-| **Experimental** | Implementado y probado, pero su sintaxis o sus reglas pueden cambiar. En la versión 0.4 ninguna parte del lenguaje lo es |
+| **Experimental** | Implementado y probado, pero su sintaxis o sus reglas pueden cambiar. En la versión 0.5 ninguna parte del lenguaje lo es |
 | **Previsto** | No existe. Reunido en la sección 14; no forma parte del lenguaje |
 
 Los cambios respecto a la versión 0.1 están en [`CHANGELOG.md`](../CHANGELOG.md) y sus motivos
@@ -31,8 +31,8 @@ decisiones:
    y tipos se verifican sin ejecutar el programa; lo que depende de los valores queda delimitado
    con precisión (sección 10).
 4. **Las reglas forman parte del código.** Una función declara qué espera y qué promete
-   (contratos, sección 9), y un tipo puede declarar qué valores admite (tipos refinados,
-   sección 4.4). Cada regla puede llevar su explicación, y cuando se incumple el diagnóstico dice
+   (contratos, sección 9), un tipo puede declarar qué valores admite (tipos refinados,
+   sección 4.4) y un bucle declara por qué termina y qué mantiene (sección 9.5). Cada regla puede llevar su explicación, y cuando se incumple el diagnóstico dice
    cuál, dónde y con qué valores ([decisión 0006](decisions/0006-requisitos-verificables.md)).
 5. **Las herramientas reciben datos, no texto.** El programa y sus errores pueden obtenerse en JSON
    con un esquema versionado.
@@ -69,8 +69,8 @@ Solo se admiten letras ASCII. Se distinguen mayúsculas de minúsculas.
 Palabras clave:
 
 ```
-fn   let   return   if   else   true   false   and   or   not   requires   ensures   example   type
-where
+fn   let   var   return   if   else   while   true   false   and   or   not   requires   ensures
+example   invariant   decreases   type   where
 ```
 
 Palabras reservadas para versiones futuras. No pueden usarse como nombres y usarlas produce el
@@ -78,8 +78,7 @@ error `E1103`:
 
 ```
 ai       assert   break    const    continue enum     for      import
-in       match    pub      test     tool     try      uses     var
-while
+in       match    pub      test     tool     try      uses
 ```
 
 No son palabras reservadas, sino nombres predefinidos: los tipos `Int`, `Float`, `Bool`, `Text` y
@@ -139,10 +138,13 @@ explanation = "," TEXT ;
 block      = "{" { NEWLINE } { statement end } "}" ;
 end        = NEWLINE | (* nada, si lo siguiente es "}" *) ;
 
-statement  = let | return | if | block | assignment | expression ;
+statement  = let | var | return | if | while | block | assignment | expression ;
 let        = "let" NAME [ ":" type ] "=" expression ;
+var        = "var" NAME [ ":" type ] "=" expression ;
 return     = "return" [ expression ] ;
 if         = "if" expression block [ "else" ( if | block ) ] ;
+while      = "while" expression "{" { NEWLINE } { loop_clause } { statement end } "}" ;
+loop_clause = ( "invariant" | "decreases" ) expression [ explanation ] end ;
 assignment = NAME "=" expression ;
 
 expression     = or ;
@@ -164,13 +166,14 @@ Notas:
   Un tipo no puede declararse dentro de una función (`E1101`).
 - Una explicación (`explanation`) es un único texto literal no vacío, de una sola línea. Un texto
   vacío, formado solo por espacios o con un salto de línea (`\n`) es el error `E1101`.
-- Las cláusulas `requires` y `ensures` van **al principio del cuerpo** de una función, antes de
-  cualquier sentencia. En cualquier otro lugar son el error `E1106`.
+- Las cláusulas `requires`, `ensures` y `example` van **al principio del cuerpo** de una función,
+  antes de cualquier sentencia; `invariant` y `decreases`, al principio del cuerpo de un `while`. En
+  cualquier otro lugar son el error `E1106`.
 - `else` se escribe en la misma línea que la `}` que cierra el bloque anterior: `} else {`.
 - Las comparaciones no se encadenan: `a < b < c` es un error de sintaxis (`E1101`). Se escribe
   `a < b and b < c`.
-- `assignment` forma parte de la gramática solo para poder rechazarla con un mensaje preciso: toda
-  asignación es el error `E2007`, porque las variables son inmutables.
+- Una asignación es una sentencia, no una expresión: `a = b = 1` e `if x = 1 { }` son errores de
+  sintaxis (`E1101`). No existen `+=` ni `++`.
 - No se admite una coma final en las listas de parámetros ni de argumentos.
 - Límites de tamaño: los paréntesis, los operadores unarios, los bloques y las cadenas `else if`
   pueden anidarse hasta 64 niveles, y un árbol de expresión puede tener hasta 256 niveles (por
@@ -381,8 +384,9 @@ let age: Int = 25             // tipo anotado
   es `E2011` y señala el valor. La variable conserva el tipo anotado, de modo que un único error no
   se repite en cada uso posterior.
 - El valor no puede ser una llamada a una función `Void` (`E2011`).
-- **Las variables son inmutables.** No existe ninguna forma de cambiar su valor; `name = "x"` es el
-  error `E2007`. Los parámetros de una función también son inmutables.
+- **Una variable `let` es inmutable.** No existe ninguna forma de cambiar su valor; `name = "x"` es el
+  error `E2007`. Los parámetros de una función también son inmutables. Una variable que tiene que
+  cambiar se declara con `var` (sección 5.3).
 
 ```nex
 let age: Int = "twenty"       // E2011: Expected Int, found Text
@@ -411,6 +415,38 @@ let x: Void = 1               // E2012: una variable no puede ser Void
   (`let f = add`) es el error `E2011`: las funciones no son valores.
 
 Consecuencia: dentro de una función, cada nombre significa una sola cosa de principio a fin.
+
+### 5.3 Variables que cambian: `var` y la asignación
+
+<!-- nex:body -->
+```nex
+var count = 0                 // tipo inferido: Int
+var total: Float = 0.0        // tipo anotado
+count = count + 1             // asignación
+```
+
+- `var` tiene la misma forma y las mismas reglas que `let` (inferencia, anotación, ámbito, sin
+  ocultación). La diferencia es que su valor puede cambiarse después con una asignación.
+- **El tipo de una `var` no cambia nunca.** El valor asignado tiene que ser compatible con él, con la
+  regla de la sección 4.2 (`E2011`).
+- Se puede asignar una `var` visible en ese punto, también desde un bloque interior. Asignar una
+  variable `let` o un parámetro es el error `E2007`; un nombre que no es una variable visible,
+  `E2005`.
+- **Los parámetros no se pueden asignar.** Así, en `ensures` y en los diagnósticos tienen siempre el
+  valor con el que se llamó a la función. Para cambiarlo, se copia: `var rest = n`.
+- Una `var` de tipo refinado conserva la garantía de la sección 4.4: se le asigna una constante que
+  cumple la condición (comprobada sin ejecutar, `E2017`) o un valor comprobado con `Tipo(x)`.
+  `p = p + 1` es `E2011`; se escribe `p = Percent(p + 1)`.
+- Una función no ve las variables de quien la llama, así que una `var` solo cambia desde su propia
+  función: no hay estado compartido entre funciones.
+
+```text
+var p: Percent = 20
+p = 30                 // correcto: constante que cumple la condición
+p = 120                // E2017: 120 no es un Percent válido
+p = p + 10             // E2011: un Int no es un Percent
+p = Percent(p + 10)    // correcto: comprobado al ejecutar (E4003 si no se cumple)
+```
 
 <!-- nex:valid -->
 ```nex
@@ -538,9 +574,11 @@ Cómo se decide si un bloque "siempre devuelve":
 | `if` sin `else` | Nunca (la condición puede ser falsa) |
 | `if` … `else` … | Todas sus ramas siempre devuelven |
 | Bloque `{ }` | Alguna de sus sentencias siempre devuelve |
+| `while` | Nunca (su condición puede ser falsa desde el principio) |
 | Cualquier otra | Nunca |
 
-El análisis no evalúa las condiciones: `if true { return 1 }` sin `else` se considera incompleto.
+El análisis no evalúa las condiciones: `if true { return 1 }` sin `else` se considera incompleto, y
+una función cuyo único `return` está dentro de un `while` necesita otro después del bucle.
 
 ```nex
 fn sign(n: Int) -> Int {          // correcto: las tres ramas devuelven
@@ -596,6 +634,8 @@ Una función puede llamarse a sí misma, y dos funciones pueden llamarse entre s
 El número de llamadas anidadas está limitado a 1000 (contando `main`). Superarlo es el error de
 ejecución `E3004`; el caso habitual es una recursividad que nunca alcanza su caso base. Con
 expresiones muy profundamente anidadas el límite efectivo puede ser menor; el error es el mismo.
+Para repetir algo muchas veces se usa un bucle (sección 9.5): sus vueltas no son llamadas y no
+cuentan para este límite.
 
 ## 8. Funciones integradas
 
@@ -774,6 +814,108 @@ fn double(n: Int) -> Int {
   `false`: `E4004`, categoría `test`) o `error` (un error de ejecución o una regla incumplida, que
   conserva su código y gana una nota con el ejemplo que lo provocó).
 
+### 9.5 Bucles: `while`, `invariant` y `decreases`
+
+Un bucle repite su cuerpo mientras su condición es `true`. Como una función, declara al principio
+de su cuerpo los requisitos que lo hacen correcto, y el intérprete los comprueba en cada vuelta
+([decisión 0010](decisions/0010-var-y-while.md)):
+
+<!-- nex:run -->
+```nex
+fn sum_to(n: Int) -> Int {
+    requires n >= 0, "Only natural numbers"
+    ensures result == n * (n + 1) / 2
+    var total = 0
+    var i = 0
+    while i < n {
+        invariant total == i * (i + 1) / 2, "total is the sum of the numbers already added"
+        decreases n - i, "Each turn moves i one step closer to n"
+        i = i + 1
+        total = total + i
+    }
+    return total
+}
+
+fn main() -> Void {
+    print(sum_to(100000))
+}
+```
+
+```text
+5000050000
+```
+
+| Cláusula | Cuántas | Qué declara | Tipo |
+|----------|---------|-------------|------|
+| `decreases` | **Exactamente una** | La **medida**: un entero que nunca baja de 0 y disminuye en cada vuelta. Es la razón por la que el bucle termina | `Int` |
+| `invariant` | Cero o más | Una condición que se cumple antes de cada evaluación de la condición del bucle: al llegar, después de cada vuelta y, por tanto, al salir | `Bool` |
+
+Reglas:
+
+- **Todo bucle declara su medida.** Sin `decreases`, o con más de una, es el error `E2021`.
+- La condición del bucle es `Bool` (`E2011`), y la medida, `Int` (`E2011`).
+- Las cláusulas ven lo que es visible donde está el bucle (parámetros, `let`, `var`), no lo que
+  declara su cuerpo. Llevan una explicación opcional tras una coma, como los contratos.
+- Cada vuelta abre un ámbito nuevo: lo declarado en el cuerpo existe solo durante esa vuelta. Lo que
+  tiene que sobrevivir entre vueltas se declara con `var` antes del bucle.
+- Un `return` dentro del cuerpo termina la función.
+- Las vueltas no son llamadas: no cuentan para el límite de 1000 llamadas anidadas.
+- No existen `break`, `continue` ni `for` (siguen reservadas).
+
+Cada vez que se ejecuta un bucle:
+
+1. Se comprueban los `invariant`, en orden. Uno falso detiene el programa: **`E4005`**.
+2. Se evalúa la condición. Si es `false`, el bucle termina.
+3. Se evalúa la medida. Si es negativa, o no es estrictamente menor que en la vuelta anterior de esa
+   misma ejecución del bucle, el programa se detiene: **`E4006`**.
+4. Se ejecuta el cuerpo y se vuelve al paso 1.
+
+Así, **todo bucle termina, o se detiene con un diagnóstico que dice por qué no lo hacía**: una medida
+entera que no baja de 0 no puede disminuir para siempre. No hay límites de tiempo: el mismo programa
+da siempre el mismo resultado. El diagnóstico dice en qué vuelta ocurrió y con qué valores:
+
+<!-- nex:fails exit=5 -->
+```nex
+fn count_even(limit: Int) -> Int {
+    var i = 0
+    var even = 0
+    while i < limit {
+        decreases limit - i, "Each turn moves i one step closer to limit"
+        if i / 2 * 2 == i {
+            even = even + 1
+            i = i + 1
+        }
+    }
+    return even
+}
+
+fn main() -> Void {
+    print(count_even(10))
+}
+```
+
+```text
+contract error[E4006]: Loop measure did not decrease
+ --> program.nex:5:19
+  |
+5 |         decreases limit - i, "Each turn moves i one step closer to limit"
+  |                   ^^^^^^^^^ The measure was 9 and is still 9
+  = note: The measure at line 5: decreases limit - i
+  = note: Reason: Each turn moves i one step closer to limit
+  = note: Before turn 3 of the loop at line 4.
+  = note: The values: limit = 10, i = 1, even = 1
+  = note: In 'count_even', called at line 15, column 11.
+
+error: program.nex: the program stopped because a contract was broken
+```
+
+Cualquier otro error que se produzca dentro de un bucle (`E3xxx`, `E4xxx`) gana una nota por cada
+bucle que lo contiene, del más interior al más exterior: `In turn 3 of the loop at line 6.`
+
+**Lo que no garantiza.** Que un bucle termine pronto: una medida inicial de mil millones permite mil
+millones de vueltas. Que la medida y los invariantes sean los adecuados: se comprueba lo escrito, en
+las vueltas que se ejecutan. Nada de esto se demuestra sin ejecutar.
+
 ## 10. Errores: antes de ejecutar y durante la ejecución
 
 ### 10.1 Etapas
@@ -804,10 +946,12 @@ Todo lo siguiente lo comunica `nex check`, sin ejecutar una sola sentencia:
 - Caracteres, números, textos y escapes mal escritos.
 - Código que no sigue la gramática.
 - Ausencia de `main`, funciones duplicadas, parámetros o declaraciones no válidas.
-- Nombres que no existen, nombres declarados dos veces, intentos de reasignación.
+- Nombres que no existen, nombres declarados dos veces, asignaciones a variables `let` o a
+  parámetros.
 - Llamadas a funciones inexistentes o con un número de argumentos incorrecto.
-- **Todos los errores de tipos**: anotaciones, operadores, argumentos, valores de retorno,
-  condiciones, condiciones de contratos y uso de `Void` como valor.
+- **Todos los errores de tipos**: anotaciones, asignaciones, operadores, argumentos, valores de
+  retorno, condiciones, condiciones de contratos y de bucles, medidas y uso de `Void` como valor.
+- Bucles sin medida, o con más de una.
 - Declaraciones de tipos refinados mal formadas, y **toda constante que no cumple la condición del
   tipo refinado donde se usa** (`E2017`).
 - Funciones que pueden terminar sin `return`, y código inalcanzable tras un `return`.
@@ -830,8 +974,11 @@ análisis estático no afirma nada sobre ellas:
 | Condición `requires` falsa | `E4001` |
 | Condición `ensures` falsa | `E4002` |
 | Un valor comprobado con `Percent(x)` que no cumple la condición de su tipo | `E4003` |
+| Un `invariant` falso | `E4005` |
+| Una medida (`decreases`) negativa o que no disminuye | `E4006` |
 
-Tampoco se analiza si un programa termina: una recursividad sin fin se detiene con `E3004`.
+El análisis no decide si un programa termina. Al ejecutarse, una recursividad sin fin se detiene con
+`E3004` y un bucle sin fin, con `E4006`.
 
 Estos son los **únicos** errores que puede producir la ejecución de un programa aceptado por
 `nex check`. Cuando se produce uno, el programa se detiene en ese punto: la salida ya escrita se
@@ -890,7 +1037,7 @@ un resumen del comando, no un diagnóstico.
 | `semantic` | Nombres, ámbitos o estructura del programa | Sin ejecutar |
 | `type` | Tipos | Sin ejecutar |
 | `runtime` | Depende de los valores calculados | Al ejecutar |
-| `contract` | Una condición `requires` o `ensures` fue falsa | Al ejecutar |
+| `contract` | Una regla que el programa declara se incumplió: `requires`, `ensures`, la condición de un tipo refinado, un `invariant` o una medida | Al ejecutar |
 | `test` | Un ejemplo evaluado por `nex test` resultó falso | Al ejecutar `nex test` |
 
 ### 11.3 Códigos de error
@@ -910,13 +1057,13 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E1102` | Unclosed block | `syntax` | Falta una `}` al llegar al final del archivo |
 | `E1103` | Reserved word | `syntax` | Se usa una palabra reservada para una versión futura |
 | `E1105` | Expression too deeply nested | `syntax` | Se superan los límites de anidamiento de la sección 3 |
-| `E1106` | Misplaced contract clause | `syntax` | `requires` o `ensures` fuera del principio del cuerpo de una función |
+| `E1106` | Misplaced contract clause | `syntax` | `requires`, `ensures` o `example` fuera del principio del cuerpo de una función, o `invariant` o `decreases` fuera del principio del cuerpo de un `while` |
 | `E2001` | Missing main function | `semantic` | El programa no declara `main` |
 | `E2002` | Duplicate function | `semantic` | Dos funciones con el mismo nombre, o con el de una integrada |
 | `E2004` | Invalid return type | `type` | `main` declara un tipo de retorno distinto de `Void` |
 | `E2005` | Unknown variable | `semantic` | Se usa un nombre que no está declarado o no es visible |
 | `E2006` | Name already declared | `semantic` | Se declara un nombre que ya es visible, o el de una función |
-| `E2007` | Cannot reassign variable | `semantic` | Se intenta dar un valor nuevo a una variable o a un parámetro |
+| `E2007` | Cannot reassign variable | `semantic` | Se intenta dar un valor nuevo a una variable declarada con `let` o a un parámetro |
 | `E2008` | Unknown function | `semantic` | Se llama a una función que no existe |
 | `E2009` | Wrong number of arguments | `type` | Una llamada no pasa tantos argumentos como parámetros hay |
 | `E2010` | Unused value | `semantic` | Un valor calculado que se pierde |
@@ -930,6 +1077,7 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E2018` | Invalid refinement condition | `semantic` | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado |
 | `E2019` | Too many refinement checks | `semantic` | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (sección 4.4) |
 | `E2020` | Example without its function | `semantic` | Un ejemplo no contiene ninguna llamada a su función (sección 9.4) |
+| `E2021` | Missing loop measure | `semantic` | Un `while` sin `decreases`, o con más de uno (sección 9.5) |
 | `E3001` | Division by zero | `runtime` | División por cero |
 | `E3002` | Integer overflow | `runtime` | Un resultado `Int` fuera del rango de 64 bits |
 | `E3003` | Float result out of range | `runtime` | Un resultado `Float` demasiado grande |
@@ -940,6 +1088,8 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E4001` | Precondition violated | `contract` | Una condición `requires` es falsa en una llamada |
 | `E4002` | Postcondition violated | `contract` | Una condición `ensures` es falsa al terminar una función |
 | `E4003` | Refinement violated | `contract` | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado |
+| `E4005` | Loop invariant violated | `contract` | Un `invariant` es falso antes de evaluar la condición de su bucle (sección 9.5) |
+| `E4006` | Loop measure did not decrease | `contract` | La medida de un bucle es negativa o no es menor que en la vuelta anterior (sección 9.5) |
 | `E4004` | Example failed | `test` | Un ejemplo evaluado por `nex test` vale `false` (sección 9.4) |
 
 Códigos retirados (existieron en la versión 0.1 y ya no se emiten):
@@ -967,7 +1117,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.4.0",
+  "nexora_version": "0.5.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -1023,7 +1173,7 @@ La representación del programa (`nex inspect`) está descrita en
 | `2` | Uso incorrecto de la línea de comandos |
 | `3` | El programa falló durante la ejecución |
 | `4` | El archivo no pudo leerse |
-| `5` | El programa incumplió durante la ejecución una regla que declara: un contrato o la condición de un tipo refinado |
+| `5` | El programa incumplió durante la ejecución una regla que declara: un contrato, la condición de un tipo refinado, un invariante o la medida de un bucle |
 | `6` | `nex test`: algún ejemplo no pasó, o no había ningún ejemplo que evaluar |
 | `70` | Error interno de NEXORA (un fallo de la herramienta, no del programa). Un programa que agota la memoria al ejecutarse no da `70`, sino el diagnóstico `E3007` ([decisión 0009](decisions/0009-memoria-agotada.md)) |
 | `130` | Interrumpido con Ctrl+C |
@@ -1089,11 +1239,13 @@ En [`examples/`](../examples/README.md) hay más programas, todos ejecutados por
 | `types.nex` | Inferencia, anotaciones, comparaciones, lógica y conversiones | `0` |
 | `functions.nex` | Funciones, `if`/`else`, recursividad | `0` |
 | `contracts.nex` | Contratos que se cumplen | `0` |
+| `loops.nex` | Variables `var` y bucles con su medida y sus invariantes | `0` |
 | `invalid/syntax_error.nex` | Errores de sintaxis (incorrecto a propósito) | `1` |
 | `invalid/name_errors.nex` | Errores de nombres y estructura (incorrecto a propósito) | `1` |
 | `invalid/type_errors.nex` | Errores de tipos (incorrecto a propósito) | `1` |
 | `failing/runtime_error.nex` | Un error que solo aparece al ejecutar | `3` |
 | `failing/contract_violation.nex` | Un contrato incumplido al ejecutar | `5` |
+| `failing/loop_measure.nex` | Un bucle que no terminaría: su medida deja de disminuir | `5` |
 
 ### 12.2 Programas inválidos
 
@@ -1103,10 +1255,11 @@ En [`examples/`](../examples/README.md) hay más programas, todos ejecutados por
 | `let x = (1 + 2` | `E1101` | Falta `)` |
 | `let x = 1; let y = 2` | `E1001` | `;` no existe en el lenguaje |
 | `let x = 1 < 2 < 3` | `E1101` | Las comparaciones no se encadenan |
-| `var count = 0` | `E1103` | `var` es una palabra reservada |
+| `for i in items { }` | `E1103` | `for` es una palabra reservada |
 | `print(total)` sin declarar `total` | `E2005` | Variable desconocida |
 | `let x = 1` y después `let x = 2` | `E2006` | El nombre ya está declarado |
-| `let x = 1` y después `x = 2` | `E2007` | Las variables son inmutables |
+| `let x = 1` y después `x = 2` | `E2007` | Una variable `let` no cambia; se declara con `var` |
+| `while i < n { i = i + 1 }` | `E2021` | Falta la medida: `decreases n - i` |
 | `let age: Int = "twenty"` | `E2011` | Se esperaba `Int` y el valor es `Text` |
 | `let total = 10 + 2.5` | `E2011` | `Int` y `Float` no se mezclan |
 | `let ok = true + 1` | `E2011` | Un `Bool` no admite aritmética |
@@ -1128,9 +1281,10 @@ En [`examples/`](../examples/README.md) hay más programas, todos ejecutados por
 
 Son limitaciones reales de esta versión, no fallos:
 
-- No hay bucles (`while`, `for`). La repetición solo puede expresarse con recursividad, limitada a
-  1000 llamadas anidadas.
-- Las variables no pueden reasignarse; no existe `var`.
+- El único bucle es `while`, y siempre declara su medida (`decreases`). No hay `for`, `break` ni
+  `continue`, ni asignaciones compuestas (`+=`).
+- La medida de un bucle es un `Int`: no hay medidas compuestas (pares, textos).
+- Los parámetros no pueden reasignarse.
 - `if` es una sentencia, no una expresión: no puede usarse como valor.
 - No hay tipos compuestos: ni listas, ni registros, ni valores opcionales.
 - Los textos solo admiten concatenación e igualdad: no hay longitud, acceso a caracteres ni orden.
@@ -1160,7 +1314,7 @@ La lista completa, con los límites de la implementación y los riesgos conocido
 Nada de lo que sigue funciona hoy. Es la dirección del diseño, tomada del borrador
 `docs/fase-1-diseno.md` de la raíz del repositorio, y puede cambiar:
 
-- Variables reasignables (`var`) y bucles.
+- `for` sobre rangos y listas, `break` y `continue`.
 - `if` y `match` como expresiones.
 - Interpolación de textos (`"Hello {name}"`), para la que ya está reservada la `{`.
 - Tipos compuestos: listas, mapas, registros, enumeraciones, `Option` y `Result`.
@@ -1187,4 +1341,5 @@ Esta especificación manda sobre el borrador en lo que ya está implementado:
 | Alias sin condición | `type UserId = Int` | No existen |
 | Conversión entre números | `Int.to_float(x)` | `to_float(x)`, `to_int(x)` |
 | Variables sin usar | Son un error | No se comprueba todavía |
+| Bucles | `while` y `for`, sin requisitos | Solo `while`, con medida obligatoria (`decreases`) e invariantes opcionales, comprobados en cada vuelta |
 | Convenciones de nombres | Obligatorias (`snake_case`…) | No se comprueban todavía |

@@ -194,5 +194,5 @@ def test_language_info_comes_from_the_implementation():
     assert info["keywords"] == sorted(KEYWORDS)
     assert info["builtins"] == sorted(BUILTINS)
     assert info["types"] == ["Void", "Int", "Float", "Bool", "Text"]
-    assert "while" in info["reserved_words"] and "fn" not in info["reserved_words"]
+    assert "for" in info["reserved_words"] and "fn" not in info["reserved_words"]
     json.dumps(info)

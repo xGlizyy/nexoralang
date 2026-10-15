@@ -41,7 +41,7 @@ fn main() -> Void {
 `nex context program.nex` escribe:
 
 ```text
-program.nex | NEXORA 0.4.0 | 14 lines
+program.nex | NEXORA 0.5.0 | 14 lines
 Static analysis: no errors.
 The program was not run to produce this summary.
 Entry point: main
@@ -72,7 +72,8 @@ Notes:
 |------|---------------|
 | Funciones, parámetros, tipos de retorno | El árbol de sintaxis |
 | Contratos, con su condición **tal como está escrita** | El texto del archivo, recortado por la posición del nodo |
-| Variables de cada función y su tipo | Los símbolos que registra el comprobador. Si la variable no tiene anotación, es el tipo que el comprobador infirió |
+| Variables de cada función, su tipo y si pueden cambiar (`mutable`, `true` en las `var`) | Los símbolos que registra el comprobador. Si la variable no tiene anotación, es el tipo que el comprobador infirió |
+| `loops`: los bucles de cada función, con su condición, sus invariantes y su medida **tal como están escritos** | El árbol de sintaxis y el texto del archivo. `measure` es `null` solo si falta (`E2021`) |
 | `calls`, `called_by` | Las llamadas que el comprobador resolvió. No se busca texto: una llamada cuenta cuando el comprobador la asoció a una función |
 | `recursive` | Si la función puede alcanzarse a sí misma siguiendo esas llamadas, directa o indirectamente |
 | `features` | Qué construcciones aparecen en el árbol (ver la tabla siguiente) |
@@ -95,10 +96,16 @@ Características que puede enumerar `features`:
 | `logic` | usa `and`, `or` o `not` |
 | `conversions` | llama a `to_text`, `to_float` o `to_int` |
 | `nested_blocks` | tiene un bloque `{ }` suelto dentro de otro |
+| `refined_types` | declara algún tipo refinado |
+| `examples` | tiene alguna cláusula `example` |
+| `mutable_variables` | declara alguna variable con `var` |
+| `loops` | usa `while` |
+| `loop_invariants` | algún bucle declara un `invariant` |
 
 Las **notas** no son opiniones sobre el código. Cada una es una regla del lenguaje que se añade
 solo si el programa contiene aquello a lo que se refiere: que los contratos se comprueban al
-ejecutar y no se han demostrado, el límite de llamadas anidadas si hay recursividad, que `Int / Int`
+ejecutar y no se han demostrado, que cada bucle comprueba su medida y sus invariantes en cada
+vuelta si hay bucles, el límite de llamadas anidadas si hay recursividad, que `Int / Int`
 descarta los decimales si hay una división entera, o qué palabras reservadas se han usado.
 
 ### Formato JSON
@@ -120,7 +127,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.context/1",
-  "nexora_version": "0.4.0",
+  "nexora_version": "0.5.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
@@ -156,7 +163,8 @@ fn main() -> Void {
         "main"
       ],
       "recursive": false,
-      "examples": []
+      "examples": [],
+      "loops": []
     },
     {
       "name": "main",
@@ -179,7 +187,8 @@ fn main() -> Void {
       ],
       "called_by": [],
       "recursive": false,
-      "examples": []
+      "examples": [],
+      "loops": []
     }
   ],
   "features": [
@@ -224,15 +233,16 @@ error no forman parte del resumen:
 <!-- nex:context -->
 ```nex
 fn main() -> Void {
-    var count = 0
-    while count < 3 {
-        print(count)
+    let items = 3
+    for item in items {
+        print(item)
     }
+    let first = match
 }
 ```
 
 ```text
-program.nex | NEXORA 0.4.0 | 6 lines
+program.nex | NEXORA 0.5.0 | 7 lines
 Static analysis: 2 errors.
 The program was not run to produce this summary.
 Partial summary: only the code that could be parsed is described.
@@ -240,15 +250,16 @@ Entry point: main
 
 Functions (1):
   fn main() -> Void    [line 1]
+      variables: items: Int
 
 Features used: none
 
 Diagnostics:
-  syntax E1103 at 2:5: 'var' is reserved for a future version of NEXORA and is not implemented yet
-  syntax E1103 at 3:5: 'while' is reserved for a future version of NEXORA and is not implemented yet
+  syntax E1103 at 3:5: 'for' is reserved for a future version of NEXORA and is not implemented yet
+  syntax E1103 at 6:17: 'match' is reserved for a future version of NEXORA and cannot be used here
 
 Notes:
-  - The program uses words reserved for features that are not implemented: var, while.
+  - The program uses words reserved for features that are not implemented: for, in, match.
   - The program has syntax errors, so this summary is partial: it covers only the code that could be parsed. Statements with errors, and functions whose declaration has errors, are missing, and a type that depends on them is unknown.
 ```
 
@@ -294,7 +305,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.symbols/1",
-  "nexora_version": "0.4.0",
+  "nexora_version": "0.5.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
@@ -317,6 +328,8 @@ fn main() -> Void {
       },
       "scope": null,
       "references": [],
+      "mutable": false,
+      "assignments": [],
       "signature": "fn main() -> Void",
       "params": [],
       "return_type": "Void"
@@ -345,7 +358,9 @@ fn main() -> Void {
           "end_line": 3,
           "end_column": 16
         }
-      ]
+      ],
+      "mutable": false,
+      "assignments": []
     }
   ],
   "builtins": [
@@ -407,7 +422,9 @@ Cada símbolo tiene:
 | `function` | La función donde se declara. `null` si el símbolo es una función |
 | `declaration` | Posición de la declaración |
 | `scope` | El bloque donde es visible. `null` en una función, que es visible en todo el archivo |
-| `references` | Posición de cada uso que el comprobador resolvió a este símbolo |
+| `references` | Posición de cada uso que el comprobador resolvió a este símbolo, incluidas las asignaciones |
+| `mutable` | `true` solo en una variable declarada con `var` |
+| `assignments` | Posición de cada asignación que le da un valor nuevo. Vacía en todo lo que no es una `var` |
 | `signature`, `params`, `return_type` | Solo en las funciones |
 
 `builtins` enumera aparte las funciones que proporciona el lenguaje (`print`, `to_text`…), que no

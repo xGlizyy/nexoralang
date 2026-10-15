@@ -19,6 +19,63 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
+## 0.5.0 — `var` y bucles que dicen por qué terminan
+
+La repetición deja de depender de la recursividad y del límite de 1000 llamadas. Y lo hace a la
+manera de NEXORA: cada bucle declara por qué termina (`decreases`) y qué mantiene (`invariant`), y
+el intérprete lo comprueba en cada vuelta. Así ningún bucle se queda repitiendo para siempre: o
+termina, o se detiene y dice en qué vuelta y con qué valores. Implementa la
+[decisión 0010](docs/decisions/0010-var-y-while.md).
+
+### Añadido
+
+- **Variables reasignables:** `var count = 0` y `count = count + 1`. El tipo de una `var` no cambia
+  nunca. `let` sigue siendo inmutable, y los parámetros también, para que `ensures` y los
+  diagnósticos vean siempre los valores con los que se llamó a la función. Una `var` de tipo
+  refinado conserva su garantía: se le asigna una constante válida o un valor comprobado con
+  `Tipo(x)`.
+- **Bucles `while`** con dos cláusulas al principio del cuerpo, con la forma de los contratos y su
+  explicación opcional tras una coma:
+  - `decreases` (exactamente una): la medida, un `Int` que no baja de 0 y disminuye en cada vuelta.
+  - `invariant` (cero o más): condiciones que se cumplen antes de cada evaluación de la condición.
+- Códigos nuevos: `E2021` (bucle sin medida, o con más de una), `E4005` (invariante incumplido) y
+  `E4006` (la medida no disminuye o es negativa), estos dos de categoría `contract`, con código de
+  salida `5`. Sus diagnósticos dicen la vuelta y los valores de todas las variables visibles.
+- Un error dentro de un bucle (`E3xxx`, `E4xxx`) gana una nota por cada bucle que lo contiene:
+  `In turn 3 of the loop at line 6.`
+- `nex test` ya no puede quedarse esperando por un bucle: el ejemplo queda en `error` con `E4006`.
+- `nex inspect`: nodos `Var`, `While` y `LoopClause` (sigue siendo `nexora.inspect/2`). `nex symbols`:
+  campos `mutable` y `assignments`. `nex context`: campo `mutable` en las variables, campo `loops` al
+  final de cada función con la condición, los invariantes y la medida de cada bucle, valores
+  `mutable_variables`, `loops` y `loop_invariants` en `features`, y una nota cuando hay bucles.
+- `E1103` sugiere cómo escribir con `while` lo que se intentaba con `for`, `break` o `continue`.
+- Ejemplos `loops.nex` y `failing/loop_measure.nex`.
+
+### Cambiado
+
+- `E2007` mantiene su código y su título, pero su etiqueta y su sugerencia dicen ahora si el nombre
+  es una variable `let` o un parámetro, y proponen `var`.
+- La sugerencia de `E2014` recuerda que un bucle puede no ejecutarse nunca.
+
+### Cambios incompatibles
+
+- **`invariant` y `decreases` pasan a ser palabras clave.** Un programa que los use como nombre de
+  variable, parámetro o función deja de ser válido (`E1101`); se renombran.
+- `var` y `while` dejan de ser palabras reservadas. Ningún programa válido podía usarlas.
+
+### Documentación
+
+- Especificación 0.5: sección 5.3 (`var` y la asignación) y sección 9.5 (bucles).
+- Guías: bucles en [contratos](docs/contracts.md#bucles-invariant-y-decreases) y en
+  [primeros pasos](docs/getting-started.md).
+
+### Limitaciones
+
+- No hay `for`, `break` ni `continue`, ni asignaciones compuestas (`+=`).
+- La medida es un `Int`; no hay medidas compuestas.
+- Una medida garantiza que un bucle termina, no que termine pronto: una medida inicial enorme
+  permite muchísimas vueltas. Una recursividad lenta (`fib(40)`) sigue sin límite de tiempo.
+
 ## 0.4.0 — Ejemplos y `nex test`
 
 Tercer paso de la línea principal: una función puede llevar casos concretos de lo que debe dar, y

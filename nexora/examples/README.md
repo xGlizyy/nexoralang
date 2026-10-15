@@ -28,6 +28,7 @@ Superan `nex check` y `nex run` termina con código `0`.
 | [`contracts.nex`](contracts.nex) | Contratos `requires` y `ensures` que se cumplen, con su explicación |
 | [`checked_examples.nex`](checked_examples.nex) | Funciones con sus propios ejemplos (`example`), que evalúa `nex test` |
 | [`refined_types.nex`](refined_types.nex) | Tipos refinados con `where`: constantes comprobadas sin ejecutar y comprobación explícita con `Percent(x)` |
+| [`loops.nex`](loops.nex) | Variables `var` y bucles `while` con su medida (`decreases`) y sus invariantes (`invariant`), comprobados en cada vuelta |
 
 ## Inválidos (`invalid/`)
 
@@ -50,3 +51,4 @@ Superan `nex check`, porque el fallo depende de valores que solo se conocen al e
 | [`failing/runtime_error.nex`](failing/runtime_error.nex) | División por cero | `3` |
 | [`failing/contract_violation.nex`](failing/contract_violation.nex) | Una condición `requires` es falsa | `5` |
 | [`failing/refinement_violation.nex`](failing/refinement_violation.nex) | Un valor calculado no cumple la condición de un tipo refinado | `5` |
+| [`failing/loop_measure.nex`](failing/loop_measure.nex) | Un bucle que no terminaría: su medida deja de disminuir | `5` |

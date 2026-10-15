@@ -74,8 +74,8 @@ Ada
 
 Dos reglas importantes:
 
-- **Las variables no cambian.** Una vez declarada, una variable conserva su valor. Si necesitas
-  otro valor, declara otra variable.
+- **Las variables `let` no cambian.** Una vez declarada, conserva su valor. Una variable que tiene
+  que cambiar se declara con `var` y se le da otro valor con `=` (lo verás en la sección 6).
 - **Un nombre solo se declara una vez.** No puedes declarar dos variables con el mismo nombre si
   la primera sigue siendo visible.
 
@@ -202,6 +202,36 @@ warm
 
 La condición tiene que ser un `Bool`: una comparación (`==`, `!=`, `<`, `<=`, `>`, `>=`), una
 variable de tipo `Bool`, o una combinación con `and`, `or` y `not`.
+
+### Repetir con `while`
+
+`while` repite un bloque mientras su condición es verdadera. Lo que cambia de una vuelta a otra se
+declara con `var`. Cada bucle dice, con `decreases`, por qué termina: un número que baja en cada
+vuelta y nunca pasa de 0.
+
+<!-- nex:run -->
+```nex
+fn main() -> Void {
+    var count = 3
+    while count > 0 {
+        decreases count, "One step closer to zero on every turn"
+        print(count)
+        count = count - 1
+    }
+    print("liftoff")
+}
+```
+
+```text
+3
+2
+1
+liftoff
+```
+
+Si el número no baja (por ejemplo, porque olvidas `count = count - 1`), el programa no se queda
+colgado: se detiene en la segunda vuelta y te dice qué valores tenía. Los [contratos](contracts.md#bucles-invariant-y-decreases)
+explican también `invariant`, para decir qué se mantiene en cada vuelta.
 
 La guía de [funciones](functions.md) explica el resto: rutas de retorno, recursividad y límites.
 
@@ -331,4 +361,4 @@ Result: passed
   (lo que una función espera y promete) y [tipos refinados](types.md#tipos-refinados) (los valores
   que admite un tipo).
 - La referencia completa del lenguaje: [especificación](language-spec.md).
-- Lo que NEXORA todavía no puede hacer (bucles, listas, leer datos…): [limitaciones](limitations.md).
+- Lo que NEXORA todavía no puede hacer (listas, leer datos…): [limitaciones](limitations.md).

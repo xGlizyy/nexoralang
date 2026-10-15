@@ -230,7 +230,9 @@
         "function",
         "declaration",
         "scope",
-        "references"
+        "references",
+        "mutable",
+        "assignments"
       ],
       "properties": {
         "name": {
@@ -277,6 +279,17 @@
             "$ref": "#/$defs/span"
           },
           "description": "Every use the checker resolved to this symbol."
+        },
+        "mutable": {
+          "type": "boolean",
+          "description": "True only for a variable declared with 'var'."
+        },
+        "assignments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/span"
+          },
+          "description": "Where a 'var' is given a new value. Each one is also in references."
         },
         "signature": {
           "type": "string",

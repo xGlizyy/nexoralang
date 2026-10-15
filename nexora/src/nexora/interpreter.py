@@ -6,8 +6,9 @@ effect a program can have is writing text through `print`.
 The interpreter only accepts a `CheckedProgram`: names and types were verified by the
 checker and are not verified again here. What is checked here is exactly what cannot be
 known before running: division by zero, overflow, conversions out of range, the depth of
-the call stack, whether the `requires` and `ensures` conditions hold, and whether a value
-checked with `Percent(x)` satisfies the condition of its refined type.
+the call stack, whether the `requires` and `ensures` conditions hold, whether a value
+checked with `Percent(x)` satisfies the condition of its refined type, and whether every
+loop keeps its invariants and makes its measure smaller on every turn.
 """
 
 from __future__ import annotations
@@ -26,8 +27,11 @@ from .values import INT_MAX, INT_MIN, Value, format_value, show_value
 MAX_CALL_DEPTH = 1000
 # Python frames needed to run MAX_CALL_DEPTH ordinary NEXORA calls, with room to spare.
 _PYTHON_RECURSION_LIMIT = 25_000
-# How many calls a run-time diagnostic lists.
+# How many calls a run-time diagnostic lists, and how many loops it names.
 _TRACE_LENGTH = 6
+# Every note that says where in a loop a diagnostic happened contains this text.
+_LOOP_NOTE = " of the loop at line "
+_MORE_LOOPS = "... and more loops."
 
 
 class _Returned:
@@ -82,6 +86,25 @@ class Environment:
 
     def declare(self, name: str, value: Value) -> None:
         self._values[name] = value
+
+    def assign(self, name: str, value: Value) -> None:
+        """Gives a new value to a variable, in the block that declared it."""
+        environment: Environment | None = self
+        while environment is not None:
+            if name in environment._values:
+                environment._values[name] = value
+                return
+            environment = environment._parent
+        raise LookupError(f"variable '{name}' is not defined")
+
+    def visible(self) -> list[tuple[str, Value]]:
+        """Every variable and parameter visible here, in the order they were declared."""
+        chain: list[Environment] = []
+        environment: Environment | None = self
+        while environment is not None:
+            chain.append(environment)
+            environment = environment._parent
+        return [pair for scope in reversed(chain) for pair in scope._values.items()]
 
 
 class Interpreter:
@@ -280,9 +303,14 @@ class Interpreter:
         return None
 
     def _statement(self, statement: ast.Statement, environment: Environment) -> _Returned | None:
-        if isinstance(statement, ast.Let):
+        if isinstance(statement, (ast.Let, ast.Var)):
             environment.declare(statement.name, self._evaluate(statement.value, environment))
             return None
+        if isinstance(statement, ast.Assign):
+            environment.assign(statement.name, self._evaluate(statement.value, environment))
+            return None
+        if isinstance(statement, ast.While):
+            return self._while(statement, environment)
         if isinstance(statement, ast.Return):
             if statement.value is None:
                 return _Returned(None)
@@ -302,8 +330,86 @@ class Interpreter:
         if isinstance(statement, ast.ExprStatement):
             self._evaluate(statement.expression, environment)
             return None
-        # ast.Assign is always rejected by the checker.
         raise TypeError(f"statement {type(statement).__name__} reached the interpreter")
+
+    # Loops (decision 0010, section 6)
+
+    def _while(self, loop: ast.While, environment: Environment) -> _Returned | None:
+        """Runs a loop without recursion. Before every evaluation of the condition the invariants must
+        hold; before every turn the measure must be 0 or more and smaller than on the turn before. So a
+        loop always ends, or stops with a diagnostic that names the turn and the values."""
+        invariants = [clause for clause in loop.clauses if clause.clause == "invariant"]
+        measure = next(clause for clause in loop.clauses if clause.clause == "decreases")
+        line = loop.span.line
+        previous: int | None = None
+        turn = 0
+        while True:
+            when = (f"Before the first turn of the loop at line {line}." if turn == 0
+                    else f"After turn {turn} of the loop at line {line}.")
+            for invariant in invariants:
+                if not self._in_loop(when, lambda clause=invariant: self._evaluate(clause.condition, environment)):
+                    raise self._fail(
+                        "E4005",
+                        "This condition is false",
+                        invariant.condition.span,
+                        notes=(
+                            f"The condition at line {invariant.span.line} is false: "
+                            f"invariant {unparse(invariant.condition)}",
+                            *self._reason_note(invariant),
+                            when,
+                            *self._loop_values(environment),
+                        ),
+                    )
+            if not self._in_loop(when, lambda: self._evaluate(loop.condition, environment)):
+                return None
+
+            turn += 1
+            before = f"Before turn {turn} of the loop at line {line}."
+            current = self._in_loop(before, lambda: self._evaluate(measure.condition, environment))
+            if current < 0 or (previous is not None and current >= previous):
+                if current < 0:
+                    label = f"The measure is {current}; it must be 0 or more"
+                elif current == previous:
+                    label = f"The measure was {previous} and is still {current}"
+                else:
+                    label = f"The measure was {previous} and is now {current}"
+                raise self._fail(
+                    "E4006",
+                    label,
+                    measure.condition.span,
+                    notes=(
+                        f"The measure at line {measure.span.line}: decreases {unparse(measure.condition)}",
+                        *self._reason_note(measure),
+                        before,
+                        *self._loop_values(environment),
+                    ),
+                )
+            previous = current
+            outcome = self._in_loop(f"In turn {turn} of the loop at line {line}.",
+                                    lambda: self._block(loop.body, Environment(environment)))
+            if outcome is not None:
+                return outcome
+
+    @staticmethod
+    def _in_loop(where: str, action: Callable[[], object]):
+        """Runs part of a loop. A diagnostic raised inside it gains a note saying where in the loop it
+        happened, so an error nested in several loops names each one, innermost first."""
+        try:
+            return action()
+        except NexoraRuntimeError as error:
+            diagnostic = error.diagnostic
+            if _MORE_LOOPS in diagnostic.notes:
+                raise
+            loops = sum(1 for note in diagnostic.notes if _LOOP_NOTE in note)
+            note = where if loops < _TRACE_LENGTH else _MORE_LOOPS
+            raise NexoraRuntimeError(replace(diagnostic, notes=(*diagnostic.notes, note))) from None
+
+    @staticmethod
+    def _loop_values(environment: Environment) -> tuple[str, ...]:
+        pairs = environment.visible()
+        if not pairs:
+            return ()
+        return ("The values: " + ", ".join(f"{name} = {show_value(value)}" for name, value in pairs),)
 
     # Expressions
 

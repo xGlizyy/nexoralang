@@ -1,6 +1,6 @@
 # Limitaciones
 
-Lo que NEXORA **no** hace en la versión 0.4.0, y los riesgos que conviene conocer antes de usarlo.
+Lo que NEXORA **no** hace en la versión 0.5.0, y los riesgos que conviene conocer antes de usarlo.
 Nada de lo que aparece aquí como "no existe" funciona hoy, aunque se mencione en el borrador de
 diseño o en la hoja de ruta.
 
@@ -17,8 +17,10 @@ NEXORA es un proyecto en una fase temprana (anterior a la versión 1.0):
 
 | Falta | Consecuencia |
 |-------|--------------|
-| Bucles (`while`, `for`) | La repetición solo se expresa con recursividad |
-| Variables reasignables (`var`) | Todo valor es inmutable |
+| `for`, `break` y `continue` | Se escribe un `while` con un contador; para salir antes, la condición o `return` |
+| Asignaciones compuestas (`+=`, `++`) | Se escribe `x = x + 1` |
+| Reasignar un parámetro | Se copia antes en una `var` |
+| Un bucle sin medida (`decreases`) | Todo bucle declara por qué termina; si no puede escribirse una medida, se pone un máximo de vueltas explícito (`decreases limit - turns`) |
 | `if` como expresión | `if` no puede usarse para dar valor a una variable |
 | Tipos compuestos: listas, mapas, registros, enumeraciones, opcionales | Solo existen `Int`, `Float`, `Bool` y `Text` |
 | Tipos definidos por el usuario y genéricos | |
@@ -51,9 +53,11 @@ lenguaje. No sirve todavía para escribir aplicaciones.
 | Entero literal más pequeño | `-9223372036854775807` | `-9223372036854775808` solo puede obtenerse calculándolo: `-9223372036854775807 - 1` |
 
 No hay límite de tiempo ni de memoria: un programa puede tardar o consumir memoria sin que el
-intérprete lo detenga (dentro del límite de 1000 llamadas anidadas, eso significa sobre todo
-textos que crecen por concatenación). Se puede interrumpir con Ctrl+C. Tampoco `nex test` tiene
-límites por ejemplo. Si Python se queda sin memoria mientras el programa se ejecuta, el programa
+intérprete lo detenga. Ningún programa se queda repitiendo algo para siempre: una recursividad sin
+fin se detiene con `E3004` y un bucle sin fin, con `E4006` (su medida deja de disminuir). Pero un
+programa que termina puede tardar mucho: una recursividad que se ramifica (`fib(40)`) o un bucle
+con una medida inicial enorme. Se puede interrumpir con Ctrl+C. Tampoco `nex test` tiene límites
+de tiempo por ejemplo. Si Python se queda sin memoria mientras el programa se ejecuta, el programa
 termina con el error `E3007`; pero en Linux el sistema puede matar el proceso antes, sin ningún
 mensaje ([decisión 0009](decisions/0009-memoria-agotada.md)).
 

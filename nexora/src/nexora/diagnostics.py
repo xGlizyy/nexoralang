@@ -106,6 +106,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E2018": ("Invalid refinement condition", SEMANTIC),
     "E2019": ("Too many refinement checks", SEMANTIC),
     "E2020": ("Example without its function", SEMANTIC),
+    "E2021": ("Missing loop measure", SEMANTIC),
 
     "E3001": ("Division by zero", RUNTIME),
     "E3002": ("Integer overflow", RUNTIME),
@@ -118,6 +119,8 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E4001": ("Precondition violated", CONTRACT),
     "E4002": ("Postcondition violated", CONTRACT),
     "E4003": ("Refinement violated", CONTRACT),
+    "E4005": ("Loop invariant violated", CONTRACT),
+    "E4006": ("Loop measure did not decrease", CONTRACT),
 
     "E4004": ("Example failed", TEST),
 }

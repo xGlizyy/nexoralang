@@ -79,6 +79,10 @@ class Symbol:
     function: str | None          # the function it belongs to (None for a function itself)
     scope: Span | None            # the block where it is visible (None for a function: the whole file)
     references: list[Span] = field(default_factory=list)
+    # True only for a variable declared with 'var'.
+    mutable: bool = False
+    # Where the variable is given a new value. Each of these is also in `references`.
+    assignments: list[Span] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -612,7 +616,7 @@ class Checker:
                 "but its body can end without a 'return'",
                 function.name_span,
                 hint="Make sure every path through the function ends with 'return'. "
-                     "An 'if' without 'else' can be skipped.",
+                     "An 'if' without 'else' can be skipped, and a loop may not run at all.",
             )
 
     def _example(self, example: ast.Example, function: str) -> None:
@@ -670,8 +674,9 @@ class Checker:
 
     # Statements. Each returns True when it always ends the function with 'return'.
 
-    def _declare(self, scope: _Scope, name: str, category: str, kind: str | None, span: Span) -> None:
-        symbol = Symbol(name, category, kind, span, self._function_name, scope.span)
+    def _declare(self, scope: _Scope, name: str, category: str, kind: str | None, span: Span, *,
+                 mutable: bool = False) -> None:
+        symbol = Symbol(name, category, kind, span, self._function_name, scope.span, mutable=mutable)
         scope.names[name] = symbol
         self._symbols.append(symbol)
 
@@ -694,7 +699,7 @@ class Checker:
         return returned
 
     def _statement(self, statement: ast.Statement, scope: _Scope) -> bool:
-        if isinstance(statement, ast.Let):
+        if isinstance(statement, (ast.Let, ast.Var)):
             self._let(statement, scope)
         elif isinstance(statement, ast.Return):
             self._return(statement, scope)
@@ -703,17 +708,10 @@ class Checker:
             return self._if(statement, scope)
         elif isinstance(statement, ast.Block):
             return self._block(statement, _Scope(scope))
+        elif isinstance(statement, ast.While):
+            self._while(statement, scope)
         elif isinstance(statement, ast.Assign):
-            self._expression(statement.value, scope)
-            if scope.find(statement.name) is None:
-                self._unknown_variable(statement.name, statement.name_span, scope)
-            else:
-                self._report(
-                    "E2007",
-                    f"'{statement.name}' cannot be given a new value: variables are immutable",
-                    statement.name_span,
-                    hint="Declare a new variable with a different name instead.",
-                )
+            self._assign(statement, scope)
         else:
             expression = statement.expression
             found = self._expression(expression, scope)
@@ -735,7 +733,7 @@ class Checker:
                 )
         return False
 
-    def _let(self, statement: ast.Let, scope: _Scope) -> None:
+    def _let(self, statement: ast.Let | ast.Var, scope: _Scope) -> None:
         # The initialiser is checked first: a variable is not visible inside its own declaration.
         value_type = self._expression(statement.value, scope)
         if value_type == VOID:
@@ -753,7 +751,79 @@ class Checker:
                                       (f"'{statement.name}' is declared as {declared}.",))
 
         if self._name_is_free(statement.name, statement.name_span, scope):
-            self._declare(scope, statement.name, "variable", variable_type, statement.name_span)
+            self._declare(scope, statement.name, "variable", variable_type, statement.name_span,
+                          mutable=isinstance(statement, ast.Var))
+
+    def _assign(self, statement: ast.Assign, scope: _Scope) -> None:
+        """`name = value`: only a variable declared with 'var' takes a new value, and only of its type.
+        Parameters stay immutable, so 'ensures' and the diagnostics see the values a call received."""
+        value_type = self._expression(statement.value, scope)
+        name, span = statement.name, statement.name_span
+        target = scope.find(name)
+        if target is None:
+            self._unknown_variable(name, span, scope)
+            return
+        if target.category == "parameter":
+            self._report(
+                "E2007",
+                f"'{name}' is a parameter and cannot be given a new value",
+                span,
+                hint=f"Copy it into a variable: 'var name = {name}'.",
+            )
+            return
+        if not target.mutable:
+            self._report(
+                "E2007",
+                f"'{name}' was declared with 'let' and cannot be given a new value",
+                span,
+                hint="Declare it with 'var' if its value has to change.",
+                notes=(f"'{name}' is declared at line {target.span.line}, column {target.span.column}.",),
+            )
+            return
+        target.references.append(span)
+        target.assignments.append(span)
+        if value_type == VOID:
+            self._report("E2011", "This call does not produce a value to store", statement.value.span)
+        elif value_type is not None and target.type is not None:
+            self._expect_type(target.type, value_type, statement.value, (f"'{name}' is declared as {target.type}.",))
+
+    def _while(self, statement: ast.While, scope: _Scope) -> None:
+        """A loop and its clauses (decision 0010). The clauses see what is visible where the loop is,
+        not what its body declares. A loop never counts as always returning: the analysis does not
+        evaluate conditions, and the condition may be false from the start."""
+        self._condition(statement.condition, scope, "'while'")
+        measures = [clause for clause in statement.clauses if clause.clause == "decreases"]
+        for clause in statement.clauses:
+            if clause.clause == "invariant":
+                self._condition(clause.condition, scope, "'invariant'")
+                continue
+            found = self._expression(clause.condition, scope)
+            if found is not None and self._root(found) != INT:
+                self._report(
+                    "E2011",
+                    f"The measure of 'decreases' must be Int, found {found}",
+                    clause.condition.span,
+                    hint="The measure is a whole number that gets smaller on every turn and never goes below 0.",
+                )
+        if not measures:
+            keyword = statement.span
+            self._report(
+                "E2021",
+                "This loop does not say why it ends",
+                Span(keyword.line, keyword.column, keyword.line, keyword.column + len("while")),
+                hint="Add 'decreases <expression>' with an Int that gets smaller on every turn and never goes "
+                     "below 0, for example 'decreases n - i'.",
+            )
+        for extra in measures[1:]:
+            first = measures[0].span
+            self._report(
+                "E2021",
+                "A loop has exactly one measure",
+                extra.span,
+                hint="Combine them into one Int that gets smaller on every turn.",
+                notes=(f"The first 'decreases' is at line {first.line}, column {first.column}.",),
+            )
+        self._block(statement.body, _Scope(scope))
 
     def _return(self, statement: ast.Return, scope: _Scope) -> None:
         expected = self._return_type

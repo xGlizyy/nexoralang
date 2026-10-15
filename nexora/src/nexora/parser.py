@@ -37,11 +37,20 @@ _COMPARISON_OPERATORS = ("==", "!=", "<", "<=", ">", ">=")
 _NAME_KEYWORDS = (
     TokenType.FN, TokenType.LET, TokenType.RETURN, TokenType.IF, TokenType.ELSE, TokenType.TRUE,
     TokenType.FALSE, TokenType.AND, TokenType.OR, TokenType.NOT, TokenType.REQUIRES, TokenType.ENSURES,
-    TokenType.TYPE, TokenType.WHERE, TokenType.EXAMPLE,
+    TokenType.TYPE, TokenType.WHERE, TokenType.EXAMPLE, TokenType.VAR, TokenType.WHILE, TokenType.INVARIANT,
+    TokenType.DECREASES,
 )
 _DECLARATION_KEYWORDS = (TokenType.FN, TokenType.TYPE)
 # The clauses that open a function body: the contracts and the examples.
 _CONTRACT_KEYWORDS = (TokenType.REQUIRES, TokenType.ENSURES, TokenType.EXAMPLE)
+# The clauses that open the body of a loop.
+_LOOP_KEYWORDS = (TokenType.INVARIANT, TokenType.DECREASES)
+# Hints for the reserved words a program is most likely to reach for.
+_RESERVED_HINTS = {
+    "break": "There is no 'break': a loop ends when its condition is false, or with 'return'.",
+    "continue": "There is no 'continue': put the rest of the turn inside an 'if'.",
+    "for": "There is no 'for' yet: write a 'while' loop with a counter declared with 'var'.",
+}
 _STATEMENT_END = (TokenType.NEWLINE, TokenType.RBRACE, TokenType.EOF)
 
 
@@ -359,12 +368,14 @@ class Parser:
         # Expression depth is counted per statement.
         self._depths.clear()
 
-        if token.type is TokenType.LET:
+        if token.type in (TokenType.LET, TokenType.VAR):
             return self._let()
         if token.type is TokenType.RETURN:
             return self._return()
         if token.type is TokenType.IF:
             return self._if()
+        if token.type is TokenType.WHILE:
+            return self._while()
         if token.type is TokenType.LBRACE:
             return self._block()
         if token.type is TokenType.IDENT and self._peek(1).type is TokenType.EQUAL:
@@ -378,6 +389,12 @@ class Parser:
                 f"'{token.lexeme}' must come at the start of a function body, before any other statement",
                 hint="Move this clause to the first lines of the function.",
             )
+        if token.type in _LOOP_KEYWORDS:
+            raise self._error(
+                "E1106",
+                f"'{token.lexeme}' must come at the start of the body of a 'while', before any other statement",
+                hint="Move this clause to the first lines of the loop body.",
+            )
         if token.type is TokenType.ELSE:
             raise self._error(
                 "E1101",
@@ -385,13 +402,10 @@ class Parser:
                 hint="'else' goes on the same line as the '}' that closes the 'if' block: } else {",
             )
         if token.type is TokenType.RESERVED:
-            hint = None
-            if token.lexeme == "var":
-                hint = "Variables cannot be reassigned in this version; declare a new one with 'let'."
             raise self._error(
                 "E1103",
                 f"'{token.lexeme}' is reserved for a future version of NEXORA and is not implemented yet",
-                hint=hint,
+                hint=_RESERVED_HINTS.get(token.lexeme),
             )
         if token.type is TokenType.FN:
             raise self._error("E1101", "A function cannot be declared inside another function")
@@ -411,9 +425,10 @@ class Parser:
         expression = self._expression()
         return ast.ExprStatement(expression.span, expression)
 
-    def _let(self) -> ast.Let:
+    def _let(self) -> ast.Let | ast.Var:
+        """`let` and `var` share one form; only `var` can be assigned again later."""
         keyword = self._advance()
-        name = self._expect_name("a variable name after 'let'")
+        name = self._expect_name(f"a variable name after '{keyword.lexeme}'")
         declared_type = None
         if self._match(TokenType.COLON):
             declared_type = self._type(f"a type for '{name.lexeme}' after ':'")
@@ -423,7 +438,8 @@ class Parser:
             hint="A variable must be given a value when it is declared.",
         )
         value = self._expression()
-        return ast.Let(keyword.span.to(value.span), name.lexeme, name.span, declared_type, value)
+        node = ast.Var if keyword.type is TokenType.VAR else ast.Let
+        return node(keyword.span.to(value.span), name.lexeme, name.span, declared_type, value)
 
     def _return(self) -> ast.Return:
         keyword = self._advance()
@@ -449,6 +465,46 @@ class Parser:
         self._nesting -= 1
         end = else_branch.span if else_branch is not None else then_block.span
         return ast.If(keyword.span.to(end), condition, then_block, else_branch)
+
+    def _while(self) -> ast.While:
+        """`while condition { clauses statements }`. The clauses come first in the body, like the
+        contracts of a function; the checker requires exactly one `decreases` (decision 0010)."""
+        keyword = self._advance()
+        self._enter(keyword)
+        if self._check(TokenType.LBRACE):
+            raise self._error("E1101", "Expected a condition after 'while', found '{'")
+        condition = self._expression()
+        opening = self._expect(TokenType.LBRACE, "'{' to start the body of 'while'")
+        self._enter(opening)
+        level = self._nesting
+        self._skip_newlines()
+        clauses = self._loop_clauses(level)
+        body = self._block_rest(opening, level)
+        self._nesting -= 1
+        return ast.While(keyword.span.to(body.span), condition, tuple(clauses), body)
+
+    def _loop_clauses(self, level: int) -> list[ast.LoopClause]:
+        """The `invariant` and `decreases` clauses that open the body of a loop, in any order."""
+        clauses: list[ast.LoopClause] = []
+        while self._peek().type in _LOOP_KEYWORDS:
+            try:
+                keyword = self._advance()
+                self._depths.clear()
+                if self._peek().type in _STATEMENT_END:
+                    what = "a condition" if keyword.type is TokenType.INVARIANT else "an Int measure"
+                    raise self._error(
+                        "E1101",
+                        f"Expected {what} after '{keyword.lexeme}', found {self._peek().describe()}",
+                    )
+                condition = self._expression()
+                message, end = self._explanation(keyword.lexeme, condition.span)
+                self._end_of_statement()
+                clauses.append(ast.LoopClause(keyword.span.to(end), keyword.lexeme, condition, message))
+            except ParseError as error:
+                self._record(error)
+                self._nesting = level
+                self._synchronize_statement()
+        return clauses
 
     # Expressions
 

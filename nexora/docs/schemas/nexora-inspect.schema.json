@@ -736,6 +736,72 @@
         }
       }
     },
+    "Var": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "declared_type",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Var"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "declared_type": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/TypeRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        }
+      }
+    },
     "Assign": {
       "type": "object",
       "required": [
@@ -975,6 +1041,9 @@
                 "$ref": "#/$defs/Let"
               },
               {
+                "$ref": "#/$defs/Var"
+              },
+              {
                 "$ref": "#/$defs/Assign"
               },
               {
@@ -984,6 +1053,9 @@
                 "$ref": "#/$defs/If"
               },
               {
+                "$ref": "#/$defs/While"
+              },
+              {
                 "$ref": "#/$defs/ExprStatement"
               },
               {
@@ -991,6 +1063,126 @@
               }
             ]
           }
+        }
+      }
+    },
+    "LoopClause": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "clause",
+        "condition",
+        "message"
+      ],
+      "properties": {
+        "kind": {
+          "const": "LoopClause"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "clause": {
+          "type": "string"
+        },
+        "condition": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "message": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "While": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "condition",
+        "clauses",
+        "body"
+      ],
+      "properties": {
+        "kind": {
+          "const": "While"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "condition": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "clauses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LoopClause"
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/Block"
         }
       }
     },

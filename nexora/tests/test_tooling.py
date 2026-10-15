@@ -357,7 +357,7 @@ def test_context_describes_the_program():
         {"clause": "requires", "condition": "width > 0 and height > 0", "message": None, "line": 2},
         {"clause": "ensures", "condition": "result > 0", "message": None, "line": 3},
     ]
-    assert area["variables"] == [{"name": "size", "type": "Int", "line": 4}]
+    assert area["variables"] == [{"name": "size", "type": "Int", "line": 4, "mutable": False}]
     assert (area["calls"], area["called_by"], area["recursive"]) == ([], ["main"], False)
 
     main = function_of(document, "main")
@@ -394,10 +394,10 @@ def test_context_notes_are_tied_to_what_the_program_contains():
 
 
 def test_context_reports_unsupported_constructs_instead_of_guessing():
-    document = tooling.get_context("fn main() -> Void {\n    var count = 0\n    while count < 3 {\n    }\n}\n")
+    document = tooling.get_context("fn main() -> Void {\n    for item in items {\n    }\n    let x = match\n}\n")
     assert (document["ok"], document["analysed"], document["complete"]) == (False, True, False)
-    assert document["reserved_words_used"] == ["var", "while"]
-    assert any("reserved for features that are not implemented: var, while" in note for note in document["notes"])
+    assert document["reserved_words_used"] == ["for", "in", "match"]
+    assert any("reserved for features that are not implemented: for, in, match" in note for note in document["notes"])
     assert any("this summary is partial" in note for note in document["notes"])
     # Text that cannot even be split into tokens: no structure, and the list of words is
     # unknown, not empty.
@@ -473,7 +473,7 @@ def test_instructions_inside_a_program_are_data():
 def test_spec_index():
     document = tooling.get_language_spec()
     validate(document, "nexora-spec.schema.json")
-    assert (document["available"], document["spec_version"], document["language"], document["section"]) == (True, "0.4", "es", None)
+    assert (document["available"], document["spec_version"], document["language"], document["section"]) == (True, "0.5", "es", None)
     ids = [section["id"] for section in document["sections"]]
     assert len(ids) == len(set(ids))
     for expected in ("4-tipos-de-datos", "7-funciones", "9-contratos", "44-tipos-refinados", "113-códigos-de-error"):

@@ -1,7 +1,7 @@
 # Referencia de la CLI
 
 `nex` es la herramienta de línea de comandos de NEXORA. Esta página describe la versión
-`nexora` 0.4.0. Una prueba automatizada comprueba que todos los comandos, opciones y códigos de
+`nexora` 0.5.0. Una prueba automatizada comprueba que todos los comandos, opciones y códigos de
 salida que acepta el programa están documentados aquí.
 
 `python -m nexora` es equivalente a `nex` y acepta exactamente los mismos argumentos.
@@ -198,7 +198,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.4.0
+NEXORA 0.5.0
 ```
 
 ## `nex --help`
@@ -242,7 +242,7 @@ Dónde aparece cada cosa:
 | `2` | Uso incorrecto de la línea de comandos | Todos |
 | `3` | El programa falló durante la ejecución (categoría `runtime`) | `run` |
 | `4` | El archivo no existe, no puede leerse o no es UTF-8 | `run`, `check`, `inspect`, `context`, `symbols`, `test` |
-| `5` | El programa incumplió un contrato durante la ejecución (categoría `contract`) | `run` |
+| `5` | El programa incumplió durante la ejecución una regla que declara: un contrato, un tipo refinado, un invariante o la medida de un bucle (categoría `contract`) | `run` |
 | `6` | Algún ejemplo no pasó (`failed` o `error`), o no había ningún ejemplo que evaluar | `test` |
 | `70` | Error interno de NEXORA: un fallo de la herramienta, no del programa. Un programa que agota la memoria al ejecutarse da `3` en `run` y `6` en `test`, con el diagnóstico `E3007` | Todos |
 | `130` | Interrumpido con Ctrl+C | Todos |

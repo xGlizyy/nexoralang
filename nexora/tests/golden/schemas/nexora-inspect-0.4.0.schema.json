@@ -1,0 +1,1226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexora.invalid/schemas/nexora-inspect.schema.json",
+  "title": "nexora.inspect/2: the syntax tree of a program",
+  "type": "object",
+  "required": [
+    "schema",
+    "nexora_version",
+    "file",
+    "ok",
+    "diagnostics",
+    "complete",
+    "program"
+  ],
+  "properties": {
+    "schema": {
+      "const": "nexora.inspect/2"
+    },
+    "nexora_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "file": {
+      "type": "string",
+      "description": "The name the source was given. A label, not necessarily a path."
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "True when the static analysis found no errors."
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "complete": {
+      "type": "boolean",
+      "description": "True when the analysis covers the whole file. False when syntax errors left out the statements and functions that have them, or when there is no structure at all."
+    },
+    "program": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Program"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Partial when 'complete' is false. Null when the source has lexical errors."
+    }
+  },
+  "$defs": {
+    "span": {
+      "description": "A region of the source. Lines and columns start at 1; the end is exclusive. Columns count Unicode code points.",
+      "type": "object",
+      "required": [
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": [
+        "severity",
+        "category",
+        "code",
+        "message",
+        "label",
+        "hint",
+        "notes",
+        "file",
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "severity": {
+          "const": "error"
+        },
+        "category": {
+          "enum": [
+            "contract",
+            "file",
+            "lexical",
+            "runtime",
+            "semantic",
+            "syntax",
+            "test",
+            "type"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^E[0-9]{4}$",
+          "description": "Stable identifier of the problem."
+        },
+        "message": {
+          "type": "string",
+          "description": "Fixed title of the code."
+        },
+        "label": {
+          "type": "string",
+          "description": "What is wrong in this particular case."
+        },
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A suggested fix, only when a rule of the language supports it."
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Related information."
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    },
+    "IntLiteral": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "value",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "IntLiteral"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "value": {
+          "type": "integer"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "FloatLiteral": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "value",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "FloatLiteral"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "value": {
+          "type": "number"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "TextLiteral": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "value",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "TextLiteral"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "value": {
+          "type": "string"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "BoolLiteral": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "value",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "BoolLiteral"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "value": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "Name": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Name"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "Unary": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "operator",
+        "operand",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Unary"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "operator": {
+          "type": "string"
+        },
+        "operand": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "Binary": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "operator",
+        "operator_span",
+        "left",
+        "right",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Binary"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "operator": {
+          "type": "string"
+        },
+        "operator_span": {
+          "$ref": "#/$defs/span"
+        },
+        "left": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "right": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "Group": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "expression",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Group"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "expression": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "Call": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "callee",
+        "callee_span",
+        "arguments",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Call"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "callee": {
+          "type": "string"
+        },
+        "callee_span": {
+          "$ref": "#/$defs/span"
+        },
+        "arguments": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/IntLiteral"
+              },
+              {
+                "$ref": "#/$defs/FloatLiteral"
+              },
+              {
+                "$ref": "#/$defs/TextLiteral"
+              },
+              {
+                "$ref": "#/$defs/BoolLiteral"
+              },
+              {
+                "$ref": "#/$defs/Name"
+              },
+              {
+                "$ref": "#/$defs/Unary"
+              },
+              {
+                "$ref": "#/$defs/Binary"
+              },
+              {
+                "$ref": "#/$defs/Group"
+              },
+              {
+                "$ref": "#/$defs/Call"
+              }
+            ]
+          }
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "TypeRef": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "const": "TypeRef"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "TypeDecl": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "base",
+        "condition",
+        "message"
+      ],
+      "properties": {
+        "kind": {
+          "const": "TypeDecl"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "base": {
+          "$ref": "#/$defs/TypeRef"
+        },
+        "condition": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "message": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Let": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "declared_type",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Let"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "declared_type": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/TypeRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        }
+      }
+    },
+    "Assign": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Assign"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        }
+      }
+    },
+    "Return": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Return"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "If": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "condition",
+        "then_block",
+        "else_branch"
+      ],
+      "properties": {
+        "kind": {
+          "const": "If"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "condition": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "then_block": {
+          "$ref": "#/$defs/Block"
+        },
+        "else_branch": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Block"
+            },
+            {
+              "$ref": "#/$defs/If"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ExprStatement": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "expression"
+      ],
+      "properties": {
+        "kind": {
+          "const": "ExprStatement"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "expression": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        }
+      }
+    },
+    "Block": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "statements"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Block"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "statements": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Let"
+              },
+              {
+                "$ref": "#/$defs/Assign"
+              },
+              {
+                "$ref": "#/$defs/Return"
+              },
+              {
+                "$ref": "#/$defs/If"
+              },
+              {
+                "$ref": "#/$defs/ExprStatement"
+              },
+              {
+                "$ref": "#/$defs/Block"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "Param": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Param"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "type": {
+          "$ref": "#/$defs/TypeRef"
+        }
+      }
+    },
+    "Contract": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "clause",
+        "condition",
+        "message"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Contract"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "clause": {
+          "type": "string"
+        },
+        "condition": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "message": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Example": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "condition",
+        "message"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Example"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "condition": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "message": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Function": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "params",
+        "return_type",
+        "contracts",
+        "body",
+        "examples"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Function"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Param"
+          }
+        },
+        "return_type": {
+          "$ref": "#/$defs/TypeRef"
+        },
+        "contracts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Contract"
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/Block"
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Example"
+          }
+        }
+      }
+    },
+    "Program": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "types",
+        "functions"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Program"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TypeDecl"
+          }
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Function"
+          }
+        }
+      }
+    }
+  }
+}

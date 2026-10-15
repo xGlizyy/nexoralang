@@ -309,12 +309,94 @@ program.nex: no examples to run
 error: program.nex: nothing was tested
 ```
 
+## Bucles: `invariant` y `decreases`
+
+Un bucle `while` declara sus requisitos al principio de su cuerpo, igual que una función
+([decisión 0010](decisions/0010-var-y-while.md)):
+
+- **`decreases`** (exactamente una): la **medida**, un `Int` que nunca baja de 0 y que disminuye en
+  cada vuelta. Es la razón por la que el bucle termina, escrita en el código.
+- **`invariant`** (las que haga falta): una condición que se cumple antes de cada evaluación de la
+  condición del bucle; es decir, al llegar, después de cada vuelta y al salir.
+
+<!-- nex:run -->
+```nex
+fn gcd(a: Int, b: Int) -> Int {
+    requires a >= 0 and b >= 0, "Only natural numbers"
+    requires a > 0 or b > 0, "gcd(0, 0) is not defined"
+    var x = a
+    var y = b
+    while y != 0 {
+        invariant x >= 0 and y >= 0
+        decreases y, "The remainder is always smaller than the divisor"
+        let remainder = x - x / y * y
+        x = y
+        y = remainder
+    }
+    return x
+}
+
+fn main() -> Void {
+    print(gcd(1071, 462))
+}
+```
+
+```text
+21
+```
+
+Las cláusulas ven lo que es visible donde está el bucle, no lo que declara su cuerpo, y llevan su
+explicación tras una coma. Un bucle sin `decreases` no supera `nex check` (`E2021`).
+
+El intérprete las comprueba **en cada vuelta**. Un invariante falso es `E4005`; una medida negativa
+o que no es menor que en la vuelta anterior es `E4006`. Así, ningún bucle se queda repitiendo para
+siempre: o termina, o se detiene y dice en qué vuelta y con qué valores. El diagnóstico lleva la
+explicación de la regla, como el de un contrato:
+
+<!-- nex:fails exit=5 -->
+```nex
+fn average(total: Int, count: Int) -> Int {
+    requires count > 0, "There is nothing to average"
+    var quotient = 0
+    var rest = total
+    while rest >= count {
+        invariant quotient * count + rest == total, "No unit is lost while dividing"
+        decreases rest
+        rest = rest - count
+        quotient = quotient + 2
+    }
+    return quotient
+}
+
+fn main() -> Void {
+    print(average(10, 3))
+}
+```
+
+```text
+contract error[E4005]: Loop invariant violated
+ --> program.nex:6:19
+  |
+6 |         invariant quotient * count + rest == total, "No unit is lost while dividing"
+  |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ This condition is false
+  = note: The condition at line 6 is false: invariant quotient * count + rest == total
+  = note: Reason: No unit is lost while dividing
+  = note: After turn 1 of the loop at line 5.
+  = note: The values: total = 10, count = 3, quotient = 2, rest = 7
+  = note: In 'average', called at line 15, column 11.
+
+error: program.nex: the program stopped because a contract was broken
+```
+
 ## Códigos y salida
 
 | Situación | Código | Categoría | `nex run` termina con |
 |-----------|--------|-----------|-----------------------|
 | Condición `requires` falsa | `E4001` | `contract` | `5` |
 | Condición `ensures` falsa | `E4002` | `contract` | `5` |
+| `invariant` falso en un bucle | `E4005` | `contract` | `5` |
+| Medida (`decreases`) que no disminuye o es negativa | `E4006` | `contract` | `5` |
+| Bucle sin medida, o con más de una | `E2021` | `semantic` | `1` (no se ejecuta) |
 | Condición mal tipada | `E2011` | `type` | `1` (no se ejecuta) |
 | Cláusula fuera del principio del cuerpo | `E1106` | `syntax` | `1` (no se ejecuta) |
 | Explicación vacía, de más de una línea o que no es un texto | `E1101` | `syntax` | `1` (no se ejecuta) |
@@ -338,9 +420,12 @@ Lo que los contratos **no** hacen. Es importante no atribuirles más garantías 
   función que use `print`.
 - **No se pueden desactivar.** Se comprueban siempre, y cada comprobación tiene un coste de
   ejecución.
-- No hay invariantes ni condiciones sobre valores "antes" y "después": no hacen falta mientras
-  todos los valores sean inmutables. Las reglas sobre los valores de un tipo se escriben con
+- No hay condiciones sobre valores "antes" y "después" de una función: los parámetros no cambian,
+  así que en `ensures` tienen el valor con el que se llamó. Los invariantes existen solo en los
+  bucles. Las reglas sobre los valores de un tipo se escriben con
   [tipos refinados](types.md#tipos-refinados).
+- **Una medida garantiza que el bucle termina, no que termine pronto.** Una medida inicial de mil
+  millones permite mil millones de vueltas.
 
 ## Por qué existen
 

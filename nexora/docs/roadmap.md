@@ -23,7 +23,8 @@ hay una prueba que falla si deja de funcionar.
 | Tipos `Int`, `Float`, `Bool`, `Text`, `Void`; inferencia y anotaciones | `tests/test_types.py` |
 | Aritmética, comparaciones y operadores lógicos | `tests/test_types.py`, `tests/test_interpreter.py` |
 | Conversiones explícitas (`to_float`, `to_int`, `to_text`) | `tests/test_types.py` |
-| Variables inmutables, bloques y ámbitos | `tests/test_checker.py` |
+| Variables inmutables (`let`) y reasignables (`var`), bloques y ámbitos | `tests/test_checker.py`, `tests/test_loops.py` |
+| **Bucles** `while` con su medida (`decreases`) e invariantes (`invariant`), comprobados en cada vuelta | `tests/test_loops.py` |
 | Funciones con parámetros, `return`, rutas de retorno, recursividad | `tests/test_functions.py` |
 | `if` / `else if` / `else` | `tests/test_functions.py` |
 | **Contratos** (`requires`, `ensures`), estables desde la 0.3.0 | `tests/test_contracts.py` |
@@ -31,6 +32,7 @@ hay una prueba que falla si deja de funcionar.
 | **Tipos refinados** (`type ... where ...`): constantes comprobadas sin ejecutar, `Tipo(x)` al ejecutar, cadenas de tipos | `tests/test_refined_types.py` |
 | **Ejemplos en las funciones** (`example`), evaluados con `nex test` | `tests/test_example_clauses.py`, `tests/test_nex_test.py` |
 | Memoria agotada al ejecutar como error del programa (`E3007`) | `tests/test_out_of_memory.py` |
+| Ningún bucle se queda repitiendo para siempre: se detiene con `E4006`, también en `nex test` | `tests/test_loops.py` |
 | Análisis estático separado de la ejecución | `tests/test_checker.py`, `tests/test_security.py` |
 | Intérprete | `tests/test_interpreter.py` |
 | Diagnósticos con código, categoría y posición, en texto y JSON | `tests/test_diagnostics.py`, `tests/test_cli.py` |
@@ -70,6 +72,7 @@ sólido:
 | 3 | **Casos concretos en la función (`example`)** y un comando que los ejecute sin escribir `main` | **Completado en la 0.4.0** ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
 | 4 | **Avisar cuando una edición elimina o debilita un requisito** | En investigación: no está decidido cómo detectar que una condición es más débil que otra |
 | 5 | **Tipos refinados** (`type Percent = Int where ...`) | **Completado en la 0.3.0** sobre los tipos integrados. Falta refinar registros, cuando existan |
+| 5b | **Requisitos de los bucles**: la medida (`decreases`) y los invariantes (`invariant`), con su explicación, comprobados en cada vuelta | **Completado en la 0.5.0** ([decisión 0010](decisions/0010-var-y-while.md)) |
 | 6 | **Evaluar si los requisitos en el código ayudan a un agente de IA** a no romperlos | Planificado; ver la última fila de [En investigación](#en-investigación) |
 
 Hasta que el paso 6 dé resultados, la característica es una hipótesis y no se presenta como una
@@ -81,21 +84,19 @@ El resto del lenguaje, en el orden en que tendría sentido abordarlo. Avanza jun
 principal; cuando un punto de esta lista es necesario para un paso de la línea principal, va
 primero:
 
-1. **Variables reasignables (`var`) y bucles (`while`).** Van juntos: uno no sirve sin el otro.
-   Eliminan la dependencia de la recursividad.
-2. **Operaciones sobre textos**: longitud, comparación de orden, conversión de texto a número.
-3. **Un primer tipo compuesto: listas.** Exige cambiar la forma en que el comprobador representa
-   los tipos.
-4. **Registros y valores opcionales** (`Option`, `Result`), para representar la ausencia de un
+1. **Operaciones sobre textos**: longitud, comparación de orden, conversión de texto a número.
+2. **Un primer tipo compuesto: listas.** Exige cambiar la forma en que el comprobador representa
+   los tipos. Con ellas, `for` sobre una lista (su medida es lo que queda por recorrer).
+3. **Registros y valores opcionales** (`Option`, `Result`), para representar la ausencia de un
    valor y los errores sin excepciones.
-5. **Entrada de datos**: argumentos del programa y lectura de la entrada estándar.
-6. **Módulos e importaciones.**
-7. **Avisos** (variables sin usar) y convenciones de nombres.
-8. **Análisis más tolerante**: conservar las funciones cuya declaración tiene un error, y dar
+4. **Entrada de datos**: argumentos del programa y lectura de la entrada estándar.
+5. **Módulos e importaciones.**
+6. **Avisos** (variables sin usar, `var` que nunca cambia) y convenciones de nombres.
+7. **Análisis más tolerante**: conservar las funciones cuya declaración tiene un error, y dar
    estructura también con errores léxicos. El árbol parcial con errores de sintaxis ya existe.
-9. **Servidor de lenguaje (LSP)**, empezando por los diagnósticos. La evaluación y los requisitos
+8. **Servidor de lenguaje (LSP)**, empezando por los diagnósticos. La evaluación y los requisitos
    que quedan están en [LSP](lsp.md). Hoy no existe.
-10. **Formateador.**
+9. **Formateador.**
 
 ## En investigación
 
@@ -122,6 +123,7 @@ Ideas del diseño original cuyo valor o cuya forma no están decididos:
 | 4 | Playground: editor web que ejecuta con el intérprete real | Implementada y probada en local; sin desplegar, y con el aislamiento por contenedor sin verificar |
 | 5 | Herramientas para agentes: protocolo JSON, `nex context`, `nex symbols`, API de Python, servidor MCP | Implementada y probada en local; el LSP queda planificado y ningún modelo de IA se ha evaluado |
 | 6 | Requisitos verificables: contratos estables, explicación de las reglas y tipos refinados | Completada (versión 0.3.0). Los ejemplos (paso 3) llegaron en la 0.4.0; quedan los pasos 4 y 6 de la [línea principal](#línea-principal-requisitos-verificables) |
+| 7 | Repetición sin recursividad: `var` y bucles que declaran por qué terminan y qué mantienen | Completada (versión 0.5.0) |
 
 La web del proyecto (`web/`, en la raíz del repositorio) muestra una versión resumida de esta hoja
 de ruta. Este documento es la referencia.

@@ -98,17 +98,20 @@ Los campos de cada nodo aparecen siempre, en el orden indicado. Un campo opciona
 | `Param` | `name`: texto · `name_span`: posición · `type`: `TypeRef` | Un parámetro |
 | `TypeRef` | `name`: texto | Un tipo escrito en el código: `Int`, `Float`, `Bool`, `Text`, `Void` o un tipo refinado |
 | `Contract` | `clause`: `"requires"` o `"ensures"` · `condition`: expresión · `message`: texto o `null` | Una cláusula de contrato. `message` es la explicación escrita tras la coma |
+| `LoopClause` | `clause`: `"invariant"` o `"decreases"` · `condition`: expresión (`Bool` en un invariante, `Int` en una medida) · `message`: texto o `null` | Una cláusula del principio del cuerpo de un `While` |
 
 ### Sentencias
 
 | `kind` | Campos | Significado |
 |--------|--------|-------------|
 | `Block` | `statements`: lista de sentencias | Un bloque `{ }` |
-| `Let` | `name`: texto · `name_span`: posición · `declared_type`: `TypeRef` o `null` · `value`: expresión | Declaración de variable. `declared_type` es `null` si el tipo se infiere |
+| `Let` | `name`: texto · `name_span`: posición · `declared_type`: `TypeRef` o `null` · `value`: expresión | Declaración de variable inmutable. `declared_type` es `null` si el tipo se infiere |
+| `Var` | Los mismos que `Let` | Declaración de una variable que puede cambiar de valor (`var`). Es un nodo distinto de `Let` para que una herramienta que no lo conoce lo note, en vez de tomarla por inmutable |
 | `Return` | `value`: expresión o `null` | `return`, con o sin valor |
 | `If` | `condition`: expresión · `then_block`: `Block` · `else_branch`: `Block`, `If` o `null` | Condicional. `else_branch` es otro `If` en un `else if` |
+| `While` | `condition`: expresión · `clauses`: lista de `LoopClause`, en el orden del código · `body`: `Block` | Un bucle. `body` contiene las sentencias, sin las cláusulas |
 | `ExprStatement` | `expression`: expresión | Una llamada usada como sentencia |
-| `Assign` | `name`: texto · `name_span`: posición · `value`: expresión | Una asignación. Siempre va acompañada del error `E2007` |
+| `Assign` | `name`: texto · `name_span`: posición · `value`: expresión | Una asignación. Solo es válida sobre una variable `var`; sobre una `let` o un parámetro va acompañada del error `E2007` |
 
 ### Expresiones
 
@@ -195,5 +198,6 @@ versión 2, y otra comprueba que este documento los menciona todos.
 | Versión | Publicada en | Cambios |
 |---------|--------------|---------|
 | `nexora.inspect/1` | `nexora` 0.2.0 | Primera versión |
+| `nexora.inspect/2` | `nexora` 0.5.0 | Añadidos, sin cambiar la versión: nodos `Var`, `While` y `LoopClause` ([decisión 0010](decisions/0010-var-y-while.md)). `Assign` aparece también en programas válidos. Un programa sin `var` ni bucles produce el mismo documento que en la 0.4.0 |
 | `nexora.inspect/2` | `nexora` 0.4.0 | Añadidos, sin cambiar la versión: nodo `Example` y campo `examples` al final de `Function` ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
 | `nexora.inspect/2` | `nexora` 0.3.0 | **Cambio incompatible:** el campo `type` de las expresiones deja de ser una lista cerrada (`Int`, `Float`, `Bool`, `Text`, `Void`) y puede ser el nombre de un tipo refinado. Añadidos: nodo `TypeDecl`, campo `types` en `Program`, campo `message` en `Contract` |

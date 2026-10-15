@@ -16,6 +16,9 @@ fn main() -> Void {
     40 + 2
     area(2, 3)
     launch()
+    while true {
+        print("forever")
+    }
     return
     print("never runs")
 }

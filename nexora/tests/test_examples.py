@@ -31,6 +31,7 @@ EXPECTED = {
     "contracts.nex": (0, 0),
     "refined_types.nex": (0, 0),
     "checked_examples.nex": (0, 0),
+    "loops.nex": (0, 0),
     # Rejected by the static analysis: never started.
     "invalid/syntax_error.nex": (1, 1),
     "invalid/name_errors.nex": (1, 1),
@@ -40,12 +41,14 @@ EXPECTED = {
     "failing/runtime_error.nex": (3, 0),
     "failing/contract_violation.nex": (5, 0),
     "failing/refinement_violation.nex": (5, 0),
+    "failing/loop_measure.nex": (5, 0),
 }
 
 
 # Exit code of `nex test` for the examples that have 'example' clauses.
 TESTED = {
     "checked_examples.nex": 0,
+    "loops.nex": 0,
 }
 
 

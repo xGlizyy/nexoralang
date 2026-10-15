@@ -129,6 +129,8 @@ def _symbol_entries(facts: CheckedProgram) -> list[dict]:
             "declaration": _span(symbol.span),
             "scope": _span(symbol.scope),
             "references": [_span(reference) for reference in symbol.references],
+            "mutable": symbol.mutable,
+            "assignments": [_span(assignment) for assignment in symbol.assignments],
         }
         if symbol.category == "function":
             declaration = facts.functions[symbol.name]
@@ -216,6 +218,9 @@ _FEATURES = (
     ("contracts", lambda node, types: isinstance(node, ast.Contract)),
     ("refined_types", lambda node, types: isinstance(node, ast.TypeDecl)),
     ("examples", lambda node, types: isinstance(node, ast.Example)),
+    ("mutable_variables", lambda node, types: isinstance(node, ast.Var)),
+    ("loops", lambda node, types: isinstance(node, ast.While)),
+    ("loop_invariants", lambda node, types: isinstance(node, ast.LoopClause) and node.clause == "invariant"),
     ("type_annotations", lambda node, types: isinstance(node, ast.Let) and node.declared_type is not None),
     ("arithmetic", lambda node, types: isinstance(node, ast.Binary) and node.operator in ("+", "-", "*", "/")
         and types.get(id(node)) != TEXT),
@@ -256,6 +261,10 @@ def _notes(analysis: Analysis, features: list[str], reserved_used: list[str]) ->
         notes.append("Every value of a refined type satisfies its condition. This analysis checked the "
                      "constants given to refined types; any other value is checked by 'Type(x)' while the "
                      "program runs (E4003).")
+    if "loops" in features:
+        notes.append("Every loop declares a measure ('decreases') that is checked on every turn: a loop ends, or "
+                     "stops with E4006. Invariants are checked before every evaluation of the loop condition "
+                     "(E4005). This analysis verified their types, not that they hold.")
     if "recursion" in features:
         notes.append(f"Recursion is limited to {MAX_CALL_DEPTH} nested calls (runtime error E3004).")
     types = analysis.types or {}
@@ -286,6 +295,7 @@ def _function_context(function: ast.Function, analysis: Analysis, calls: dict[st
             "name": symbol.name,
             "type": symbol.type,
             "line": symbol.span.line,
+            "mutable": symbol.mutable,
         }
         for symbol in facts.symbols
         if symbol.category == "variable" and symbol.function == function.name
@@ -314,6 +324,21 @@ def _function_context(function: ast.Function, analysis: Analysis, calls: dict[st
              "line": example.span.line}
             for example in function.examples
         ],
+        # The loops of the function and the requirements each one declares (decision 0010).
+        "loops": [_loop_context(loop, analysis.source) for loop in _walk(function.body) if isinstance(loop, ast.While)],
+    }
+
+
+def _loop_context(loop: ast.While, source: Source) -> dict:
+    def clause(node: ast.LoopClause) -> dict:
+        return {"condition": _text_of(source, node.condition.span), "message": node.message, "line": node.span.line}
+
+    measures = [node for node in loop.clauses if node.clause == "decreases"]
+    return {
+        "line": loop.span.line,
+        "condition": _text_of(source, loop.condition.span),
+        "invariants": [clause(node) for node in loop.clauses if node.clause == "invariant"],
+        "measure": clause(measures[0]) if measures else None,
     }
 
 
@@ -413,8 +438,16 @@ def render_context(document: dict) -> str:
                 if contract["message"]:
                     lines.append(f"          reason: {contract['message']}")
             if function["variables"]:
-                variables = ", ".join(f"{v['name']}: {v['type'] or '?'}" for v in function["variables"])
+                variables = ", ".join(f"{'var ' if v['mutable'] else ''}{v['name']}: {v['type'] or '?'}"
+                                      for v in function["variables"])
                 lines.append(f"      variables: {variables}")
+            for loop in function["loops"]:
+                lines.append(f"      loop at line {loop['line']}: while {loop['condition']}")
+                for clause, entry in [*(("invariant", item) for item in loop["invariants"]),
+                                      *([("decreases", loop["measure"])] if loop["measure"] else [])]:
+                    lines.append(f"          {clause} {entry['condition']}")
+                    if entry["message"]:
+                        lines.append(f"              reason: {entry['message']}")
             if function["calls"]:
                 lines.append(f"      calls: {', '.join(function['calls'])}")
             if function["builtins_called"]:

@@ -1,0 +1,5 @@
+examples/loops.nex: 3 examples in 3 functions
+  sum_to         1 passed
+  gcd            1 passed
+  integer_root   1 passed
+✓ 3 examples passed: examples/loops.nex

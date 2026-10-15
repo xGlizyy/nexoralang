@@ -278,7 +278,8 @@
         "builtins_called",
         "called_by",
         "recursive",
-        "examples"
+        "examples",
+        "loops"
       ],
       "properties": {
         "name": {
@@ -341,7 +342,8 @@
             "required": [
               "name",
               "type",
-              "line"
+              "line",
+              "mutable"
             ],
             "properties": {
               "name": {
@@ -356,6 +358,10 @@
               "line": {
                 "type": "integer",
                 "minimum": 1
+              },
+              "mutable": {
+                "type": "boolean",
+                "description": "True if declared with 'var'."
               }
             }
           }
@@ -411,6 +417,46 @@
               }
             }
           }
+        },
+        "loops": {
+          "type": "array",
+          "description": "The loops of the function, in source order, with the requirements each one declares. Checked on every turn when the program runs; the analysis never evaluates them.",
+          "items": {
+            "type": "object",
+            "required": [
+              "line",
+              "condition",
+              "invariants",
+              "measure"
+            ],
+            "properties": {
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "condition": {
+                "type": "string",
+                "description": "The loop condition, as written."
+              },
+              "invariants": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/loop_clause"
+                }
+              },
+              "measure": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/loop_clause"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The 'decreases' clause. Null only in a program with errors (E2021)."
+              }
+            }
+          }
         }
       }
     },
@@ -449,6 +495,31 @@
             "null"
           ],
           "description": "The explanation written after the condition, if any."
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "loop_clause": {
+      "type": "object",
+      "required": [
+        "condition",
+        "message",
+        "line"
+      ],
+      "properties": {
+        "condition": {
+          "type": "string",
+          "description": "The expression, as written."
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The explanation written after it, if any."
         },
         "line": {
           "type": "integer",

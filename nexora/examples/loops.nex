@@ -1,0 +1,61 @@
+// Loops that say why they are correct. Every 'while' declares a measure ('decreases'): an Int that
+// never goes below 0 and gets smaller on every turn. It may also declare invariants: conditions that
+// hold before every check of the loop condition. The interpreter checks both on every turn, so a
+// loop always ends, or stops and says in which turn and with which values it went wrong.
+// A variable whose value changes is declared with 'var'; 'let' never changes.
+
+type Natural = Int where value >= 0, "A count cannot be negative"
+
+fn sum_to(n: Natural) -> Int {
+    ensures result == n * (n + 1) / 2, "The formula Gauss found as a child"
+    example sum_to(4) == 10
+    var total = 0
+    var i = 0
+    while i < n {
+        invariant total == i * (i + 1) / 2, "total is the sum of the numbers already added"
+        decreases n - i, "Each turn moves i one step closer to n"
+        i = i + 1
+        total = total + i
+    }
+    return total
+}
+
+fn gcd(a: Natural, b: Natural) -> Int {
+    requires a > 0 or b > 0, "gcd(0, 0) is not defined"
+    example gcd(48, 18) == 6, "Euclid's algorithm"
+    var x: Int = a
+    var y: Int = b
+    while y != 0 {
+        invariant x >= 0 and y >= 0
+        decreases y, "The remainder is always smaller than the divisor"
+        let remainder = x - x / y * y
+        x = y
+        y = remainder
+    }
+    return x
+}
+
+fn integer_root(n: Natural) -> Natural {
+    ensures result * result <= n and (result + 1) * (result + 1) > n
+    example integer_root(10) == 3
+    var root: Natural = 0
+    while (root + 1) * (root + 1) <= n {
+        invariant root * root <= n
+        decreases n - root * root, "The square of root grows toward n"
+        root = Natural(root + 1)
+    }
+    return root
+}
+
+fn main() -> Void {
+    print(sum_to(5000))
+    print(gcd(1071, 462))
+    print(integer_root(1_000_000))
+    var countdown = 3
+    while countdown > 0 {
+        decreases countdown
+        print("T-minus " + to_text(countdown))
+        countdown = countdown - 1
+    }
+    print("Lift-off")
+}

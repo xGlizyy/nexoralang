@@ -306,7 +306,8 @@ describe('highlighting and positions', () => {
     ]);
     assert.deepEqual(classes('print(to_text(2.5)) // done'), [['builtin', 'print'], ['builtin', 'to_text'], ['num', '2.5'], ['com', '// done']]);
     assert.deepEqual(classes('requires n >= 0 and not ok'), [['kw', 'requires'], ['op', '&gt;='], ['num', '0'], ['kw', 'and'], ['kw', 'not']]);
-    assert.deepEqual(classes('while x'), [['reserved', 'while']]);
+    assert.deepEqual(classes('while x'), [['kw', 'while']]);
+    assert.deepEqual(classes('for x'), [['reserved', 'for']]);
   });
 
   test('text is never coloured as code, and unfinished text does not break', () => {

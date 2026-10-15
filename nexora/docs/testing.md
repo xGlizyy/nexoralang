@@ -27,15 +27,15 @@ La batería completa tarda unos tres minutos. Las pruebas no necesitan conexión
 
 ## Última medición
 
-Realizada el 14 de octubre de 2026, en Windows 11 con Python 3.12.10:
+Realizada el 15 de octubre de 2026, en Windows 11 con Python 3.12.10:
 
 | Comprobación | Resultado |
 |--------------|-----------|
 | `python -m ruff check src tests` | Sin errores |
-| `python -m pytest` | 1039 pruebas superadas, 4 omitidas, 0 fallos |
-| Cobertura de líneas y ramas (`--cov`) | 93,25 % |
+| `python -m pytest` | 1372 pruebas superadas, 4 omitidas, 0 fallos |
+| Cobertura de líneas y ramas (`--cov`) | 94,23 % |
 | Umbral configurado (`fail_under` en `pyproject.toml`) | 90 % |
-| Pruebas del servidor web (`node --test "test/*.test.js"`, en `servidor/`) | 98 superadas, 0 fallos |
+| Pruebas del servidor web (`node --test "test/*.test.js"`, en `servidor/`) | 109 superadas, 0 fallos |
 
 Las cuatro pruebas omitidas necesitan funciones de POSIX que Windows no tiene, y **no se han
 ejecutado nunca**: una comprueba un archivo sin permiso de lectura (el mismo caso se cubre en
@@ -93,6 +93,7 @@ ejecuta en alguna prueba; no que se hayan probado todas las combinaciones de ent
 | `test_types.py` | 139 | Inferencia, anotaciones, cada operador con cada combinación de tipos, conversiones, condiciones |
 | `test_functions.py` | 56 | Parámetros, argumentos, retornos, rutas de retorno, `if` / `else`, funciones `Void`, recursividad y su límite |
 | `test_contracts.py` | 41 | `requires` y `ensures` que se cumplen y que fallan, tipos de las condiciones, `result`, contenido de los diagnósticos |
+| `test_loops.py` | 81 | `var`, asignaciones, bucles con su medida y sus invariantes: análisis, cada diagnóstico con su vuelta y sus valores, que ningún bucle se queda colgado (tampoco en `nex test`), y lo que muestran `inspect`, `symbols` y `context` ([decisión 0010](decisions/0010-var-y-while.md)) |
 | `test_interpreter.py` | 47 | Salida de los programas, aritmética entera y decimal, desbordamiento, división por cero |
 | `test_diagnostics.py` | 16 | Formato de texto, formato JSON, y que el registro de códigos coincide con la especificación |
 | `test_inspect.py` | 8 | El esquema JSON de `nex inspect`: nodos, campos, tipos y posiciones |
@@ -185,8 +186,8 @@ python -m pip install build
 python -m build
 ```
 
-Genera `dist/nexora_lang-0.4.0-py3-none-any.whl` (el intérprete y el comando `nex`) y
-`dist/nexora_lang-0.4.0.tar.gz` (además: documentación, ejemplos y pruebas).
+Genera `dist/nexora_lang-0.5.0-py3-none-any.whl` (el intérprete y el comando `nex`) y
+`dist/nexora_lang-0.5.0.tar.gz` (además: documentación, ejemplos y pruebas).
 
 Comprobado el 14 de octubre de 2026 en Windows 11 con Python 3.12:
 
