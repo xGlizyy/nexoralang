@@ -19,6 +19,34 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
+## Sin publicar
+
+Cambios posteriores al tag `v0.6.0`, todavía sin versión. Afectan al servidor web del playground
+(`servidor/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no cambian.
+
+### Cambios incompatibles
+
+- **El playground está desactivado salvo que se active de forma explícita.** Antes se activaba
+  siempre que `PLAYGROUND_ENABLED` no fuera exactamente `false`: sin definir, vacía o con una errata
+  (`False`, `0`), quedaba abierto. Ahora solo `PLAYGROUND_ENABLED=true` lo activa; sin definir,
+  vacía o `false`, la API responde 503 (`playground_disabled`) y no arranca ningún worker. Una
+  instalación local que quiera usar el playground tiene que añadir `PLAYGROUND_ENABLED=true` a su
+  `servidor/.env`.
+- Cualquier otro valor de `PLAYGROUND_ENABLED` (`True`, `1`, `yes`…) impide arrancar el servidor,
+  con un mensaje que pide `"true"` o `"false"`.
+
+### Documentación
+
+- `servidor/.env.example` deja el playground en `false`, y la [guía del playground](docs/playground.md)
+  lo mantiene desactivado en un servidor público hasta completar la
+  [comprobación del aislamiento](docs/playground.md#comprobar-el-aislamiento). Las comprobaciones
+  que necesitan el playground activo se hacen en un entorno controlado, sin exposición pública.
+
+### Limitaciones
+
+- El aislamiento en contenedor sigue **sin comprobar**: este cambio evita activar el playground por
+  error, pero no lo hace más seguro una vez activado.
+
 ## 0.6.0 — Operaciones sobre textos que declaran sus requisitos
 
 Un programa puede medir un texto, cortarlo, buscar en él, ordenarlo y leer los números escritos en

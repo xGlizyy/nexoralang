@@ -270,10 +270,14 @@ npm run migrate
 npm start
 ```
 
-`.env.example` deja el playground desactivado (`PLAYGROUND_ENABLED=false`): con ese valor la API
-responde 503 (`playground_disabled`). Para usarlo en tu equipo, escribe `PLAYGROUND_ENABLED=true` en
-tu `servidor/.env` y reinicia el servidor. El servidor escucha en todas las interfaces del equipo: si
-tu cortafuegos deja entrar conexiones al puerto 3000, otros equipos de tu red también podrán usarlo.
+El playground solo se activa con `PLAYGROUND_ENABLED=true`. `.env.example` lo deja desactivado
+(`PLAYGROUND_ENABLED=false`), y también queda desactivado si la variable no está definida o está
+vacía: la API responde 503 (`playground_disabled`). Cualquier otro valor (`True`, `1`…) impide
+arrancar el servidor. **Una instalación local que ya tenga su `servidor/.env` y quiera usar el
+playground tiene que añadir `PLAYGROUND_ENABLED=true` de forma explícita**: antes bastaba con no
+definirla. Escríbela en tu `servidor/.env` y reinicia el servidor. Úsalo solo para pruebas locales
+controladas: el servidor escucha en todas las interfaces del equipo, así que, si tu cortafuegos deja
+entrar conexiones al puerto 3000, otros equipos de tu red también podrán usarlo.
 
 Abre <http://localhost:3000/playground>.
 
@@ -303,6 +307,7 @@ cd servidor && npm test
 | `nexora/tests/test_api.py` | `check_source` y `run_source`; límites de salida y de texto; que la API y `nex` dan el mismo resultado en todos los ejemplos |
 | `nexora/tests/test_worker.py` | El proceso worker: protocolo, peticiones malformadas, modo aislado. Los límites del sistema operativo solo se ejecutan en Linux y macOS |
 | `servidor/test/playground-api.test.js` | La API por HTTP contra el intérprete real: validación, códigos HTTP, esquema, límites, tiempo agotado, concurrencia, fallos del worker, entorno del worker, orígenes, y paridad con la línea de comandos |
+| `servidor/test/playground-config.test.js` | La activación con la configuración real: desactivado sin `PLAYGROUND_ENABLED`, vacía o `false`; activado solo con `true`; error al arrancar con cualquier otro valor; 503 en todas las rutas sin arrancar el worker, y un programa real con `true` |
 | `servidor/test/playground-frontend.test.js` | La lógica de la página (cliente, estado, resaltado) contra un servidor real y con fallos simulados |
 | `servidor/test/web-guide.test.js` | Los ejemplos de la guía web y los enlaces entre páginas |
 
@@ -381,10 +386,11 @@ PLAYGROUND_TIMEOUT_MS=4000
 ```
 
 **El playground queda desactivado** hasta completar la
-[comprobación del aislamiento](#comprobar-el-aislamiento). Solo el valor exacto `false` lo desactiva:
-`False`, `0`, un valor vacío o no definir la variable lo dejan activado. Tampoco la definas en el
-entorno del servicio (`Environment=` en systemd o una variable exportada): ese valor tiene prioridad
-sobre `servidor/.env`.
+[comprobación del aislamiento](#comprobar-el-aislamiento). Solo el valor exacto `true` lo activa;
+`false`, un valor vacío o no definir la variable lo dejan desactivado, y cualquier otro valor
+(`True`, `1`…) impide arrancar el servidor. No la definas tampoco en el entorno del servicio
+(`Environment=` en systemd o una variable exportada): ese valor tiene prioridad sobre
+`servidor/.env`, y un `PLAYGROUND_ENABLED=true` olvidado ahí lo activaría.
 
 Notas:
 
