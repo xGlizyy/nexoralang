@@ -16,6 +16,9 @@ export const fakeWorker = (mode) => [
 export function testConfig(overrides = {}) {
   return {
     ...loadPlaygroundConfig(),
+    // Las pruebas activan el playground de forma explícita: sin PLAYGROUND_ENABLED=true está
+    // desactivado. Una prueba lo desactiva con { enabled: false }.
+    enabled: true,
     // Por defecto, sin límite de peticiones que estorbe a las pruebas.
     rateLimit: { windowMs: 60_000, limit: 100_000 },
     ...overrides,

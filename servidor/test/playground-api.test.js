@@ -328,10 +328,14 @@ describe('when the runtime fails', () => {
   });
 
   test('a disabled playground refuses every request', async () => {
-    const server = await startServer({ enabled: false });
+    // Con una orden que no existe, cualquier intento de arrancar el worker quedaría en el registro.
+    const server = await startServer({ enabled: false, workerCommand: ['this-executable-does-not-exist-nexora'] });
     try {
-      assertError(await server.run(HELLO), 503, 'playground_disabled');
       assertError(await server.call('/info'), 503, 'playground_disabled');
+      assertError(await server.call('/examples'), 503, 'playground_disabled');
+      assertError(await server.check(HELLO), 503, 'playground_disabled');
+      assertError(await server.run(HELLO), 503, 'playground_disabled');
+      assert.deepEqual(server.logs, [], 'a disabled playground must not start the worker');
     } finally {
       await server.close();
     }

@@ -18,6 +18,16 @@ function list(name) {
   return (process.env[name] ?? '').split(',').map((item) => item.trim()).filter(Boolean);
 }
 
+// El playground ejecuta código de cualquier visitante, así que solo se activa si se pide de forma
+// explícita: sin definir, vacío o "false", queda desactivado. Cualquier otro valor ("True", "1"...)
+// impide arrancar, para que una errata no lo deje activado ni desactivado sin que nadie lo note.
+function enabledFlag() {
+  const raw = process.env.PLAYGROUND_ENABLED;
+  if (raw === undefined || raw === '' || raw === 'false') return false;
+  if (raw === 'true') return true;
+  throw new Error('PLAYGROUND_ENABLED debe ser exactamente "true" o "false" (revisa servidor/.env)');
+}
+
 // Python del entorno virtual del núcleo. En producción conviene indicarlo con NEXORA_PYTHON.
 function defaultPython() {
   return process.platform === 'win32'
@@ -47,7 +57,7 @@ function workerCommand() {
 export function loadPlaygroundConfig() {
   const timeoutMs = integer('PLAYGROUND_TIMEOUT_MS', 2000, 100);
   return {
-    enabled: process.env.PLAYGROUND_ENABLED !== 'false',
+    enabled: enabledFlag(),
     workerCommand: workerCommand(),
     examplesDir: process.env.NEXORA_EXAMPLES_DIR || root('nexora/examples'),
 
