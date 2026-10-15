@@ -163,6 +163,40 @@ def test_memory_error_while_building_the_report_is_not_e3007(monkeypatch, capsys
     assert (code, captured.out) == (70, "")
 
 
+@pytest.mark.parametrize("module, name", [(cli, "render"), (api, "summary_of")])
+@pytest.mark.parametrize("failure", [MemoryError(), KeyError("a bug")], ids=["MemoryError", "KeyError"])
+def test_a_failure_while_building_the_text_report_writes_no_partial_report(monkeypatch, capsys, tmp_path,
+                                                                           module, name, failure):  # [4]
+    # Like the JSON document, the text report is built whole before it is written. A failure while
+    # rendering a diagnostic, or while counting the summary, is an internal error (70), and stdout
+    # stays empty: no summary that could be taken for the complete report.
+    def broken(*_):
+        raise failure
+
+    exhaust_three_calls_deep(monkeypatch)
+    monkeypatch.setattr(module, name, broken)
+    (tmp_path / "grow.nex").write_text(GROW, encoding="utf-8")
+    code, captured = in_process(capsys, "test", str(tmp_path / "grow.nex"))
+    assert (code, captured.out) == (70, "")
+    assert captured.err.startswith(f"internal error: NEXORA hit an unexpected problem ({type(failure).__name__}")
+    # No verdict, no diagnostic of an example, and the failure is not taken for the program's E3007.
+    assert "passed" not in captured.err and "did not pass" not in captured.err
+    assert "error[" not in captured.err and "E3007" not in captured.err
+
+
+def test_the_text_report_is_unchanged_when_nothing_fails(monkeypatch, capsys, tmp_path):
+    # The same report as before it was built whole: summary on stdout, diagnostics and verdict on stderr.
+    exhaust_three_calls_deep(monkeypatch)
+    path = tmp_path / "grow.nex"
+    path.write_text(GROW, encoding="utf-8")
+    code, captured = in_process(capsys, "test", str(path))
+    assert code == 6
+    assert captured.out == f"{path}: 2 examples in 1 function\n  grow   1 passed, 1 error\n"
+    assert captured.err.startswith("\nruntime error[E3007]: Out of memory\n")
+    assert "\noutput of example 1 of 'grow':\n    grow 3\n    grow 2\n" in captured.err
+    assert captured.err.endswith(f"\nerror: {path}: 1 of 2 examples did not pass (0 failed, 1 error)\n")
+
+
 def test_memory_error_while_converting_is_not_converted(monkeypatch, capsys, tmp_path):  # [5]
     exhaust_three_calls_deep(monkeypatch)
     original = interpreter.Interpreter._fail

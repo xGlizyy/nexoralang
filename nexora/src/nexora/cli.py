@@ -284,60 +284,73 @@ def _test(path: str, output_format: str, function: str | None) -> int:
     if output_format == "json":
         _print_json(api.test_document(report), sys.stdout)
     else:
-        _report_test(report, path)
+        _write_lines(_test_report_lines(report, path))
 
     if report.status == api.NOT_RUN:
         return EXIT_UNREADABLE_FILE if source is None else EXIT_INVALID_PROGRAM
     return EXIT_OK if report.status == api.PASSED else EXIT_TEST_FAILED
 
 
-def _report_test(report: api.TestReport, path: str) -> None:
+# Where a line of a text report goes.
+_OUT, _ERR = "stdout", "stderr"
+
+
+def _write_lines(lines: list[tuple[str, str]]) -> None:
+    """Writes a text report that is already complete, each line to its stream, in order. stdout is
+    flushed before anything goes to stderr, so a terminal shows them in that order."""
+    for stream, line in lines:
+        if stream == _ERR:
+            sys.stdout.flush()
+        print(line, file=sys.stdout if stream == _OUT else sys.stderr)
+
+
+def _test_report_lines(report: api.TestReport, path: str) -> list[tuple[str, str]]:
+    """The text report of `nex test`, line by line: the summary for stdout, the diagnostics for stderr.
+    It is built whole before anything is written, like the JSON document, so a failure while building
+    it (an internal error, running out of memory) leaves no partial report behind (decision 0008, 3.4)."""
+    lines: list[tuple[str, str]] = []
     source = report.analysis.source
     if report.status == api.NOT_RUN:
-        _report(report.analysis.diagnostics, source)
+        for diagnostic in report.analysis.diagnostics:
+            lines += [(_ERR, render(diagnostic, source)), (_ERR, "")]
         if source.text or report.analysis.diagnostics[0].category != "file":
-            print(f"error: {path}: not tested because of {_plural(len(report.analysis.diagnostics))}", file=sys.stderr)
+            lines.append((_ERR, f"error: {path}: not tested because of {_plural(len(report.analysis.diagnostics))}"))
         else:
-            print(f"error: {path}: the file could not be read", file=sys.stderr)
-        return
+            lines.append((_ERR, f"error: {path}: the file could not be read"))
+        return lines
     if report.status == api.NO_EXAMPLES:
-        print(f"{path}: no examples to run")
-        print(f"error: {path}: nothing was tested", file=sys.stderr)
-        return
+        return [(_OUT, f"{path}: no examples to run"), (_ERR, f"error: {path}: nothing was tested")]
 
     results = report.results
     functions: dict[str, list] = {}
     for result in results:
         functions.setdefault(result.function, []).append(result)
     if report.function is not None:
-        print(f"{path}: {_count(len(results), 'example')} of '{report.function}'")
+        lines.append((_OUT, f"{path}: {_count(len(results), 'example')} of '{report.function}'"))
     else:
-        print(f"{path}: {_count(len(results), 'example')} in {_count(len(functions), 'function')}")
+        lines.append((_OUT, f"{path}: {_count(len(results), 'example')} in {_count(len(functions), 'function')}"))
     width = max(len(name) for name in functions)
     for name, own in functions.items():
         counts = [f"{sum(r.status == status for r in own)} {status}"
                   for status in (api.PASSED, api.FAILED, api.ERROR) if any(r.status == status for r in own)]
-        print(f"  {name.ljust(width)}   {', '.join(counts)}")
-    sys.stdout.flush()
+        lines.append((_OUT, f"  {name.ljust(width)}   {', '.join(counts)}"))
 
     for result in results:
         if result.status == api.PASSED:
             continue
-        print(file=sys.stderr)
-        print(render(result.diagnostic, source), file=sys.stderr)
+        lines += [(_ERR, ""), (_ERR, render(result.diagnostic, source))]
         if result.output:
-            print(f"\noutput of example {result.index} of '{result.function}':", file=sys.stderr)
-            for line in result.output.rstrip("\n").split("\n"):
-                print(f"    {line}", file=sys.stderr)
+            lines.append((_ERR, f"\noutput of example {result.index} of '{result.function}':"))
+            lines += [(_ERR, f"    {line}") for line in result.output.rstrip("\n").split("\n")]
 
     summary = api.summary_of(report)
     if report.status == api.PASSED:
-        print(f"✓ {_count(summary['total'], 'example')} passed: {path}")
+        lines.append((_OUT, f"✓ {_count(summary['total'], 'example')} passed: {path}"))
     else:
         not_passed = summary["failed"] + summary["error"]
-        print(file=sys.stderr)
-        print(f"error: {path}: {not_passed} of {_count(summary['total'], 'example')} did not pass "
-              f"({summary['failed']} failed, {_count(summary['error'], 'error')})", file=sys.stderr)
+        lines += [(_ERR, ""), (_ERR, f"error: {path}: {not_passed} of {_count(summary['total'], 'example')} "
+                                     f"did not pass ({summary['failed']} failed, {_count(summary['error'], 'error')})")]
+    return lines
 
 
 def _use_utf8() -> None:
