@@ -28,7 +28,7 @@ export const roadmap = [
     summary: 'The rules are written down before they are built, and the specification follows the interpreter exactly. The syntax can still change.',
     status: 'in-progress',
     available: [
-      'A language specification, version 0.5, that describes exactly what the interpreter does.',
+      'A language specification, version 0.6, that describes exactly what the interpreter does.',
       'Eleven accepted design records, each with its reasons, the alternatives it rejected and what it does not guarantee.',
       'A broader design draft of where the language is going.',
     ],

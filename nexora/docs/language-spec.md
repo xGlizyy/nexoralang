@@ -1,7 +1,7 @@
 # Especificación del lenguaje NEXORA
 
-- **Versión de la especificación:** 0.5
-- **Implementación de referencia:** `nexora` 0.5.1 (este repositorio, directorio `nexora/`)
+- **Versión de la especificación:** 0.6
+- **Implementación de referencia:** `nexora` 0.6.0 (este repositorio, directorio `nexora/`)
 - **Estado:** describe exactamente lo que el intérprete hace hoy.
 
 Este documento es la referencia del lenguaje: define la sintaxis y el significado de cada
@@ -12,7 +12,7 @@ Cómo leer el estado de cada parte:
 | Marca | Significado |
 |-------|-------------|
 | *(sin marca)* | **Implementado** y cubierto por pruebas |
-| **Experimental** | Implementado y probado, pero su sintaxis o sus reglas pueden cambiar. En la versión 0.5 ninguna parte del lenguaje lo es |
+| **Experimental** | Implementado y probado, pero su sintaxis o sus reglas pueden cambiar. En la versión 0.6 ninguna parte del lenguaje lo es |
 | **Previsto** | No existe. Reunido en la sección 14; no forma parte del lenguaje |
 
 Los cambios respecto a la versión 0.1 están en [`CHANGELOG.md`](../CHANGELOG.md) y sus motivos
@@ -1223,7 +1223,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.5.1",
+  "nexora_version": "0.6.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

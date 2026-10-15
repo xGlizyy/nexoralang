@@ -120,7 +120,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.5.1",
+  "nexora_version": "0.6.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

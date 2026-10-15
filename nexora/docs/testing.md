@@ -192,8 +192,8 @@ python -m pip install build
 python -m build
 ```
 
-Genera `dist/nexora_lang-0.5.1-py3-none-any.whl` (el intérprete y el comando `nex`) y
-`dist/nexora_lang-0.5.1.tar.gz` (además: documentación, ejemplos y pruebas).
+Genera `dist/nexora_lang-0.6.0-py3-none-any.whl` (el intérprete y el comando `nex`) y
+`dist/nexora_lang-0.6.0.tar.gz` (además: documentación, ejemplos y pruebas).
 
 Comprobado el 14 de octubre de 2026 en Windows 11 con Python 3.12:
 

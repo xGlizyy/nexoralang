@@ -1,6 +1,6 @@
 # Limitaciones
 
-Lo que NEXORA **no** hace en la versión 0.5.1, y los riesgos que conviene conocer antes de usarlo.
+Lo que NEXORA **no** hace en la versión 0.6.0, y los riesgos que conviene conocer antes de usarlo.
 Nada de lo que aparece aquí como "no existe" funciona hoy, aunque se mencione en el borrador de
 diseño o en la hoja de ruta.
 
