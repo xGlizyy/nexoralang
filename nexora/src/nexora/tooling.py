@@ -32,6 +32,7 @@ from .diagnostics import CATEGORIES, CODES, MAX_DIAGNOSTICS, Source, Span
 from .interpreter import MAX_CALL_DEPTH
 from .parser import MAX_EXPRESSION_DEPTH, MAX_NESTING
 from .pipeline import Analysis, analyze
+from .prelude import CONTRACTS, IMPLEMENTATIONS, requirements
 from .tokens import KEYWORDS, RESERVED_WORDS, TokenType
 from .values import INT, INT_MAX, INT_MIN, TEXT, VALUE_TYPES, VOID
 from .version import __version__
@@ -148,6 +149,12 @@ def _builtin_entries() -> list[dict]:
             "signature": signature.describe(),
             "params": [{"name": name, "type": kind} for name, kind in signature.params],
             "return_type": signature.return_type,
+            # Decision 0011, 7.4: an agent must not take an `ensures` for something checked.
+            "contracts": [
+                {"clause": contract.clause, "condition": contract.source, "message": contract.message,
+                 "checked_at_run_time": contract.checked_at_run_time}
+                for contract in CONTRACTS.get(signature.name, ())
+            ],
         }
     return [describe(BUILTINS[name]) for name in sorted(BUILTINS)]
 
@@ -236,11 +243,21 @@ _FEATURES = (
 
 def _features(analysis: Analysis, recursive: bool) -> list[str]:
     program, types = analysis.program, analysis.types or {}
+    refined = analysis.checked.refined if analysis.checked is not None else {}
+
+    def root(kind: str | None) -> str | None:
+        return refined[kind].root if kind in refined else kind
+
     found = set()
     for node in _walk(program):
         for feature, uses in _FEATURES:
             if uses(node, types):
                 found.add(feature)
+        # Decision 0011, 7.4: a function of a type, or two texts compared by order.
+        if (isinstance(node, ast.Call) and node.callee in IMPLEMENTATIONS) or (
+                isinstance(node, ast.Binary) and node.operator in ("<", "<=", ">", ">=")
+                and root(types.get(id(node.left))) == TEXT):
+            found.add("text_operations")
         if isinstance(node, ast.Block) and any(isinstance(statement, ast.Block) for statement in node.statements):
             found.add("nested_blocks")
     if len(program.functions) > 1 or any(function.name != "main" for function in program.functions):
@@ -452,6 +469,10 @@ def render_context(document: dict) -> str:
                 lines.append(f"      calls: {', '.join(function['calls'])}")
             if function["builtins_called"]:
                 lines.append(f"      built-ins: {', '.join(function['builtins_called'])}")
+                for name in function["builtins_called"]:
+                    for contract in requirements(name):
+                        lines.append(f"          {name} requires {contract.source}")
+                        lines.append(f"              reason: {contract.message}")
             if function["called_by"]:
                 lines.append(f"      called by: {', '.join(function['called_by'])}")
             if function["recursive"]:

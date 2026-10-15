@@ -29,6 +29,7 @@ Superan `nex check` y `nex run` termina con código `0`.
 | [`checked_examples.nex`](checked_examples.nex) | Funciones con sus propios ejemplos (`example`), que evalúa `nex test` |
 | [`refined_types.nex`](refined_types.nex) | Tipos refinados con `where`: constantes comprobadas sin ejecutar y comprobación explícita con `Percent(x)` |
 | [`loops.nex`](loops.nex) | Variables `var` y bucles `while` con su medida (`decreases`) y sus invariantes (`invariant`), comprobados en cada vuelta |
+| [`texts.nex`](texts.nex) | Textos: `Text.length`, `Text.slice` y la búsqueda dentro de un texto, el orden entre textos y la lectura de números con `Int.parse` y `Float.parse`, cada una con sus requisitos |
 
 ## Inválidos (`invalid/`)
 
@@ -52,3 +53,4 @@ Superan `nex check`, porque el fallo depende de valores que solo se conocen al e
 | [`failing/contract_violation.nex`](failing/contract_violation.nex) | Una condición `requires` es falsa | `5` |
 | [`failing/refinement_violation.nex`](failing/refinement_violation.nex) | Un valor calculado no cumple la condición de un tipo refinado | `5` |
 | [`failing/loop_measure.nex`](failing/loop_measure.nex) | Un bucle que no terminaría: su medida deja de disminuir | `5` |
+| [`failing/parse_number.nex`](failing/parse_number.nex) | Lee un número de un texto que no lo es: incumple el `requires` de `Int.parse`, con una sugerencia | `5` |

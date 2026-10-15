@@ -1,0 +1,12 @@
+contract error[E4001]: Precondition violated
+ --> examples/failing/parse_number.nex:6:12
+  |
+6 |     return Int.parse(prices) * 2
+  |            ^^^^^^^^^^^^^^^^^ This call breaks a 'requires' condition of 'Int.parse'
+  = note: The condition of the built-in function is false: requires Int.can_parse(text)
+  = note: Reason: Only a whole number within the range of Int can be read as an Int
+  = note: It was called with: text = "12a"
+  = note: In 'total', called at line 11, column 11.
+  = hint: Check the text first with Int.can_parse(...), and call Int.parse only when it is true.
+
+error: examples/failing/parse_number.nex: the program stopped because a contract was broken

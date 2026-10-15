@@ -64,7 +64,8 @@ Reglas del flujo:
 | `ast_nodes.py` | Los nodos del árbol y su conversión a JSON | `diagnostics` |
 | `parser.py` | Tokens → AST, con recuperación de errores | `ast_nodes`, `tokens`, `diagnostics` |
 | `checker.py` | Análisis estático. **Único lugar con las reglas de tipos** | `ast_nodes`, `diagnostics`, `values` |
-| `interpreter.py` | Ejecución, contratos y errores de ejecución | `ast_nodes`, `checker`, `diagnostics`, `values` |
+| `interpreter.py` | Ejecución, contratos y errores de ejecución | `ast_nodes`, `checker`, `diagnostics`, `prelude`, `values` |
+| `prelude.py` | Las funciones de un tipo (`Text.length`, `Int.parse`…): sus contratos, escritos en NEXORA, sus implementaciones y la gramática de los números escritos en un texto | `ast_nodes`, `diagnostics`, `lexer`, `parser`, `values` |
 | `pipeline.py` | Encadena lexer, parser y checker | Los tres |
 | `api.py` | Comprobar o ejecutar código en memoria, con límites opcionales. La interfaz para quien integra NEXORA en otro programa | `pipeline`, `interpreter`, `checker`, `tokens`, `diagnostics` |
 | `worker.py` | Proceso de un solo uso que atiende una petición JSON; lo usa el [playground](playground.md) | `api` |
@@ -181,7 +182,7 @@ usuario: si se alcanzan, el comprobador ha dejado pasar algo que no debía, y es
 | Una sentencia | Nodo en `ast_nodes.py` → `_statement` en `parser.py` → `_statement` en `checker.py` (tipos y si "siempre devuelve") → `_statement` en `interpreter.py` |
 | Un operador | `tokens.py`, `lexer.py`, la tabla `_PRECEDENCE` de `parser.py`, `binary_result` en `checker.py` y `_binary` en `interpreter.py` |
 | Un tipo | `values.py` (nombre y formato), `KNOWN_TYPES` y las reglas en `checker.py`, y su representación en `interpreter.py` |
-| Una función integrada | La tabla `BUILTINS` de `checker.py` y `_call` en `interpreter.py` |
+| Una función integrada | La tabla `BUILTINS` de `checker.py` y `_call` en `interpreter.py`. Si pertenece a un tipo (`Text.length`), su nombre lleva el tipo delante en `BUILTINS`, y su implementación y sus contratos van en `prelude.py` |
 | Un error | Una entrada en `_REGISTRY` (`diagnostics.py`) y una fila en las tablas de `language-spec.md` y `diagnostics.md` |
 | Una opción o un comando | `_build_parser` en `cli.py` y `cli-reference.md` |
 

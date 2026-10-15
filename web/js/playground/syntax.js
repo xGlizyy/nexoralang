@@ -11,12 +11,21 @@ export const FALLBACK_LANGUAGE = Object.freeze({
     'requires', 'return', 'true', 'type', 'var', 'where', 'while',
   ],
   types: ['Void', 'Int', 'Float', 'Bool', 'Text'],
-  builtins: ['print', 'to_float', 'to_int', 'to_text'],
+  builtins: [
+    'Float.can_parse', 'Float.parse', 'Int.can_parse', 'Int.parse', 'Text.contains', 'Text.ends_with',
+    'Text.length', 'Text.slice', 'Text.starts_with', 'print', 'to_float', 'to_int', 'to_text',
+  ],
   reserved_words: [
     'ai', 'assert', 'break', 'const', 'continue', 'enum', 'for', 'import', 'in', 'match', 'pub',
     'test', 'tool', 'try', 'uses',
   ],
 });
+
+// The whole name of a function written after a type, as in Text.length: 'Text.length'.
+function qualified(source, index, word) {
+  const before = /([A-Za-z_][A-Za-z0-9_]*)\.$/.exec(source.slice(Math.max(0, index - 64), index));
+  return before ? `${before[1]}.${word}` : word;
+}
 
 function escapeHtml(text) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -46,7 +55,7 @@ export function highlight(source, language = FALLBACK_LANGUAGE) {
     else if (operator !== undefined) kind = 'op';
     else if (keywords.has(word)) kind = 'kw';
     else if (types.has(word)) kind = 'type';
-    else if (builtins.has(word)) kind = 'builtin';
+    else if (builtins.has(word) || builtins.has(qualified(source, match.index, word))) kind = 'builtin';
     else if (reserved.has(word)) kind = 'reserved';
     else if (source[match.index + text.length] === '(') kind = 'fn';
 

@@ -57,6 +57,8 @@ class Signature:
 
 
 # The built-in functions. These are the only conversions between types: nothing converts implicitly.
+# Those whose name has a '.' belong to a type and are called with its name, as in Text.length(s)
+# (decision 0011). Their contracts and implementations are in prelude.py.
 BUILTINS: dict[str, Signature] = {
     signature.name: signature
     for signature in (
@@ -64,8 +66,24 @@ BUILTINS: dict[str, Signature] = {
         Signature("to_text", (("value", ANY_VALUE),), TEXT, builtin=True),
         Signature("to_float", (("value", INT),), FLOAT, builtin=True),
         Signature("to_int", (("value", FLOAT),), INT, builtin=True),
+        Signature("Text.length", (("text", TEXT),), INT, builtin=True),
+        Signature("Text.slice", (("text", TEXT), ("start", INT), ("end", INT)), TEXT, builtin=True),
+        Signature("Text.contains", (("text", TEXT), ("part", TEXT)), BOOL, builtin=True),
+        Signature("Text.starts_with", (("text", TEXT), ("part", TEXT)), BOOL, builtin=True),
+        Signature("Text.ends_with", (("text", TEXT), ("part", TEXT)), BOOL, builtin=True),
+        Signature("Int.can_parse", (("text", TEXT),), BOOL, builtin=True),
+        Signature("Int.parse", (("text", TEXT),), INT, builtin=True),
+        Signature("Float.can_parse", (("text", TEXT),), BOOL, builtin=True),
+        Signature("Float.parse", (("text", TEXT),), FLOAT, builtin=True),
     )
 }
+
+# The functions of each built-in type, by type: {"Text": ["contains", ...], ...}.
+TYPE_FUNCTIONS: dict[str, list[str]] = {}
+for _name in sorted(BUILTINS):
+    if "." in _name:
+        _type, _function = _name.split(".")
+        TYPE_FUNCTIONS.setdefault(_type, []).append(_function)
 
 
 @dataclass
@@ -144,7 +162,8 @@ def binary_result(operator: str, left: str, right: str) -> str | None:
     if operator in EQUALITY:
         return BOOL
     if operator in ORDERING:
-        return BOOL if left in (INT, FLOAT) else None
+        # Two texts are ordered by code point, character by character (decision 0011, section 2).
+        return BOOL if left in (INT, FLOAT, TEXT) else None
     if left in (INT, FLOAT):
         return left
     if left == TEXT and operator == "+":
@@ -162,7 +181,10 @@ def _binary_hint(operator: str, left: str, right: str) -> str | None:
     if operator in EQUALITY:
         return f"Both sides of '{operator}' must have the same type."
     if operator in ORDERING:
-        return f"'{operator}' compares two Int values or two Float values."
+        if TEXT in (left, right) and {left, right} <= {TEXT, INT, FLOAT}:
+            return (f"'{operator}' compares two values of the same type. Convert one side: to_text(...) "
+                    "turns a number into a Text, and Int.parse(...) reads an Int from a Text.")
+        return f"'{operator}' compares two Int values, two Float values or two Text values."
     if operator == "+" and TEXT in (left, right):
         return "'+' joins Text with Text. Convert the other side with to_text(...)."
     if left == right == TEXT:
@@ -990,6 +1012,9 @@ class Checker:
 
     def _call(self, node: ast.Call, scope: _Scope) -> str | None:
         argument_types = [self._expression(argument, scope) for argument in node.arguments]
+        if node.qualifier is not None and node.callee not in BUILTINS:
+            self._unknown_qualified_call(node, scope)
+            return None
         if node.callee in self._type_names:
             return self._refinement_check(node, argument_types)
         if self._refining is not None and node.callee in self._function_names and node.callee not in BUILTINS:
@@ -1007,10 +1032,8 @@ class Checker:
             if scope.find(node.callee) is not None:
                 self._report("E2008", f"'{node.callee}' is a variable, not a function", node.callee_span)
             else:
-                known = [*self._signatures, *BUILTINS]
-                close = difflib.get_close_matches(node.callee, known, n=1)
-                hint = f"Did you mean '{close[0]}'?" if close else None
-                self._report("E2008", f"There is no function named '{node.callee}'", node.callee_span, hint=hint)
+                self._report("E2008", f"There is no function named '{node.callee}'", node.callee_span,
+                             hint=self._function_hint(node.callee))
             return None
 
         # The call is resolved: it is recorded even if its arguments turn out to be wrong. A call
@@ -1042,6 +1065,62 @@ class Checker:
                 self._expect_type(expected, found, argument,
                                   (f"This is the argument for '{param_name}' in: {signature.describe()}",))
         return signature.return_type
+
+    def _function_hint(self, callee: str) -> str | None:
+        """The suggestion for a call to a function that does not exist. A name that is a function of
+        a type, written without it ("length"), suggests the qualified name first (decision 0011, 9)."""
+        def qualified(member: str) -> list[str]:
+            return sorted(name for name in BUILTINS if "." in name and name.split(".")[1] == member)
+
+        def suggest(names: list[str]) -> str:
+            return "Did you mean " + " or ".join(f"'{name}'" for name in names) + "?"
+
+        if qualified(callee):
+            return suggest(qualified(callee))
+        plain = [*self._signatures, *(name for name in BUILTINS if "." not in name)]
+        close = difflib.get_close_matches(callee, plain, n=1)
+        if close:
+            return suggest(close)
+        members = sorted({name.split(".")[1] for name in BUILTINS if "." in name})
+        close = difflib.get_close_matches(callee, members, n=1)
+        return suggest(qualified(close[0])) if close else None
+
+    def _unknown_qualified_call(self, node: ast.Call, scope: _Scope) -> None:
+        """`Name.function(...)` where Name is not a type with that function (decision 0011, 9)."""
+        qualifier = node.qualifier
+        function = node.callee.split(".", 1)[1]
+        hint: str | None = None
+        notes: tuple[str, ...] = ()
+        symbol = scope.find(qualifier)
+        if qualifier in KNOWN_TYPES:
+            label = f"'{qualifier}' has no function named '{function}'"
+            functions = TYPE_FUNCTIONS.get(qualifier, [])
+            if functions:
+                close = difflib.get_close_matches(function, functions, n=1)
+                hint = f"Did you mean '{qualifier}.{close[0]}'?" if close else None
+                notes = (f"The functions of {qualifier}: {', '.join(functions)}.",)
+            else:
+                notes = (f"{qualifier} has no functions yet.",)
+        elif qualifier in self._type_names:
+            label = f"'{qualifier}' has no functions of its own"
+            base = self._root(qualifier)
+            if TYPE_FUNCTIONS.get(base):
+                hint = f"A value of {qualifier} can be passed to the functions of its base type, {base}."
+        elif symbol is not None:
+            label = f"'{qualifier}' is a {symbol.category}: values have no functions of their own"
+            base = self._root(symbol.type) if symbol.type is not None else None
+            if function in TYPE_FUNCTIONS.get(base, []):
+                hint = f"Call the function of its type: {base}.{function}({qualifier})"
+        elif qualifier in BUILTINS or qualifier in self._signatures:
+            label = f"'{qualifier}' is a function, not a type"
+        else:
+            label = f"There is no type named '{qualifier}'"
+            close = difflib.get_close_matches(qualifier, [*KNOWN_TYPES, *self._type_names], n=1)
+            hint = f"Did you mean '{close[0]}'?" if close else None
+            if qualifier[:1].islower():
+                notes = ("Before the '.' goes the name of a type, such as Text. "
+                         "Modules are not part of NEXORA yet.",)
+        self._report("E2008", label, node.callee_span, hint=hint, notes=notes)
 
     def _refinement_check(self, node: ast.Call, argument_types: list[str | None]) -> str | None:
         """`Percent(x)`: checks, when the program runs, that x satisfies the condition of Percent."""

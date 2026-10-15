@@ -314,11 +314,13 @@
         "name",
         "signature",
         "params",
-        "return_type"
+        "return_type",
+        "contracts"
       ],
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "Text.length for a function of a type."
         },
         "signature": {
           "type": "string"
@@ -331,6 +333,38 @@
         },
         "return_type": {
           "type": "string"
+        },
+        "contracts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "clause",
+              "condition",
+              "message",
+              "checked_at_run_time"
+            ],
+            "properties": {
+              "clause": {
+                "enum": [
+                  "requires",
+                  "ensures"
+                ]
+              },
+              "condition": {
+                "type": "string",
+                "description": "The condition, written in NEXORA."
+              },
+              "message": {
+                "type": "string",
+                "description": "Why the rule exists."
+              },
+              "checked_at_run_time": {
+                "type": "boolean",
+                "description": "True for 'requires', checked on every call. False for 'ensures', which the implementation keeps and the tests check, but the program does not."
+              }
+            }
+          }
         }
       }
     }

@@ -19,8 +19,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
 from . import ast_nodes as ast
-from .checker import CheckedProgram, refinement_notes
+from .checker import BUILTINS, CheckedProgram, refinement_notes
 from .diagnostics import Diagnostic, NexoraRuntimeError, Span
+from .prelude import IMPLEMENTATIONS, parse_hint, requirements
 from .values import INT_MAX, INT_MIN, Value, format_value, show_value
 
 # The deepest chain of calls a program may have (main counts as the first).
@@ -536,6 +537,12 @@ class Interpreter:
         if node.callee in self._refined:
             return self._refine(node, arguments[0])
 
+        # The functions of a type (decision 0011): their requires first, then the operation.
+        implementation = IMPLEMENTATIONS.get(node.callee)
+        if implementation is not None:
+            self._check_requirements(node, arguments)
+            return implementation(*arguments)
+
         # Built-in functions.
         value = arguments[0]
         if node.callee == "print":
@@ -558,6 +565,34 @@ class Interpreter:
             return whole
         raise TypeError(f"call to '{node.callee}' reached the interpreter")
 
+
+    def _check_requirements(self, node: ast.Call, arguments: list[Value]) -> None:
+        """Checks the `requires` of a function of a type, in the order they are written, and stops
+        at the first that is false with the same E4001 as a function of the program (decision 0011,
+        7.1 and 7.2). Its conditions cannot fail: they only compare Ints and call functions that
+        have an answer for any text."""
+        contracts = requirements(node.callee)
+        if not contracts:
+            return
+        params = [name for name, _ in BUILTINS[node.callee].params]
+        environment = Environment()
+        for name, value in zip(params, arguments, strict=True):
+            environment.declare(name, value)
+        for contract in contracts:
+            if self._evaluate(contract.condition, environment):
+                continue
+            values = ", ".join(f"{name} = {show_value(value)}" for name, value in zip(params, arguments, strict=True))
+            raise self._fail(
+                "E4001",
+                f"This call breaks a 'requires' condition of '{node.callee}'",
+                node.span,
+                hint=parse_hint(node.callee, arguments[0]),
+                notes=(
+                    f"The condition of the built-in function is false: requires {unparse(contract.condition)}",
+                    f"Reason: {contract.message}",
+                    f"It was called with: {values}",
+                ),
+            )
 
     def _skipped(self, node: ast.Expr) -> None:
         """Marks the own calls inside an operand that 'and' or 'or' did not need to evaluate."""

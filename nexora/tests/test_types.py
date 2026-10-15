@@ -124,8 +124,8 @@ def test_operator_result_types(expression, expected):
     "1 + 2.5", "2.5 * 2", "1 < 2.5", "1 == 1.0", "1.0 != 1",
     # Numbers and Bool.
     "1 + true", "true * 2", "true < false", "1 == true", "-true",
-    # Text only supports '+' and equality, with Text.
-    '"a" + 1', '1 + "a"', '"a" - "b"', '"a" * 2', '"a" < "b"', '"a" == 1', '-"a"',
+    # Text only supports '+', equality and ordering, with Text (ordering since 0.6.0, decision 0011).
+    '"a" + 1', '1 + "a"', '"a" - "b"', '"a" * 2', '"a" < 1', '2 >= "a"', '"a" == 1', '-"a"',
     # Logic only works on Bool.
     "1 and 2", "true and 1", '"a" or true', "not 1", 'not "a"', "1 or 0",
 ])

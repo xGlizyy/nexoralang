@@ -43,6 +43,7 @@ class TokenType(Enum):
     RBRACE = "}"
     COMMA = ","
     COLON = ":"
+    DOT = "."
     ARROW = "->"
     EQUAL = "="
     PLUS = "+"

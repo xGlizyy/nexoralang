@@ -107,7 +107,12 @@ def test_the_package_has_no_runtime_dependencies():
 # The language
 
 def test_the_built_in_functions_are_exactly_the_documented_ones():
-    assert set(BUILTINS) == {"print", "to_text", "to_float", "to_int"}
+    assert set(BUILTINS) == {
+        "print", "to_text", "to_float", "to_int",
+        # The functions of a type (decision 0011): pure, they only read their arguments.
+        "Text.length", "Text.slice", "Text.contains", "Text.starts_with", "Text.ends_with",
+        "Int.can_parse", "Int.parse", "Float.can_parse", "Float.parse",
+    }
 
 
 @pytest.mark.parametrize("name", [

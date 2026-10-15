@@ -75,6 +75,7 @@ Notes:
 | Variables de cada función, su tipo y si pueden cambiar (`mutable`, `true` en las `var`) | Los símbolos que registra el comprobador. Si la variable no tiene anotación, es el tipo que el comprobador infirió |
 | `loops`: los bucles de cada función, con su condición, sus invariantes y su medida **tal como están escritos** | El árbol de sintaxis y el texto del archivo. `measure` es `null` solo si falta (`E2021`) |
 | `calls`, `called_by` | Las llamadas que el comprobador resolvió. No se busca texto: una llamada cuenta cuando el comprobador la asoció a una función |
+| `builtins_called` | Las funciones integradas a las que llama cada función, con su nombre completo (`print`, `Text.length`). En la salida de texto, debajo van los `requires` de cada una, con su explicación |
 | `recursive` | Si la función puede alcanzarse a sí misma siguiendo esas llamadas, directa o indirectamente |
 | `features` | Qué construcciones aparecen en el árbol (ver la tabla siguiente) |
 | `reserved_words_used` | Palabras reservadas para características no implementadas que aparecen en el texto |
@@ -101,6 +102,7 @@ Características que puede enumerar `features`:
 | `mutable_variables` | declara alguna variable con `var` |
 | `loops` | usa `while` |
 | `loop_invariants` | algún bucle declara un `invariant` |
+| `text_operations` | llama a una función de un tipo (`Text.length`, `Int.parse`…) u ordena textos con `< <= > >=` |
 
 Las **notas** no son opiniones sobre el código. Cada una es una regla del lenguaje que se añade
 solo si el programa contiene aquello a lo que se refiere: que los contratos se comprueban al
@@ -365,6 +367,180 @@ fn main() -> Void {
   ],
   "builtins": [
     {
+      "name": "Float.can_parse",
+      "signature": "fn Float.can_parse(text: Text) -> Bool",
+      "params": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "return_type": "Bool",
+      "contracts": []
+    },
+    {
+      "name": "Float.parse",
+      "signature": "fn Float.parse(text: Text) -> Float",
+      "params": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "return_type": "Float",
+      "contracts": [
+        {
+          "clause": "requires",
+          "condition": "Float.can_parse(text)",
+          "message": "Only a decimal number that fits in a Float can be read as a Float",
+          "checked_at_run_time": true
+        }
+      ]
+    },
+    {
+      "name": "Int.can_parse",
+      "signature": "fn Int.can_parse(text: Text) -> Bool",
+      "params": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "return_type": "Bool",
+      "contracts": []
+    },
+    {
+      "name": "Int.parse",
+      "signature": "fn Int.parse(text: Text) -> Int",
+      "params": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "return_type": "Int",
+      "contracts": [
+        {
+          "clause": "requires",
+          "condition": "Int.can_parse(text)",
+          "message": "Only a whole number within the range of Int can be read as an Int",
+          "checked_at_run_time": true
+        }
+      ]
+    },
+    {
+      "name": "Text.contains",
+      "signature": "fn Text.contains(text: Text, part: Text) -> Bool",
+      "params": [
+        {
+          "name": "text",
+          "type": "Text"
+        },
+        {
+          "name": "part",
+          "type": "Text"
+        }
+      ],
+      "return_type": "Bool",
+      "contracts": []
+    },
+    {
+      "name": "Text.ends_with",
+      "signature": "fn Text.ends_with(text: Text, part: Text) -> Bool",
+      "params": [
+        {
+          "name": "text",
+          "type": "Text"
+        },
+        {
+          "name": "part",
+          "type": "Text"
+        }
+      ],
+      "return_type": "Bool",
+      "contracts": []
+    },
+    {
+      "name": "Text.length",
+      "signature": "fn Text.length(text: Text) -> Int",
+      "params": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "return_type": "Int",
+      "contracts": [
+        {
+          "clause": "ensures",
+          "condition": "result >= 0",
+          "message": "A text never has a negative number of characters",
+          "checked_at_run_time": false
+        }
+      ]
+    },
+    {
+      "name": "Text.slice",
+      "signature": "fn Text.slice(text: Text, start: Int, end: Int) -> Text",
+      "params": [
+        {
+          "name": "text",
+          "type": "Text"
+        },
+        {
+          "name": "start",
+          "type": "Int"
+        },
+        {
+          "name": "end",
+          "type": "Int"
+        }
+      ],
+      "return_type": "Text",
+      "contracts": [
+        {
+          "clause": "requires",
+          "condition": "start >= 0",
+          "message": "A slice cannot start before the first character",
+          "checked_at_run_time": true
+        },
+        {
+          "clause": "requires",
+          "condition": "start <= end",
+          "message": "A slice cannot end before it starts",
+          "checked_at_run_time": true
+        },
+        {
+          "clause": "requires",
+          "condition": "end <= Text.length(text)",
+          "message": "A slice cannot end after the last character",
+          "checked_at_run_time": true
+        },
+        {
+          "clause": "ensures",
+          "condition": "Text.length(result) == end - start",
+          "message": "The slice has exactly end - start characters",
+          "checked_at_run_time": false
+        }
+      ]
+    },
+    {
+      "name": "Text.starts_with",
+      "signature": "fn Text.starts_with(text: Text, part: Text) -> Bool",
+      "params": [
+        {
+          "name": "text",
+          "type": "Text"
+        },
+        {
+          "name": "part",
+          "type": "Text"
+        }
+      ],
+      "return_type": "Bool",
+      "contracts": []
+    },
+    {
       "name": "print",
       "signature": "fn print(value: Int | Float | Bool | Text) -> Void",
       "params": [
@@ -373,7 +549,8 @@ fn main() -> Void {
           "type": "Int | Float | Bool | Text"
         }
       ],
-      "return_type": "Void"
+      "return_type": "Void",
+      "contracts": []
     },
     {
       "name": "to_float",
@@ -384,7 +561,8 @@ fn main() -> Void {
           "type": "Int"
         }
       ],
-      "return_type": "Float"
+      "return_type": "Float",
+      "contracts": []
     },
     {
       "name": "to_int",
@@ -395,7 +573,8 @@ fn main() -> Void {
           "type": "Float"
         }
       ],
-      "return_type": "Int"
+      "return_type": "Int",
+      "contracts": []
     },
     {
       "name": "to_text",
@@ -406,7 +585,8 @@ fn main() -> Void {
           "type": "Int | Float | Bool | Text"
         }
       ],
-      "return_type": "Text"
+      "return_type": "Text",
+      "contracts": []
     }
   ]
 }
@@ -427,8 +607,13 @@ Cada símbolo tiene:
 | `assignments` | Posición de cada asignación que le da un valor nuevo. Vacía en todo lo que no es una `var` |
 | `signature`, `params`, `return_type` | Solo en las funciones |
 
-`builtins` enumera aparte las funciones que proporciona el lenguaje (`print`, `to_text`…), que no
-tienen declaración en el archivo.
+`builtins` enumera aparte las funciones que proporciona el lenguaje (`print`, `to_text`…, y las de
+un tipo, con su nombre completo: `Text.length`, `Int.parse`…), que no tienen declaración en el
+archivo. Cada una lleva `contracts`: sus `requires` y `ensures`, con la condición escrita en NEXORA,
+su explicación y `checked_at_run_time`, que es `true` en los `requires` (se comprueban en cada
+llamada) y `false` en los `ensures` (los cumple la implementación y lo verifican las pruebas, pero el
+programa no los comprueba). Una variable llamada `length` es un símbolo más, sin relación con
+`Text.length` ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)).
 
 Cómo se calcula: el comprobador registra cada declaración al procesarla y, cada vez que resuelve un
 nombre con las reglas de ámbito del lenguaje, anota esa posición en el símbolo correspondiente. Por

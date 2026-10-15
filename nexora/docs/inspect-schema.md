@@ -131,7 +131,7 @@ contiene un error. Una llamada a una función que no devuelve nada tiene tipo
 | `Unary` | `operator`: `"-"` o `"not"` · `operand`: expresión | |
 | `Binary` | `operator`: texto · `operator_span`: posición · `left`: expresión · `right`: expresión | `operator` es uno de `+ - * / == != < <= > >= and or` |
 | `Group` | `expression`: expresión | Una expresión entre paréntesis |
-| `Call` | `callee`: texto · `callee_span`: posición · `arguments`: lista de expresiones | Llamada a una función propia o integrada, o comprobación de un tipo refinado (`Percent(x)`), cuyo tipo es el del tipo refinado |
+| `Call` | `callee`: texto · `callee_span`: posición · `arguments`: lista de expresiones · `qualifier`: texto o `null` | Llamada a una función propia o integrada, o comprobación de un tipo refinado (`Percent(x)`), cuyo tipo es el del tipo refinado. En una llamada cualificada (`Text.length(s)`), `callee` es el nombre completo (`"Text.length"`), `callee_span` lo abarca entero y `qualifier` es el tipo (`"Text"`); en cualquier otra, `qualifier` es `null` |
 
 ## Ejemplo
 
@@ -198,6 +198,7 @@ versión 2, y otra comprueba que este documento los menciona todos.
 | Versión | Publicada en | Cambios |
 |---------|--------------|---------|
 | `nexora.inspect/1` | `nexora` 0.2.0 | Primera versión |
+| `nexora.inspect/2` | `nexora` 0.6.0 | Añadido, sin cambiar la versión: campo `qualifier` en `Call`, en todas las llamadas (`null` si no hay cualificador), después de `arguments` y antes de `type` ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)). `callee` puede contener un punto (`"Text.length"`) en las llamadas cualificadas. Un programa sin ellas produce el mismo documento que en la 0.5.1, más `"qualifier": null` en cada `Call`; el documento valida también con el esquema de la 0.5.1 |
 | `nexora.inspect/2` | `nexora` 0.5.0 | Añadidos, sin cambiar la versión: nodos `Var`, `While` y `LoopClause` ([decisión 0010](decisions/0010-var-y-while.md)). `Assign` aparece también en programas válidos. Un programa sin `var` ni bucles produce el mismo documento que en la 0.4.0 |
 | `nexora.inspect/2` | `nexora` 0.4.0 | Añadidos, sin cambiar la versión: nodo `Example` y campo `examples` al final de `Function` ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
 | `nexora.inspect/2` | `nexora` 0.3.0 | **Cambio incompatible:** el campo `type` de las expresiones deja de ser una lista cerrada (`Int`, `Float`, `Bool`, `Text`, `Void`) y puede ser el nombre de un tipo refinado. Añadidos: nodo `TypeDecl`, campo `types` en `Program`, campo `message` en `Contract` |

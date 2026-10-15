@@ -72,10 +72,15 @@ class Group(Node):
 
 @dataclass(frozen=True)
 class Call(Node):
-    """A call to a function, or `Percent(x)`: the check that turns a value into a refined type."""
+    """A call to a function, or `Percent(x)`: the check that turns a value into a refined type.
+
+    In a qualified call such as `Text.length(s)`, `callee` is the whole name ("Text.length"),
+    `callee_span` covers it, and `qualifier` is the name before the '.' ("Text"). Otherwise
+    `qualifier` is None (decision 0011, 7.4)."""
     callee: str
     callee_span: Span
     arguments: tuple[Expr, ...]
+    qualifier: str | None = None
 
 
 Expr = IntLiteral | FloatLiteral | TextLiteral | BoolLiteral | Name | Unary | Binary | Group | Call

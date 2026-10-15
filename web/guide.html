@@ -92,6 +92,7 @@
       <li><a href="#contracts">Contracts</a></li>
       <li><a href="#refined-types">Refined types</a></li>
       <li><a href="#loops">Loops</a></li>
+      <li><a href="#texts">Texts</a></li>
       <li><a href="#diagnostics">Diagnostics</a></li>
       <li><a href="#limitations">Limitations</a></li>
     </ol>
@@ -229,8 +230,8 @@ true</pre></div>
       <p>
         Every parameter states its type, and the return type is always written. A function that returns a
         value must end with <code>return</code> on every path. <code>if</code> and <code>else</code> choose
-        between blocks; the condition must be a <code>Bool</code>. There are no loops yet: repetition is
-        written with recursion.
+        between blocks; the condition must be a <code>Bool</code>. A function may call itself; to repeat
+        something many times, a <a href="#loops">loop</a> needs no stack.
       </p>
       <figure class="window">
         <pre class="code" data-example="run"><code>fn factorial(n: Int) -&gt; Int {
@@ -383,6 +384,42 @@ fn main() -&gt; Void {
       </figure>
     </section>
 
+    <section id="texts">
+      <h2>Texts</h2>
+      <p>
+        Some functions belong to a type and are called with its name: <code>Text.length</code>,
+        <code>Text.slice</code>, <code>Text.contains</code>, <code>Text.starts_with</code>,
+        <code>Text.ends_with</code>, and <code>Int.parse</code> and <code>Float.parse</code> to read a number
+        written in a text. A character is a Unicode code point, and texts are ordered by code point with
+        <code>&lt;</code>, the same on any machine: <code>"Z" &lt; "a"</code> is true.
+      </p>
+      <p>
+        The functions that may have no answer say when they have one, with a <code>requires</code> written in
+        NEXORA. <code>Text.slice("abc", 2, 9)</code> does not quietly return <code>"c"</code>, and
+        <code>Int.parse("12a")</code> does not return <code>12</code>: both stop the program and explain which rule
+        was broken. Check first with <code>Int.can_parse</code>:
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="run"><code>fn main() -&gt; Void {
+    let name = "Ada Lovelace"
+    let length = Text.length(name)
+    print(length)
+    print(Text.slice(name, 0, 3))
+    print(Text.contains(name, "Love"))
+    print("Ada" &lt; "ada")
+    let written = "042"
+    if Int.can_parse(written) {
+        print(Int.parse(written) + 1)
+    }
+}</code></pre>
+        <div class="guide-output"><pre data-expected>12
+Ada
+true
+true
+43</pre></div>
+      </figure>
+    </section>
+
     <section id="diagnostics">
       <h2>Diagnostics</h2>
       <p>
@@ -417,7 +454,7 @@ fn main() -&gt; Void {
       <ul class="bullets">
         <li><code>for</code>, <code>break</code> and <code>continue</code>: every loop is a <code>while</code> with its measure.</li>
         <li>Lists, records and any other compound type.</li>
-        <li>Operations on text other than joining and comparing for equality.</li>
+        <li>Operations on text beyond the ones in <a href="#texts">Texts</a>: no <code>trim</code>, upper case, <code>split</code> or <code>replace</code>.</li>
         <li>Reading input, files or the network: a program can only print.</li>
         <li>Modules: a program is a single file.</li>
         <li>Any integration with AI models.</li>

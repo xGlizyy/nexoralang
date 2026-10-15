@@ -1,0 +1,4 @@
+examples/texts.nex: 2 examples in 2 functions
+  initials   1 passed
+  count_of   1 passed
+✓ 2 examples passed: examples/texts.nex

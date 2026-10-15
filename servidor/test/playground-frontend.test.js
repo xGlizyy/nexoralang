@@ -308,6 +308,9 @@ describe('highlighting and positions', () => {
     assert.deepEqual(classes('requires n >= 0 and not ok'), [['kw', 'requires'], ['op', '&gt;='], ['num', '0'], ['kw', 'and'], ['kw', 'not']]);
     assert.deepEqual(classes('while x'), [['kw', 'while']]);
     assert.deepEqual(classes('for x'), [['reserved', 'for']]);
+    // The function of a type is a built-in function; the type before the '.' stays a type.
+    assert.deepEqual(classes('Text.length(name)'), [['type', 'Text'], ['builtin', 'length']]);
+    assert.deepEqual(classes('Int.parse(t) + length(t)'), [['type', 'Int'], ['builtin', 'parse'], ['op', '+'], ['fn', 'length']]);
   });
 
   test('text is never coloured as code, and unfinished text does not break', () => {

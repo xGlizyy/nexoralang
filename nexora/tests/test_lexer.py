@@ -58,9 +58,23 @@ def test_invalid_numbers(text):
 
 
 def test_a_dot_without_digits_is_not_part_of_the_number():
+    # Since 0.6.0 it is a token of its own, which the parser rejects (decision 0011, 3.4).
     tokens, errors = lex("1.")
     assert tokens[0].type is T.INT and tokens[0].value == 1
-    assert codes(errors) == ["E1001"]
+    assert tokens[1].type is T.DOT and errors == []
+
+
+@pytest.mark.parametrize("text, kinds", [
+    ("1.5", [T.FLOAT]),
+    ("Text.length", [T.IDENT, T.DOT, T.IDENT]),
+    ("1.length", [T.INT, T.DOT, T.IDENT]),
+    (".5", [T.DOT, T.INT]),
+    ("1.5.2", [T.FLOAT, T.DOT, T.INT]),
+    ('"a.b" // c.d', [T.STRING]),
+])
+def test_where_a_dot_is_a_token(text, kinds):
+    tokens, errors = lex(text)
+    assert errors == [] and [token.type for token in tokens[:-1]] == kinds
 
 
 def test_string_literal_and_escapes():

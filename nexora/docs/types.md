@@ -139,7 +139,10 @@ Cosas que conviene saber:
 - **`not`** se aplica antes que las comparaciones: `not a == b` significa `(not a) == b`. Para
   negar una comparación escribe `not (a == b)` o `a != b`.
 - **`and` y `or`** no evalúan su lado derecho si el izquierdo ya decide el resultado.
-- **Textos.** Solo admiten `+`, `==` y `!=`. No se pueden ordenar con `<`.
+- **Textos.** Admiten `+`, `==`, `!=` y el orden (`<`, `<=`, `>`, `>=`) entre dos textos, carácter
+  a carácter por punto de código Unicode: `"Z" < "a"` y `"10" < "9"` son verdaderos. Sus funciones
+  (`Text.length`, `Text.slice`…) y la lectura de números (`Int.parse`, `Float.parse`) están en la
+  [especificación](language-spec.md), sección 8.1.
 
 ## Casos inválidos
 

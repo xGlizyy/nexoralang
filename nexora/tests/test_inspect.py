@@ -51,7 +51,7 @@ EXPECTED_FIELDS = {
     "Unary": ["kind", "span", "operator", "operand", "type"],
     "Binary": ["kind", "span", "operator", "operator_span", "left", "right", "type"],
     "Group": ["kind", "span", "expression", "type"],
-    "Call": ["kind", "span", "callee", "callee_span", "arguments", "type"],
+    "Call": ["kind", "span", "callee", "callee_span", "arguments", "qualifier", "type"],
 }
 
 

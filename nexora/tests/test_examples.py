@@ -32,6 +32,7 @@ EXPECTED = {
     "refined_types.nex": (0, 0),
     "checked_examples.nex": (0, 0),
     "loops.nex": (0, 0),
+    "texts.nex": (0, 0),
     # Rejected by the static analysis: never started.
     "invalid/syntax_error.nex": (1, 1),
     "invalid/name_errors.nex": (1, 1),
@@ -42,6 +43,7 @@ EXPECTED = {
     "failing/contract_violation.nex": (5, 0),
     "failing/refinement_violation.nex": (5, 0),
     "failing/loop_measure.nex": (5, 0),
+    "failing/parse_number.nex": (5, 0),
 }
 
 
@@ -49,6 +51,7 @@ EXPECTED = {
 TESTED = {
     "checked_examples.nex": 0,
     "loops.nex": 0,
+    "texts.nex": 0,
 }
 
 

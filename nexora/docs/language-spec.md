@@ -113,8 +113,12 @@ de un texto es un error (`E1005`): está reservada para la futura interpolación
 ### 2.6 Símbolos
 
 ```
-(  )  {  }  ,  :  =  ->  +  -  *  /  ==  !=  <  <=  >  >=
+(  )  {  }  ,  :  .  =  ->  +  -  *  /  ==  !=  <  <=  >  >=
 ```
+
+Un `.` seguido de un dígito, dentro de un número, forma parte del número decimal (`1.5`). Cualquier
+otro `.` es un símbolo, que solo es válido en una llamada cualificada como `Text.length(s)`
+(sección 8.1).
 
 Cualquier carácter que no forme parte de lo descrito en esta sección es un error (`E1001`); el
 analizador nunca ignora un carácter desconocido.
@@ -157,6 +161,7 @@ unary          = ( "-" | "not" ) unary | primary ;
 primary        = INT | FLOAT | TEXT | "true" | "false"
                | NAME
                | NAME "(" [ expression { "," expression } ] ")"
+               | NAME "." NAME "(" [ expression { "," expression } ] ")"
                | "(" expression ")" ;
 ```
 
@@ -175,6 +180,10 @@ Notas:
 - Una asignación es una sentencia, no una expresión: `a = b = 1` e `if x = 1 { }` son errores de
   sintaxis (`E1101`). No existen `+=` ni `++`.
 - No se admite una coma final en las listas de parámetros ni de argumentos.
+- En una llamada cualificada (`NAME "." NAME "("`), el `.` va pegado a los dos nombres: sin espacios
+  ni saltos de línea a sus lados (`E1101`). Entre el segundo nombre y el `(` puede haber espacios,
+  como en cualquier llamada. Que el primer nombre sea un tipo con esa función lo comprueba el análisis
+  estático (`E2008`, sección 8.1).
 - Límites de tamaño: los paréntesis, los operadores unarios, los bloques y las cadenas `else if`
   pueden anidarse hasta 64 niveles, y un árbol de expresión puede tener hasta 256 niveles (por
   ejemplo, una suma de 256 términos). Superarlos es el error `E1105`.
@@ -225,8 +234,10 @@ Las únicas conversiones que existen son llamadas explícitas a funciones integr
 | `to_float(value)` | `Int` → `Float` | Siempre posible. Los enteros de más de 53 bits se redondean al `Float` más cercano |
 | `to_int(value)` | `Float` → `Int` | Descarta la parte decimal (redondea hacia cero): `to_int(3.9)` es `3`, `to_int(-3.9)` es `-3`. Si el resultado no cabe en un `Int`, error de ejecución `E3005` |
 | `to_text(value)` | `Int`, `Float`, `Bool` o `Text` → `Text` | El mismo texto que escribiría `print` (sección 8) |
+| `Int.parse(text)` | `Text` → `Int` | Solo si `Int.can_parse(text)`; si no, `E4001` (sección 8.1) |
+| `Float.parse(text)` | `Text` → `Float` | Solo si `Float.can_parse(text)`; si no, `E4001` (sección 8.1) |
 
-No existe conversión desde `Text` hacia un número ni hacia `Bool`, ni entre `Bool` y los números.
+No existe conversión desde `Text` hacia `Bool`, ni entre `Bool` y los números.
 
 ```nex
 let count = 3
@@ -474,7 +485,7 @@ De mayor a menor. Todos los operadores binarios asocian por la izquierda.
 | 3 | `+`  `-` | Dos `Int` o dos `Float` | El mismo tipo |
 | 3 | `+` | Dos `Text` | `Text` (concatenación) |
 | 4 | `==`  `!=` | Dos valores del mismo tipo (`Int`, `Float`, `Bool` o `Text`) | `Bool` |
-| 4 | `<`  `<=`  `>`  `>=` | Dos `Int` o dos `Float` | `Bool` |
+| 4 | `<`  `<=`  `>`  `>=` | Dos `Int`, dos `Float` o dos `Text` | `Bool` |
 | 5 | `and` | Dos `Bool` | `Bool` |
 | 6 | `or` | Dos `Bool` | `Bool` |
 
@@ -487,7 +498,8 @@ Cualquier combinación de tipos que no aparezca en la tabla es el error `E2011`.
 
 - `Int` y `Float` no se mezclan, tampoco al comparar: `1 + 1.5` y `1 == 1.0` son errores.
 - Los `Bool` no admiten aritmética ni orden: `true + 1` y `true < false` son errores.
-- Los `Text` solo admiten `+`, `==` y `!=`: `"a" < "b"` y `"a" * 2` son errores.
+- Los `Text` solo admiten `+`, `==`, `!=` y el orden (`<`, `<=`, `>`, `>=`) entre dos `Text`:
+  `"a" * 2` y `"1" < 2` son errores.
 - `and`, `or` y `not` solo aceptan `Bool`: `1 and 2` y `not 0` son errores.
 
 ### 6.2 Semántica
@@ -498,6 +510,12 @@ Cualquier combinación de tipos que no aparezca en la tabla es el error `E2011`.
   `true`.
 - **Igualdad:** dos `Text` son iguales si tienen exactamente los mismos caracteres (se distinguen
   mayúsculas). Dos `Float` se comparan por su valor IEEE 754.
+- **Orden entre textos:** carácter a carácter, por punto de código Unicode. En la primera posición
+  en que difieren, va antes el carácter de punto de código más bajo; si uno es el principio del
+  otro, va antes el más corto. No depende del idioma ni de la configuración del sistema, y no es el
+  orden alfabético de ningún idioma: `"Z" < "a"`, `"z" < "é"` y `"10" < "9"` son verdaderos. Nada
+  se normaliza: una `é` escrita con un solo carácter es distinta de una `e` seguida del acento
+  combinado (sección 8.1).
 - **División entre enteros:** `/` entre dos `Int` devuelve un `Int` y descarta la parte decimal
   (redondea hacia cero): `7 / 2` es `3` y `-7 / 2` es `-3`. Para obtener decimales se dividen dos
   `Float`: `7.0 / 2.0` es `3.5`.
@@ -657,6 +675,94 @@ Texto que producen `print` y `to_text`:
 
 `print` es la única forma que tiene un programa de producir un efecto. Un programa NEXORA no puede
 leer archivos, abrir conexiones, ejecutar otros programas ni leer datos de entrada.
+
+### 8.1 Funciones de un tipo: `Text.length`, `Int.parse`…
+
+Algunas funciones integradas pertenecen a un tipo y se llaman con su nombre delante
+([decisión 0011](decisions/0011-operaciones-sobre-textos.md)):
+
+| Función | Qué hace | Requisitos |
+|---------|----------|------------|
+| `Text.length(text: Text) -> Int` | Número de caracteres | |
+| `Text.slice(text: Text, start: Int, end: Int) -> Text` | Los caracteres desde `start` (incluido) hasta `end` (excluido) | `start >= 0`, `start <= end`, `end <= Text.length(text)` |
+| `Text.contains(text: Text, part: Text) -> Bool` | Si `part` aparece en `text` | |
+| `Text.starts_with(text: Text, part: Text) -> Bool` | Si `text` empieza por `part` | |
+| `Text.ends_with(text: Text, part: Text) -> Bool` | Si `text` termina en `part` | |
+| `Int.can_parse(text: Text) -> Bool` | Si `text` es un entero escrito según la gramática de abajo, dentro del rango de `Int` | |
+| `Int.parse(text: Text) -> Int` | El entero escrito en `text` | `Int.can_parse(text)` |
+| `Float.can_parse(text: Text) -> Bool` | Si `text` es un decimal escrito según la gramática de abajo, cuyo valor redondeado es finito | |
+| `Float.parse(text: Text) -> Float` | El decimal escrito en `text`, redondeado al `Float` más cercano | `Float.can_parse(text)` |
+
+- **Un carácter es un punto de código Unicode** y las posiciones empiezan en 0. `Text.length("año")`
+  es 3. No se normaliza nada: una `e` seguida del acento combinado son dos caracteres.
+- **Nombres.** No se reserva ningún nombre: `let length = Text.length(name)` es válido, y `Int`,
+  `Float`, `Bool` y `Text` se pueden seguir usando como nombres de variable. Delante del punto solo
+  puede ir un tipo con esa función; cualquier otra cosa es `E2008`, con una sugerencia (`length(t)`
+  sugiere `Text.length`). Un programa no puede declarar funciones de un tipo.
+- **Requisitos.** Antes de la operación se comprueban sus requisitos, en el orden de la tabla. El
+  primero que no se cumple detiene el programa con `E4001`, como el `requires` de una función del
+  programa. No hay índices negativos ni recortes silenciosos: `Text.slice("abc", 2, 9)` no devuelve
+  `"c"`. `Int.parse` y `Float.parse` añaden una sugerencia según lo que falló.
+- **Números escritos en un texto.** Una única forma, solo con caracteres ASCII:
+
+  ```text
+  entero    = [ "-" ] dígito { dígito }
+  decimal   = [ "-" ] dígito { dígito } ( fracción [ exponente ] | exponente )
+  fracción  = "." dígito { dígito }
+  exponente = ( "e" | "E" ) [ "+" | "-" ] dígito { dígito }
+  ```
+
+  Sin espacios, sin `+` delante, sin `_` ni separadores, sin `inf` ni `nan`. Se admiten ceros a la
+  izquierda (`"007"` es 7). `Float.can_parse("1")` es falso: un entero no es un decimal; se lee con
+  `to_float(Int.parse("1"))`. Un valor demasiado pequeño se redondea a cero (`"1e-400"` es `0.0`);
+  uno que se redondearía a infinito no se admite (`"1e309"`). Lo que escribe `to_text` siempre se
+  puede volver a leer: `Int.parse(to_text(n)) == n` y `Float.parse(to_text(x)) == x`.
+
+<!-- nex:run -->
+```nex
+fn main() -> Void {
+    let name = "Ada Lovelace"
+    let length = Text.length(name)
+    print(length)
+    print(Text.slice(name, 0, 3))
+    print(Text.contains(name, "Love") and Text.ends_with(name, "lace"))
+    print("Ada" < "ada")
+    if Int.can_parse("042") {
+        print(Int.parse("042") + 1)
+    }
+}
+```
+
+```text
+12
+Ada
+true
+true
+43
+```
+
+Un requisito que no se cumple detiene el programa con su explicación y los valores de la llamada:
+
+<!-- nex:fails exit=5 -->
+```nex
+fn main() -> Void {
+    print(Int.parse("12a"))
+}
+```
+
+```text
+contract error[E4001]: Precondition violated
+ --> program.nex:2:11
+  |
+2 |     print(Int.parse("12a"))
+  |           ^^^^^^^^^^^^^^^^ This call breaks a 'requires' condition of 'Int.parse'
+  = note: The condition of the built-in function is false: requires Int.can_parse(text)
+  = note: Reason: Only a whole number within the range of Int can be read as an Int
+  = note: It was called with: text = "12a"
+  = hint: Check the text first with Int.can_parse(...), and call Int.parse only when it is true.
+
+error: program.nex: the program stopped because a contract was broken
+```
 
 ## 9. Contratos
 
@@ -971,7 +1077,7 @@ análisis estático no afirma nada sobre ellas:
 | `to_int` de un valor que no cabe en un `Int` | `E3005` |
 | Un `Text` más largo que el límite del entorno, si este fija uno | `E3006` |
 | El programa agota la memoria disponible | `E3007` |
-| Condición `requires` falsa | `E4001` |
+| Condición `requires` falsa, también la de una función de un tipo (`Text.slice`, `Int.parse`…, sección 8.1) | `E4001` |
 | Condición `ensures` falsa | `E4002` |
 | Un valor comprobado con `Percent(x)` que no cumple la condición de su tipo | `E4003` |
 | Un `invariant` falso | `E4005` |
@@ -1287,8 +1393,11 @@ Son limitaciones reales de esta versión, no fallos:
 - Los parámetros no pueden reasignarse.
 - `if` es una sentencia, no una expresión: no puede usarse como valor.
 - No hay tipos compuestos: ni listas, ni registros, ni valores opcionales.
-- Los textos solo admiten concatenación e igualdad: no hay longitud, acceso a caracteres ni orden.
-- No hay conversión de `Text` a número, ni operador de resto (`%`).
+- Las operaciones sobre textos son las de la sección 8.1: no hay `trim`, mayúsculas, `split`,
+  `replace` ni búsqueda de posiciones. Un carácter es un punto de código: no se cuentan grafemas.
+- No hay operador de resto (`%`).
+- Los requisitos de las funciones de un tipo se comprueban al ejecutar, como los del programa:
+  `nex check` no avisa de que `Text.slice("abc", 0, 5)` va a fallar.
 - No hay interpolación de textos, textos de varias líneas ni comentarios de bloque.
 - Los literales solo admiten notación decimal: no hay hexadecimal ni exponentes (`1e-3`).
 - El entero mínimo `-9223372036854775808` no puede escribirse como literal. Sí puede obtenerse:

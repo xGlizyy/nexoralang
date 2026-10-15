@@ -523,6 +523,7 @@
         "callee",
         "callee_span",
         "arguments",
+        "qualifier",
         "type"
       ],
       "properties": {
@@ -571,6 +572,16 @@
               }
             ]
           }
+        },
+        "qualifier": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": [

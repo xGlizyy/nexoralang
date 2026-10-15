@@ -110,7 +110,7 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E2005` | Unknown variable | Se usa un nombre que no está declarado o que ya no es visible | Decláralo antes con `let`, o corrige el nombre |
 | `E2006` | Name already declared | Se declara un nombre que ya es visible, o el de una función | Elige otro nombre |
 | `E2007` | Cannot reassign variable | Se asigna un valor nuevo a una variable declarada con `let` o a un parámetro | Declara la variable con `var`; un parámetro se copia antes en una `var` |
-| `E2008` | Unknown function | Se llama a una función que no existe | Corrige el nombre o declara la función |
+| `E2008` | Unknown function | Se llama a una función que no existe. También en una llamada cualificada (`Texto.length(t)`, `Text.lenght(t)`, `name.length()`) cuyo nombre delante del punto no es un tipo con esa función ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)) | Corrige el nombre o declara la función. Las funciones de un tipo se llaman con su nombre: `Text.length(t)` |
 | `E2010` | Unused value | Un valor calculado que se pierde: una operación suelta o una llamada cuyo resultado no se usa | Guárdalo con `let` o pásalo a una función |
 | `E2013` | Invalid parameter | `main` tiene parámetros, o un parámetro se llama `result` | Quita los parámetros de `main`, o cambia el nombre |
 | `E2014` | Missing return | Una función que devuelve un valor puede terminar sin `return` | Asegúrate de que todas las ramas terminan con `return` |
@@ -147,7 +147,7 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 
 | Código | Título | Qué significa | Qué hacer |
 |--------|--------|---------------|-----------|
-| `E4001` | Precondition violated | Una llamada no cumple una condición `requires`. Señala la llamada | Corrige los argumentos, o comprueba la condición antes de llamar |
+| `E4001` | Precondition violated | Una llamada no cumple una condición `requires`, de una función del programa o de una función de un tipo (`Text.slice`, `Int.parse`). Señala la llamada | Corrige los argumentos, o comprueba la condición antes de llamar (`Int.can_parse` antes de `Int.parse`) |
 | `E4002` | Postcondition violated | Una función no cumple su propia condición `ensures`. Señala la cláusula | Corrige el cuerpo de la función (o la condición, si era incorrecta) |
 | `E4003` | Refinement violated | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado. Señala la comprobación | Corrige el cálculo que produce el valor, o compruébalo antes con un `if` |
 | `E4005` | Loop invariant violated | Un `invariant` es falso antes de evaluar la condición de su bucle: al llegar, o después de una vuelta. Señala la cláusula; las notas dicen después de qué vuelta y con qué valores | Corrige el cuerpo del bucle, o el invariante si no describía lo que el bucle mantiene |

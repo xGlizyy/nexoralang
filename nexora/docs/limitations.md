@@ -24,9 +24,11 @@ NEXORA es un proyecto en una fase temprana (anterior a la versión 1.0):
 | `if` como expresión | `if` no puede usarse para dar valor a una variable |
 | Tipos compuestos: listas, mapas, registros, enumeraciones, opcionales | Solo existen `Int`, `Float`, `Bool` y `Text` |
 | Tipos definidos por el usuario y genéricos | |
-| Operaciones sobre textos: longitud, acceso a caracteres, búsqueda, orden | Los textos solo se unen (`+`) y se comparan (`==`, `!=`) |
+| `trim`, mayúsculas, `split`, `replace`, búsqueda de posiciones | Existen `Text.length`, `Text.slice`, `Text.contains`, `Text.starts_with`, `Text.ends_with` y el orden entre textos ([especificación](language-spec.md), 8.1) |
+| Grafemas y normalización Unicode | Un carácter es un punto de código: una `e` con el acento combinado cuenta 2, y dos textos que se ven iguales pueden ser distintos para `==` |
+| Orden alfabético según el idioma | El orden entre textos es el de los puntos de código: `"Z" < "a"` |
 | Interpolación de textos | Se usa `+` y `to_text` |
-| Conversión de `Text` a número | Un programa no puede interpretar un número escrito como texto |
+| Leer números con espacios, `+`, separadores o en otras bases | `Int.parse` y `Float.parse` solo leen una forma (`"-42"`, `"2.5e3"`) |
 | Operador de resto (`%`) y potencias | |
 | Funciones matemáticas (raíz, redondeo, valor absoluto…) | Hay que escribirlas |
 | Entrada de datos: teclado, argumentos, archivos, red | Un programa solo puede escribir con `print` |

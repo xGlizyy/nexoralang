@@ -1,0 +1,63 @@
+// Texts: their length, their parts, their order, and the numbers written in them.
+//
+// These functions belong to a type and are called with its name: Text.length, Int.parse...
+// Those that may have no answer declare when they have one, with a 'requires' written in NEXORA,
+// and stop with E4001 when it is broken, exactly like a function of the program.
+// A character is a Unicode code point, and texts are ordered by code point, on any machine.
+
+type Code = Text where Text.length(value) == 3, "A code has exactly three characters"
+
+fn initials(first: Text, last: Text) -> Text {
+    requires Text.length(first) > 0 and Text.length(last) > 0, "Both names are needed"
+    example initials("Ada", "Lovelace") == "AL"
+    return Text.slice(first, 0, 1) + Text.slice(last, 0, 1)
+}
+
+fn count_of(letter: Text, text: Text) -> Int {
+    requires Text.length(letter) == 1, "One character at a time"
+    example count_of("a", "banana") == 3
+    var count = 0
+    var i = 0
+    while i < Text.length(text) {
+        invariant count >= 0 and count <= i
+        decreases Text.length(text) - i, "Each turn reads one more character"
+        if Text.slice(text, i, i + 1) == letter {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+fn quantity(written: Text) -> Int {
+    requires Int.can_parse(written), "The quantity has to be written as a whole number"
+    return Int.parse(written)
+}
+
+fn main() -> Void {
+    // A variable may be called 'length': the function is Text.length.
+    let length = Text.length("año")
+    print(length)
+    print(initials("Grace", "Hopper"))
+    print(count_of("s", "mississippi"))
+
+    // Parts of a text, and where one text appears in another.
+    let greeting = "Hello, world"
+    print(Text.slice(greeting, 7, 12))
+    print(Text.contains(greeting, "world") and Text.starts_with(greeting, "Hello"))
+    print(Text.ends_with(greeting, "!"))
+
+    // Ordered by code point: "Z" comes before "a", and "10" before "9".
+    print("Z" < "a")
+    print("10" < "9")
+
+    // Numbers written in texts. Check first, then read.
+    print(quantity("007") * 2)
+    print(Int.can_parse("12a"))
+    print(Float.can_parse("1") or Float.can_parse("2.5e3"))
+    print(Float.parse("2.5e3") / 2.0)
+    print(to_float(Int.parse("-40")))
+
+    let code: Code = "NEX"
+    print(code + "-" + to_text(Text.length(code)))
+}

@@ -25,6 +25,7 @@ hay una prueba que falla si deja de funcionar.
 | Conversiones explícitas (`to_float`, `to_int`, `to_text`) | `tests/test_types.py` |
 | Variables inmutables (`let`) y reasignables (`var`), bloques y ámbitos | `tests/test_checker.py`, `tests/test_loops.py` |
 | **Bucles** `while` con su medida (`decreases`) e invariantes (`invariant`), comprobados en cada vuelta | `tests/test_loops.py` |
+| **Operaciones sobre textos**: `Text.length`, `Text.slice`, búsqueda, orden entre textos y lectura de números (`Int.parse`, `Float.parse`), con sus requisitos comprobados en cada llamada | `tests/test_text_operations.py` |
 | Funciones con parámetros, `return`, rutas de retorno, recursividad | `tests/test_functions.py` |
 | `if` / `else if` / `else` | `tests/test_functions.py` |
 | **Contratos** (`requires`, `ensures`), estables desde la 0.3.0 | `tests/test_contracts.py` |
@@ -84,7 +85,7 @@ El resto del lenguaje, en el orden en que tendría sentido abordarlo. Avanza jun
 principal; cuando un punto de esta lista es necesario para un paso de la línea principal, va
 primero:
 
-1. **Operaciones sobre textos**: longitud, comparación de orden, conversión de texto a número.
+1. ~~**Operaciones sobre textos**~~: hechas en la 0.6.0 ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)).
 2. **Un primer tipo compuesto: listas.** Exige cambiar la forma en que el comprobador representa
    los tipos. Con ellas, `for` sobre una lista (su medida es lo que queda por recorrer).
 3. **Registros y valores opcionales** (`Option`, `Result`), para representar la ausencia de un

@@ -152,11 +152,28 @@ _SYMBOL = {
     },
 }
 
+_BUILTIN_CONTRACT = {
+    "type": "object",
+    "required": ["clause", "condition", "message", "checked_at_run_time"],
+    "properties": {
+        "clause": {"enum": ["requires", "ensures"]},
+        "condition": {"type": "string", "description": "The condition, written in NEXORA."},
+        "message": {"type": "string", "description": "Why the rule exists."},
+        "checked_at_run_time": {
+            "type": "boolean",
+            "description": "True for 'requires', checked on every call. False for 'ensures', which the "
+                           "implementation keeps and the tests check, but the program does not.",
+        },
+    },
+}
+
 _BUILTIN = {
     "type": "object",
-    "required": ["name", "signature", "params", "return_type"],
-    "properties": {"name": {"type": "string"}, "signature": {"type": "string"},
-                   "params": {"type": "array", "items": {"$ref": "#/$defs/param"}}, "return_type": {"type": "string"}},
+    "required": ["name", "signature", "params", "return_type", "contracts"],
+    "properties": {"name": {"type": "string", "description": "Text.length for a function of a type."},
+                   "signature": {"type": "string"},
+                   "params": {"type": "array", "items": {"$ref": "#/$defs/param"}}, "return_type": {"type": "string"},
+                   "contracts": {"type": "array", "items": _BUILTIN_CONTRACT}},
 }
 
 _CONTEXT_FUNCTION = {

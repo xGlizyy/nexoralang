@@ -189,6 +189,32 @@ error: program.nex: the program stopped because a contract was broken
 Sin el contrato, el mismo programa fallaría con una división por cero dentro de `divide`. Con él,
 el error dice qué regla se incumplió y desde dónde.
 
+### Las funciones del lenguaje también tienen `requires`
+
+Las funciones de un tipo que no siempre tienen respuesta (`Text.slice`, `Int.parse`,
+`Float.parse`) declaran sus `requires` en NEXORA, con su explicación, y fallan con el mismo `E4001`
+([especificación](language-spec.md), sección 8.1). Quien llama puede trasladar el requisito a su
+propia función:
+
+<!-- nex:run -->
+```nex
+fn quantity(written: Text) -> Int {
+    requires Int.can_parse(written), "The quantity has to be written as a whole number"
+    return Int.parse(written)
+}
+
+fn main() -> Void {
+    print(quantity("12") * 2)
+}
+```
+
+```text
+24
+```
+
+`nex symbols` muestra los requisitos de cada función integrada en su campo `contracts`, así que una
+herramienta sabe antes de ejecutar nada que `Int.parse` exige `Int.can_parse`.
+
 ## Cuando `ensures` no se cumple
 
 El diagnóstico señala **la cláusula**, porque es la función la que no cumple lo que promete, y

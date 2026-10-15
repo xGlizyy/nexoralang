@@ -253,7 +253,10 @@ class Parser:
     def _function(self) -> ast.Function:
         keyword = self._expect(TokenType.FN, "'fn'")
         name = self._expect_name("a function name after 'fn'")
-        opening = self._expect(TokenType.LPAREN, f"'(' after the function name '{name.lexeme}'")
+        hint = None
+        if self._check(TokenType.DOT):
+            hint = "Only the language defines functions of a type, such as Text.length. Choose a name without '.'."
+        opening = self._expect(TokenType.LPAREN, f"'(' after the function name '{name.lexeme}'", hint=hint)
 
         params: list[ast.Param] = []
         if not self._check(TokenType.RPAREN):
@@ -551,6 +554,8 @@ class Parser:
             return ast.BoolLiteral(self._advance().span, token.type is TokenType.TRUE)
         if token.type is TokenType.IDENT:
             self._advance()
+            if self._check(TokenType.DOT):
+                return self._qualified_call(token)
             if self._check(TokenType.LPAREN):
                 return self._call(token)
             return ast.Name(token.span, token.lexeme)
@@ -568,7 +573,30 @@ class Parser:
             )
         raise self._error("E1101", f"Expected a value or an expression, found {token.describe()}")
 
-    def _call(self, callee: Token) -> ast.Call:
+    def _qualified_call(self, qualifier: Token) -> ast.Call:
+        """`Name.function(...)`. Only the form is checked here: whether `Name` is a type that has
+        `function` is decided by the checker (decision 0011, 3.4 and 9)."""
+        dot = self._advance()
+        name = self._peek()
+        if name.type is not TokenType.IDENT:
+            raise self._error("E1101", f"Expected the name of a function after '{qualifier.lexeme}.'", dot)
+        full = f"{qualifier.lexeme}.{name.lexeme}"
+        # The '.' touches both names. Inside parentheses a line break leaves no token, so the
+        # positions are compared, not the tokens.
+        if not (_touches(qualifier.span, dot.span) and _touches(dot.span, name.span)):
+            raise self._error("E1101", f"Write '{full}' without spaces around the '.'",
+                              span=qualifier.span.to(name.span))
+        self._advance()
+        if self._check(TokenType.DOT):
+            raise self._error("E1101", f"Expected '(' after '{full}', found '.'",
+                              notes=("A qualified name has one '.': Type.function",))
+        if not self._check(TokenType.LPAREN):
+            raise self._error("E1101", f"Expected '(' to call '{full}'",
+                              hint=f"A function is not a value: call it, as in {full}(...).")
+        return self._call(qualifier, name=full, name_span=qualifier.span.to(name.span), qualifier=qualifier.lexeme)
+
+    def _call(self, callee: Token, *, name: str | None = None, name_span: Span | None = None,
+              qualifier: str | None = None) -> ast.Call:
         opening = self._advance()
         self._enter(opening)
         arguments: list[ast.Expr] = []
@@ -579,7 +607,8 @@ class Parser:
         closing = self._expect(TokenType.RPAREN, "')' to close the call", notes=(self._opened_at(opening),))
         self._nesting -= 1
         return self._built(
-            ast.Call(callee.span.to(closing.span), callee.lexeme, callee.span, tuple(arguments)),
+            ast.Call(callee.span.to(closing.span), name or callee.lexeme, name_span or callee.span,
+                     tuple(arguments), qualifier),
             *arguments,
         )
 
@@ -614,5 +643,23 @@ class Parser:
         return node
 
 
+def _touches(left: Span, right: Span) -> bool:
+    """Whether `right` starts exactly where `left` ends, on the same line."""
+    return left.end_line == right.line and left.end_column == right.column
+
+
 def parse(tokens: list[Token]) -> tuple[ast.Program, list[Diagnostic]]:
     return Parser(tokens).parse()
+
+
+def parse_expression(tokens: list[Token]) -> ast.Expr:
+    """A single expression and nothing else. For the conditions the language declares itself
+    (prelude.py), which are fixed text: any syntax error there is a defect, raised as ValueError."""
+    parser = Parser(tokens)
+    try:
+        expression = parser._expression()
+    except ParseError as error:
+        raise ValueError(error.diagnostic.label) from None
+    if not parser._check(TokenType.EOF):
+        raise ValueError(f"unexpected {parser._peek().describe()} after the expression")
+    return expression

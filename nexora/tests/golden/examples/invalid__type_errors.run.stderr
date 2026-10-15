@@ -32,7 +32,7 @@ type error[E2011]: Type mismatch
    |
 17 |     let big = 3 > "2"
    |                 ^ Cannot apply '>' to Int and Text
-   = hint: '>' compares two Int values or two Float values.
+   = hint: '>' compares two values of the same type. Convert one side: to_text(...) turns a number into a Text, and Int.parse(...) reads an Int from a Text.
 
 type error[E2011]: Type mismatch
   --> examples/invalid/type_errors.nex:18:18
