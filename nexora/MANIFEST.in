@@ -3,4 +3,4 @@
 include LICENSE CHANGELOG.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md
 recursive-include docs *.md *.json
 recursive-include examples *.nex *.md
-recursive-include tests *.py *.stdout *.stderr
+recursive-include tests *.py *.json *.stdout *.stderr
