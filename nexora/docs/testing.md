@@ -37,6 +37,12 @@ Realizada el 15 de octubre de 2026, en Windows 11 con Python 3.12.10:
 | Umbral configurado (`fail_under` en `pyproject.toml`) | 90 % |
 | Pruebas del servidor web (`node --test "test/*.test.js"`, en `servidor/`) | 112 superadas, 0 fallos |
 
+Las 112 pruebas del servidor son las de esta medición y las de `v0.6.0`. Después del tag, el commit
+`cb709ff` añadió `servidor/test/playground-config.test.js`: en `main`, en el commit `7c87027`,
+`npm test` en `servidor/` da 130 superadas y 0 fallos (15 de octubre de 2026, Windows 11, Node
+24.21.0). Esa ejecución solo repitió las pruebas del servidor; el resto de la tabla no se volvió a
+medir.
+
 Las cuatro pruebas omitidas necesitan funciones de POSIX que Windows no tiene, y **no se han
 ejecutado nunca**: una comprueba un archivo sin permiso de lectura (el mismo caso se cubre en
 Windows simulando el error), y tres comprueban los límites de memoria y de CPU que el proceso del
