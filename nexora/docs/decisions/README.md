@@ -16,6 +16,7 @@ una decisión se revisa, se añade otra que la sustituye y se indica en ambas.
 | [0008](0008-ejemplos-y-nex-test.md) | Ejemplos en las funciones (`example`) y el comando `nex test` | Aceptada | No |
 | [0009](0009-memoria-agotada.md) | Un programa que agota la memoria al ejecutarse: diagnóstico `E3007` | Aceptada | Sí |
 | [0010](0010-var-y-while.md) | Variables reasignables (`var`) y bucles con requisitos (`while`, `invariant`, `decreases`) | Aceptada | Sí |
+| [0011](0011-operaciones-sobre-textos.md) | Operaciones sobre textos: funciones asociadas a un tipo (`Text.length`, `Int.parse`) que declaran sus requisitos | Aceptada | No |
 
 ## Posibles cambios incompatibles en el futuro
 
