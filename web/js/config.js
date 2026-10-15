@@ -25,7 +25,7 @@ export const roadmap = [
   },
   {
     title: 'First interpreter',
-    description: 'A reference interpreter runs a subset of the language: types, functions, conditions, contracts and refined types.',
+    description: 'A reference interpreter runs a subset of the language: types, functions, conditions, loops that declare why they end, contracts, refined types and examples checked with nex test.',
     status: 'done',
   },
   {

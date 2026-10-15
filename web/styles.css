@@ -1135,6 +1135,56 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
 .bullets li + li { margin-top: 8px; }
 .bullets li::before { content: ""; position: absolute; left: 2px; top: 0.72em; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 
+/* FAQ: each question opens its answer in place. */
+.docs__article .faq__group {
+  margin-top: 40px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.faq { margin-top: 12px; border-top: 1px solid var(--line); }
+.faq__item { border-bottom: 1px solid var(--line); }
+
+.faq__item summary {
+  position: relative;
+  padding: 18px 40px 18px 0;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+}
+
+.faq__item summary::-webkit-details-marker { display: none; }
+
+/* A plus that turns into a minus while the answer is open. */
+.faq__item summary::before,
+.faq__item summary::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  width: 12px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--muted);
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.faq__item summary::after { transform: rotate(90deg); }
+.faq__item[open] summary::after { transform: rotate(0deg); }
+.faq__item summary:hover::before, .faq__item summary:hover::after,
+.faq__item[open] summary::before, .faq__item[open] summary::after { background: var(--accent); }
+
+.faq__answer { padding: 0 40px 20px 0; }
+.faq__answer > :first-child { margin-top: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .faq__item summary::before, .faq__item summary::after { transition: none; }
+}
+
 /* With JavaScript each section is a page of its own (docs-pages.js shows one at a time and adds the pager). */
 
 /* Sections are reached from the outline in the header, so the side index is only kept for the

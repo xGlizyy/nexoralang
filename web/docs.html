@@ -52,6 +52,7 @@
                   <li><a href="docs.html#example"><span>04</span><strong>Conceptual example</strong><small>A first look at the syntax</small></a></li>
                   <li><a href="docs.html#roadmap"><span>05</span><strong>Roadmap</strong><small>The phases, in order</small></a></li>
                   <li><a href="docs.html#follow"><span>06</span><strong>Following the project</strong><small>How to keep up with it</small></a></li>
+                  <li><a href="docs.html#faq"><span>07</span><strong>FAQ</strong><small>Common questions, answered</small></a></li>
                 </ol>
               </div>
               <div class="nav-menu__tree">
@@ -93,6 +94,7 @@
       <li><a href="#example">Conceptual example</a></li>
       <li><a href="#roadmap">Roadmap</a></li>
       <li><a href="#follow">Following the project</a></li>
+      <li><a href="#faq">FAQ</a></li>
     </ol>
   </nav>
 
@@ -153,7 +155,7 @@
           <dt><span class="chip">Planned</span></dt>
           <dd>
             <ul>
-              <li>The rest of the language: collections and <code>for</code>, modules.</li>
+              <li>The rest of the language: operations on text, collections and <code>for</code>, reading input, modules.</li>
               <li>More developer tools.</li>
               <li>Optional AI integrations, currently at the research stage.</li>
             </ul>
@@ -245,6 +247,84 @@
       <p>
         Until then, this page and the <a href="index.html#roadmap">roadmap</a> are updated as the project advances.
       </p>
+    </section>
+
+    <section id="faq">
+      <h2>Frequently asked questions</h2>
+      <p>Short answers to the questions that come up most often about the project and how to take part in it.</p>
+
+      <h3 class="faq__group">About the project</h3>
+      <div class="faq">
+        <details class="faq__item">
+          <summary>Is NEXORA ready for production?</summary>
+          <div class="faq__answer">
+            <p>
+              <strong>Not yet.</strong> Version 0.5 is an experimental development release. It can be
+              explored and tested, but production suitability has not been established.
+            </p>
+          </div>
+        </details>
+        <details class="faq__item">
+          <summary>Is NEXORA a replacement for Python?</summary>
+          <div class="faq__answer">
+            <p>
+              <strong>No such claim is made.</strong> The current implementation uses Python, and the project
+              explores its own language design goals.
+            </p>
+            <p>
+              It should be evaluated on its actual capabilities rather than as a general replacement for
+              Python or another established language.
+            </p>
+          </div>
+        </details>
+        <details class="faq__item">
+          <summary>Can I use NEXORA to learn about programming languages?</summary>
+          <div class="faq__answer">
+            <p>
+              <strong>Yes.</strong> Exploring the available syntax, examples, interpreter behavior,
+              diagnostics and design records can be useful for learning and experimentation. The
+              <a href="playground.html">playground</a> and the <a href="guide.html">language guide</a> are
+              good places to start.
+            </p>
+          </div>
+        </details>
+      </div>
+
+      <h3 class="faq__group">Getting involved</h3>
+      <div class="faq">
+        <details class="faq__item">
+          <summary>Can I contribute?</summary>
+          <div class="faq__answer">
+            <p>
+              You can provide feedback and explore potential contributions. Check the project's public
+              repository and contribution instructions, if available, for the current process.
+            </p>
+          </div>
+        </details>
+        <details class="faq__item">
+          <summary>Where should I report a bug?</summary>
+          <div class="faq__answer">
+            <p>Use the project's official issue tracker if one is published. Include:</p>
+            <ul class="bullets">
+              <li>The NEXORA version (<code>nex --version</code>);</li>
+              <li>The operating system;</li>
+              <li>The smallest program that reproduces the issue;</li>
+              <li>The command you ran;</li>
+              <li>The actual output.</li>
+            </ul>
+          </div>
+        </details>
+        <details class="faq__item">
+          <summary>What should I do if a feature is missing?</summary>
+          <div class="faq__answer">
+            <p>
+              Check the language documentation and <a href="guide.html#limitations">limitations</a> first.
+              If the feature is not supported, treat it as a possible future proposal rather than assuming
+              the language is behaving incorrectly.
+            </p>
+          </div>
+        </details>
+      </div>
     </section>
   </article>
 
