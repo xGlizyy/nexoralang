@@ -943,12 +943,12 @@ fn sum_to(n: Int) -> Int {
 }
 
 fn main() -> Void {
-    print(sum_to(100000))
+    print(sum_to(10000))
 }
 ```
 
 ```text
-5000050000
+50005000
 ```
 
 | Cláusula | Cuántas | Qué declara | Tipo |
