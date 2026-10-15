@@ -195,14 +195,18 @@ python -m build
 Genera `dist/nexora_lang-0.6.0-py3-none-any.whl` (el intérprete y el comando `nex`) y
 `dist/nexora_lang-0.6.0.tar.gz` (además: documentación, ejemplos y pruebas).
 
-Comprobado el 14 de octubre de 2026 en Windows 11 con Python 3.12:
+Comprobado el 15 de octubre de 2026 para la 0.6.0, con los dos paquetes generados a partir del
+commit `5324619` (el de `v0.6.0`), en Windows 11 con Python 3.12.10:
 
 | Comprobación | Resultado |
 |--------------|-----------|
 | Instalar el `.whl` en un entorno virtual nuevo, sin acceso a la red (`pip install --no-index`) | Correcto; no instala ninguna otra dependencia |
 | `nex --version`, `nex run` y `python -m nexora check` desde ese entorno | Correcto |
 | Extraer el `.tar.gz` en una carpeta vacía, crear un entorno, `pip install -e ".[dev]"` | Correcto |
-| `ruff` y la batería completa de pruebas en esa copia limpia | Sin errores; mismas pruebas que en el repositorio |
+| `ruff` y la batería completa de pruebas (`pytest --cov`) en esa copia limpia | Sin errores: 1600 pruebas superadas y 4 omitidas (las de POSIX), cobertura del 94,48 % |
+
+Esas cifras son de la copia extraída del `.tar.gz`. En el propio repositorio, la batería completa no
+se repitió sobre el commit `5324619`.
 
 La segunda comprobación equivale a partir de un clon limpio: demuestra que el paquete de código
 fuente contiene todo lo necesario para instalar, probar y documentar el proyecto.
