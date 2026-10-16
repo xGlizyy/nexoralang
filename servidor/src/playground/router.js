@@ -75,9 +75,22 @@ export function createPlaygroundRouter(config, { log = console.error } = {}) {
     text_chars: config.maxTextChars,
   };
 
-  const worker = (request, timeoutMs = config.timeoutMs) => limiter.run(
-    () => runWorker(config.workerCommand, request, { timeoutMs, maxResponseBytes }),
-  );
+  // El hueco se libera cuando el worker ha terminado de verdad, no cuando responde: un contenedor
+  // puede seguir vivo después de que su cliente `docker run` haya muerto (ver worker.js).
+  const worker = async (request, timeoutMs = config.timeoutMs) => {
+    const release = await limiter.acquire();
+    let answer;
+    try {
+      answer = runWorker(config.workerCommand, request, {
+        timeoutMs, maxResponseBytes, onFinished: release, containerStop: config.containerStop, log,
+      });
+    } catch (error) {
+      // Una excepción síncrona significa que no se lanzó ningún worker: el hueco queda libre.
+      release();
+      throw error;
+    }
+    return answer;
+  };
 
   // Solo se aceptan peticiones del propio sitio (o de los orígenes configurados). Un navegador
   // envía la cabecera Origin en las peticiones entre sitios; si no coincide, se rechaza.

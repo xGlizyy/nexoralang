@@ -1,6 +1,22 @@
 // Configuración del playground. No depende de la base de datos: el playground no guarda nada.
 
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+/** En la orden de un contenedor, el servidor sustituye este marcador por un nombre único. */
+export const CONTAINER_PLACEHOLDER = '{container}';
+const CONTAINER_TOOLS = new Set(['docker', 'podman']);
+
+/**
+ * Eliminar un contenedor que no terminó bien: tiempo máximo de cada orden y esperas entre
+ * intentos. Son retryDelaysMs.length + 1 intentos (seis), separados por 31 s de esperas en total;
+ * cada intento ejecuta dos órdenes (rm y ps) y cada una se mata a los attemptTimeoutMs. Si ningún
+ * intento confirma que el contenedor ya no existe, su hueco sigue ocupado hasta reiniciar el servidor.
+ */
+export const CONTAINER_STOP = Object.freeze({
+  attemptTimeoutMs: 10_000,
+  retryDelaysMs: Object.freeze([1000, 2000, 4000, 8000, 16_000]),
+});
 
 const root = (relative) => fileURLToPath(new URL(`../../../${relative}`, import.meta.url));
 
@@ -50,7 +66,33 @@ function workerCommand() {
   if (!Array.isArray(command) || command.length === 0 || !command.every((part) => typeof part === 'string')) {
     throw new Error('PLAYGROUND_WORKER_COMMAND debe ser una lista JSON de textos, por ejemplo ["docker","run","--rm","-i","nexora-worker"]');
   }
+  checkContainerCommand(command);
   return command;
+}
+
+// path.win32 separa por "\" y por "/": el resultado es el mismo en cualquier sistema operativo,
+// también para una ruta de Windows leída en Linux o macOS.
+export const isContainerTool = (part) => CONTAINER_TOOLS.has(path.win32.basename(part).replace(/\.exe$/i, '').toLowerCase());
+
+// Matar la orden `docker run` no detiene el contenedor: el servidor tiene que poder nombrarlo para
+// eliminarlo. Por eso una orden de contenedor sin `--name {container}` impide arrancar. `--init`
+// evita que Python sea el proceso 1 del contenedor, que ignora las señales sin manejador (SIGALRM).
+function checkContainerCommand(command) {
+  const run = command.indexOf('run');
+  const marks = command.filter((part) => part === CONTAINER_PLACEHOLDER).length;
+  if (marks === 0) {
+    if (run > 0 && command.slice(0, run).some(isContainerTool)) {
+      throw new Error(`PLAYGROUND_WORKER_COMMAND ejecuta un contenedor sin "--name","${CONTAINER_PLACEHOLDER}": el servidor no podría detenerlo (revisa servidor/.env)`);
+    }
+    return;
+  }
+  const at = command.indexOf(CONTAINER_PLACEHOLDER);
+  if (marks > 1 || run < 1 || at < run || command[at - 1] !== '--name') {
+    throw new Error(`PLAYGROUND_WORKER_COMMAND debe contener "--name","${CONTAINER_PLACEHOLDER}" una sola vez, después de "run" (revisa servidor/.env)`);
+  }
+  if (!command.slice(run + 1).includes('--init')) {
+    throw new Error('PLAYGROUND_WORKER_COMMAND debe incluir "--init" después de "run" (revisa servidor/.env)');
+  }
 }
 
 /** Lee la configuración del entorno. Se llama una vez al arrancar; las pruebas pasan la suya. */
@@ -79,5 +121,7 @@ export function loadPlaygroundConfig() {
 
     // Orígenes que pueden llamar a la API además del propio. Vacío: solo el mismo origen.
     allowedOrigins: list('PLAYGROUND_ALLOWED_ORIGINS'),
+
+    containerStop: CONTAINER_STOP,
   };
 }

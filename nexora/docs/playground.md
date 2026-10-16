@@ -307,6 +307,7 @@ cd servidor && npm test
 | `nexora/tests/test_api.py` | `check_source` y `run_source`; límites de salida y de texto; que la API y `nex` dan el mismo resultado en todos los ejemplos |
 | `nexora/tests/test_worker.py` | El proceso worker: protocolo, peticiones malformadas, modo aislado. Los límites del sistema operativo solo se ejecutan en Linux y macOS |
 | `servidor/test/playground-api.test.js` | La API por HTTP contra el intérprete real: validación, códigos HTTP, esquema, límites, tiempo agotado, concurrencia, fallos del worker, entorno del worker, orígenes, y paridad con la línea de comandos |
+| `servidor/test/playground-containers.test.js` | El ciclo de vida de los contenedores con un Docker falso (`test/fixtures/fake-docker.js`), sin Docker: nombre único por petición, eliminación y confirmación tras tiempo agotado, respuesta excesiva o error, hueco ocupado hasta confirmar, intentos limitados, ningún intento si la herramienta no arranca, y validación de la orden |
 | `servidor/test/playground-config.test.js` | La activación con la configuración real: desactivado sin `PLAYGROUND_ENABLED`, vacía o `false`; activado solo con `true`; error al arrancar con cualquier otro valor; 503 en todas las rutas sin arrancar el worker, y un programa real con `true` |
 | `servidor/test/playground-frontend.test.js` | La lógica de la página (cliente, estado, resaltado) contra un servidor real y con fallos simulados |
 | `servidor/test/web-guide.test.js` | Los ejemplos de la guía web y los enlaces entre páginas |
@@ -381,7 +382,7 @@ NODE_ENV=production
 TRUST_PROXY=1
 PUBLIC_URL=https://tu-dominio.example
 PLAYGROUND_ENABLED=false
-PLAYGROUND_WORKER_COMMAND=["docker","run","--rm","-i","--network","none","--read-only","--cap-drop","ALL","--security-opt","no-new-privileges","--pids-limit","32","--memory","256m","--memory-swap","256m","--cpus","0.5","--user","65534:65534","--tmpfs","/tmp:rw,size=1m,noexec","nexora-worker"]
+PLAYGROUND_WORKER_COMMAND=["docker","run","--rm","-i","--init","--name","{container}","--network","none","--read-only","--cap-drop","ALL","--security-opt","no-new-privileges","--pids-limit","32","--memory","256m","--memory-swap","256m","--cpus","0.5","--user","65534:65534","--tmpfs","/tmp:rw,size=1m,noexec","nexora-worker"]
 PLAYGROUND_TIMEOUT_MS=4000
 ```
 
@@ -400,8 +401,20 @@ Notas:
   Una alternativa más estricta es Docker en modo *rootless*.
 - Arrancar un contenedor por petición es más lento que arrancar un proceso. Mide cuánto tarda en tu
   servidor y ajusta `PLAYGROUND_TIMEOUT_MS`; con el valor inicial de 2 s puede no bastar.
-- Si el servidor mata la orden `docker run` por tiempo, el contenedor termina por su cuenta poco
-  después: el worker lleva un temporizador propio.
+- Matar la orden `docker run` no detiene el contenedor. Por eso la orden lleva
+  `"--name","{container}"`: el servidor pone en el marcador un nombre nuevo en cada petición
+  (`nexora-pg-` y un UUID) y, si el contenedor no terminó bien (tiempo agotado, respuesta demasiado
+  grande o ilegible, error del cliente), lo elimina con `docker rm -f` y comprueba con `docker ps`
+  que ya no existe. El hueco del worker no se libera hasta esa confirmación. Lo intenta hasta seis
+  veces, separadas por esperas de 1, 2, 4, 8 y 16 s (31 s de espera en total). Cada intento ejecuta
+  dos órdenes, y cada orden se mata si tarda más de 10 s; si todas llegan a ese límite, se añaden
+  hasta 120 s más, sin contar lo que tarde en terminar una orden ya matada. Si ningún intento
+  confirma, el hueco queda ocupado hasta reiniciar el servidor y el registro anota
+  `container not confirmed stopped`. Una orden `docker` o `podman` sin el marcador, o sin `--init`,
+  impide arrancar el servidor.
+- `--init` hace que el proceso 1 del contenedor sea el init de Docker y no Python, que como proceso
+  1 ignoraría las señales sin manejador, como la del temporizador del worker. **Sin comprobar con
+  Docker real todavía.**
 - `TRUST_PROXY=1` es necesario detrás de nginx para que el cupo por cliente use la dirección real
   del visitante y no la del proxy.
 

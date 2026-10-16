@@ -34,6 +34,21 @@ Cambios posteriores al tag `v0.6.0`, todavía sin versión. Afectan al servidor 
   `servidor/.env`.
 - Cualquier otro valor de `PLAYGROUND_ENABLED` (`True`, `1`, `yes`…) impide arrancar el servidor,
   con un mensaje que pide `"true"` o `"false"`.
+- **Una orden de contenedor en `PLAYGROUND_WORKER_COMMAND` necesita `"--init"` y
+  `"--name","{container}"`.** Sin ellos el servidor no arranca. Para actualizar una configuración
+  existente, añade `"--init","--name","{container}"` después de `"run"`, como en
+  `servidor/.env.example`.
+
+### Corregido
+
+- **Un contenedor que agota el tiempo ya no sigue ejecutándose con su hueco liberado.** Antes, el
+  servidor mataba el cliente `docker run`, que no detiene el contenedor, y liberaba el hueco en ese
+  momento. Según el código, eso permitía que hubiera más contenedores vivos que
+  `PLAYGROUND_MAX_CONCURRENT`; no se ha observado con Docker real, porque el modo contenedor
+  todavía no se ha probado. Ahora cada
+  contenedor tiene un nombre generado por el servidor; si no termina bien, se elimina por ese
+  nombre y el hueco solo se libera cuando se confirma que ya no existe. Los intentos de eliminarlo
+  están limitados; si ninguno confirma, el hueco queda ocupado.
 
 ### Documentación
 
@@ -46,6 +61,8 @@ Cambios posteriores al tag `v0.6.0`, todavía sin versión. Afectan al servidor 
 
 - El aislamiento en contenedor sigue **sin comprobar**: este cambio evita activar el playground por
   error, pero no lo hace más seguro una vez activado.
+- La eliminación de contenedores se ha probado con un Docker falso, no con Docker real. Si el
+  servidor se cae, nadie elimina los contenedores que tuviera en marcha.
 
 ## 0.6.0 — Operaciones sobre textos que declaran sus requisitos
 

@@ -41,7 +41,10 @@ Las 112 pruebas del servidor son las de esta medición y las de `v0.6.0`. Despu�
 `cb709ff` añadió `servidor/test/playground-config.test.js`: en `main`, en el commit `7c87027`,
 `npm test` en `servidor/` da 130 superadas y 0 fallos (15 de octubre de 2026, Windows 11, Node
 24.21.0). Esa ejecución solo repitió las pruebas del servidor; el resto de la tabla no se volvió a
-medir.
+medir. En la rama `fix/playground-container-lifecycle`, que añade
+`servidor/test/playground-containers.test.js`, `npm test` da 154 superadas y 0 fallos en cada una
+de seis ejecuciones (16 de octubre de 2026, Windows 11, Node 24.21.0), con un Docker falso: no se
+ejecutó ningún contenedor real.
 
 Las cuatro pruebas omitidas necesitan funciones de POSIX que Windows no tiene, y **no se han
 ejecutado nunca**: una comprueba un archivo sin permiso de lectura (el mismo caso se cubre en
