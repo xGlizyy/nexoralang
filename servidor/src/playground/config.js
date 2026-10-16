@@ -5,7 +5,35 @@ import { fileURLToPath } from 'node:url';
 
 /** En la orden de un contenedor, el servidor sustituye este marcador por un nombre único. */
 export const CONTAINER_PLACEHOLDER = '{container}';
+// Se reconocen para rechazar una orden de contenedor que no sea la admitida, no porque se admitan.
 const CONTAINER_TOOLS = new Set(['docker', 'podman']);
+
+/**
+ * La única orden de contenedor admitida: "docker", "run", estas opciones exactamente una vez cada
+ * una y en cualquier orden, y la imagen (CONTAINER_IMAGE) como último elemento. Los valores son
+ * fijos: cambiar un límite, el aislamiento o la imagen es una decisión explícita, que se toma aquí
+ * y no en servidor/.env.
+ */
+export const CONTAINER_FLAGS = Object.freeze(['--rm', '-i', '--init', '--read-only']);
+export const CONTAINER_OPTIONS = Object.freeze([
+  ['--name', CONTAINER_PLACEHOLDER],
+  ['--network', 'none'],
+  ['--cap-drop', 'ALL'],
+  ['--security-opt', 'no-new-privileges'],
+  ['--pids-limit', '32'],
+  ['--memory', '256m'],
+  ['--memory-swap', '256m'],
+  ['--cpus', '0.5'],
+  ['--user', '65534:65534'],
+  ['--tmpfs', '/tmp:rw,size=1m,noexec'],
+  // Solo la imagen local: si no existe, Docker falla (código 125) en vez de descargar otra.
+  ['--pull', 'never'],
+].map((pair) => Object.freeze(pair)));
+// La única imagen admitida es la local de Nexora, con o sin etiqueta (la gramática de etiquetas de
+// Docker). Sin ruta, sin registro y sin digest: ningún nombre que pueda resolverse fuera del equipo.
+export const CONTAINER_IMAGE = 'nexora-worker';
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const IMAGE = new RegExp(`^${escapeRegExp(CONTAINER_IMAGE)}(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?$`);
 
 /**
  * Eliminar un contenedor que no terminó bien: tiempo máximo de cada orden y esperas entre
@@ -64,7 +92,7 @@ function workerCommand() {
     command = null;
   }
   if (!Array.isArray(command) || command.length === 0 || !command.every((part) => typeof part === 'string')) {
-    throw new Error('PLAYGROUND_WORKER_COMMAND debe ser una lista JSON de textos, por ejemplo ["docker","run","--rm","-i","nexora-worker"]');
+    throw new Error('PLAYGROUND_WORKER_COMMAND debe ser una lista JSON de textos, por ejemplo ["/srv/nexora/nexora/.venv/bin/python","-I","-m","nexora.worker"]; la orden de contenedor admitida está en servidor/.env.example');
   }
   checkContainerCommand(command);
   return command;
@@ -74,24 +102,51 @@ function workerCommand() {
 // también para una ruta de Windows leída en Linux o macOS.
 export const isContainerTool = (part) => CONTAINER_TOOLS.has(path.win32.basename(part).replace(/\.exe$/i, '').toLowerCase());
 
-// Matar la orden `docker run` no detiene el contenedor: el servidor tiene que poder nombrarlo para
-// eliminarlo. Por eso una orden de contenedor sin `--name {container}` impide arrancar. `--init`
-// evita que Python sea el proceso 1 del contenedor, que ignora las señales sin manejador (SIGALRM).
+const invalid = (detail) => new Error(`PLAYGROUND_WORKER_COMMAND ${detail}. La orden de contenedor admitida está en servidor/.env.example y en nexora/docs/playground.md (revisa servidor/.env)`);
+
+// Una orden que lleva el marcador o nombra docker o podman en cualquier posición es una orden de
+// contenedor, y tiene que ser exactamente la admitida (CONTAINER_FLAGS y CONTAINER_OPTIONS). Las
+// demás son el modo de proceso y no se comprueban. Matar `docker run` no detiene el contenedor:
+// `--name {container}` permite eliminarlo, y `--init` evita que Python sea el proceso 1, que ignora
+// las señales sin manejador (SIGALRM). Las opciones van antes de la imagen, porque lo que va detrás
+// llega al programa del contenedor y no a Docker.
 function checkContainerCommand(command) {
-  const run = command.indexOf('run');
-  const marks = command.filter((part) => part === CONTAINER_PLACEHOLDER).length;
-  if (marks === 0) {
-    if (run > 0 && command.slice(0, run).some(isContainerTool)) {
-      throw new Error(`PLAYGROUND_WORKER_COMMAND ejecuta un contenedor sin "--name","${CONTAINER_PLACEHOLDER}": el servidor no podría detenerlo (revisa servidor/.env)`);
+  if (!command.some((part) => part.includes(CONTAINER_PLACEHOLDER) || isContainerTool(part))) return;
+  if (command[0] !== 'docker' || command[1] !== 'run') {
+    throw invalid('ejecuta un contenedor, pero no empieza por "docker","run": no se admiten rutas al ejecutable, sudo, podman, "container run" ni opciones globales de Docker');
+  }
+  const values = new Map(CONTAINER_OPTIONS);
+  const seen = new Set();
+  let at = 2;
+  while (at < command.length && command[at].startsWith('-')) {
+    const option = command[at];
+    if (!CONTAINER_FLAGS.includes(option) && !values.has(option)) {
+      throw invalid(`contiene la opción "${option}", que no está admitida (tampoco la forma --opción=valor)`);
     }
-    return;
+    if (seen.has(option)) throw invalid(`repite la opción "${option}"`);
+    seen.add(option);
+    if (!values.has(option)) {
+      at += 1;
+      continue;
+    }
+    const expected = values.get(option);
+    if (at + 1 >= command.length) throw invalid(`termina en "${option}" sin su valor "${expected}"`);
+    if (command[at + 1] !== expected) {
+      throw invalid(`da a "${option}" el valor "${command[at + 1]}"; el único admitido es "${expected}"`);
+    }
+    at += 2;
   }
-  const at = command.indexOf(CONTAINER_PLACEHOLDER);
-  if (marks > 1 || run < 1 || at < run || command[at - 1] !== '--name') {
-    throw new Error(`PLAYGROUND_WORKER_COMMAND debe contener "--name","${CONTAINER_PLACEHOLDER}" una sola vez, después de "run" (revisa servidor/.env)`);
+  if (at >= command.length) throw invalid('no termina en el nombre de la imagen');
+  if (at < command.length - 1) {
+    throw invalid(`tiene elementos después de la imagen "${command[at]}": Docker no los aplicaría, se los pasaría al programa del contenedor`);
   }
-  if (!command.slice(run + 1).includes('--init')) {
-    throw new Error('PLAYGROUND_WORKER_COMMAND debe incluir "--init" después de "run" (revisa servidor/.env)');
+  const missing = [
+    ...CONTAINER_FLAGS.filter((flag) => !seen.has(flag)).map((flag) => `"${flag}"`),
+    ...CONTAINER_OPTIONS.filter(([option]) => !seen.has(option)).map(([option, value]) => `"${option}","${value}"`),
+  ];
+  if (missing.length > 0) throw invalid(`no incluye antes de la imagen: ${missing.join(', ')}`);
+  if (!IMAGE.test(command[at])) {
+    throw invalid(`termina en "${command[at]}", que no es un nombre de imagen admitido: solo "${CONTAINER_IMAGE}" o "${CONTAINER_IMAGE}:<etiqueta>", la imagen local`);
   }
 }
 

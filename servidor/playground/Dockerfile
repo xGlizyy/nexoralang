@@ -11,9 +11,10 @@
 # El servidor web la usa para CADA petición con una orden como esta (variable
 # PLAYGROUND_WORKER_COMMAND de servidor/.env), que es la que impone el aislamiento:
 #
-#     docker run --rm -i --init --name {container} --network none --read-only --cap-drop ALL
-#       --security-opt no-new-privileges --pids-limit 32 --memory 256m --memory-swap 256m
-#       --cpus 0.5 --user 65534:65534 --tmpfs /tmp:rw,size=1m,noexec nexora-worker
+#     docker run --rm -i --init --pull never --name {container} --network none --read-only
+#       --cap-drop ALL --security-opt no-new-privileges --pids-limit 32 --memory 256m
+#       --memory-swap 256m --cpus 0.5 --user 65534:65534 --tmpfs /tmp:rw,size=1m,noexec
+#       nexora-worker
 
 FROM python:3.12-slim
 

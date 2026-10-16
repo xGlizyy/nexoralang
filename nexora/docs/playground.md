@@ -228,6 +228,7 @@ leer lo que el usuario del servidor puede leer. En Windows, además, no hay lím
 Con `PLAYGROUND_WORKER_COMMAND`, cada petición se ejecuta en un contenedor Docker de un solo uso:
 sin red (`--network none`), con el sistema de archivos de solo lectura, sin capacidades, sin poder
 ganar privilegios, como usuario sin privilegios, y con límites de memoria, CPU y número de procesos.
+Solo se usa la imagen local `nexora-worker`, que Docker no descarga nunca (`--pull never`).
 
 *No cubre:* un fallo del propio Docker o del núcleo del sistema. Y **no está probado todavía**.
 
@@ -307,7 +308,7 @@ cd servidor && npm test
 | `nexora/tests/test_api.py` | `check_source` y `run_source`; límites de salida y de texto; que la API y `nex` dan el mismo resultado en todos los ejemplos |
 | `nexora/tests/test_worker.py` | El proceso worker: protocolo, peticiones malformadas, modo aislado. Los límites del sistema operativo solo se ejecutan en Linux y macOS |
 | `servidor/test/playground-api.test.js` | La API por HTTP contra el intérprete real: validación, códigos HTTP, esquema, límites, tiempo agotado, concurrencia, fallos del worker, entorno del worker, orígenes, y paridad con la línea de comandos |
-| `servidor/test/playground-containers.test.js` | El ciclo de vida de los contenedores con un Docker falso (`test/fixtures/fake-docker.js`), sin Docker: nombre único por petición, eliminación y confirmación tras tiempo agotado, respuesta excesiva o error, hueco ocupado hasta confirmar, intentos limitados, ningún intento si la herramienta no arranca, y validación de la orden |
+| `servidor/test/playground-containers.test.js` | El ciclo de vida de los contenedores con un Docker falso (`test/fixtures/fake-docker.js`), sin Docker: nombre único por petición, eliminación y confirmación tras tiempo agotado, respuesta excesiva o error, hueco ocupado hasta confirmar, intentos limitados, ningún intento si la herramienta no arranca, y el [formato de la orden de contenedor](#formato-de-la-orden-de-contenedor): la orden documentada en `.env.example`, esta guía y el `Dockerfile`, opciones ausentes, repetidas, con otro valor o desconocidas, y elementos después de la imagen |
 | `servidor/test/playground-config.test.js` | La activación con la configuración real: desactivado sin `PLAYGROUND_ENABLED`, vacía o `false`; activado solo con `true`; error al arrancar con cualquier otro valor; 503 en todas las rutas sin arrancar el worker, y un programa real con `true` |
 | `servidor/test/playground-frontend.test.js` | La lógica de la página (cliente, estado, resaltado) contra un servidor real y con fallos simulados |
 | `servidor/test/web-guide.test.js` | Los ejemplos de la guía web y los enlaces entre páginas |
@@ -370,10 +371,39 @@ que no se sube al repositorio.
 
 ### 3. Imagen del worker
 
+El playground solo ejecuta la imagen local `nexora-worker`. La orden lleva `--pull never`, así que
+Docker nunca la descarga de un registro: la construye el operador en el propio servidor, a partir
+del código que despliega.
+
 ```bash
 cd /srv/nexora/app
 docker build -f servidor/playground/Dockerfile -t nexora-worker .
+docker image inspect nexora-worker --format '{{.Id}} {{.Created}}'   # existe, y cuál es
 ```
+
+- Constrúyela antes de activar el playground y vuelve a construirla en cada actualización (paso 8):
+  contiene su propia copia del intérprete. Cada petición crea un contenedor nuevo, así que la
+  siguiente petición ya usa la imagen reconstruida.
+- Para fijar una versión, constrúyela también con etiqueta (`-t nexora-worker:0.6.0`) y escribe esa
+  etiqueta al final de la orden (`"nexora-worker:0.6.0"`). Para volver a una versión anterior que
+  conserves, cambia la etiqueta de la orden y reinicia el servicio. La etiqueta es lo único de la
+  orden que se puede cambiar.
+- Si la imagen no está en el equipo (no se construyó, o se borró con `docker image rm` o
+  `docker image prune -a`), cada ejecución falla sin ejecutar nada. Según el manual de Docker, con
+  `--pull never` responde `No such image` y no crea el contenedor, y entonces la API devuelve 503
+  `runtime_unavailable`. Ese camino está probado con un Docker falso que rechaza la orden con el
+  código 125, no con Docker real.
+- `--pull` existe desde Docker 20.10.0 (notas de esa versión). El manual de Docker lo escribe
+  `--pull=never`; la orden de Nexora usa dos elementos (`"--pull","never"`), que según el código
+  fuente del cliente de Docker es equivalente, porque `--pull` es una opción de texto sin valor por
+  defecto implícito. Con una versión anterior a la 20.10, Docker debería rechazar la opción y no
+  ejecutar nada. Ninguna de las dos cosas se ha comprobado con la versión instalada.
+- No la subas a un registro para usarla aquí: el servidor no la descargaría.
+- **La etiqueta es mutable.** `nexora-worker` y `nexora-worker:<etiqueta>` son nombres locales, no
+  una huella de su contenido. Quien tenga acceso al demonio Docker de ese equipo puede volver a
+  etiquetar otra imagen con ese nombre (`docker tag`, `docker build -t`), y el servidor la ejecutaría
+  sin notar el cambio: no comprueba qué imagen hay detrás del nombre. Que se ejecute la imagen de
+  Nexora depende, por tanto, de controlar quién accede al equipo y al demonio Docker.
 
 En `servidor/.env`:
 
@@ -382,7 +412,7 @@ NODE_ENV=production
 TRUST_PROXY=1
 PUBLIC_URL=https://tu-dominio.example
 PLAYGROUND_ENABLED=false
-PLAYGROUND_WORKER_COMMAND=["docker","run","--rm","-i","--init","--name","{container}","--network","none","--read-only","--cap-drop","ALL","--security-opt","no-new-privileges","--pids-limit","32","--memory","256m","--memory-swap","256m","--cpus","0.5","--user","65534:65534","--tmpfs","/tmp:rw,size=1m,noexec","nexora-worker"]
+PLAYGROUND_WORKER_COMMAND=["docker","run","--rm","-i","--init","--pull","never","--name","{container}","--network","none","--read-only","--cap-drop","ALL","--security-opt","no-new-privileges","--pids-limit","32","--memory","256m","--memory-swap","256m","--cpus","0.5","--user","65534:65534","--tmpfs","/tmp:rw,size=1m,noexec","nexora-worker"]
 PLAYGROUND_TIMEOUT_MS=4000
 ```
 
@@ -398,7 +428,11 @@ Notas:
 - El usuario que ejecuta el servidor tiene que poder usar Docker. **Pertenecer al grupo `docker`
   equivale a tener permisos de administrador en esa máquina.** Es el compromiso de este diseño: el
   código del visitante queda encerrado, a cambio de que el servidor web pueda lanzar contenedores.
-  Una alternativa más estricta es Docker en modo *rootless*.
+- **Docker en modo *rootless* no está admitido por ahora.** Para encontrar su demonio, la orden
+  `docker` necesitaría `DOCKER_HOST`, o las opciones `-H` o `--context`. Pero la orden admitida no
+  permite opciones globales, y el servidor solo pasa `PATH` y `SystemRoot` a las órdenes que lanza,
+  así que la orden `docker` usa el demonio por defecto del sistema. Admitirlo exigiría cambiar el
+  contrato y el entorno del worker, y es una decisión pendiente.
 - Arrancar un contenedor por petición es más lento que arrancar un proceso. Mide cuánto tarda en tu
   servidor y ajusta `PLAYGROUND_TIMEOUT_MS`; con el valor inicial de 2 s puede no bastar.
 - Matar la orden `docker run` no detiene el contenedor. Por eso la orden lleva
@@ -410,13 +444,94 @@ Notas:
   dos órdenes, y cada orden se mata si tarda más de 10 s; si todas llegan a ese límite, se añaden
   hasta 120 s más, sin contar lo que tarde en terminar una orden ya matada. Si ningún intento
   confirma, el hueco queda ocupado hasta reiniciar el servidor y el registro anota
-  `container not confirmed stopped`. Una orden `docker` o `podman` sin el marcador, o sin `--init`,
-  impide arrancar el servidor.
+  `container not confirmed stopped`.
+- **Si el servidor se cae** (un fallo, un `kill`, un corte de la máquina), no hay ninguna limpieza
+  automática garantizada de los contenedores que tuviera en marcha: el servidor solo elimina los de
+  las peticiones que está atendiendo, y al arrancar no busca los que quedaron. Según el código,
+  además, esos contenedores no cuentan para `PLAYGROUND_MAX_CONCURRENT` después de reiniciar el
+  servidor. Para ver los que puedan quedar:
+
+  ```bash
+  docker ps -a --filter name=nexora-pg- --format '{{.Names}}  {{.Status}}  {{.CreatedAt}}'
+  ```
+
+  Ese filtro también lista contenedores de peticiones en curso, si el servidor ya está en marcha.
+  Antes de eliminar uno, compruébalo: que el nombre sea `nexora-pg-` seguido de un UUID, que sea de
+  la imagen `nexora-worker` y que se creara antes de la caída (`docker inspect -f '{{.Config.Image}}
+  {{.Created}} {{.State.Status}}' <nombre>`). Solo entonces elimínalo a mano con `docker rm -f
+  <nombre>`. Ni esto ni la caída se han comprobado con Docker real.
 - `--init` hace que el proceso 1 del contenedor sea el init de Docker y no Python, que como proceso
   1 ignoraría las señales sin manejador, como la del temporizador del worker. **Sin comprobar con
   Docker real todavía.**
 - `TRUST_PROXY=1` es necesario detrás de nginx para que el cupo por cliente use la dirección real
   del visitante y no la del proxy.
+
+#### Formato de la orden de contenedor
+
+`PLAYGROUND_WORKER_COMMAND` admite una sola orden de contenedor: la de arriba. El servidor la
+comprueba al arrancar y, si no la cumple, no arranca y dice qué falla. Las reglas son:
+
+1. Empieza por `"docker","run"`: `docker` sin ruta y `run` justo después.
+2. Después van las opciones de la tabla, **cada una exactamente una vez y con ese valor exacto**,
+   en cualquier orden. Una opción con valor va en dos elementos (`"--memory","256m"`).
+3. El último elemento es la imagen local: `nexora-worker` o `nexora-worker:<etiqueta>`. La
+   etiqueta sigue la gramática de Docker: letras, cifras, `_`, `.` y `-`, sin empezar por `.` ni
+   por `-`, y hasta 128 caracteres. No se admite otro nombre, una ruta, un registro ni un digest.
+   La etiqueta es lo único que se puede cambiar.
+
+| Opción | Valor |
+|--------|-------|
+| `--rm` | — |
+| `-i` | — |
+| `--init` | — |
+| `--read-only` | — |
+| `--pull` | `never` |
+| `--name` | `{container}` |
+| `--network` | `none` |
+| `--cap-drop` | `ALL` |
+| `--security-opt` | `no-new-privileges` |
+| `--pids-limit` | `32` |
+| `--memory` | `256m` |
+| `--memory-swap` | `256m` |
+| `--cpus` | `0.5` |
+| `--user` | `65534:65534` |
+| `--tmpfs` | `/tmp:rw,size=1m,noexec` |
+
+Las opciones van antes de la imagen porque el cliente de Docker deja de leer opciones al llegar a
+ella y pasa lo que sigue al programa del contenedor (`SetInterspersed(false)` en su código fuente).
+Según eso, un `"--name","{container}"` escrito después de la imagen dejaría al contenedor con un
+nombre aleatorio, y el servidor no podría eliminarlo. No se ha observado con Docker real: está en
+la [comprobación del aislamiento](#comprobar-el-aislamiento).
+
+**No se admite:**
+- otra opción de `docker run`, ni los alias de las de la tabla (`-m`, `-u`, `--net`,
+  `--interactive`…);
+- la forma `--opción=valor`, tampoco `--pull=never`, aunque sea la que muestra el manual de Docker;
+- banderas combinadas (`-it`) ni `--`;
+- nada después de la imagen, ni otra imagen;
+- una ruta al ejecutable, `docker.exe`, `sudo`, Podman, `docker container run` ni opciones
+  globales de Docker.
+
+**Qué es una orden de contenedor se decide solo por nombres.** Si algún elemento contiene
+`{container}`, o es un ejecutable llamado `docker` o `podman` (con ruta o `.exe`, en mayúsculas o
+minúsculas), la orden se trata como de contenedor y tiene que ser exactamente la de arriba, aunque
+el playground esté desactivado. Así, una orden de proceso que cumpla esa condición se rechaza. Las
+demás órdenes son el modo de proceso y no se comprueban. Quedan fuera de esa detección un script
+envoltorio, otra herramienta (`nerdctl`, `docker.cmd`…) o un ejecutable de Docker con otro nombre.
+Ninguno es una forma admitida de ejecutar contenedores: el servidor no validaría su orden ni
+eliminaría sus contenedores.
+
+Los valores de la tabla y la imagen son fijos a propósito: cambiar un límite, el aislamiento o la
+imagen es una decisión que se toma en el código (`CONTAINER_OPTIONS` y `CONTAINER_IMAGE` en
+`servidor/src/playground/config.js`), con sus pruebas, y no una variación de `servidor/.env`.
+
+Las pruebas de esta comprobación (`servidor/test/playground-containers.test.js`) solo analizan la
+lista de argumentos y no ejecutan ningún Docker. Las del ciclo de vida del mismo archivo usan un
+Docker falso. Ninguna usa Docker real.
+
+Validar la orden tampoco garantiza por sí solo el aislamiento efectivo, que depende también de la
+configuración del demonio Docker (`daemon.json`, el runtime por defecto, los espacios de nombres
+de usuario) y de la versión instalada. El servidor no comprueba nada de eso.
 
 ### 4. Servicio (systemd)
 
@@ -525,14 +640,19 @@ servicio.
 
 | Comprobación | Cómo | Resultado esperado |
 |--------------|------|--------------------|
-| El worker funciona en el contenedor | La orden de `PLAYGROUND_WORKER_COMMAND`, a mano, con `{"action":"run","code":"fn main() -> Void {\n    print(1)\n}"}` por la entrada estándar | Un JSON con `"output":"1\n"` |
-| Sin red | `docker run --rm --network none --entrypoint python nexora-worker -c "import socket; socket.create_connection(('1.1.1.1', 53), 2)"` | Falla |
+| El worker funciona en el contenedor | La orden de `PLAYGROUND_WORKER_COMMAND`, escrita a mano como en el comentario de `servidor/playground/Dockerfile`, con un nombre propio en lugar de `{container}` (por ejemplo `--name nexora-prueba`: el marcador solo lo sustituye el servidor, y Docker no lo acepta como nombre), y con `{"action":"run","code":"fn main() -> Void {\n    print(1)\n}"}` por la entrada estándar | Un JSON con `"output":"1\n"` |
+| Sin red | `docker run --rm --pull never --network none --entrypoint python nexora-worker -c "import socket; socket.create_connection(('1.1.1.1', 53), 2)"` | Falla |
 | Sistema de archivos de solo lectura | Añade `--read-only --entrypoint python … -c "open('/x','w')"` | Falla |
 | Usuario sin privilegios | `… --entrypoint id nexora-worker` | `uid=65534` |
 | Límite de tiempo | Ejecuta desde la página un programa lento (por ejemplo `fib(40)`) | Estado `timeout`; con `docker ps` no queda ningún contenedor pasados unos segundos |
 | Límite de memoria | Un programa que duplica un texto muchas veces | `E3006` o `memory_limit`; el servidor sigue respondiendo |
 | Las pruebas del sistema operativo | `python -m pytest tests/test_worker.py` en el servidor | Las tres pruebas marcadas como POSIX pasan |
 | Concurrencia | Varias peticiones lentas a la vez | Las que no caben reciben 503 `busy`; nunca hay más contenedores que `PLAYGROUND_MAX_CONCURRENT` |
+| *Pendiente:* el nombre identifica un solo contenedor | Con una petición lenta en marcha, toma su nombre de `docker ps --filter name=nexora-pg-`. Ejecuta `docker ps -aq --filter name=^<nombre>$`, y lo mismo con el nombre sin su último carácter. Repite el primero cuando la petición haya terminado | El primero devuelve un identificador; el del nombre recortado, nada; el primero, repetido al final, nada |
+| *Pendiente:* `--init` está activo | Con una petición lenta en marcha, `docker inspect -f '{{.HostConfig.Init}}' <nombre>` y `docker top <nombre>` | `HostConfig.Init` es `true`, y el primer proceso que muestra `docker top` es `docker-init`. `docker top` muestra los procesos desde fuera del contenedor: indica que `docker-init` es el primero, no lo demuestra como proceso 1 dentro del contenedor. La fila «Límite de tiempo» comprueba además que el temporizador interno del worker termina el programa |
+| *Pendiente:* lo que va después de la imagen no es una opción de Docker | `docker run --rm --pull never --entrypoint python nexora-worker -c "import sys; print(sys.argv)" --name x` | Imprime `['-c', '--name', 'x']`, y `docker ps -a --filter name=^x$` no lista nada |
+| *Pendiente:* un nombre ya en uso | `docker run -d --rm --pull never --name nexora-prueba --entrypoint sleep nexora-worker 30`, dos veces seguidas | La segunda falla por conflicto de nombre y no crea otro contenedor |
+| *Pendiente:* sin la imagen no se descarga nada | `docker run --rm --pull never nexora-worker:no-existe` | Falla con `No such image`, sin descargar nada (`docker image ls` no cambia) |
 
 ### 8. Actualizar
 
@@ -546,7 +666,9 @@ curl -s https://tu-dominio.example/api/playground/info     # activado: la versi�
 ```
 
 La imagen del worker hay que reconstruirla en cada actualización del lenguaje: contiene su propia
-copia del intérprete.
+copia del intérprete. Si la orden usa una etiqueta (`nexora-worker:0.6.0`), construye la imagen con
+la etiqueta nueva, cámbiala en `PLAYGROUND_WORKER_COMMAND` y reinicia el servicio; ver
+[Imagen del worker](#3-imagen-del-worker).
 
 ### Sin Docker
 

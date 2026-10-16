@@ -43,8 +43,10 @@ Las 112 pruebas del servidor son las de esta medición y las de `v0.6.0`. Despu�
 24.21.0). Esa ejecución solo repitió las pruebas del servidor; el resto de la tabla no se volvió a
 medir. En la rama `fix/playground-container-lifecycle`, que añade
 `servidor/test/playground-containers.test.js`, `npm test` da 154 superadas y 0 fallos en cada una
-de seis ejecuciones (16 de octubre de 2026, Windows 11, Node 24.21.0), con un Docker falso: no se
-ejecutó ningún contenedor real.
+de seis ejecuciones en el commit `d5585099`, y 325 superadas y 0 fallos en cada una de seis
+ejecuciones después de añadir las pruebas del formato de la orden de contenedor y de la imagen
+local (16 de octubre de 2026, Windows 11, Node 24.21.0). Las pruebas del formato solo analizan la
+orden; las del ciclo de vida usan un Docker falso. No se ejecutó ningún contenedor real.
 
 Las cuatro pruebas omitidas necesitan funciones de POSIX que Windows no tiene, y **no se han
 ejecutado nunca**: una comprueba un archivo sin permiso de lectura (el mismo caso se cubre en

@@ -34,10 +34,31 @@ Cambios posteriores al tag `v0.6.0`, todavía sin versión. Afectan al servidor 
   `servidor/.env`.
 - Cualquier otro valor de `PLAYGROUND_ENABLED` (`True`, `1`, `yes`…) impide arrancar el servidor,
   con un mensaje que pide `"true"` o `"false"`.
-- **Una orden de contenedor en `PLAYGROUND_WORKER_COMMAND` necesita `"--init"` y
-  `"--name","{container}"`.** Sin ellos el servidor no arranca. Para actualizar una configuración
-  existente, añade `"--init","--name","{container}"` después de `"run"`, como en
-  `servidor/.env.example`.
+- **La única orden de contenedor que admite `PLAYGROUND_WORKER_COMMAND` es la documentada.** Tiene
+  que empezar por `"docker","run"`, llevar exactamente una vez cada opción de aislamiento y de
+  límites de `servidor/.env.example` con su valor exacto, entre ellas `"--init"`,
+  `"--pull","never"` y `"--name","{container}"`, y terminar en la imagen. Cualquier otra orden de
+  contenedor impide arrancar el servidor, aunque el playground esté desactivado, con un mensaje que
+  nombra lo que falla. Eso incluye una opción que falte, se repita, tenga otro valor o no esté en la
+  lista, como los alias `-m`, `-u`, `--net` o `--interactive`; la forma `--opción=valor`; algo
+  después de la imagen; una ruta al ejecutable, `docker.exe`, `sudo`, Podman,
+  `docker container run` u opciones globales de Docker. Lo que va después de la imagen no lo aplica
+  Docker, sino que lo recibe el programa del contenedor. Con la comprobación anterior, un
+  `"--name","{container}"` escrito detrás de la imagen se aceptaba (comprobado con el validador
+  anterior) y, según el código, el servidor podía dar por eliminado un contenedor que seguía vivo;
+  no se ha observado con Docker real. Para actualizar una configuración existente, copia la orden
+  de `servidor/.env.example`. Cambiar un límite exige cambiar el servidor
+  (`servidor/src/playground/config.js`), no solo `servidor/.env`.
+- **Solo se ejecuta la imagen local `nexora-worker`, y Docker no la descarga nunca.** La imagen
+  tiene que ser `nexora-worker` o `nexora-worker:<etiqueta>`: no se admite otro nombre, una ruta, un
+  registro ni un digest. `"--pull","never"` hace que, si la imagen no está en el equipo, la
+  ejecución falle en vez de descargarla. Hay que construir la imagen en el servidor antes de
+  activar el playground y en cada actualización (ver la
+  [guía del playground](docs/playground.md#3-imagen-del-worker)). `--pull` necesita Docker 20.10 o
+  posterior.
+- Las órdenes del modo de proceso siguen sin comprobarse, salvo las que contienen `{container}` o
+  un ejecutable llamado `docker` o `podman`: esas se tratan como órdenes de contenedor y se
+  rechazan si no son la documentada.
 
 ### Corregido
 
@@ -61,8 +82,21 @@ Cambios posteriores al tag `v0.6.0`, todavía sin versión. Afectan al servidor 
 
 - El aislamiento en contenedor sigue **sin comprobar**: este cambio evita activar el playground por
   error, pero no lo hace más seguro una vez activado.
-- La eliminación de contenedores se ha probado con un Docker falso, no con Docker real. Si el
-  servidor se cae, nadie elimina los contenedores que tuviera en marcha.
+- Nada de esto se ha probado con Docker real. Las pruebas de la orden solo analizan la lista de
+  argumentos, sin ejecutar ningún Docker; las del ciclo de vida (eliminación de contenedores, hueco
+  ocupado, imagen ausente) usan un Docker falso. Si el servidor se cae, nadie elimina los
+  contenedores que tuviera en marcha.
+- Qué es una orden de contenedor se decide solo por los nombres documentados. Un script
+  envoltorio, otra herramienta (`nerdctl`…) o un ejecutable de Docker con otro nombre quedan fuera
+  de la detección: no son una forma admitida de ejecutar contenedores, y el servidor no validaría
+  su orden ni eliminaría sus contenedores.
+- Validar la orden no garantiza la configuración efectiva del demonio Docker ni de sus runtimes.
+- La etiqueta local (`nexora-worker` o `nexora-worker:<etiqueta>`) es mutable: quien tenga acceso
+  al demonio Docker puede volver a etiquetar otra imagen con ese nombre, y el servidor la
+  ejecutaría sin notarlo. Que se ejecute la imagen de Nexora depende del control de acceso al
+  equipo y al demonio Docker.
+- Docker en modo *rootless* no está admitido: la orden no permite `-H` ni `--context`, y el
+  servidor solo pasa `PATH` y `SystemRoot` a las órdenes que lanza.
 
 ## 0.6.0 — Operaciones sobre textos que declaran sus requisitos
 
