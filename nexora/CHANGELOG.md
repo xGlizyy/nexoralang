@@ -21,10 +21,58 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 
 ## Sin publicar
 
-Cambios posteriores al tag `v0.6.0`, todavía sin versión. Afectan al servidor web del playground
-(`servidor/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no cambian.
+Cambios posteriores al tag `v0.6.0`, todavía sin versión. Afectan al servidor web (`servidor/`) y
+a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no cambian.
+
+### Añadido
+
+- **Antispam en el registro y el inicio de sesión** (`servidor/src/captcha.js`): Google reCAPTCHA v3,
+  un campo trampa y un límite estricto por cliente (5 registros o 15 inicios de sesión por hora) para
+  toda petición sin un token que Google confirme. reCAPTCHA solo se carga en el navegador si la
+  persona lo acepta en el panel de cookies; sin él se puede entrar igual, con ese límite. La clave
+  secreta va en `RECAPTCHA_SECRET_KEY` y la del sitio en `web/js/consent-config.js`; al arrancar, el
+  servidor avisa si solo está una de las dos.
+- **Freno del inicio de sesión por cuenta** (`servidor/src/login-throttle.js`): tras 5 fallos desde
+  un cliente, ese cliente espera cada vez más, hasta 15 minutos; tras 20 fallos contra una cuenta
+  desde cualquier cliente, cada intento espera, como mucho un minuto. Responde igual para un email
+  con cuenta y uno sin ella, y reserva cada intento antes de consultar la base de datos.
+- **Límites por cliente con IPv6** (`servidor/src/rate-limits.js`): todos los límites cuentan una
+  dirección IPv6 por su bloque /56, y además cada red /48 con cuatro veces el cupo. Las cabeceras
+  `RateLimit-*` describen la cuenta que antes se agota, y cada rechazo lleva `Retry-After`.
+- **Borrado de las sesiones caducadas** al arrancar y cada hora, por tandas, sin que dos pasadas se
+  solapen (`servidor/src/session-cleanup.js`).
+- **Cabeceras de seguridad en todas las respuestas** (`servidor/src/security-headers.js`): la
+  política de contenido (CSP) sin código en línea que tenían el playground y la guía pasa a todas las
+  páginas, más `X-Frame-Options`, `Cross-Origin-Opener-Policy`, `Permissions-Policy`,
+  `Referrer-Policy` y, en producción y solo por HTTPS, HSTS. La API tiene una política que no carga
+  nada.
+- `LISTEN_HOST`: la dirección en la que escucha el servidor. Con nginx en el mismo equipo,
+  `LISTEN_HOST=127.0.0.1` y `TRUST_PROXY=loopback`; al arrancar, el servidor avisa si no casan.
+- Web: las tipografías se sirven desde el propio sitio (JetBrains Mono, con su licencia OFL) en vez
+  de Google Fonts, y todo el sitio usa JetBrains Mono; un gestor de consentimiento de cookies con
+  Google Consent Mode v2; las páginas legales, todavía en borrador (ver Limitaciones); y una
+  documentación web ampliada: qué es NEXORA, cómo se prueba y los cambios recientes.
 
 ### Cambios incompatibles
+
+- **`NODE_ENV` solo admite `development`, `test` o `production`, en minúsculas.** Antes cualquier
+  valor distinto de `production` (`Production`, `prod`, vacío) dejaba el servidor en desarrollo, sin
+  cookies solo por HTTPS. Ahora esos valores impiden arrancar. Sin definir sigue funcionando como
+  desarrollo, y el servidor lo avisa al arrancar.
+- **`TRUST_PROXY` solo admite `0`, `loopback` o un entero de 1 a 10 sin ceros a la izquierda.**
+  Antes se leía con `Number()`: `true` o `nginx` daban `NaN` sin ningún aviso. Ahora cualquier otro
+  valor impide arrancar. Con nginx en el mismo equipo, se recomienda `loopback` en vez de `1`.
+- `LISTEN_HOST` solo admite una dirección IP o quedar vacía; un nombre, también `localhost`, impide
+  arrancar.
+- Con `NODE_ENV=production` y `RECAPTCHA_SECRET_KEY`, falta `RECAPTCHA_HOSTNAMES` impide arrancar.
+  `RECAPTCHA_MIN_SCORE` fuera de 0 a 1, o un `RECAPTCHA_HOSTNAMES` que no sea una lista de dominios,
+  también.
+- **En producción sin `RECAPTCHA_SECRET_KEY`, todos los registros e inicios de sesión pasan por el
+  límite estricto** (5 registros o 15 inicios de sesión por cliente y hora). En desarrollo no cambia
+  nada.
+- La API de cuentas tiene respuestas nuevas: `429` con `code: "login_throttled"` y `Retry-After`
+  durante el freno del inicio de sesión; `400` con `captcha_invalid` o `captcha_expired`; y `429`
+  con `captcha_required` en el límite estricto. Un campo `website` con contenido se rechaza con `400`.
 
 - **El playground está desactivado salvo que se active de forma explícita.** Antes se activaba
   siempre que `PLAYGROUND_ENABLED` no fuera exactamente `false`: sin definir, vacía o con una errata
@@ -102,6 +150,18 @@ Cambios posteriores al tag `v0.6.0`, todavía sin versión. Afectan al servidor 
   equipo y al demonio Docker.
 - Docker en modo *rootless* no está admitido: la orden no permite `-H` ni `--context`, y el
   servidor solo pasa `PATH` y `SystemRoot` a las órdenes que lanza.
+- El antispam, el freno del inicio de sesión, el borrado de sesiones y las cabeceras se han probado
+  con la base de datos, Google reCAPTCHA y el navegador simulados: no contra un MySQL real, con claves
+  reales de reCAPTCHA, en un navegador ni detrás de nginx. Las pruebas automatizadas del servidor
+  con estos cambios (567 superadas, 0 fallos, en cada una de tres ejecuciones por sistema) se han
+  ejecutado en Windows 11 y en Ubuntu 24.04 en WSL 2, con esos mismos servicios simulados
+  ([Pruebas](docs/testing.md)).
+- Los contadores de los límites y del freno del inicio de sesión están en memoria: se pierden al
+  reiniciar y no se comparten entre varias instancias del servidor.
+- Las páginas legales son un borrador sin los datos del titular ni revisión jurídica: no deben
+  publicarse así. Riesgos y decisiones pendientes (Analytics y su CSP, el `409` que revela si un email
+  tiene cuenta, la cancelación de consultas de MySQL):
+  [Tareas pendientes y riesgos](docs/playground.md#tareas-pendientes-y-riesgos).
 
 ## 0.6.0 — Operaciones sobre textos que declaran sus requisitos
 

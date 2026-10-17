@@ -85,6 +85,29 @@ Ubuntu solo trae la 3.12. Las pruebas del servidor necesitan el entorno de `nexo
 **No se ejecutó Docker** ni ninguna de las comprobaciones de
 [aislamiento del playground](playground.md#comprobar-el-aislamiento), que siguen pendientes.
 
+Después, el 17 de octubre de 2026, en la rama `feature/server-hardening`, solo se ejecutó
+`npm test` en `servidor/`. El servidor (antispam, límites por cliente, freno del inicio de sesión,
+borrado de sesiones caducadas, cabeceras de seguridad y tipografías propias) ya estaba en los
+commits `a8a956b`, `cda0ee9` y `a160829`; la web (gestor de consentimiento, formularios de cuenta,
+páginas legales en borrador y documentación ampliada) y sus pruebas seguían sin commit. Una cifra
+anterior de ese mismo día, 522 superadas, solo en Windows, corresponde a un estado previo del trabajo.
+
+| Árbol | Windows 11, Node 24.21.0 | Ubuntu 24.04.5 en WSL 2, Node 24.11.1 |
+|-------|--------------------------|---------------------------------------|
+| `a160829` sin los cambios sin commit | 492 superadas, 0 fallos (una ejecución) | No se ejecutó |
+| `a160829` con los cambios sin commit (auditoría) | **565 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | **565 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones |
+| El mismo árbol tras las correcciones de la auditoría | **567 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | **567 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones |
+
+En Linux se usó una copia nueva del árbol de trabajo, comprobada archivo por archivo con SHA-256, con
+las dependencias instaladas con `npm ci` y el intérprete de `nexora/.venv` (Python 3.12.3). La
+última fila se ejecutó antes de añadir este apartado: esa copia solo difiere del árbol en este archivo.
+
+Son pruebas automatizadas: la base de datos MySQL, las respuestas de Google reCAPTCHA y el navegador
+están simulados (el gestor de consentimiento y los formularios se ejecutan en un DOM mínimo,
+`servidor/test/fixtures/mini-dom.js`). **Siguen pendientes las comprobaciones reales**: contra un
+MySQL real, con claves reales de reCAPTCHA, en un navegador, detrás de nginx y con las cabeceras del
+servidor de producción. Tampoco se ejecutó Docker.
+
 La cobertura bajó respecto a la medición anterior (99,56 %) porque dos módulos nuevos se prueban
 lanzándolos como procesos aparte, que la medición no sigue: `worker.py` y `mcp_server.py`.
 

@@ -409,7 +409,8 @@ En `servidor/.env`:
 
 ```bash
 NODE_ENV=production
-TRUST_PROXY=1
+TRUST_PROXY=loopback
+LISTEN_HOST=127.0.0.1
 PUBLIC_URL=https://tu-dominio.example
 PLAYGROUND_ENABLED=false
 PLAYGROUND_WORKER_COMMAND=["docker","run","--rm","-i","--init","--pull","never","--name","{container}","--network","none","--read-only","--cap-drop","ALL","--security-opt","no-new-privileges","--pids-limit","32","--memory","256m","--memory-swap","256m","--cpus","0.5","--user","65534:65534","--tmpfs","/tmp:rw,size=1m,noexec","nexora-worker"]
@@ -463,8 +464,21 @@ Notas:
 - `--init` hace que el proceso 1 del contenedor sea el init de Docker y no Python, que como proceso
   1 ignoraría las señales sin manejador, como la del temporizador del worker. **Sin comprobar con
   Docker real todavía.**
-- `TRUST_PROXY=1` es necesario detrás de nginx para que el cupo por cliente use la dirección real
-  del visitante y no la del proxy.
+- `TRUST_PROXY=loopback` es necesario detrás de nginx para que el cupo por cliente use la dirección
+  real del visitante y no la del proxy. Con `loopback`, `X-Forwarded-For` solo se tiene en cuenta si
+  la conexión llega desde el propio equipo: una conexión directa desde otro equipo no puede
+  inventarse su dirección. **Pero confía en cualquier proceso del propio equipo** que pueda conectar
+  con el servidor, no solo en nginx: no protege por sí solo frente a un proceso local malicioso.
+  `TRUST_PROXY=1` también funciona detrás de nginx, pero confía en cualquier conexión, venga de donde
+  venga. Los límites cuentan las direcciones IPv6 por bloque /56 y, además, por bloque /48.
+- `LISTEN_HOST=127.0.0.1` hace que el servidor escuche solo en el propio equipo: aunque el
+  cortafuegos dejara abierto el puerto 3000, no se podría llegar a él desde fuera. Sin ella escucha
+  en todas las interfaces, como en desarrollo. Solo admite una dirección IP: `localhost` detiene el
+  servidor al arrancar, porque Node puede resolverlo a `::1` (así ocurre en Windows 11 con Node 24) y
+  entonces no atendería a un nginx que apunte a `127.0.0.1`. Al arrancar, el servidor escribe en qué dirección
+  escucha y avisa si `TRUST_PROXY` y `LISTEN_HOST` no casan. **Sin comprobar en un VPS real.**
+- Con `NODE_ENV=production`, el servidor envía HSTS solo en las peticiones que llegan por HTTPS
+  (nginx las marca con `X-Forwarded-Proto`, y `TRUST_PROXY` hace que el servidor lo crea).
 
 #### Formato de la orden de contenedor
 
@@ -684,8 +698,47 @@ cualquiera.
   lanzado como proceso, sin contenedor ([Pruebas](testing.md#linux)).
 - Medir el tiempo de arranque de un contenedor por petición. Si es demasiado, la alternativa es un
   grupo de workers ya arrancados, que no se ha implementado.
-- El cupo de peticiones se guarda en la memoria del servidor: se pierde al reiniciar y no se
-  comparte entre varias instancias.
-- No hay CAPTCHA ni otra defensa contra un abuso distribuido desde muchas direcciones.
+- El cupo de peticiones y el freno del inicio de sesión se guardan en la memoria del servidor: se
+  pierden al reiniciar y no se comparten entre varias instancias.
+- El borrado de sesiones caducadas usa `DELETE … LIMIT`, que es inseguro con la replicación basada en
+  sentencias (`binlog_format=STATEMENT`). Con `ROW` (el valor por defecto de MySQL 8) o `MIXED` no hay
+  problema. Si el MySQL de producción usa `STATEMENT`, hay que cambiarlo por un borrado por clave
+  primaria; está pendiente de conocer ese servidor.
+- El tiempo máximo de cada consulta del borrado de sesiones es del cliente (mysql2): la promesa falla
+  a los 30 s, pero la sentencia sigue en MySQL y la conexión no vuelve al pool hasta que termina. Una
+  sentencia bloqueada retendría una conexión del pool, el mismo que usan el registro y el inicio de
+  sesión. Para no acumularlas, una pasada no empieza mientras las consultas de la anterior no hayan
+  terminado para mysql2: se omite y se anota en el registro. Una pasada que supera su tiempo máximo
+  (5 minutos) deja de enviar tandas nuevas, pero no cancela la que tiene en curso; el registro lo dice,
+  y anota cuántas sesiones borró en total esa pasada o con qué error acabó cuando por fin termina. Pero mysql2 da una consulta por terminada
+  al vencer su tope aunque siga en MySQL, así que una sentencia que durase más que el intervalo (una
+  hora) podría sumar otra conexión en la pasada siguiente. Pendiente de probar con un MySQL de pruebas
+  una cancelación real (`KILL QUERY` desde otra conexión, o destruir la conexión al vencer el tiempo).
+- El freno del inicio de sesión reserva cada intento antes de consultar la base de datos, así que las
+  peticiones simultáneas no lo sortean. Su estado está en memoria: se pierde al reiniciar y no se
+  comparte entre varias instancias del servidor.
+- El playground no tiene CAPTCHA: sus peticiones solo tienen el cupo por cliente y por red IPv6 /48,
+  que no frena un abuso repartido entre muchas direcciones. El registro y el inicio de sesión sí
+  tienen un antispam (`servidor/src/captcha.js`): Google reCAPTCHA v3, que solo se carga si la persona
+  lo acepta, un campo trampa y un límite estricto por cliente. **Sin probar con claves reales de
+  Google**: las pruebas simulan sus respuestas.
+- Decisión pendiente: el registro responde 409 a un email que ya tiene cuenta, y eso revela qué
+  emails están registrados. Evitarlo exige confirmar el email por correo, que el sitio no envía.
+- Decisión pendiente de producto y privacidad: el gestor de consentimiento (`web/js/consent.js`) sabe
+  cargar Google Analytics, Tag Manager y Ads tras el consentimiento, pero ninguno está configurado y la
+  política de seguridad de las páginas (CSP, `servidor/src/security-headers.js`) solo admite scripts y
+  conexiones del propio sitio: el navegador los bloquearía aun con consentimiento. Las pruebas del
+  servidor fallan mientras haya uno configurado. Si se decide usar alguno, la propuesta es que el
+  servidor añada a la CSP solo los dominios del servicio configurado, tal como los documente Google en
+  ese momento, y solo en scripts externos: los scripts escritos dentro de la página seguirían
+  prohibidos. Antes habría que actualizar la política de cookies y la de privacidad.
+- Las páginas legales (`web/aviso-legal.html`, `privacidad.html`, `cookies.html` y `terminos.html`)
+  son un borrador: les faltan los datos del titular y otros datos, marcados entre corchetes (como
+  `[NIF O CIF]` o `[DOMINIO]`), y no tienen revisión jurídica. No deben publicarse así. Esos
+  marcadores solo pueden aparecer en las páginas legales, que avisan arriba de que son un borrador
+  (`servidor/test/web-guide.test.js` lo comprueba). El aviso del formulario de registro
+  (`web/signup.html`) no nombra al responsable del tratamiento: remite a la política de privacidad,
+  donde está pendiente. La revisión jurídica debe confirmar si esa primera capa de información basta
+  o si el formulario tiene que nombrarlo.
 - La página no se ha probado en Firefox, en Safari ni con lectores de pantalla.
 - No se puede compartir un programa mediante un enlace.
