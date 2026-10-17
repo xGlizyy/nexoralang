@@ -1,4 +1,4 @@
-// Límites de peticiones por cliente, con la misma estrategia en cada límite que la use.
+// Límites de peticiones por cliente, con la misma estrategia en todo el servidor.
 //
 // Cada límite cuenta dos cosas a la vez:
 //   - por cliente: una dirección IPv4, o un bloque IPv6 /56 (client-ip.js);
@@ -11,8 +11,8 @@
 // cupo de un único cliente. Por eso el factor es pequeño pero mayor que 1. Con IPv4 la cuenta de red
 // es la misma dirección con un tope mayor, así que nunca actúa antes que la del cliente.
 //
-// Cabeceras. Una petición puede pasar por varias cuentas: las dos de cada límite y, si una ruta
-// encadena varios límites, las de cada uno. Las cabeceras
+// Cabeceras. Una petición puede pasar por varias cuentas: las dos de cada límite y, en el registro y
+// el inicio de sesión, dos límites seguidos (el general y el estricto del antispam). Las cabeceras
 // RateLimit-* (borrador 6 del IETF, las que ya enviaba express-rate-limit) describen siempre la cuenta
 // que antes se agota: la de menos peticiones restantes y, a igualdad, la que tarda más en renovarse.
 // Si cada cuenta escribiera las suyas, ganaría la última, que puede ser la más holgada (la de red

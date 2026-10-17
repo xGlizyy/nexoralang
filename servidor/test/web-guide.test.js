@@ -90,4 +90,23 @@ describe('links between the pages of the site', () => {
       assert.doesNotMatch(html, /\son\w+="/, `${page} has an inline event handler`);
     }
   });
+
+  // The fonts are served from the site itself, so loading a page sends nothing to a third party.
+  test('no page loads a stylesheet or a font from another site, and every font file exists', () => {
+    for (const page of pages) {
+      const html = read(page);
+      for (const [tag] of html.matchAll(/<link\b[^>]*>/g)) {
+        assert.doesNotMatch(tag, /href="(https?:)?\/\//, `${page} links to another site: ${tag}`);
+      }
+    }
+    const css = read('styles.css');
+    assert.doesNotMatch(css, /@import/);
+    const fonts = [...css.matchAll(/@font-face\s*\{[^}]*?src:\s*url\("([^"]+)"\)/g)].map(([, url]) => url);
+    assert.ok(fonts.length > 0, 'styles.css declares its fonts');
+    for (const url of fonts) {
+      assert.ok(!/^(https?:)?\/\//.test(url), `font from another site: ${url}`);
+      assert.ok(existsSync(path.join(web, url)), `missing font file ${url}`);
+    }
+    assert.ok(existsSync(path.join(web, 'fonts', 'jetbrains-mono', 'OFL.txt')), 'the font licence travels with the font');
+  });
 });

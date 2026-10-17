@@ -2,9 +2,10 @@
 // prueba depende de pausas ni de temporizadores reales.
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { describe, test } from 'node:test';
 import {
-  ACCOUNT_FREE, ACCOUNT_MAX_DELAY_MS, FORGET_AFTER_MS, OVERFLOW_WINDOW_MS, PAIR_FREE, PAIR_MAX_DELAY_MS, createLoginThrottle,
+  ACCOUNT_FREE, ACCOUNT_MAX_DELAY_MS, FORGET_AFTER_MS, OVERFLOW_WINDOW_MS, PAIR_FREE, PAIR_MAX_DELAY_MS, accountDigest, createLoginThrottle,
 } from '../src/login-throttle.js';
 
 function clock() {
@@ -232,3 +233,40 @@ describe('memory bound (D4)', () => {
     assert.ok(throttle.begin('b@example.com', '198.51.100.1').attempt);
   });
 });
+
+describe('how an email is kept (HMAC with a key of each throttle)', () => {
+  test('the stored digest is neither the email nor its plain SHA-256, which a list of emails would undo', () => {
+    const throttle = createLoginThrottle();
+    const digest = throttle.digest(ADA);
+    assert.ok(!digest.includes(ADA) && !digest.includes('ada'));
+    assert.notEqual(digest, createHash('sha256').update(ADA).digest('base64url'));
+    assert.match(digest, /^[\w-]{43}$/, 'a 256-bit digest in base64url');
+  });
+
+  test('each throttle draws its own random key: the same email gives different digests', () => {
+    assert.notEqual(createLoginThrottle().digest(ADA), createLoginThrottle().digest(ADA));
+  });
+
+  test('within one throttle the digest is stable, so the limits still apply to the account', () => {
+    const c = clock();
+    const throttle = createLoginThrottle({ now: c.now });
+    assert.equal(throttle.digest(ADA), throttle.digest(ADA));
+    fail(throttle, ADA, '198.51.100.1', PAIR_FREE);
+    assert.ok(throttle.wait(ADA, '198.51.100.1') > 0, 'the account is recognised again');
+  });
+
+  test('with an injected key the digest is the documented HMAC-SHA-256, in base64url', () => {
+    const key = Buffer.alloc(32, 7);
+    assert.equal(createLoginThrottle({ key }).digest(ADA), accountDigest(ADA, key));
+    assert.equal(accountDigest(ADA, key), createHmacReference(ADA, key));
+  });
+});
+
+/** HMAC-SHA-256 written out with createHash, as RFC 2104 defines it, to check accountDigest independently. */
+function createHmacReference(message, key) {
+  const block = Buffer.alloc(64);
+  key.copy(block);
+  const pad = (byte) => Buffer.from(block.map((b) => b ^ byte));
+  const inner = createHash('sha256').update(pad(0x36)).update(message).digest();
+  return createHash('sha256').update(pad(0x5c)).update(inner).digest('base64url');
+}

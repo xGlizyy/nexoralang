@@ -10,7 +10,7 @@
     "start": "node --env-file=.env src/index.js",
     "dev": "node --env-file=.env --watch src/index.js",
     "migrate": "node --env-file=.env src/migrate.js",
-    "test": "node --test test/client-ip.test.js test/listen.test.js test/login-throttle.test.js test/package-scripts.test.js test/playground-api.test.js test/playground-config.test.js test/playground-containers.test.js test/playground-frontend.test.js test/rate-limits.test.js test/session-cleanup.test.js test/web-guide.test.js"
+    "test": "node --test test/auth-routes.test.js test/captcha.test.js test/client-ip.test.js test/environment.test.js test/listen.test.js test/login-throttle.test.js test/package-scripts.test.js test/playground-api.test.js test/playground-config.test.js test/playground-containers.test.js test/playground-frontend.test.js test/rate-limits.test.js test/security-headers.test.js test/session-cleanup.test.js test/web-guide.test.js"
   },
   "dependencies": {
     "express": "^5.1.0",

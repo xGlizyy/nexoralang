@@ -25,7 +25,10 @@
 //
 // Los intentos rechazados por la espera no cuentan como fallos (no la alargan). Los fallos se
 // olvidan FORGET_AFTER_MS después del último. El freno trata igual un email que existe y uno que no:
-// no revela qué cuentas hay. Los emails no se guardan: solo un resumen SHA-256.
+// no revela qué cuentas hay. Los emails no se guardan: solo un HMAC-SHA-256 hecho con una clave
+// aleatoria que cada freno crea al construirse (uno por proceso, en auth.js) y que nunca sale de aquí.
+// Un SHA-256 sin clave se podría deshacer probando una lista de emails; sin la clave, no. La clave se
+// pierde al reiniciar, igual que la tabla, así que no hace falta guardarla.
 //
 // Memoria. Vive en la memoria del proceso: se pierde al reiniciar y no se comparte entre varias
 // instancias. Guarda como mucho MAX_ENTRIES registros:
@@ -37,7 +40,7 @@
 //     cupo, se pide esperar. Solo ocurre con la tabla llena de esperas activas, es decir, durante un
 //     ataque muy grande: entonces el freno se vuelve más estricto en vez de olvidar.
 
-import { createHash } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 
 export const PAIR_FREE = 5;
 export const PAIR_MAX_DELAY_MS = 15 * 60 * 1000;
@@ -56,13 +59,23 @@ const LIMITS = {
   account: { free: ACCOUNT_FREE, max: ACCOUNT_MAX_DELAY_MS },
 };
 
-export function createLoginThrottle({ now = Date.now, maxEntries = MAX_ENTRIES, overflowAttempts = OVERFLOW_ATTEMPTS } = {}) {
+/** El resumen de un email con la clave `key`: HMAC-SHA-256 en base64url. */
+export function accountDigest(email, key) {
+  return createHmac('sha256', key).update(email).digest('base64url');
+}
+
+export function createLoginThrottle({
+  now = Date.now,
+  maxEntries = MAX_ENTRIES,
+  overflowAttempts = OVERFLOW_ATTEMPTS,
+  key = randomBytes(32),
+} = {}) {
   // key -> { kind: 'pair' | 'account', failures, pending, lastFailure, lastReserve, seq }
   // `seq` cuenta los fallos anotados: un acierto sabe así si hubo alguno desde que empezó.
   const entries = new Map();
   let overflow = { start: 0, used: 0 };
 
-  const accountKey = (email) => `a:${createHash('sha256').update(email).digest('base64url')}`;
+  const accountKey = (email) => `a:${accountDigest(email, key)}`;
   const pairKey = (email, client) => `p:${accountKey(email)}|${client}`;
 
   function remaining(entry) {
@@ -197,5 +210,8 @@ export function createLoginThrottle({ now = Date.now, maxEntries = MAX_ENTRIES, 
     },
 
     get size() { return entries.size; },
+
+    /** El resumen con que este freno guarda `email` (para pruebas): nunca el email ni la clave. */
+    digest: (email) => accountDigest(email, key),
   };
 }
