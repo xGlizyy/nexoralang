@@ -475,7 +475,29 @@ describe('the two reCAPTCHA keys', () => {
 
   test('a file that exists but cannot be read is not fatal either: the keys are just not cross-checked', () => {
     const denied = () => { throw Object.assign(new Error('denied'), { code: 'EACCES' }); };
-    assert.equal(readSiteKeyFile('consent-config.js', { read: denied }), undefined);
+    assert.deepEqual(readSiteKeyFile('consent-config.js', { read: denied }), { readError: 'EACCES' });
     assert.equal(readSiteKeyFile('consent-config.js', { read: () => `  recaptchaSiteKey: '${SITE_KEY}',` }), SITE_KEY);
+  });
+
+  test('an unreadable file is reported as unreadable, with or without a secret key', () => {
+    for (const secret of [null, 'secret']) {
+      const warnings = captchaKeyWarnings({ secret, siteKey: { readError: 'EACCES' } });
+      assert.equal(warnings.length, 1, String(secret));
+      assert.match(warnings[0], /^could not read web\/js\/consent-config\.js \(EACCES\); the reCAPTCHA keys were not cross-checked$/);
+      assert.doesNotMatch(warnings[0], /could not find/);
+    }
+    const odd = () => { throw new TypeError('not a path'); };
+    assert.deepEqual(readSiteKeyFile('consent-config.js', { read: odd }), { readError: 'TypeError' }, 'an error without a code is named');
+  });
+
+  test('"could not find recaptchaSiteKey" is kept for a file that was read but has no such line', () => {
+    const siteKey = readSiteKeyFile('consent-config.js', { read: () => 'window.NEXORA_CONSENT_CONFIG = {};' });
+    assert.equal(siteKey, undefined);
+    for (const secret of [null, 'secret']) {
+      assert.deepEqual(captchaKeyWarnings({ secret, siteKey }), ['could not find recaptchaSiteKey in web/js/consent-config.js; the reCAPTCHA keys were not cross-checked']);
+    }
+    // Neither a missing file nor an unreadable one gets that message.
+    assert.ok(!captchaKeyWarnings({ secret: 'secret', siteKey: null }).some((line) => line.includes('could not find')));
+    assert.ok(!captchaKeyWarnings({ secret: 'secret', siteKey: { readError: 'EISDIR' } }).some((line) => line.includes('could not find')));
   });
 });

@@ -68,14 +68,14 @@ export function createLoginThrottle({
   now = Date.now,
   maxEntries = MAX_ENTRIES,
   overflowAttempts = OVERFLOW_ATTEMPTS,
-  key = randomBytes(32),
+  hmacKey = randomBytes(32),
 } = {}) {
   // key -> { kind: 'pair' | 'account', failures, pending, lastFailure, lastReserve, seq }
   // `seq` cuenta los fallos anotados: un acierto sabe así si hubo alguno desde que empezó.
   const entries = new Map();
   let overflow = { start: 0, used: 0 };
 
-  const accountKey = (email) => `a:${accountDigest(email, key)}`;
+  const accountKey = (email) => `a:${accountDigest(email, hmacKey)}`;
   const pairKey = (email, client) => `p:${accountKey(email)}|${client}`;
 
   function remaining(entry) {
@@ -212,6 +212,6 @@ export function createLoginThrottle({
     get size() { return entries.size; },
 
     /** El resumen con que este freno guarda `email` (para pruebas): nunca el email ni la clave. */
-    digest: (email) => accountDigest(email, key),
+    digest: (email) => accountDigest(email, hmacKey),
   };
 }

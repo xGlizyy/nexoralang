@@ -257,8 +257,61 @@ describe('how an email is kept (HMAC with a key of each throttle)', () => {
 
   test('with an injected key the digest is the documented HMAC-SHA-256, in base64url', () => {
     const key = Buffer.alloc(32, 7);
-    assert.equal(createLoginThrottle({ key }).digest(ADA), accountDigest(ADA, key));
+    assert.equal(createLoginThrottle({ hmacKey: key }).digest(ADA), accountDigest(ADA, key));
     assert.equal(accountDigest(ADA, key), createHmacReference(ADA, key));
+  });
+});
+
+describe('two throttles share no state', () => {
+  // The same HMAC key in both: they keep the same digests, so whatever keeps them apart is their own
+  // state, not a difference of keys.
+  const hmacKey = Buffer.alloc(32, 9);
+  const pair = () => {
+    const c = clock();
+    return { c, a: createLoginThrottle({ now: c.now, hmacKey }), b: createLoginThrottle({ now: c.now, hmacKey }) };
+  };
+
+  test('failures of an account from one client make that client wait only in the throttle that saw them', () => {
+    const { a, b } = pair();
+    assert.equal(a.digest(ADA), b.digest(ADA), 'same key, same digest');
+    fail(a, ADA, '198.51.100.1', PAIR_FREE);
+    assert.ok(a.wait(ADA, '198.51.100.1') > 0);
+    assert.equal(b.wait(ADA, '198.51.100.1'), 0);
+    assert.ok(b.begin(ADA, '198.51.100.1').attempt, 'b lets the attempt through');
+  });
+
+  test('an account blocked from many clients stays open in the other throttle', () => {
+    const { a, b } = pair();
+    for (let i = 1; i <= ACCOUNT_FREE; i += 1) fail(a, ADA, `198.51.100.${i}`, 1);
+    assert.ok(a.wait(ADA, '203.0.113.7') > 0, 'a client a never saw waits in a');
+    assert.equal(b.wait(ADA, '203.0.113.7'), 0);
+  });
+
+  test('attempts still in flight in one throttle do not count in the other', () => {
+    const { a, b } = pair();
+    for (let i = 0; i < PAIR_FREE; i += 1) assert.ok(a.begin(ADA, '198.51.100.1').attempt);
+    assert.ok(a.begin(ADA, '198.51.100.1').wait > 0, 'a counts its own reservations');
+    assert.equal(b.wait(ADA, '198.51.100.1'), 0);
+    assert.ok(b.begin(ADA, '198.51.100.1').attempt);
+  });
+
+  test('a success in one throttle does not clear the failures of the other', () => {
+    const { a, b } = pair();
+    fail(a, ADA, '198.51.100.1', PAIR_FREE);
+    const waiting = a.wait(ADA, '198.51.100.1');
+    assert.equal(attempt(b, ADA, '198.51.100.1', 'succeeded'), 0);
+    assert.equal(a.wait(ADA, '198.51.100.1'), waiting);
+  });
+
+  test('size counts only the records of each throttle', () => {
+    const { a, b } = pair();
+    fail(a, ADA, '198.51.100.1', 1);
+    fail(a, 'grace@example.com', '198.51.100.2', 1);
+    assert.equal(a.size, 4, 'a pair and an account record for each email');
+    assert.equal(b.size, 0);
+    fail(b, ADA, '198.51.100.1', 1);
+    assert.equal(b.size, 2);
+    assert.equal(a.size, 4);
   });
 });
 

@@ -75,16 +75,22 @@ export function readSiteKey(source) {
 }
 
 /**
- * La clave del sitio leída del archivo `file` (web/js/consent-config.js): la de readSiteKey, o null si
- * el archivo no existe (un sitio sin gestor de consentimiento, que nunca carga reCAPTCHA). Cualquier
- * otro error de lectura devuelve undefined. Nunca lanza: el servidor arranca aunque falte la web.
+ * La clave del sitio leída del archivo `file` (web/js/consent-config.js). Devuelve:
+ *   la clave, o ''          el archivo se leyó y tiene la línea (readSiteKey)
+ *   undefined               el archivo se leyó, pero no tiene la línea recaptchaSiteKey
+ *   null                    el archivo no existe (un sitio sin gestor de consentimiento, que nunca
+ *                           carga reCAPTCHA)
+ *   { readError: código }   el archivo existe, o no se sabe, pero no se pudo leer (EACCES, EISDIR…)
+ * Nunca lanza: el servidor arranca aunque falte o no se pueda leer la web.
  */
 export function readSiteKeyFile(file, { read = readFileSync } = {}) {
+  let source;
   try {
-    return readSiteKey(read(file, 'utf8'));
+    source = read(file, 'utf8');
   } catch (error) {
-    return error.code === 'ENOENT' ? null : undefined;
+    return error.code === 'ENOENT' ? null : { readError: error.code ?? error.name };
   }
+  return readSiteKey(source);
 }
 
 /**
@@ -99,6 +105,12 @@ export function captchaKeyWarnings({ secret, siteKey }) {
     }
     return warnings;
   }
+  // El archivo existe, o no se sabe, pero no se pudo leer: se dice siempre, haya o no clave secreta.
+  if (siteKey !== null && typeof siteKey === 'object') {
+    warnings.push(`could not read web/js/consent-config.js (${siteKey.readError}); the reCAPTCHA keys were not cross-checked`);
+    return warnings;
+  }
+  // Se leyó, pero no tiene la línea recaptchaSiteKey (el archivo cambió de forma).
   if (siteKey === undefined) {
     warnings.push('could not find recaptchaSiteKey in web/js/consent-config.js; the reCAPTCHA keys were not cross-checked');
     return warnings;
