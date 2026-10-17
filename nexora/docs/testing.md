@@ -48,10 +48,42 @@ ejecuciones después de añadir las pruebas del formato de la orden de contenedo
 local (16 de octubre de 2026, Windows 11, Node 24.21.0). Las pruebas del formato solo analizan la
 orden; las del ciclo de vida usan un Docker falso. No se ejecutó ningún contenedor real.
 
-Las cuatro pruebas omitidas necesitan funciones de POSIX que Windows no tiene, y **no se han
-ejecutado nunca**: una comprueba un archivo sin permiso de lectura (el mismo caso se cubre en
-Windows simulando el error), y tres comprueban los límites de memoria y de CPU que el proceso del
-playground pide al sistema operativo.
+Las cuatro pruebas omitidas necesitan funciones de POSIX que Windows no tiene: una comprueba un
+archivo sin permiso de lectura (el mismo caso se cubre en Windows simulando el error), y tres
+comprueban los límites de memoria y de CPU que el proceso del playground pide al sistema operativo.
+En Windows se omiten; en Linux se ejecutan y pasan (siguiente apartado).
+
+### Linux
+
+Realizada el 17 de octubre de 2026 en Ubuntu 24.04 sobre WSL 2 (núcleo 6.18), con un usuario que
+no es root (uid 1000), con Node.js 24.11.1. Se ejecutó sobre una copia, en el sistema de archivos de
+Linux (no en `/mnt/c`), del árbol de trabajo de la rama `fix/playground-container-lifecycle` en el
+commit `237184b`. En `nexora/` y `npm/` ese árbol no tenía cambios sin commit; en `servidor/` y
+`web/` tenía cambios en curso, sin commit (páginas de la web, CAPTCHA y sus pruebas), que entran en
+la cifra de `npm test` en `servidor/`:
+
+| Comprobación | Resultado |
+|--------------|-----------|
+| `python -m ruff check src tests` | Sin errores |
+| `python -m pytest --cov`, Python 3.12.3 | 1604 pruebas superadas, **0 omitidas**, 0 fallos; cobertura del 94,48 % |
+| `python -m pytest` (sin `--cov`), Python 3.11.17 y 3.13.16 | 1604 superadas, 0 omitidas, 0 fallos en cada versión |
+| `npm test` en `npm/` | 12 superadas, 0 fallos |
+| `npm test` en `servidor/`, con el árbol de trabajo descrito arriba | 355 superadas, 0 fallos, en cada una de dos ejecuciones |
+| Paquete de pip: `python -m build`, instalación del wheel con `--no-index` en un entorno limpio, `nex run` y `nex --version` | Sin errores |
+| Paquete de npm: `npm pack`, instalación desde el archivo y `npx nex run` | Sin errores |
+
+Las cuatro pruebas de POSIX se ejecutaron por primera vez y pasaron: el archivo sin permiso de
+lectura da `E0001`, y los límites de memoria, de tiempo real y de CPU terminan el programa. Esos
+límites se probaron con `tests/test_worker.py`, que lanza el worker directamente como proceso, sin
+contenedor y sin pasar por el servidor.
+
+`ruff`, la cobertura, las pruebas de `npm/` y `servidor/` y los paquetes se comprobaron solo con
+Python 3.12.3; con 3.11 y 3.13 solo se ejecutó `pytest`. Python 3.11 y 3.13 se instalaron con `uv`;
+Ubuntu solo trae la 3.12. Las pruebas del servidor necesitan el entorno de `nexora/.venv` (en Linux,
+`nexora/.venv/bin/python`), igual que en Windows.
+
+**No se ejecutó Docker** ni ninguna de las comprobaciones de
+[aislamiento del playground](playground.md#comprobar-el-aislamiento), que siguen pendientes.
 
 La cobertura bajó respecto a la medición anterior (99,56 %) porque dos módulos nuevos se prueban
 lanzándolos como procesos aparte, que la medición no sigue: `worker.py` y `mcp_server.py`.
@@ -230,13 +262,15 @@ En la raíz del repositorio, `.github/workflows/nexora-ci.yml` define las mismas
 GitHub Actions: análisis del código, pruebas con cobertura y generación del paquete, en Linux,
 Windows y macOS con Python 3.11, 3.12 y 3.13.
 
-**Ese flujo no se ha ejecutado nunca**: el proyecto no tiene todavía un repositorio en GitHub. No
-se sabe si pasa en Linux, en macOS ni en otras versiones de Python hasta que se ejecute. Por eso el
+**Ese flujo no se ha ejecutado nunca**: el proyecto no tiene todavía un repositorio en GitHub. En
+Linux, las pruebas se han ejecutado a mano ([Linux](#linux)); en macOS, y en Windows con Python 3.11
+y 3.13, no se sabe si pasan. Por eso el
 `README` no muestra ninguna insignia de estado.
 
 ## Lo que las pruebas no cubren
 
-- **Otras plataformas.** Solo se han ejecutado en Windows 11 con Python 3.12.
+- **Otras plataformas.** Se han ejecutado en Windows 11 con Python 3.12 y en Linux (Ubuntu 24.04
+  sobre WSL 2) con Python 3.11, 3.12 y 3.13. macOS, otras distribuciones y Linux sin WSL, no.
 - **Rendimiento.** No hay pruebas de velocidad ni de consumo de memoria.
 - **Tiempo y memoria sin límite.** Un programa puede tardar o consumir memoria indefinidamente; no
   hay pruebas sobre ello porque el intérprete no lo impide.
@@ -250,7 +284,8 @@ se sabe si pasa en Linux, en macOS ni en otras versiones de Python hasta que se 
   Hay una única comprobación manual con Claude Code, descrita en
   [Servidor MCP](mcp.md#comprobación-en-claude-code).
 - **Ningún modelo de IA.** Las tareas de referencia miden las herramientas deterministas.
-- **El aislamiento del playground con contenedor** y sus límites POSIX no se han ejecutado.
+- **El aislamiento del playground con contenedor** no se ha ejecutado. Los límites POSIX del worker,
+  lanzado como proceso sin contenedor, sí, en Linux.
 - **La web del proyecto** (`web/`): el playground y la guía tienen pruebas en `servidor/test/`
   (lógica del editor, API, enlaces); el aspecto visual y el resto de páginas, no.
 - **La instalación del paquete en un entorno limpio** no se ha repetido desde que se añadieron las

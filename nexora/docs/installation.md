@@ -21,9 +21,10 @@ NEXORA funciona sin conexión.
 |---------|--------|
 | Windows 11, Python 3.12 | **Comprobado**: instalación en modo desarrollo en un entorno limpio, instalación desde el paquete generado, y batería de pruebas completa |
 | Windows 11, Node.js 24, paquete de npm | **Comprobado**: generado con `npm pack`, instalado desde el archivo y usado. No publicado |
-| Linux | **No comprobado.** Las instrucciones siguen el procedimiento estándar de Python. El flujo de integración continua preparado en `.github/workflows/` ejecutaría las pruebas en Linux, pero todavía no se ha ejecutado nunca |
+| Linux (Ubuntu 24.04 en WSL 2), Python 3.12 | **Comprobado** el 17 de octubre de 2026: batería de pruebas completa, sin ninguna omitida, con un usuario que no es root; paquete generado e instalado desde el archivo en un entorno limpio, y `nex run` usado. Otras distribuciones y Linux sin WSL, no comprobados |
+| Linux, Node.js 24, paquete de npm | **Comprobado**: generado con `npm pack`, instalado desde el archivo y usado con `npx nex`. No publicado |
 | macOS | **No comprobado** |
-| Python 3.11 y 3.13 | **No comprobado.** El código no usa nada posterior a Python 3.11 |
+| Python 3.11 y 3.13 | **Comprobado solo en Linux** (3.11.17 y 3.13.16): batería de pruebas completa, sin instalar el paquete generado. En Windows y macOS, no comprobado |
 
 ## Instalación paso a paso
 

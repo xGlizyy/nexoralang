@@ -16,7 +16,7 @@ ejecutarlo en local y cómo desplegarlo en un servidor propio.
 | API del servidor (`/api/playground`) | Implementada y probada |
 | Página (`web/playground.html`) | Implementada. Lógica probada de forma automática; el dibujado, comprobado a mano en Chrome |
 | Límites de tiempo, tamaño, salida, concurrencia y peticiones | Implementados y probados |
-| Límites de memoria y CPU del sistema operativo | Implementados para Linux y macOS. **No probados**: el desarrollo se hizo en Windows, donde no existen |
+| Límites de memoria y CPU del sistema operativo | Implementados para Linux y macOS. Probados en Linux (Ubuntu 24.04 sobre WSL 2) con `tests/test_worker.py`, que lanza el worker como proceso, sin contenedor; en macOS, no. En Windows no existen |
 | Aislamiento en contenedor (Docker) | Configuración preparada. **No probada**: no había Docker en el equipo de desarrollo |
 | Despliegue en un servidor público | **No realizado** |
 
@@ -680,7 +680,8 @@ cualquiera.
 ## Tareas pendientes y riesgos
 
 - Construir y probar la imagen del worker, y completar la tabla de comprobación del aislamiento.
-- Ejecutar en Linux las pruebas de los límites del sistema operativo.
+- Comprobar los límites del sistema operativo dentro del contenedor. En Linux ya pasan con el worker
+  lanzado como proceso, sin contenedor ([Pruebas](testing.md#linux)).
 - Medir el tiempo de arranque de un contenedor por petición. Si es demasiado, la alternativa es un
   grupo de workers ya arrancados, que no se ha implementado.
 - El cupo de peticiones se guarda en la memoria del servidor: se pierde al reiniciar y no se

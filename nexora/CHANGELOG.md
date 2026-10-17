@@ -77,6 +77,11 @@ Cambios posteriores al tag `v0.6.0`, todavía sin versión. Afectan al servidor 
   lo mantiene desactivado en un servidor público hasta completar la
   [comprobación del aislamiento](docs/playground.md#comprobar-el-aislamiento). Las comprobaciones
   que necesitan el playground activo se hacen en un entorno controlado, sin exposición pública.
+- Linux comprobado ([Pruebas](docs/testing.md#linux)): en Ubuntu 24.04 sobre WSL 2 pasan las
+  pruebas automáticas de `nexora/` con Python 3.11, 3.12 y 3.13 (también las cuatro de POSIX, que
+  nunca se habían ejecutado) y las de `npm/` y `servidor/`, y los paquetes de pip y npm se instalan
+  y funcionan. No hizo falta cambiar código. Docker y el aislamiento del playground siguen sin
+  comprobar.
 
 ### Limitaciones
 
