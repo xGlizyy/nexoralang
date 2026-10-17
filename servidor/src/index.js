@@ -4,6 +4,7 @@ import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { auth } from './auth.js';
 import { config } from './config.js';
+import { listenWarnings } from './listen.js';
 import { loadPlaygroundConfig } from './playground/config.js';
 import { createPlaygroundRouter } from './playground/router.js';
 
@@ -53,6 +54,11 @@ app.use((error, req, res, next) => {
   res.status(500).json({ error: 'Internal server error.' });
 });
 
-app.listen(config.port, () => {
-  console.log(`NEXORA en http://localhost:${config.port}`);
+for (const warning of listenWarnings(config)) console.error(`warning: ${warning}`);
+
+// Sin LISTEN_HOST, en todas las interfaces, como siempre; con LISTEN_HOST, solo en esa dirección.
+const server = config.host ? app.listen(config.port, config.host) : app.listen(config.port);
+server.on('listening', () => {
+  const { address, port } = server.address();
+  console.log(`NEXORA en http://localhost:${port} (${config.environment}, escuchando en ${address === '::' || address === '0.0.0.0' ? 'todas las interfaces' : address})`);
 });

@@ -1,3 +1,7 @@
+import { parseTrustProxy } from './client-ip.js';
+import { isProduction, parseNodeEnv } from './environment.js';
+import { parseListenHost } from './listen.js';
+
 function required(name) {
   const value = process.env[name];
   if (!value) throw new Error(`Falta la variable de entorno ${name} (revisa servidor/.env)`);
@@ -15,8 +19,12 @@ const port = Number(process.env.PORT ?? 3000);
 
 export const config = {
   port,
-  production: process.env.NODE_ENV === 'production',
-  trustProxy: Number(process.env.TRUST_PROXY ?? 0),
+  // Dirección de escucha (listen.js). null: todas las interfaces, el comportamiento de siempre.
+  host: parseListenHost(process.env.LISTEN_HOST),
+  // Validado en environment.js: un valor desconocido detiene el servidor antes de escuchar.
+  environment: parseNodeEnv(process.env.NODE_ENV),
+  production: isProduction(process.env.NODE_ENV),
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   publicUrl: (process.env.PUBLIC_URL ?? `http://localhost:${port}`).replace(/\/+$/, ''),
   db: {
     host: process.env.DB_HOST ?? '127.0.0.1',

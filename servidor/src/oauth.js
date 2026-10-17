@@ -2,9 +2,9 @@
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 import { config } from './config.js';
 import { pool } from './db.js';
+import { clientRateLimit } from './rate-limits.js';
 import { readCookie, startSession } from './sessions.js';
 
 const STATE_COOKIE = 'nexora_oauth_state';
@@ -127,11 +127,9 @@ function fail(res, code) {
   res.redirect(`/login?error=${code}`);
 }
 
-const attempts = rateLimit({
+const attempts = clientRateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 40,
-  standardHeaders: true,
-  legacyHeaders: false,
   handler: (req, res) => fail(res, 'oauth_failed'),
 });
 

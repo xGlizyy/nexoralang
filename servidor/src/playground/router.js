@@ -5,7 +5,7 @@
 // El esquema de peticiones y respuestas está documentado en nexora/docs/playground.md.
 
 import express from 'express';
-import rateLimit from 'express-rate-limit';
+import { clientRateLimit } from '../rate-limits.js';
 import { loadExamples } from './examples.js';
 import { BusyError, Limiter } from './limiter.js';
 import { RESULT_SCHEMA, WorkerError, runWorker } from './worker.js';
@@ -158,11 +158,10 @@ export function createPlaygroundRouter(config, { log = console.error } = {}) {
     res.json({ schema: RESULT_SCHEMA, status: 'success', examples });
   });
 
-  const requests = rateLimit({
+  // Por cliente y por red IPv6 /48 (rate-limits.js).
+  const requests = clientRateLimit({
     windowMs: config.rateLimit.windowMs,
     limit: config.rateLimit.limit,
-    standardHeaders: true,
-    legacyHeaders: false,
     handler: (req, res) => {
       res.status(429).json(errorBody('rate_limited', 'Too many requests. Wait a moment and try again.'));
     },
