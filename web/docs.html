@@ -113,15 +113,245 @@
 
     <section id="what">
       <h2>What is NEXORA</h2>
+
+      <p class="lead">
+        NEXORA is a new programming language, designed from scratch as an independent project.
+        It explores a clearer, more expressive way to write software: a syntax of its own, rules
+        that live inside the code, and results that both people and automated tools can read.
+      </p>
+
+      <h3>The question it starts from</h3>
       <p>
-        NEXORA is a new programming language being built from scratch as an independent project.
-        Its aim is to explore a clearer, more expressive way to write software: a syntax of its own,
-        modern development tools and, over time, carefully chosen AI-related features.
+        Most languages were designed around one person giving instructions to a computer. Today the
+        same code is also written, read and reviewed by AI systems. NEXORA starts from a different
+        question: what would a language look like if that shared work were part of its design instead
+        of an accident?
       </p>
       <p>
-        It is not a framework or a layer on top of another language. It is a language design that
-        will get its own implementation, tooling and documentation, step by step.
+        The answer it explores is not a new assistant, but the language itself: making the intent of a
+        program explicit enough to be checked by a machine, without making it harder to read for a
+        person. Whether that actually helps an AI system is still an open question, and this project
+        does not claim to have answered it.
       </p>
+
+      <h3>NEXORA in short</h3>
+      <dl class="status-list">
+        <div>
+          <dt>What it is</dt>
+          <dd>A general-purpose programming language with its own syntax, semantics and specification.</dd>
+        </div>
+        <div>
+          <dt>Who builds it</dt>
+          <dd>An independent project. It is not a fork, a library, or a layer on top of another language.</dd>
+        </div>
+        <div>
+          <dt>What defines it</dt>
+          <dd>The requirements of a program are written in the program itself, and checked in a deterministic way.</dd>
+        </div>
+        <div>
+          <dt>Version</dt>
+          <dd>0.6, an experimental release before 1.0. The language can still change in incompatible ways.</dd>
+        </div>
+        <div>
+          <dt>Implementation</dt>
+          <dd>A reference interpreter written in Python 3.11 or later that uses only the standard library, with the <code>nex</code> command on top of it.</dd>
+        </div>
+        <div>
+          <dt>Code files</dt>
+          <dd>Plain UTF-8 text files with the <code>.nex</code> extension.</dd>
+        </div>
+        <div>
+          <dt>Tools</dt>
+          <dd>The <code>nex</code> command line, a <a href="playground.html">playground</a> that runs in the browser, and JSON output for external tools.</dd>
+        </div>
+        <div>
+          <dt>License</dt>
+          <dd>MIT.</dd>
+        </div>
+      </dl>
+
+      <h3>What writing NEXORA is like</h3>
+      <ul class="bullets">
+        <li>
+          <strong>Static types, with no implicit conversions.</strong> <code>Int</code>, <code>Float</code>,
+          <code>Bool</code>, <code>Text</code> and <code>Void</code>, with inference and annotations.
+          Every change of type is written down.
+        </li>
+        <li>
+          <strong>One name, one meaning.</strong> Inside a function a name is neither redefined nor
+          hidden, and <code>let</code> binds values that do not change unless <code>var</code> says so.
+        </li>
+        <li>
+          <strong>Requirements in the code.</strong> Contracts, refined types and loop conditions are
+          part of the program, not a separate document describing it.
+        </li>
+        <li>
+          <strong>Problems found before running.</strong> Names, types and return paths are checked
+          without executing anything, and every diagnostic says what failed, where and why.
+        </li>
+        <li>
+          <strong>Data for tools, not only text for people.</strong> The same analysis can be read as
+          JSON, with versioned schemas, by any tool that needs to understand a program instead of
+          guessing what it means.
+        </li>
+        <li>
+          <strong>Web first, in the long term.</strong> The design draft aims at compiling to
+          JavaScript, and WebAssembly later. Neither exists yet.
+        </li>
+      </ul>
+
+      <h3>What NEXORA is, and what it is not</h3>
+      <div class="compare">
+        <div class="compare__col compare__col--not">
+          <p class="compare__title">It is not</p>
+          <ul>
+            <li>A framework, a library or a wrapper around another language.</li>
+            <li>An AI assistant, a code generator or a chat. It calls no model and needs no service: its rules are deterministic code that works offline.</li>
+            <li>Proven faster, safer or more productive than other languages. No comparison has been made.</li>
+            <li>Ready for production, or a replacement for Python, JavaScript or any other language.</li>
+          </ul>
+        </div>
+        <div class="compare__col compare__col--is">
+          <p class="compare__title">It is</p>
+          <ul>
+            <li>A language project with its own specification, interpreter, documentation and tests.</li>
+            <li>A toolchain that grows around that language: the <code>nex</code> command, the playground and structured JSON output.</li>
+            <li>An open experiment: whether these decisions really do make a program easier for an automated tool to analyse.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>The idea that distinguishes it: the rules live in the code</h3>
+      <p>
+        A function declares what it expects from its caller and what it promises in return. A type
+        declares which values it accepts. A loop declares why it ends. Each rule can carry its own
+        explanation, and when one is broken the diagnostic says which rule failed, where, with which
+        values, and why that rule exists.
+      </p>
+
+      <figure class="window">
+        <div class="window__bar">
+          <span class="window__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="window__tab is-active">percentage.nex</span>
+          <span class="chip chip--in-progress window__flag">Runs today</span>
+        </div>
+        <pre class="code"><code data-lang="nex">type Percent = Int where value &gt;= 0 and value &lt;= 100, "A percentage goes from 0 to 100"
+
+fn percentage(part: Int, whole: Int) -&gt; Percent {
+    requires part &gt;= 0 and part &lt;= whole, "The part has to be inside the whole"
+    ensures result &gt;= 0 and result &lt;= 100
+    return Percent(part * 100 / whole)
+}
+
+fn main() -&gt; Void {
+    print(to_text(percentage(3, 12)))
+}</code></pre>
+      </figure>
+
+      <p>Four kinds of rule exist today:</p>
+      <ul class="bullets">
+        <li>
+          <code>requires</code> and <code>ensures</code> — what a function expects from its caller,
+          and what it promises to return, with <code>result</code> as the returned value.
+        </li>
+        <li>
+          <code>type Percent = Int where ...</code> — a refined type: a built-in type plus a rule all
+          its values satisfy. Constants are checked by <code>nex check</code> without running
+          anything; computed values are checked at the moment they are converted.
+        </li>
+        <li>
+          <code>while ... decreases ... invariant ...</code> — why a loop ends, and what it keeps true
+          on every iteration.
+        </li>
+        <li>
+          <code>example</code> — examples attached to a function, evaluated with <code>nex test</code>.
+        </li>
+      </ul>
+
+      <p>
+        Run as it is, the program above prints <code>25</code>. Change the call to
+        <code>percentage(30, 12)</code> and it stops before printing anything:
+      </p>
+
+      <figure class="window">
+        <div class="window__bar">
+          <span class="window__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="window__tab is-active">output</span>
+          <span class="chip chip--in-progress window__flag">Runs today</span>
+        </div>
+        <pre class="code"><code>contract error[E4001]: Precondition violated
+  --&gt; percentage.nex:10:19
+   |
+10 |     print(to_text(percentage(30, 12)))
+   |                   ^^^^^^^^^^^^^^^^^^ This call breaks a 'requires' condition of 'percentage'
+   = note: The condition at line 4 is false: requires part &gt;= 0 and part &lt;= whole
+   = note: Reason: The part has to be inside the whole
+   = note: It was called with: part = 30, whole = 12</code></pre>
+      </figure>
+
+      <h3>What happens when you run a NEXORA program</h3>
+      <p>
+        The same analysis produces two readings: one written for a person, and one made of data for
+        any program that needs to read the code. These are the steps both come from.
+      </p>
+      <ol class="pipeline">
+        <li>
+          <strong>Read the file</strong>
+          <p>The source is turned into tokens and then into a syntax tree. Nothing is executed.</p>
+        </li>
+        <li>
+          <strong>Check names, types and return paths</strong>
+          <p>Every name is resolved, every expression is given a type, and every path that reaches the end of a function is verified.</p>
+        </li>
+        <li>
+          <strong>Report what is wrong, before anything runs</strong>
+          <p>A program with errors is never executed. Each diagnostic carries a stable code, a category and an exact position.</p>
+        </li>
+        <li>
+          <strong>Run only what is valid</strong>
+          <p>The interpreter evaluates the program and checks the runtime rules: contracts, refined types, loop measures and invariants.</p>
+        </li>
+        <li>
+          <strong>Deliver the same result as data</strong>
+          <p>With <code>--format json</code>, diagnostics, the syntax tree, the symbols and a summary of the program are returned as documents with versioned schemas, so a tool can read them without parsing prose.</p>
+        </li>
+      </ol>
+
+      <h3>Who it is for</h3>
+      <ul class="bullets">
+        <li>
+          <strong>Developers who want the rules of their code written down.</strong> Requirements,
+          limits and expected results live next to the code they describe.
+        </li>
+        <li>
+          <strong>Anyone learning how a language is designed and built.</strong> The specification,
+          the decisions behind it and the interpreter are all part of the project.
+        </li>
+        <li>
+          <strong>Authors of tools that have to read programs.</strong> The structured output is
+          available from the command line, from Python, and through an optional MCP server.
+        </li>
+        <li>
+          <strong>Researchers of the human and AI collaboration.</strong> The hypothesis behind the
+          project is written down, and so is the fact that it has not been evaluated yet.
+        </li>
+      </ul>
+      <p class="note">
+        With the current version, NEXORA suits small programs and the study of the language itself.
+        It does not yet suit writing applications.
+      </p>
+
+      <h3>Where to go from here</h3>
+      <ul class="bullets">
+        <li><a href="guide.html">Language guide</a> — a walkthrough of the syntax that already works, with every example executed and checked.</li>
+        <li><a href="playground.html">Playground</a> — write and run NEXORA in the browser, without installing anything.</li>
+        <li><a href="#status">Current status</a> — exactly what exists today, what is experimental and what does not exist yet.</li>
+        <li><a href="#philosophy">Design philosophy</a> — the goals behind the decisions.</li>
+        <li><a href="#example">Conceptual example</a> — a first look at the syntax.</li>
+        <li><a href="#roadmap">Roadmap</a> — the phases the project moves through.</li>
+        <li><a href="#faq">FAQ</a> — the questions that come up most often.</li>
+        <li><a href="../docs/fase-1-diseno.md">Language design draft v0.1</a> — the full working document, written in Spanish.</li>
+      </ul>
     </section>
 
     <section id="status">
@@ -169,6 +399,70 @@
         <a href="../docs/fase-1-diseno.md">Language design draft v0.1</a> (written in Spanish).
         It is more detailed than this page and some of its notation differs from the examples shown here.
       </p>
+
+      <h3>How it is tested</h3>
+      <p>Each figure is a snapshot of the day it was measured, not a guarantee about the current code.</p>
+
+      <dl class="status-list">
+        <div>
+          <dt><span class="chip chip--in-progress">Passed</span></dt>
+          <dd>
+            <ul>
+              <li>Interpreter: 1,600 tests passed, 4 skipped and 0 failed, on Windows 11 with Python 3.12.10 (15 October 2026).</li>
+              <li>Interpreter on Linux (Ubuntu 24.04 under WSL 2): 1,604 tests passed, none skipped and 0 failed with Python 3.12.3, and the same with 3.11.17 and 3.13.16 (17 October 2026). That includes the 4 POSIX tests that Windows skips: a file without read permission, and the memory, CPU and time limits of the playground process.</li>
+              <li>Web server, in the development version: 567 automated tests passed, none skipped and 0 failed in each of three runs on Windows 11 with Node 24.21.0, and in each of three runs on Linux (Ubuntu 24.04 under WSL 2) with Node 24.11.1 (17 October 2026). The tests of the container command only analyse its arguments, and the container lifecycle tests use a fake Docker: no real container was run. The database, Google reCAPTCHA and the browser are simulated too.</li>
+            </ul>
+          </dd>
+        </div>
+        <div>
+          <dt><span class="chip chip--experimental">Pending</span></dt>
+          <dd>
+            <ul>
+              <li>Checking the isolation of the playground containers with real Docker. It has not been done yet.</li>
+              <li>Checking the website visually in a browser: the cookie banner, the account forms and the pages of this documentation. The automated tests only read the pages; they do not display them.</li>
+            </ul>
+          </dd>
+        </div>
+        <div>
+          <dt><span class="chip">Not tested</span></dt>
+          <dd>
+            <ul>
+              <li>macOS, Linux outside WSL or on other distributions, and Python 3.11 and 3.13 on Windows. A continuous integration workflow for Linux, Windows and macOS with Python 3.11, 3.12 and 3.13 exists, but it has never been run.</li>
+              <li>The web server against a real MySQL database, real Google reCAPTCHA keys and the headers of the production server.</li>
+              <li>Speed and memory use. There are no tests for them.</li>
+            </ul>
+          </dd>
+        </div>
+      </dl>
+
+      <h3>Recent changes</h3>
+
+      <dl class="status-list">
+        <div>
+          <dt><span class="chip chip--in-progress">0.6.0</span></dt>
+          <dd>
+            <ul>
+              <li>Operations on text that declare their requirements: <code>Text.length</code>, <code>Text.slice</code>, <code>Text.contains</code>, <code>Text.starts_with</code> and <code>Text.ends_with</code>, and reading numbers with <code>Int.parse</code> and <code>Float.parse</code>, checked first with <code>Int.can_parse</code> and <code>Float.can_parse</code>.</li>
+              <li>Ordering between texts with <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code>.</li>
+              <li>Every program that was valid in 0.5.1 is still valid and gives the same result.</li>
+            </ul>
+          </dd>
+        </div>
+        <div>
+          <dt><span class="chip chip--experimental">Not released</span></dt>
+          <dd>
+            <ul>
+              <li>Changes to the web server and the website only; the language and the interpreter do not change. None of the playground changes has been checked with real Docker yet.</li>
+              <li>The playground is off unless the server sets <code>PLAYGROUND_ENABLED=true</code>.</li>
+              <li>The server only accepts the documented container command, and it only runs the local <code>nexora-worker</code> image, which Docker never downloads.</li>
+              <li>A container that runs out of time is removed by the name the server gave it, and its slot is only freed once the removal is confirmed.</li>
+              <li>Sign-up and log-in are protected against spam: Google reCAPTCHA v3, loaded only if you accept it in the cookie settings, and stricter attempt limits without it. Repeated failed log-ins on one account have to wait.</li>
+              <li>Every response carries security headers, and the fonts are served by this site instead of Google Fonts.</li>
+              <li>Server settings that used to be read loosely now stop it at start-up when they are wrong: <code>NODE_ENV</code>, <code>TRUST_PROXY</code>, the new <code>LISTEN_HOST</code> and the reCAPTCHA settings. In production without a reCAPTCHA key, every sign-up and log-in gets the stricter limits.</li>
+            </ul>
+          </dd>
+        </div>
+      </dl>
     </section>
 
     <section id="philosophy">

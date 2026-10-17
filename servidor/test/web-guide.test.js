@@ -80,6 +80,28 @@ describe('links between the pages of the site', () => {
     }
   });
 
+  // The outline in the header is what turns the documentation into one page per section, so it has
+  // to name exactly the sections of docs.html, in the same order, on every page that carries it.
+  const OUTLINE = /<li><a href="docs\.html#([\w-]+)"><span>(\d+)<\/span><strong>([^<]+)<\/strong>/g;
+
+  test('the documentation has one section per entry of its own index', () => {
+    const sections = [...read('docs.html').matchAll(/<section id="([\w-]+)">/g)].map(([, id]) => id);
+    assert.ok(sections.length >= 2);
+    const toc = read('docs.html').match(/<nav class="docs__toc"[\s\S]*?<\/nav>/)[0];
+    const index = [...toc.matchAll(/<li><a href="#([\w-]+)">/g)].map(([, id]) => id);
+    assert.deepEqual(index, sections);
+  });
+
+  for (const page of ['index.html', 'docs.html']) {
+    test(`${page}: the Documentation outline lists every section, in order`, () => {
+      // The outline may shorten a title ("FAQ"), so what has to match is which sections it names,
+      // in which order, and the number each one is given.
+      const ids = [...read('docs.html').matchAll(/<section id="([\w-]+)">/g)].map(([, id]) => id);
+      const outline = [...read(page).matchAll(OUTLINE)].map(([, id, number]) => [id, number]);
+      assert.deepEqual(outline, ids.map((id, index) => [id, String(index + 1).padStart(2, '0')]));
+    });
+  }
+
   test('the home page and the documentation lead to the playground', () => {
     assert.ok(read('index.html').includes('href="playground.html"'));
     assert.ok(read('docs.html').includes('href="playground.html"'));

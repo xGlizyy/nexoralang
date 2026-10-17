@@ -63,13 +63,16 @@ function setupTabs(root) {
   }
 
   if (slides) {
-    // Widths change once the web fonts load: re-place without animating.
-    new ResizeObserver(() => {
+    // Widths change once the web fonts load: re-place without animating. The tabs are observed
+    // too, because a tab can change width while the list keeps its own.
+    const observer = new ResizeObserver(() => {
       list.classList.add('is-jumping');
       placeIndicator(tabs.find((tab) => tab.getAttribute('aria-selected') === 'true'));
       void list.offsetWidth;
       list.classList.remove('is-jumping');
-    }).observe(list);
+    });
+    observer.observe(list);
+    for (const tab of tabs) observer.observe(tab);
   }
 
   for (const tab of tabs) {

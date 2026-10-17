@@ -9,7 +9,6 @@ export function setupDocsPages() {
 
   // Everything outside the sections (page title, lead, notice) belongs to the first page.
   const intro = [...article.children].filter((element) => !sections.includes(element));
-  const tocLinks = [...document.querySelectorAll('.docs__toc a')];
   const baseTitle = document.title;
   // The heading's own text, without any badge inside it ("Contracts", not "ContractsExperimental").
   const titleOf = (section) => section.querySelector('h2').firstChild.textContent.trim();
@@ -19,6 +18,9 @@ export function setupDocsPages() {
   pager.setAttribute('aria-label', 'Documentation pages');
   article.append(pager);
   article.classList.add('docs__article--paged');
+  // With JavaScript the stylesheet hides the index beside the article and centres the article on
+  // its own: the Documentation outline in the header and the pager move between the sections.
+  article.parentElement?.classList.add('docs--paged');
 
   function pagerLink(section, label, className) {
     const link = document.createElement('a');
@@ -36,7 +38,12 @@ export function setupDocsPages() {
     sections.forEach((section, i) => { section.hidden = i !== index; });
     for (const element of intro) element.hidden = index !== 0;
 
-    for (const link of tocLinks) {
+    // Every link that points at one of these sections — the index beside the article and the
+    // Documentation outline in the header — marks the section being read. The outline is built
+    // after the page loads, so the links are looked up again on every change.
+    const ids = sections.map((section) => `#${section.id}`);
+    for (const link of document.querySelectorAll('a[href]')) {
+      if (!ids.includes(link.hash)) continue;
       if (link.hash === `#${sections[index].id}`) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     }

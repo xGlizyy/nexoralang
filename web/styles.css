@@ -565,6 +565,12 @@ code { font-family: var(--mono); font-size: 0.9em; }
 .nav-menu__list strong { font-size: 0.95rem; font-weight: 500; }
 .nav-menu__list small { color: var(--muted); font-size: 0.84rem; line-height: 1.4; }
 
+/* The section being read stays marked in the outline (docs-pages.js sets aria-current). */
+.nav-menu__list a[aria-current] { background: var(--accent-soft); }
+.nav-menu__list a[aria-current]::before { background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.nav-menu__list a[aria-current] strong { color: var(--text); }
+.nav-menu__list li:has(a[aria-current])::after { border-top-color: var(--accent); }
+
 /* The language guide sits under the documentation tree, its sections laid out in rows of three. */
 .nav-menu__tree + .nav-menu__tree { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
 .nav-menu__list--grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-left: 0; }
@@ -707,6 +713,68 @@ code { font-family: var(--mono); font-size: 0.9em; }
   );
   filter: blur(34px);
 }
+
+/* Platforms badge, bottom right of the first screen (the hero starts under the header), so it is
+   visible without scrolling; on a hero shorter than the screen it stays inside the hero.
+   Only Windows 11 has been tested: the others are dimmed. */
+
+.platforms {
+  position: absolute;
+  top: min(calc(100svh - var(--header) - 64px), calc(100% - 64px));
+  right: clamp(16px, 4vw, 56px);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px 7px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(3, 3, 8, 0.55);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.platforms__label {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.platforms__list {
+  display: flex;
+  gap: 12px;
+  padding: 0 0 0 12px;
+  border-left: 1px solid var(--line-strong);
+  list-style: none;
+}
+
+.platforms__item { position: relative; display: grid; color: var(--text); }
+.platforms__item svg { width: 16px; height: 16px; fill: currentColor; transition: opacity 0.2s; }
+.platforms__item.is-untested svg { opacity: 0.35; }
+.platforms__item.is-untested:hover svg { opacity: 0.7; }
+
+.platforms__item::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: -8px;
+  bottom: calc(100% + 12px);
+  padding: 5px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+}
+
+.platforms__item:hover::after { opacity: 1; transform: none; }
 
 /* Positioning statement under the hero */
 
@@ -1247,6 +1315,66 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
 .bullets li + li { margin-top: 8px; }
 .bullets li::before { content: ""; position: absolute; left: 2px; top: 0.72em; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 
+/* Two columns that set the project against what it is not. */
+.compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 24px;
+}
+
+.compare__col {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.compare__title {
+  margin-top: 0;
+  color: var(--faint);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.compare__col ul { margin-top: 16px; }
+.compare__col li { position: relative; padding-left: 22px; color: var(--muted); font-size: 0.95rem; }
+.compare__col li + li { margin-top: 10px; }
+.compare__col li::before { position: absolute; left: 0; top: 0; font-family: var(--mono); }
+.compare__col--not li::before { content: "\00d7"; color: var(--faint); }
+.compare__col--is li::before { content: "+"; color: var(--green); }
+
+/* The steps a program goes through, in order. */
+.pipeline { margin-top: 24px; border-top: 1px solid var(--line); counter-reset: step; }
+
+.pipeline > li {
+  position: relative;
+  padding: 18px 0 18px 50px;
+  border-bottom: 1px solid var(--line);
+  counter-increment: step;
+}
+
+.pipeline > li::before {
+  content: counter(step, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 18px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+}
+
+.pipeline strong { display: block; }
+.pipeline p { margin-top: 4px; font-size: 0.95rem; }
+
 /* FAQ: each question opens its answer in place. */
 .docs__article .faq__group {
   margin-top: 40px;
@@ -1299,11 +1427,11 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
 
 /* With JavaScript each section is a page of its own (docs-pages.js shows one at a time and adds the pager). */
 
-/* Sections are reached from the outline in the header, so the side index is only kept for the
-   no-JavaScript version, where the whole document is one long page. */
+/* The side index is hidden with the paging: the Documentation outline in the header and the pager
+   already move between the sections. It stays in the markup, which the header outline reads. */
 .js .docs { display: block; }
 .js .docs__toc { display: none; }
-.js .docs__article { margin-inline: auto; }
+.js .docs--paged .docs__article { margin-inline: auto; }
 
 /* The legal pages are not paged, so they keep their side index too. */
 .js .docs--legal { display: grid; }
@@ -2279,12 +2407,23 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
   .window__bar { flex-wrap: wrap; row-gap: 0; }
   .window__tab { min-height: 44px; }
   .window__flag { margin: 0 0 10px; }
+  /* The four install tabs share the bar, so none of them hides behind the copy button. */
+  .install__window .window__bar { gap: 8px; padding-inline: 10px; }
+  .install__window .window__tab { flex: 1 1 0; justify-content: center; padding: 0 3px; }
+  .install__window .window__tab-icon { margin-right: 5px; }
+  .install__window .copy { gap: 5px; padding: 5px 8px; }
   .status-list > div { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .compare { grid-template-columns: minmax(0, 1fr); }
   .actions .btn { flex: 1 1 auto; }
+  .platforms { position: static; width: fit-content; margin: -56px auto 40px; }
   .consent-banner { right: 10px; bottom: 10px; left: 10px; padding: 18px; }
   .consent-banner__actions,
   .consent-panel__actions { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
   .consent-panel { padding: 22px 18px; }
+}
+
+@media (max-width: 359px) {
+  .install__window .window__tab-icon { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
