@@ -47,11 +47,11 @@ export const roadmap = [
       'Contracts (`requires`, `ensures`), refined types and examples checked with `nex test`.',
       'Operations on text (`Text.length`, `Text.slice`, ordering) and reading numbers with `Int.parse`, each with the requirements it checks.',
       'Diagnostics with a stable code, a position and a hint, as text or JSON.',
-      'More than 1,300 automated tests.',
+      '1,604 automated tests. On Linux (Ubuntu 24.04 under WSL 2) all of them pass with Python 3.11, 3.12 and 3.13; on Windows 11 with Python 3.12, 1,600 pass and the 4 that need POSIX are skipped.',
     ],
     next: [
       'Measuring its speed: it has never been benchmarked.',
-      'Checking it on Linux and macOS: so far it is verified on Windows only.',
+      'Checking it on macOS and on Linux outside WSL: so far it is verified on Windows 11 and on Ubuntu 24.04 under WSL 2.',
     ],
   },
   {
@@ -72,16 +72,16 @@ export const roadmap = [
   },
   {
     title: 'Playground and ecosystem',
-    summary: 'The playground runs real programs; a public repository and published packages are still to come.',
+    summary: 'The playground can run real programs but is off by default; a public repository and published packages are still to come.',
     status: 'in-progress',
     available: [
-      'A playground that runs each program with the real interpreter, in a separate process with time and output limits.',
+      'A playground that runs each program with the real interpreter, in a separate process with time and output limits. It is off unless the server enables it explicitly.',
       'Accounts with an email address, and optionally Google or GitHub.',
     ],
     next: [
       'A public repository.',
       'Publishing the packages for npm and Python. The npm package is prepared but not published.',
-      'Stronger isolation for the playground, verified on Linux.',
+      'Checking the isolation of the playground containers with real Docker. Until then it stays off on a public site.',
     ],
   },
 ];

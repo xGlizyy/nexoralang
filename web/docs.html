@@ -138,7 +138,8 @@
               <li>Rules written in the code and checked by the interpreter: contracts (<code>requires</code>, <code>ensures</code>) and refined types (<code>type Percent = Int where ...</code>), loops that declare why they end (<code>decreases</code>) and what they keep (<code>invariant</code>), each with an optional explanation, and examples in functions (<code>example</code>) checked with <code>nex test</code>.</li>
               <li>Operations on text (<code>Text.length</code>, <code>Text.slice</code>, ordering) and reading numbers with <code>Int.parse</code> and <code>Float.parse</code>, each function stating the requirements it checks.</li>
               <li>A language specification for that subset, and a broader design draft.</li>
-              <li>A <a href="playground.html">playground</a> that runs code in the browser with that interpreter, and a short <a href="guide.html">language guide</a>.</li>
+              <li>A <a href="playground.html">playground</a> that runs code in the browser with that interpreter. It is off unless the server enables it explicitly, and it must stay off on a public site until the isolation of its containers has been checked.</li>
+              <li>A short <a href="guide.html">language guide</a>.</li>
               <li>This website and this first documentation page.</li>
             </ul>
           </dd>

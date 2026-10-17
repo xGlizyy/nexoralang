@@ -105,7 +105,8 @@ NEXORA 0.6.0
 El comando `nex` queda instalado dentro del entorno virtual, no en todo el sistema: solo está
 disponible con el entorno activado. `python -m nexora` hace lo mismo que `nex`.
 
-Comprobado en Windows 11 con Python 3.12. Linux y macOS no se han probado todavía. Guía completa,
+Comprobado en Windows 11 con Python 3.12 y en Linux (Ubuntu 24.04 sobre WSL 2) con Python 3.11, 3.12
+y 3.13. macOS no se ha probado todavía. Guía completa,
 alternativas y solución de problemas: [Instalación](docs/installation.md).
 
 ## Primer programa
