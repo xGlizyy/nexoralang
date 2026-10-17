@@ -1581,6 +1581,23 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
 .auth--compact .auth__foot { margin-top: 12px; font-size: 0.86rem; }
 .auth-page .auth--compact + .legal-foot { padding-block: 12px 16px; }
 
+/* Sign up on laptop screens (1366×768 and alike): the whole form, its button included, above the
+   fold. The art gives up some width, so the card is wider and its legal text takes fewer lines.
+   Log in is shorter and already fits. */
+@media (min-width: 881px) and (max-height: 820px) {
+  .auth--signup .auth__split { grid-template-columns: minmax(0, 320px) minmax(0, 520px); }
+  .auth--signup { padding-top: 6px; }
+  .auth--signup .auth__card { padding-block: 14px; }
+  .auth--signup .auth__legal { margin-top: 8px; line-height: 1.4; }
+  .auth--signup .auth__providers { margin-top: 12px; }
+  .auth--signup .auth__providers .btn { padding-block: 7px; }
+  .auth--signup .auth__divider { margin-top: 8px; }
+  .auth--signup .auth__card label { margin-top: 6px; }
+  .auth--signup .auth__card input { padding-block: 7px; }
+  .auth--signup .auth__card > .btn { margin-top: 12px; padding-block: 8px; }
+  .auth--signup .auth__foot { margin-top: 8px; }
+}
+
 @media (max-width: 880px) {
   .auth__split { grid-template-columns: minmax(0, 410px); }
   .auth__art { display: none; }
@@ -1722,6 +1739,11 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
   0% { box-shadow: 0 0 0 0 rgba(102, 217, 166, 0.55); }
   70%, 100% { box-shadow: 0 0 0 9px rgba(102, 217, 166, 0); }
 }
+
+/* Green only once the server says the playground is on (view.js sets data-state). Without
+   JavaScript nobody asks the server, so the pill is not shown at all. */
+.pg-head__status:not([data-state="live"]) .pg-head__live { background: var(--faint); animation: none; }
+:root:not(.js) .pg-head__status { display: none; }
 
 .pg-grid {
   display: grid;
@@ -2112,6 +2134,13 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
   .pg-actions .pg-btn { flex: 1 1 auto; justify-content: center; }
   .pg-examples .pg-examples__label { display: none; }
   .pg-foot { padding-inline: 16px; }
+}
+
+@media (max-width: 440px) {
+  /* The four buttons do not fit in one row: two rows of two, in the order they are read. */
+  .pg-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* The busy button says so itself ("Running", "Checking"); the spinner would take a whole cell. */
+  .pg-actions .pg-spinner { display: none; }
 }
 
 /* Language guide (guide.html) reuses the documentation layout. */

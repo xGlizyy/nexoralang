@@ -14,6 +14,7 @@ export const FALLBACK_EXAMPLE = Object.freeze({
 });
 
 export const CONNECTION_MESSAGE = 'Unable to reach the NEXORA runtime. Your code is still available in the editor.';
+export const DISABLED_MESSAGE = 'The playground is disabled on this server.';
 const STORAGE_KEY = 'nexora.playground.v1';
 const NOTICE_MS = 8000;
 
@@ -58,6 +59,10 @@ export function createController({
 }) {
   const state = {
     ready: false,
+    // Whether the server confirmed that the playground is on: true, false, or null if it could not
+    // be told (no answer, or one the page does not understand). Run and Check need true.
+    enabled: null,
+    disabled: false,          // enabled === false: the server says the playground is off
     code: '',
     filename: FALLBACK_EXAMPLE.filename,
     // The program the editor started from: what Reset goes back to.
@@ -124,7 +129,7 @@ export function createController({
   }
 
   async function execute(action) {
-    if (state.busy) return;
+    if (state.busy || state.enabled !== true) return;
     state.busy = action;
     state.notice = null;
     state.status = { tone: 'busy', text: action === 'run' ? 'Running…' : 'Checking…' };
@@ -153,8 +158,19 @@ export function createController({
       if (saved) state.code = saved.code;
       update();
 
-      const [examples, info] = await Promise.all([client.examples(), client.info()]);
-      if (examples.kind === 'data' && examples.data.examples.length > 0) {
+      // A server with the playground off says so first, and then nothing else is asked. If the
+      // answer is anything else (an older server, no connection), the page asks as it always did.
+      const status = await client.status();
+      state.enabled = status.kind === 'data' ? status.data.enabled : null;
+      const [examples, info] = state.enabled === false ? [null, null] : await Promise.all([client.examples(), client.info()]);
+      // Without an answer from /status, /info decides: a server answers it only with the playground
+      // on, and otherwise refuses it with playground_disabled. Nothing else confirms either way.
+      if (state.enabled === null) {
+        if (info.kind === 'data') state.enabled = true;
+        else if (info.kind === 'service' && info.code === 'playground_disabled') state.enabled = false;
+      }
+      state.disabled = state.enabled === false;
+      if (examples?.kind === 'data' && examples.data.examples.length > 0) {
         state.examples = examples.data.examples;
       } else {
         state.examples = [FALLBACK_EXAMPLE];
@@ -163,7 +179,9 @@ export function createController({
       state.filename = state.origin.filename;
       if (!saved) state.code = state.origin.code;
 
-      if (info.kind === 'data') {
+      if (state.disabled) {
+        state.status = { tone: 'service', text: DISABLED_MESSAGE };
+      } else if (info.kind === 'data') {
         state.info = info.data;
         if (!info.data.available) {
           state.status = { tone: 'service', text: 'The NEXORA runtime is not available on this server right now.' };

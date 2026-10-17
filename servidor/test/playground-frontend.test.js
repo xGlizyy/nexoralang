@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { createClient } from '../../web/js/playground/client.js';
-import { CONNECTION_MESSAGE, FALLBACK_EXAMPLE, createController, describe as describeOutcome } from '../../web/js/playground/controller.js';
+import { CONNECTION_MESSAGE, DISABLED_MESSAGE, FALLBACK_EXAMPLE, createController, describe as describeOutcome } from '../../web/js/playground/controller.js';
 import { FALLBACK_LANGUAGE, highlight } from '../../web/js/playground/syntax.js';
 import { offsetOf } from '../../web/js/playground/view.js';
 import { HELLO, inMain, SLOW, startServer } from './helpers.js';
@@ -153,6 +153,7 @@ describe('against the real server', () => {
 describe('editing, copying and resetting', () => {
   const example = (id, code) => ({ id, title: `Title ${id}`, description: `About ${id}.`, filename: `${id}.nex`, code });
   const client = {
+    status: async () => ({ kind: 'data', data: { enabled: true } }),
     examples: async () => ({ kind: 'data', data: { examples: [example('one', HELLO), example('two', 'fn main() -> Void {}\n')] } }),
     info: async () => ({ kind: 'data', data: { available: true, version: '9.9.9', language: FALLBACK_LANGUAGE, limits: {} } }),
     run: async () => ({ kind: 'connection' }),
@@ -250,18 +251,36 @@ describe('when the server cannot be reached or misbehaves', () => {
   const failingFetch = async () => { throw new TypeError('fetch failed'); };
   const respond = (status, body) => async () => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
 
-  test('connection errors keep the code and say what happened', async () => {
-    const { controller, state } = harness(createClient({ fetch: failingFetch }));
+  test('connection errors keep the code, say what happened and offer nothing to run', async () => {
+    let calls = 0;
+    const { controller, state } = harness(createClient({ fetch: async () => { calls += 1; return failingFetch(); } }));
     await controller.init();
     assert.equal(state.ready, true);
+    assert.equal(state.enabled, null, 'nothing confirmed that the playground is on');
     assert.equal(state.code, FALLBACK_EXAMPLE.code, 'a valid program is shown even without the server');
     assert.equal(state.status.text, CONNECTION_MESSAGE);
 
     controller.edit('// my work\n');
+    const asked = calls;
+    await controller.run();
+    await controller.check();
+    assert.equal(calls, asked, 'Run and Check send nothing to a server that was never confirmed');
+    assert.deepEqual([state.outcome, state.busy], [null, null]);
+    assert.equal(state.code, '// my work\n');
+  });
+
+  test('a connection lost after the playground was confirmed is reported on Run', async () => {
+    const client = {
+      status: async () => ({ kind: 'data', data: { enabled: true } }),
+      examples: async () => ({ kind: 'data', data: { examples: [FALLBACK_EXAMPLE] } }),
+      info: async () => ({ kind: 'data', data: { available: true, version: '0.6.0', language: null, limits: {} } }),
+      run: async () => ({ kind: 'connection' }),
+    };
+    const { controller, state } = harness(client);
+    await controller.init();
     await controller.run();
     assert.deepEqual(state.outcome, { kind: 'connection' });
     assert.deepEqual(state.status, { tone: 'service', text: CONNECTION_MESSAGE });
-    assert.equal(state.code, '// my work\n');
     assert.equal(state.busy, null);
   });
 
@@ -287,6 +306,7 @@ describe('when the server cannot be reached or misbehaves', () => {
 
   test('a server that reports the runtime as unavailable is announced on load', async () => {
     const client = {
+      status: async () => ({ kind: 'data', data: { enabled: true } }),
       examples: async () => ({ kind: 'data', data: { examples: [] } }),
       info: async () => ({ kind: 'data', data: { available: false, version: null, language: null, limits: {} } }),
     };
@@ -294,6 +314,97 @@ describe('when the server cannot be reached or misbehaves', () => {
     await controller.init();
     assert.equal(state.status.text, 'The NEXORA runtime is not available on this server right now.');
     assert.equal(state.code, FALLBACK_EXAMPLE.code);
+  });
+});
+
+describe('when the playground is disabled on the server', () => {
+  test('the page asks only /status, says it is disabled and sends nothing to run or check', async () => {
+    const server = await startServer({ enabled: false, workerCommand: ['this-executable-does-not-exist-nexora'] });
+    try {
+      const asked = [];
+      const client = createClient({ base: server.base, fetch: (url, options) => { asked.push(url.slice(server.base.length)); return fetch(url, options); } });
+      const { controller, state } = harness(client);
+      await controller.init();
+      assert.deepEqual(asked, ['/status']);
+      assert.deepEqual([state.ready, state.disabled, state.info], [true, true, null]);
+      assert.deepEqual(state.status, { tone: 'service', text: DISABLED_MESSAGE });
+      assert.equal(state.code, FALLBACK_EXAMPLE.code, 'the editor still shows a valid program');
+
+      await controller.run();
+      await controller.check();
+      assert.deepEqual(asked, ['/status'], 'Run and Check (also from the keyboard) send nothing');
+      assert.deepEqual([state.outcome, state.busy], [null, null]);
+      assert.deepEqual(server.logs, []);
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('the code kept in the browser is not lost on a disabled server', async () => {
+    const client = { status: async () => ({ kind: 'data', data: { enabled: false } }) };
+    const { controller, state } = harness(client, { saved: { code: '// my work\n', origin: 'hello' } });
+    await controller.init();
+    assert.equal(state.code, '// my work\n');
+    assert.equal(state.disabled, true);
+  });
+
+  // An older server, without /status: /info is what it answers only with the playground on.
+  const olderServer = (info) => {
+    const asked = [];
+    const client = {
+      status: async () => { asked.push('status'); return { kind: 'service', code: 'not_found', message: 'Route not found.' }; },
+      examples: async () => { asked.push('examples'); return { kind: 'data', data: { examples: [FALLBACK_EXAMPLE] } }; },
+      info: async () => { asked.push('info'); return info; },
+      run: async () => { asked.push('run'); return { kind: 'connection' }; },
+      check: async () => { asked.push('check'); return { kind: 'connection' }; },
+    };
+    return { client, asked };
+  };
+
+  test('on an older server, a valid /info confirms that the playground is on, as before', async () => {
+    const { client, asked } = olderServer({ kind: 'data', data: { available: true, version: '0.6.0', language: null, limits: {} } });
+    const { controller, state } = harness(client);
+    await controller.init();
+    assert.deepEqual(asked, ['status', 'examples', 'info']);
+    assert.deepEqual([state.enabled, state.disabled], [true, false]);
+    assert.equal(state.status.text, 'Nothing has been run yet.');
+    await controller.run();
+    assert.deepEqual(asked.slice(3), ['run']);
+  });
+
+  test('on an older server, a disabled playground is recognised from /info', async () => {
+    const { client, asked } = olderServer({ kind: 'service', code: 'playground_disabled', message: DISABLED_MESSAGE });
+    const { controller, state } = harness(client);
+    await controller.init();
+    assert.deepEqual([state.enabled, state.disabled], [false, true]);
+    assert.deepEqual(state.status, { tone: 'service', text: DISABLED_MESSAGE });
+    await controller.run();
+    await controller.check();
+    assert.deepEqual(asked, ['status', 'examples', 'info'], 'nothing is sent to run or check');
+  });
+
+  test('a status nobody confirms is unknown, never taken as on: nothing can run', async () => {
+    for (const [name, status, info] of [
+      ['no answer', { kind: 'connection' }, { kind: 'connection' }],
+      ['an answer it does not understand', { kind: 'service', code: 'unexpected_response', message: 'x' }, { kind: 'service', code: 'unexpected_response', message: 'x' }],
+      ['an error of the service', { kind: 'service', code: 'internal_error', message: 'x' }, { kind: 'service', code: 'busy', message: 'x' }],
+    ]) {
+      const sent = [];
+      const client = {
+        status: async () => status,
+        examples: async () => ({ kind: 'connection' }),
+        info: async () => info,
+        run: async () => { sent.push('run'); return { kind: 'connection' }; },
+        check: async () => { sent.push('check'); return { kind: 'connection' }; },
+      };
+      const { controller, state } = harness(client);
+      await controller.init();
+      assert.deepEqual([state.ready, state.enabled, state.disabled], [true, null, false], name);
+      await controller.run();
+      await controller.check();
+      assert.deepEqual(sent, [], name);
+      assert.equal(state.outcome, null, name);
+    }
   });
 });
 

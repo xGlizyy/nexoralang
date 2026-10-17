@@ -120,6 +120,16 @@ export function createPlaygroundRouter(config, { log = console.error } = {}) {
   router.use((req, res, next) => {
     res.set('Cache-Control', 'no-store');
     res.set('X-Content-Type-Options', 'nosniff');
+    next();
+  });
+
+  // Si el playground está activado. La página lo pregunta antes que nada: desactivado, no pide
+  // /info ni /examples y lo dice en vez de ofrecer Run y Check. No arranca el worker.
+  router.get('/status', (req, res) => {
+    res.json({ schema: RESULT_SCHEMA, status: 'success', enabled: config.enabled });
+  });
+
+  router.use((req, res, next) => {
     if (!config.enabled) {
       return next(new ApiError(503, 'playground_disabled', 'The playground is disabled on this server.'));
     }

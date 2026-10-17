@@ -410,7 +410,7 @@ fn main() -&gt; Void {
             <ul>
               <li>Interpreter: 1,600 tests passed, 4 skipped and 0 failed, on Windows 11 with Python 3.12.10 (15 October 2026).</li>
               <li>Interpreter on Linux (Ubuntu 24.04 under WSL 2): 1,604 tests passed, none skipped and 0 failed with Python 3.12.3, and the same with 3.11.17 and 3.13.16 (17 October 2026). That includes the 4 POSIX tests that Windows skips: a file without read permission, and the memory, CPU and time limits of the playground process.</li>
-              <li>Web server, in the development version: 567 automated tests passed, none skipped and 0 failed in each of three runs on Windows 11 with Node 24.21.0, and in each of three runs on Linux (Ubuntu 24.04 under WSL 2) with Node 24.11.1 (17 October 2026). The tests of the container command only analyse its arguments, and the container lifecycle tests use a fake Docker: no real container was run. The database, Google reCAPTCHA and the browser are simulated too.</li>
+              <li>Web server, in the development version: 575 automated tests passed, none skipped and 0 failed in each of three runs on Windows 11 with Node 24.21.0 (17 October 2026). Those 575 have not been run on Linux yet. An earlier state of that version, with 567 tests, passed in each of three runs on Windows 11 and on Linux (Ubuntu 24.04 under WSL 2) with Node 24.11.1, the same day. The tests of the container command only analyse its arguments, and the container lifecycle tests use a fake Docker: no real container was run. The database, Google reCAPTCHA and the browser are simulated too.</li>
             </ul>
           </dd>
         </div>

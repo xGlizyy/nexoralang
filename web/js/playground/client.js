@@ -65,6 +65,7 @@ export function createClient({ fetch: fetchImpl = globalThis.fetch.bind(globalTh
   return {
     run: (code, filename) => execute('run', code, filename),
     check: (code, filename) => execute('check', code, filename),
+    status: () => read('/status', (body) => typeof body.enabled === 'boolean'),
     info: () => read('/info', (body) => typeof body.available === 'boolean' && typeof body.limits === 'object'),
     examples: () => read('/examples', (body) => Array.isArray(body.examples)
       && body.examples.every((example) => typeof example.code === 'string' && typeof example.id === 'string')),

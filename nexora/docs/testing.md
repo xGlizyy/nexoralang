@@ -97,21 +97,46 @@ anterior de ese mismo día, 522 superadas, solo en Windows, corresponde a un est
 | `a160829` sin los cambios sin commit | 492 superadas, 0 fallos (una ejecución) | No se ejecutó |
 | `a160829` con los cambios sin commit (auditoría) | **565 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | **565 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones |
 | El mismo árbol tras las correcciones de la auditoría | **567 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | **567 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones |
+| `dce6061` con las correcciones de la revisión visual, sin commit | **575 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
 
 En Linux se usó una copia nueva del árbol de trabajo, comprobada archivo por archivo con SHA-256, con
-las dependencias instaladas con `npm ci` y el intérprete de `nexora/.venv` (Python 3.12.3). La
-última fila se ejecutó antes de añadir este apartado: esa copia solo difiere del árbol en este archivo.
+las dependencias instaladas con `npm ci` y el intérprete de `nexora/.venv` (Python 3.12.3). La fila
+de 567 se ejecutó en Linux antes de añadir este apartado: esa copia solo difería del árbol en este
+archivo.
+
+Las ocho pruebas nuevas de la última fila cubren `GET /api/playground/status` con el playground
+activado y desactivado (sin arrancar el worker); que la página desactivada solo pregunta `/status`,
+no envía nada al pulsar Run o Check y conserva el código guardado; que Run y Check no envían nada
+mientras el servidor no confirme que el playground está activado (sin respuesta, con una respuesta
+que no entiende o con un error del servicio); que en un servidor anterior sin `/status` decide
+`/info`, como antes; que una conexión perdida después se sigue avisando al pulsar Run; y que las
+páginas legales en borrador llevan `noindex`.
 
 Son pruebas automatizadas: la base de datos MySQL, las respuestas de Google reCAPTCHA y el navegador
 están simulados (el gestor de consentimiento y los formularios se ejecutan en un DOM mínimo,
 `servidor/test/fixtures/mini-dom.js`). **Siguen pendientes las comprobaciones reales**: contra un
-MySQL real, con claves reales de reCAPTCHA, en un navegador, detrás de nginx y con las cabeceras del
-servidor de producción. Tampoco se ejecutó Docker.
+MySQL real, con claves reales de reCAPTCHA, en un navegador con esos servicios reales, detrás de
+nginx y con las cabeceras del servidor de producción. Tampoco se ejecutó Docker. La web sí se revisó
+a mano en el navegador, sin esos servicios ([Revisión visual de la web](#revisión-visual-de-la-web)).
 
 La cobertura bajó respecto a la medición anterior (99,56 %) porque dos módulos nuevos se prueban
 lanzándolos como procesos aparte, que la medición no sigue: `worker.py` y `mcp_server.py`.
 
 Estas cifras son una fotografía de ese día. Para conocer las actuales, ejecuta los comandos.
+
+### Revisión visual de la web
+
+El 17 de octubre de 2026 se revisó la web en Chrome (escritorio, 1912×948) y en Microsoft Edge 155
+sin interfaz, controlado por CDP, a 320×640, 360×740, 390×844, 820×1180, 1366×768 y 1440×900. El
+servidor de prueba arrancó sin `servidor/.env` y con la base de datos en un puerto cerrado, para que
+no pudiera leer ni escribir en MySQL (al arrancar borra las sesiones caducadas), con el playground
+desactivado. Tras las correcciones se repitió a 320×640, 360×740, 390×844 y 1366×768: ninguna
+página se desborda en horizontal, los controles del playground, del registro y del inicio de sesión
+se ven enteros al recorrerlos con Tab, y el registro cabe en 1366×768.
+
+**No se comprobó**: el playground activado en el navegador (sí en las pruebas automatizadas), los
+mensajes reales de inicio de sesión y de registro, que necesitan la base de datos, Firefox, Safari,
+lectores de pantalla ni reCAPTCHA con claves reales.
 
 ### Cobertura por componente
 

@@ -77,10 +77,11 @@ describe('PLAYGROUND_ENABLED', () => {
 });
 
 describe('the API with the real configuration', () => {
-  test('without PLAYGROUND_ENABLED, every route answers 503 and no worker starts', async () => {
+  test('without PLAYGROUND_ENABLED, /status says so, every other route answers 503 and no worker starts', async () => {
     await withEnabled(undefined, async () => {
       const server = await serve(loadPlaygroundConfig());
       try {
+        assert.equal((await server.call('/status')).json.enabled, false);
         for (const [route, body] of [['/info'], ['/examples'], ['/check', { code: HELLO }], ['/run', { code: HELLO }]]) {
           const response = await server.call(route, body);
           assert.equal(response.status, 503, route);
@@ -98,6 +99,7 @@ describe('the API with the real configuration', () => {
     await withEnabled('true', async () => {
       const server = await serve(loadPlaygroundConfig());
       try {
+        assert.equal((await server.call('/status')).json.enabled, true);
         const info = await server.call('/info');
         assert.equal(info.status, 200);
         assert.equal(info.json.available, true);

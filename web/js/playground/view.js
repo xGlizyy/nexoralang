@@ -45,6 +45,7 @@ export function mountView(root, controller, { githubUrl = null } = {}) {
   let shownCode = null;
   let shownExamples = null;
   let shownOutcome = null;
+  let shownMode = null;
   let shownLanguage = null;
   let escapePressed = false;
 
@@ -204,18 +205,28 @@ export function mountView(root, controller, { githubUrl = null } = {}) {
     return item;
   }
 
+  // Once loaded, nothing can be run unless the server confirmed that the playground is on.
+  const modeOf = (state) => (!state.ready ? 'loading' : state.disabled ? 'disabled' : state.enabled === true ? 'on' : 'unknown');
+
   function renderResults(state) {
     const result = state.outcome?.kind === 'result' ? state.outcome.result : null;
     const diagnostics = result?.diagnostics ?? [];
 
-    if (state.outcome !== shownOutcome) {
+    const mode = modeOf(state);
+    if (state.outcome !== shownOutcome || mode !== shownMode) {
       const ran = result !== null && result.action === 'run' && result.status !== 'invalid';
       const empty = find('[data-output-empty]');
       output.hidden = !(ran && result.output !== '');
       // Program output is text. textContent never interprets it as markup.
       output.textContent = ran ? result.output : '';
       empty.hidden = !output.hidden;
-      if (state.outcome === null) {
+      if (mode === 'loading') {
+        empty.textContent = 'Waiting for the server: Run is not available yet.';
+      } else if (mode === 'disabled') {
+        empty.textContent = 'Programs cannot be run here: the playground is disabled on this server.';
+      } else if (mode === 'unknown') {
+        empty.textContent = 'Programs cannot be run: the server did not confirm that the playground is on. Reload the page to try again.';
+      } else if (state.outcome === null) {
         empty.textContent = 'Nothing has been run yet. Press Run to execute the program.';
       } else if (result === null) {
         empty.textContent = 'There is no output: the request did not reach the interpreter.';
@@ -230,10 +241,19 @@ export function mountView(root, controller, { githubUrl = null } = {}) {
       diagnosticsList.replaceChildren(...diagnostics.map(diagnosticItem));
       const none = find('[data-diagnostics-empty]');
       none.hidden = diagnostics.length > 0;
-      none.textContent = result === null
-        ? 'No diagnostics yet. Press Check to analyse the program without running it.'
-        : 'No diagnostics: the interpreter found no problems.';
+      if (mode === 'loading') {
+        none.textContent = 'Waiting for the server: Check is not available yet.';
+      } else if (mode === 'disabled') {
+        none.textContent = 'Programs cannot be checked here: the playground is disabled on this server.';
+      } else if (mode === 'unknown') {
+        none.textContent = 'Programs cannot be checked: the server did not confirm that the playground is on.';
+      } else {
+        none.textContent = result === null
+          ? 'No diagnostics yet. Press Check to analyse the program without running it.'
+          : 'No diagnostics: the interpreter found no problems.';
+      }
       shownOutcome = state.outcome;
+      shownMode = mode;
     }
 
     const count = find('[data-count]');
@@ -251,10 +271,12 @@ export function mountView(root, controller, { githubUrl = null } = {}) {
 
   function renderChrome(state) {
     const busy = state.busy !== null;
+    const mode = modeOf(state);
     const run = find('[data-run]');
     const check = find('[data-check]');
-    run.disabled = busy || !state.ready;
-    check.disabled = busy || !state.ready;
+    // Only a server that confirmed the playground is on gets Run and Check, never one assumed to be.
+    run.disabled = busy || !state.ready || state.enabled !== true;
+    check.disabled = busy || !state.ready || state.enabled !== true;
     find('[data-reset]').disabled = busy;
     examples.disabled = busy;
     run.classList.toggle('is-loading', state.busy === 'run');
@@ -272,6 +294,33 @@ export function mountView(root, controller, { githubUrl = null } = {}) {
     notice.hidden = state.notice === null;
     find('[data-notice-text]').textContent = state.notice?.text ?? '';
     find('[data-undo]').hidden = !state.notice?.undo;
+
+    // The pill in the header is green only when the server confirmed that the playground is on and
+    // its interpreter answered. Anything not confirmed is grey, with what is known about it.
+    const runtime = find('[data-runtime]');
+    let pill = 'unknown';
+    if (!state.ready) pill = 'pending';
+    else if (state.disabled) pill = 'disabled';
+    else if (state.enabled === true && state.info?.available === true) pill = 'live';
+    runtime.dataset.state = pill;
+    find('[data-runtime-label]').textContent = {
+      pending: 'Connecting…',
+      disabled: 'Disabled',
+      live: 'Real interpreter',
+      unknown: state.enabled === true ? 'Unavailable' : 'Status unknown',
+    }[pill];
+    // The shortcuts are offered only when they work; disabled, not even the footer says that code
+    // runs on the server.
+    const shortcutsOff = find('[data-shortcuts-off]');
+    find('[data-shortcuts]').hidden = mode !== 'on';
+    shortcutsOff.hidden = mode === 'on';
+    shortcutsOff.textContent = {
+      loading: 'Waiting for the server…',
+      disabled: 'Run and Check are off on this server',
+      unknown: 'Run and Check are not available right now',
+    }[mode] ?? '';
+    find('[data-runs-note]').hidden = mode === 'disabled';
+    find('[data-runs-off]').hidden = mode !== 'disabled';
 
     const version = find('[data-version]');
     version.hidden = !state.info?.version;

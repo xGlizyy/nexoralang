@@ -135,6 +135,18 @@ describe('links between the pages of the site', () => {
     }
   });
 
+  // While a legal page is a draft, it asks search engines not to index it or follow its links. That
+  // is a request, not access control: anyone with the address can still open it.
+  test('the legal drafts ask search engines not to index them', () => {
+    const NOINDEX = /<meta name="robots" content="noindex, nofollow">/;
+    for (const page of ['aviso-legal.html', 'privacidad.html', 'cookies.html', 'terminos.html']) {
+      const html = read(page);
+      if (html.includes('Borrador pendiente de completar y de revisión jurídica')) {
+        assert.match(html, NOINDEX, `${page} is a draft and can be indexed`);
+      }
+    }
+  });
+
   test('the playground page loads no script or style from outside the site, and has none inline', () => {
     for (const page of ['playground.html', 'guide.html']) {
       const html = read(page);

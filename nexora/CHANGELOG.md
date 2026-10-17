@@ -52,6 +52,12 @@ a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no 
   de Google Fonts, y todo el sitio usa JetBrains Mono; un gestor de consentimiento de cookies con
   Google Consent Mode v2; las páginas legales, todavía en borrador (ver Limitaciones); y una
   documentación web ampliada: qué es NEXORA, cómo se prueba y los cambios recientes.
+- `GET /api/playground/status` dice si el playground está activado (`{"enabled": true}` o `false`).
+  Responde también con el playground desactivado y no arranca el worker. La página lo pregunta
+  primero: desactivado, no pide `/info` ni `/examples`.
+- Las páginas legales llevan `<meta name="robots" content="noindex, nofollow">` mientras sean un
+  borrador, y una prueba lo exige. Solo pide a los buscadores que no las indexen: no impide abrirlas
+  a quien tenga el enlace.
 
 ### Cambios incompatibles
 
@@ -118,6 +124,19 @@ a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no 
   contenedor tiene un nombre generado por el servidor; si no termina bien, se elimina por ese
   nombre y el hueco solo se libera cuando se confirma que ya no existe. Los intentos de eliminarlo
   están limitados; si ninguno confirma, el hueco queda ocupado.
+- **El botón Run del playground vuelve a verse en móvil.** A 390 px quedaba cortado y a 320 y 360 px
+  no se veía; solo quedaba el atajo Ctrl+Enter. Por debajo de 440 px los cuatro botones van ahora en
+  dos filas.
+- **Con el playground desactivado, la página ya no parece lista para ejecutar.** Antes mostraba
+  «Real interpreter» con un punto verde y Run y Check activos, y cada carga recibía dos respuestas
+  503. Ahora dice «Disabled», Run y Check están desactivados (también sus atajos), la ayuda y el pie
+  no dicen que el código se ejecuta, y no envía ninguna petición de ejecución. Mientras espera la
+  respuesta del servidor dice «Connecting…». Si el servidor no confirma si está activado (no
+  responde o responde algo que la página no entiende), dice «Status unknown» y tampoco deja ejecutar:
+  Run y Check solo se activan cuando el servidor lo confirma. «Real interpreter» en verde solo
+  aparece si además el intérprete respondió; si no, «Unavailable». Activado, se comporta como antes.
+- El formulario de registro cabe entero, botón incluido, en una pantalla de 1366×768. El inicio de
+  sesión ya cabía y no cambia.
 
 ### Documentación
 
@@ -152,10 +171,10 @@ a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no 
   servidor solo pasa `PATH` y `SystemRoot` a las órdenes que lanza.
 - El antispam, el freno del inicio de sesión, el borrado de sesiones y las cabeceras se han probado
   con la base de datos, Google reCAPTCHA y el navegador simulados: no contra un MySQL real, con claves
-  reales de reCAPTCHA, en un navegador ni detrás de nginx. Las pruebas automatizadas del servidor
-  con estos cambios (567 superadas, 0 fallos, en cada una de tres ejecuciones por sistema) se han
-  ejecutado en Windows 11 y en Ubuntu 24.04 en WSL 2, con esos mismos servicios simulados
-  ([Pruebas](docs/testing.md)).
+  reales de reCAPTCHA, en un navegador ni detrás de nginx. Las pruebas automatizadas del servidor,
+  con esos mismos servicios simulados, dan 575 superadas y 0 fallos en cada una de tres ejecuciones
+  en Windows 11; en Ubuntu 24.04 en WSL 2 se ejecutaron antes de las últimas correcciones de la web
+  (567 superadas, 0 fallos, en cada una de tres ejecuciones) ([Pruebas](docs/testing.md)).
 - Los contadores de los límites y del freno del inicio de sesión están en memoria: se pierden al
   reiniciar y no se comparten entre varias instancias del servidor.
 - Las páginas legales son un borrador sin los datos del titular ni revisión jurídica: no deben

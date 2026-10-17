@@ -91,9 +91,9 @@
         <p>Write, check and run NEXORA code in your browser.</p>
       </div>
     </div>
-    <p class="pg-head__status">
+    <p class="pg-head__status" data-runtime data-state="pending">
       <span class="pg-head__live" aria-hidden="true"></span>
-      Real interpreter
+      <span data-runtime-label>Connecting…</span>
       <span class="pg-head__version" data-version hidden></span>
     </p>
   </div>
@@ -122,7 +122,8 @@
 
       <div class="pg-toolbar">
         <p class="pg-help" id="editor-help">
-          <kbd>Ctrl</kbd> <kbd>Enter</kbd> run <span aria-hidden="true">·</span> <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Enter</kbd> check
+          <span data-shortcuts><kbd>Ctrl</kbd> <kbd>Enter</kbd> run <span aria-hidden="true">·</span> <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Enter</kbd> check</span>
+          <span data-shortcuts-off hidden>Run and Check are off on this server</span>
           <span class="pg-help__more">. Tab indents; press Esc and then Tab to leave the editor.</span>
         </p>
         <div class="pg-actions">
@@ -177,7 +178,8 @@
   <p class="pg-foot__note">
     NEXORA is in early development. The syntax may change, and some things are not implemented yet:
     see the <a href="guide.html#limitations">current limitations</a>.
-    Code runs on the server with the real NEXORA interpreter<span data-limits></span>. It is not stored.
+    <span data-runs-note>Code runs on the server with the real NEXORA interpreter<span data-limits></span>. It is not stored.</span>
+    <span data-runs-off hidden>The playground is disabled on this server, so code is not run here.</span>
   </p>
   <nav class="pg-foot__links" aria-label="Learn the language">
     <a href="guide.html#introduction">Introduction</a>

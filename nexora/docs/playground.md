@@ -79,8 +79,12 @@ Todas las rutas están bajo `/api/playground`. Las respuestas son siempre JSON.
 |------|--------|---------|
 | `/check` | `POST` | Analiza el programa **sin ejecutarlo** |
 | `/run` | `POST` | Analiza el programa y, si no tiene errores, lo ejecuta |
+| `/status` | `GET` | Si el playground está activado (`{"enabled": true}` o `false`). Responde siempre, también desactivado, y no arranca el worker |
 | `/info` | `GET` | Versión del lenguaje, palabras del lenguaje y límites del servicio |
 | `/examples` | `GET` | Los programas de ejemplo |
+
+La página pregunta primero `/status`. Con el playground desactivado no pide `/info` ni `/examples`:
+muestra «Disabled» y deja Run y Check desactivados.
 
 ### Petición
 
@@ -273,8 +277,8 @@ npm start
 
 El playground solo se activa con `PLAYGROUND_ENABLED=true`. `.env.example` lo deja desactivado
 (`PLAYGROUND_ENABLED=false`), y también queda desactivado si la variable no está definida o está
-vacía: la API responde 503 (`playground_disabled`). Cualquier otro valor (`True`, `1`…) impide
-arrancar el servidor. **Una instalación local que ya tenga su `servidor/.env` y quiera usar el
+vacía: la API responde 503 (`playground_disabled`) en todas las rutas salvo `/status`. Cualquier
+otro valor (`True`, `1`…) impide arrancar el servidor. **Una instalación local que ya tenga su `servidor/.env` y quiera usar el
 playground tiene que añadir `PLAYGROUND_ENABLED=true` de forma explícita**: antes bastaba con no
 definirla. Escríbela en tu `servidor/.env` y reinicia el servidor. Úsalo solo para pruebas locales
 controladas: el servidor escucha en todas las interfaces del equipo, así que, si tu cortafuegos deja
@@ -309,7 +313,7 @@ cd servidor && npm test
 | `nexora/tests/test_worker.py` | El proceso worker: protocolo, peticiones malformadas, modo aislado. Los límites del sistema operativo solo se ejecutan en Linux y macOS |
 | `servidor/test/playground-api.test.js` | La API por HTTP contra el intérprete real: validación, códigos HTTP, esquema, límites, tiempo agotado, concurrencia, fallos del worker, entorno del worker, orígenes, y paridad con la línea de comandos |
 | `servidor/test/playground-containers.test.js` | El ciclo de vida de los contenedores con un Docker falso (`test/fixtures/fake-docker.js`), sin Docker: nombre único por petición, eliminación y confirmación tras tiempo agotado, respuesta excesiva o error, hueco ocupado hasta confirmar, intentos limitados, ningún intento si la herramienta no arranca, y el [formato de la orden de contenedor](#formato-de-la-orden-de-contenedor): la orden documentada en `.env.example`, esta guía y el `Dockerfile`, opciones ausentes, repetidas, con otro valor o desconocidas, y elementos después de la imagen |
-| `servidor/test/playground-config.test.js` | La activación con la configuración real: desactivado sin `PLAYGROUND_ENABLED`, vacía o `false`; activado solo con `true`; error al arrancar con cualquier otro valor; 503 en todas las rutas sin arrancar el worker, y un programa real con `true` |
+| `servidor/test/playground-config.test.js` | La activación con la configuración real: desactivado sin `PLAYGROUND_ENABLED`, vacía o `false`; activado solo con `true`; error al arrancar con cualquier otro valor; `/status` y 503 en las demás rutas sin arrancar el worker, y un programa real con `true` |
 | `servidor/test/playground-frontend.test.js` | La lógica de la página (cliente, estado, resaltado) contra un servidor real y con fallos simulados |
 | `servidor/test/web-guide.test.js` | Los ejemplos de la guía web y los enlaces entre páginas |
 

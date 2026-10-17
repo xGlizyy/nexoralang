@@ -327,10 +327,26 @@ describe('when the runtime fails', () => {
     }
   });
 
-  test('a disabled playground refuses every request', async () => {
+  test('an enabled playground says so on /status without starting the worker', async () => {
+    const server = await startServer({ workerCommand: ['this-executable-does-not-exist-nexora'] });
+    try {
+      const status = await server.call('/status');
+      assert.equal(status.status, 200);
+      assert.equal(status.json.enabled, true);
+      assert.deepEqual(server.logs, []);
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('a disabled playground says so on /status and refuses every other request', async () => {
     // Con una orden que no existe, cualquier intento de arrancar el worker quedaría en el registro.
     const server = await startServer({ enabled: false, workerCommand: ['this-executable-does-not-exist-nexora'] });
     try {
+      const status = await server.call('/status');
+      assert.equal(status.status, 200);
+      assert.deepEqual(status.json, { schema: 'nexora.result/1', status: 'success', enabled: false });
+      assert.equal(status.headers.get('cache-control'), 'no-store');
       assertError(await server.call('/info'), 503, 'playground_disabled');
       assertError(await server.call('/examples'), 503, 'playground_disabled');
       assertError(await server.check(HELLO), 503, 'playground_disabled');
