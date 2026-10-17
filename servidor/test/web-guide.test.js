@@ -54,7 +54,10 @@ describe('language guide', () => {
 });
 
 describe('links between the pages of the site', () => {
-  const pages = ['index.html', 'docs.html', 'playground.html', 'guide.html'];
+  const pages = [
+    'index.html', 'docs.html', 'playground.html', 'guide.html', 'login.html', 'signup.html',
+    'aviso-legal.html', 'privacidad.html', 'cookies.html', 'terminos.html',
+  ];
 
   for (const page of pages) {
     test(`${page}: every local link points to a page and an anchor that exist`, () => {
@@ -80,6 +83,34 @@ describe('links between the pages of the site', () => {
   test('the home page and the documentation lead to the playground', () => {
     assert.ok(read('index.html').includes('href="playground.html"'));
     assert.ok(read('docs.html').includes('href="playground.html"'));
+  });
+
+  test('every page links to the legal pages and can reopen the cookie preferences', () => {
+    for (const page of pages) {
+      const html = read(page);
+      for (const legal of ['aviso-legal.html', 'privacidad.html', 'cookies.html', 'terminos.html']) {
+        assert.ok(html.includes(`href="${legal}"`), `${page} does not link to ${legal}`);
+      }
+      assert.ok(html.includes('data-consent-open'), `${page} has no way to reopen the cookie preferences`);
+      // The consent manager runs first, before any other script of the page.
+      const scripts = [...html.matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map(([, src]) => src);
+      assert.deepEqual(scripts.slice(0, 2), ['js/consent-config.js', 'js/consent.js'], page);
+    }
+  });
+
+  // Data the owner still has to provide ([NIF O CIF], [DOMINIO]…) may only appear in the legal pages,
+  // which say at the top that they are a draft; never in a page that presents itself as finished.
+  test('only the legal drafts show data still to be provided, and they say they are drafts', () => {
+    const PENDING = /class="placeholder"|\[[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]{2,}\]/;
+    const drafts = ['aviso-legal.html', 'privacidad.html', 'cookies.html', 'terminos.html'];
+    for (const page of pages) {
+      const html = read(page);
+      if (!drafts.includes(page)) {
+        assert.doesNotMatch(html, PENDING, `${page} shows data still to be provided`);
+      } else if (PENDING.test(html)) {
+        assert.ok(html.includes('Borrador pendiente de completar y de revisión jurídica'), `${page} does not say it is a draft`);
+      }
+    }
   });
 
   test('the playground page loads no script or style from outside the site, and has none inline', () => {

@@ -1133,6 +1133,28 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
   font-size: 0.86rem;
 }
 
+/* Legal links: in the footer of every page, with the button that reopens the cookie preferences. */
+
+.legal-links { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.legal-links a,
+.legal-links button { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.legal-links a:hover,
+.legal-links button:hover { color: var(--text); }
+.legal-links [aria-current="page"] { color: var(--text); }
+
+.pg-foot .pg-foot__legal { flex: 1 1 100%; }
+.pg-foot .pg-foot__legal a { text-decoration: none; }
+
+.auth-page .legal-foot { padding-top: 18px; text-align: center; }
+.auth-page .legal-links { justify-content: center; }
+
+.legal-foot {
+  padding: 24px 0 32px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 0.86rem;
+}
+
 /* Documentation page */
 
 .docs { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 72px; padding-block: 72px 112px; }
@@ -1283,6 +1305,11 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
 .js .docs__toc { display: none; }
 .js .docs__article { margin-inline: auto; }
 
+/* The legal pages are not paged, so they keep their side index too. */
+.js .docs--legal { display: grid; }
+.js .docs--legal .docs__toc { display: block; }
+.js .docs--legal .docs__article { margin-inline: 0; }
+
 .docs__article--paged > section { margin-top: 0; }
 .docs__article--paged > .callout + section { margin-top: 72px; }
 .docs__article--paged > section:not(:first-of-type) > h2 { font-size: clamp(2rem, 4.2vw, 2.8rem); letter-spacing: -0.035em; }
@@ -1336,6 +1363,104 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
 }
 
 .auth__card h1 { font-size: 1.7rem; }
+
+/* Back button in the header of the account pages (auth.js returns to the previous page of the site). */
+.site-header__back { grid-column: 3; justify-self: end; gap: 8px; padding: 8px 18px 8px 14px; font-size: 0.9rem; }
+.site-header__back:hover { border-color: #6a6a80; }
+.site-header__back svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.18s; }
+.site-header__back:hover svg { transform: translateX(-3px); }
+
+/* Log in: the NEXORA mark draws itself in a panel the same size as the form. */
+
+.auth__split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 410px));
+  gap: 24px;
+  justify-content: center;
+  width: 100%;
+}
+
+.auth__split .auth__card { max-width: none; }
+
+.auth__art { display: grid; place-items: center; }
+
+.auth__logo { width: 100%; overflow: visible; }
+
+.auth__logo path { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+
+.auth__logo-outline,
+.auth__logo-inner,
+.auth__logo-guide {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: logo-draw 1.6s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+.auth__logo-outline { stroke: var(--accent); stroke-width: 0.4; filter: drop-shadow(0 0 0.6px rgba(139, 117, 255, 0.9)); }
+/* Dashed, so they cannot be drawn with the dash offset: they fade in once the outline is drawn. */
+.auth__logo .auth__logo-guide {
+  stroke: rgba(181, 166, 255, 0.35);
+  stroke-width: 0.12;
+  stroke-dasharray: 0.04 0.02;
+  stroke-dashoffset: 0;
+  opacity: 0;
+  animation: logo-fade 0.8s ease-out 1.1s forwards;
+}
+.auth__logo-inner { stroke: #b5a6ff; stroke-width: 0.22; animation-duration: 0.9s; animation-delay: 1.5s; }
+
+.auth__logo .auth__logo-core {
+  fill: var(--accent);
+  stroke: none;
+  opacity: 0;
+  transform: scale(0.4);
+  transform-origin: 12px 12px;
+  animation: logo-core 0.7s cubic-bezier(0.22, 1, 0.36, 1) 2.2s forwards;
+}
+
+/* A short bright stroke keeps running along the outline once the mark is drawn. */
+.auth__logo-trace {
+  stroke: #fff;
+  stroke-width: 0.4;
+  stroke-dasharray: 0.1 0.9;
+  opacity: 0;
+  filter: drop-shadow(0 0 0.8px #b5a6ff);
+  animation: logo-trace 3.2s linear 2.6s infinite;
+}
+
+@keyframes logo-draw { to { stroke-dashoffset: 0; } }
+@keyframes logo-fade { to { opacity: 1; } }
+@keyframes logo-core { to { opacity: 1; transform: scale(1); } }
+@keyframes logo-trace {
+  0% { stroke-dashoffset: 1; opacity: 0.9; }
+  100% { stroke-dashoffset: 0; opacity: 0.9; }
+}
+
+/* Sign up has more fields than Log in: tighter spacing keeps the whole page in one screen. */
+.auth--compact { padding: 12px 24px 20px; }
+.auth--compact .auth__card { padding: 20px 28px; }
+.auth--compact .auth__captcha { margin-top: 8px; font-size: 0.74rem; }
+.auth--compact .auth__card h1 { font-size: 1.45rem; }
+.auth--compact .auth__lead { margin-top: 4px; font-size: 0.9rem; }
+.auth--compact .auth__legal { margin-top: 10px; font-size: 0.74rem; line-height: 1.5; }
+.auth--compact .auth__providers { gap: 8px; margin-top: 16px; }
+.auth--compact .auth__providers .btn { padding-block: 9px; font-size: 0.92rem; }
+.auth--compact .auth__divider { margin-top: 12px; }
+.auth--compact .auth__card label { margin-top: 10px; font-size: 0.84rem; }
+.auth--compact .auth__divider + label { margin-top: 6px; }
+.auth--compact .auth__card input { margin-top: 6px; padding: 8px 12px; }
+.auth--compact .auth__help { margin-top: 4px; font-size: 0.78rem; }
+.auth--compact .auth__card > .btn { margin-top: 16px; padding-block: 10px; }
+.auth--compact .auth__foot { margin-top: 12px; font-size: 0.86rem; }
+.auth-page .auth--compact + .legal-foot { padding-block: 12px 16px; }
+
+@media (max-width: 880px) {
+  .auth__split { grid-template-columns: minmax(0, 410px); }
+  .auth__art { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth__logo-trace { display: none; }
+}
 .auth__lead { margin-top: 8px; color: var(--muted); font-size: 0.95rem; }
 .auth__card label { margin-top: 20px; font-size: 0.88rem; font-weight: 500; }
 
@@ -1872,6 +1997,157 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
 .guide th { color: var(--faint); font-family: var(--mono); font-size: 0.74rem; font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; }
 .guide td:first-child { color: var(--text); white-space: nowrap; }
 
+/* Legal pages: the documentation layout, without its paging (the sections are inside .legal__body). */
+
+.legal__meta { margin-top: 14px; color: var(--faint); font-family: var(--mono); font-size: 0.78rem; }
+.legal__body > section { margin-top: 56px; }
+.legal__body h2 { font-size: 1.45rem; }
+.legal__body ul { margin-top: 12px; padding-left: 1.2em; color: var(--muted); list-style: disc; }
+.legal__body li + li { margin-top: 6px; }
+.legal__body .callout { margin-top: 28px; }
+
+/* A piece of information the owner still has to provide. */
+.placeholder {
+  padding: 0.05em 0.4em;
+  border: 1px dashed rgba(255, 196, 92, 0.6);
+  border-radius: 6px;
+  background: rgba(255, 196, 92, 0.1);
+  color: #ffd27a;
+  font-family: var(--mono);
+  font-size: 0.86em;
+}
+
+.legal-table-wrap { margin-top: 20px; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.legal-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.legal-table th,
+.legal-table td { padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--muted); text-align: left; vertical-align: top; }
+.legal-table tr:last-child td { border-bottom: 0; }
+.legal-table th { color: var(--faint); font-family: var(--mono); font-size: 0.72rem; font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; }
+.legal-table td:first-child { min-width: 8.5em; color: var(--text); }
+.legal-table td code { white-space: nowrap; }
+
+/* Honeypot: off screen and out of the tab order, so only bots fill it in. */
+.auth__hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+.auth__captcha { margin-top: 12px; color: var(--faint); font-size: 0.78rem; line-height: 1.5; }
+/* The status region is always in the page so screen readers announce it; empty, it takes no room. */
+.auth__captcha:empty { margin-top: 0; }
+.auth__captcha button { padding: 0; border: 0; background: none; color: var(--muted); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.auth__captcha button:hover { color: var(--text); }
+
+.auth__legal { margin-top: 18px; color: var(--faint); font-size: 0.8rem; line-height: 1.55; }
+.auth__legal a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Cookie banner and preferences panel (js/consent.js). Accepting and rejecting look the same. */
+
+.consent-banner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  z-index: 60;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 28px;
+  max-width: 1040px;
+  margin-inline: auto;
+  padding: 20px 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: rgba(21, 21, 29, 0.94);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.consent-banner__body { flex: 1 1 26rem; }
+.consent-banner__title { font-size: 1rem; }
+.consent-banner p { margin-top: 6px; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+.consent-banner a,
+.consent-panel a { color: #b5a6ff; text-decoration: underline; text-underline-offset: 3px; }
+.consent-banner__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.consent-panel {
+  width: min(640px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 28px;
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+
+.consent-panel::backdrop { background: rgba(3, 3, 8, 0.72); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+
+.consent-panel__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.consent-panel__head h2 { font-size: 1.3rem; }
+
+.consent-panel__close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.consent-panel__close:hover { color: var(--text); }
+.consent-panel__intro { margin-top: 12px; color: var(--muted); font-size: 0.92rem; line-height: 1.6; }
+
+.consent-cat { margin-top: 18px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--editor); }
+.consent-cat__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.consent-cat__name { font-weight: 600; }
+.consent-cat__always { color: var(--green); font-family: var(--mono); font-size: 0.74rem; }
+.consent-cat__desc { margin-top: 6px; color: var(--muted); font-size: 0.88rem; line-height: 1.55; }
+.consent-cat__details { margin-top: 10px; font-size: 0.84rem; }
+.consent-cat__details summary { color: var(--muted); cursor: pointer; }
+.consent-cat__details summary:hover { color: var(--text); }
+
+.consent-cookies { margin-top: 10px; }
+.consent-cookies li { display: grid; gap: 2px; padding: 8px 0; border-top: 1px solid var(--line); }
+.consent-cookies span { color: var(--faint); line-height: 1.5; }
+
+.consent-switch {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 24px;
+  margin: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  transition: background-color 0.18s, border-color 0.18s;
+}
+
+.consent-switch::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.18s, background-color 0.18s;
+}
+
+.consent-switch:checked { border-color: var(--accent); background: var(--accent); }
+.consent-switch:checked::before { background: #fff; transform: translateX(20px); }
+
+.consent-panel__status { margin-top: 18px; color: var(--faint); font-size: 0.82rem; }
+.consent-panel__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
 /* Entrance animation (set by main.js only on elements that start below the fold) */
 
 /* Neighbours that enter together are staggered: main.js sets --reveal-delay on each one. */
@@ -2005,6 +2281,10 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
   .window__flag { margin: 0 0 10px; }
   .status-list > div { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .actions .btn { flex: 1 1 auto; }
+  .consent-banner { right: 10px; bottom: 10px; left: 10px; padding: 18px; }
+  .consent-banner__actions,
+  .consent-panel__actions { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .consent-panel { padding: 22px 18px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

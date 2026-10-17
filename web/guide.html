@@ -8,6 +8,8 @@
   <meta name="theme-color" content="#0A0A0D">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
+  <script src="js/consent-config.js"></script>
+  <script src="js/consent.js"></script>
 </head>
 <body>
 
@@ -473,6 +475,18 @@ true
   </article>
 
 </main>
+
+<footer class="legal-foot">
+  <div class="container">
+    <nav class="legal-links" aria-label="Legal" lang="es">
+      <a href="aviso-legal.html">Aviso legal</a>
+      <a href="privacidad.html">Privacidad</a>
+      <a href="cookies.html">Cookies</a>
+      <a href="terminos.html">Términos</a>
+      <button type="button" data-consent-open hidden>Configurar cookies</button>
+    </nav>
+  </div>
+</footer>
 
 <script type="module" src="js/guide.js"></script>
 <script src="js/auth.js" defer></script>
