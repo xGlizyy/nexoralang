@@ -239,6 +239,15 @@ a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no 
   (567 superadas, 0 fallos, en cada una de tres ejecuciones) ([Pruebas](docs/testing.md)).
 - Los contadores de los límites y del freno del inicio de sesión están en memoria: se pierden al
   reiniciar y no se comparten entre varias instancias del servidor.
+- En el inicio de sesión con Google o GitHub, la sesión se crea fuera de la transacción de la cuenta y
+  su enlace: si falla, la cuenta queda enlazada sin sesión hasta el siguiente intento. Durante el
+  apagado, un segundo `SIGTERM` o `SIGINT` termina el proceso sin completar la limpieza, y el 503 de
+  `/api/health` solo llega por conexiones ya abiertas. Las pruebas automatizadas, en Windows y con la
+  base de datos simulada, cubren el fallo de la sesión de OAuth y el reintento, el 503 durante el
+  apagado y el rechazo de las conexiones nuevas. No cubren la segunda señal del mismo tipo ni dos
+  primeros inicios simultáneos con la misma identidad, que siguen sin probar. Quedan pendientes las
+  pruebas contra un MySQL real, con señales reales del sistema operativo, con systemd y detrás de
+  nginx ([Tareas pendientes y riesgos](docs/playground.md#tareas-pendientes-y-riesgos)).
 - Las páginas legales son un borrador sin los datos del titular ni revisión jurídica: no deben
   publicarse así. Riesgos y decisiones pendientes (Analytics y su CSP, el `409` que revela si un email
   tiene cuenta, la cancelación de consultas de MySQL):

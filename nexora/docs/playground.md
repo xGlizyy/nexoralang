@@ -568,7 +568,8 @@ WorkingDirectory=/srv/nexora/app/servidor
 ExecStart=/usr/bin/node --env-file=.env src/index.js
 Restart=on-failure
 # El servidor se apaga solo al recibir SIGTERM: espera hasta 10 s a las peticiones en curso y otros
-# 10 s al pool de MySQL. Este margen deja que termine antes de que systemd lo mate.
+# 10 s al pool de MySQL (unos 20 s en el peor caso). Este margen debería dejarle terminar antes de que
+# systemd lo mate con SIGKILL; no se ha probado con systemd.
 TimeoutStopSec=30
 NoNewPrivileges=true
 PrivateTmp=true
@@ -590,13 +591,26 @@ ciérralo en el cortafuegos y deja que solo nginx llegue a él. El worker no esc
 puerto: solo se comunica con el servidor por su entrada y salida estándar.
 
 Al recibir `SIGTERM` (`systemctl stop` o `restart`), el servidor deja de aceptar conexiones y
-`/api/health` pasa a responder 503. Desde ese momento cada respuesta lleva `Connection: close`, para
-que una conexión persistente no lo retenga. Espera, como mucho 10 s, a las peticiones en curso y a
-la tanda de borrado de sesiones que esté en MySQL (no se envía ninguna más); después cierra el pool
-de MySQL, otros 10 s como mucho. Si el borrado no termina a tiempo, el pool se cierra igualmente;
+`/api/health` pasa a responder 503 a las peticiones que llegan por conexiones que ya estaban abiertas.
+Una conexión nueva no recibe ese 503: tras `server.close()` el servidor ya no la acepta, y quien la
+abre ve la conexión rechazada. Las pruebas automatizadas lo comprueban en Windows con un servidor local
+(`ECONNREFUSED`); detrás de nginx lo normal sería un 502, pero no se ha probado con nginx ni con un
+balanceador. Desde ese momento cada respuesta lleva `Connection: close`, para que una conexión
+persistente no lo retenga. Espera, como mucho 10 s, a las peticiones en curso y a la tanda de borrado
+de sesiones que esté en MySQL (no se envía ninguna más); después cierra el pool de MySQL, otros 10 s
+como mucho. Si el borrado no termina a tiempo, el pool se cierra igualmente;
 según el código de mysql2 3.24.6, cada conexión se cierra detrás de su consulta en curso, sin
 cortarla (sin comprobar todavía contra un MySQL real). Sale con código 0 si todo
 terminó a tiempo y con 1 si tuvo que cortar algo; el registro dice qué.
+
+Cada señal se atiende una sola vez (`process.once`). Un segundo `SIGTERM`, o un segundo `SIGINT`,
+durante el apagado ya no lo recibe el servidor: Node aplica su comportamiento por defecto y termina el
+proceso en el acto, sin esperar a las peticiones en curso ni cerrar el pool de MySQL. Esto se deduce del
+código y de la documentación de Node; no se ha probado. Un `SIGINT` después de un `SIGTERM` (o al
+revés) no lo interrumpe: devuelve el mismo apagado en curso (las pruebas lo comprueban llamando dos
+veces al apagado, sin señales del sistema). Al vencer `TimeoutStopSec`, systemd no envía otro
+`SIGTERM`, sino `SIGKILL`, que tampoco permite limpiar nada.
+
 **Probado solo con pruebas automatizadas en Windows**: la señal real, con systemd, sigue sin probar.
 
 ### 5. Proxy inverso (nginx)
@@ -688,7 +702,8 @@ curl -s https://tu-dominio.example/api/health
 
 Tiene que responder `{"status":"ok","checks":{"http":"ok"}}`. Solo dice que el proceso está en marcha
 y atiende peticiones: **no comprueba MySQL, Google, GitHub, reCAPTCHA ni el playground**. Durante un
-apagado responde 503 con `{"status":"shutting_down"}`. Comprueba también que `http://` redirige a
+apagado responde 503 con `{"status":"shutting_down"}`, pero solo por conexiones que ya estaban abiertas:
+las nuevas se rechazan ([Servicio](#4-servicio-systemd)). Comprueba también que `http://` redirige a
 `https://` (`curl -sI http://tu-dominio.example/` devuelve 301).
 
 Mientras el playground esté desactivado, comprueba que de verdad lo está:
@@ -846,6 +861,19 @@ completar antes [Comprobar el aislamiento](#comprobar-el-aislamiento).
   tienen un antispam (`servidor/src/captcha.js`): Google reCAPTCHA v3, que solo se carga si la persona
   lo acepta, un campo trampa y un límite estricto por cliente. **Sin probar con claves reales de
   Google**: las pruebas simulan sus respuestas.
+- Inicio de sesión con Google o GitHub (`servidor/src/oauth.js`): la cuenta y su enlace con el
+  proveedor se crean en una transacción, pero la sesión se crea después, fuera de ella. Si guardar la
+  sesión falla, la cuenta queda creada y enlazada sin sesión, y la persona ve `oauth_failed`; según el
+  código, el siguiente intento encuentra el enlace y crea la sesión. Las pruebas cubren esos dos
+  caminos por separado, con una base de datos simulada, no contra MySQL. **Sin probar**: dos primeros
+  inicios simultáneos con la misma identidad pueden chocar (por la clave primaria del enlace o por un
+  bloqueo mutuo de MySQL), y uno de ellos recibiría `oauth_failed`. El registro con contraseña, en
+  cambio, crea la cuenta y su primera sesión en una sola transacción.
+- Apagado (`servidor/src/lifecycle.js`): un segundo `SIGTERM` o `SIGINT` termina el proceso en el acto,
+  sin completar la limpieza (sin probar); y el 503 de `/api/health` solo llega por conexiones ya
+  abiertas, porque las nuevas se rechazan una vez iniciado `server.close()`. Ver
+  [Servicio](#4-servicio-systemd). Sin probar con señales reales del sistema operativo, systemd ni
+  nginx.
 - Decisión pendiente: el registro responde 409 a un email que ya tiene cuenta, y eso revela qué
   emails están registrados. Evitarlo exige confirmar el email por correo, que el sitio no envía.
 - Decisión pendiente de producto y privacidad: el gestor de consentimiento (`web/js/consent.js`) sabe
