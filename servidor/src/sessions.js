@@ -27,13 +27,25 @@ function readToken(req) {
   return readCookie(req, SESSION_COOKIE);
 }
 
-export async function startSession(res, userId) {
+/**
+ * Guarda una sesión nueva con `db` (el pool, o la conexión de una transacción) y devuelve su token.
+ * No toca la respuesta: la cookie se pone con setSessionCookie cuando la sesión ya es definitiva.
+ */
+export async function createSession(db, userId) {
   const token = randomBytes(32).toString('base64url');
-  await pool.execute(
+  await db.execute(
     'INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))',
     [hashToken(token), userId, SESSION_DAYS],
   );
+  return token;
+}
+
+export function setSessionCookie(res, token) {
   res.cookie(SESSION_COOKIE, token, { ...cookieOptions(), maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000 });
+}
+
+export async function startSession(res, userId) {
+  setSessionCookie(res, await createSession(pool, userId));
 }
 
 export async function currentUser(req) {

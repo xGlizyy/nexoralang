@@ -8,7 +8,8 @@ import { createLoginThrottle } from './login-throttle.js';
 import { oauth } from './oauth.js';
 import { hashPassword, verifyPassword } from './passwords.js';
 import { clientRateLimit } from './rate-limits.js';
-import { currentUser, endSession, startSession } from './sessions.js';
+import { describeError } from './safe-log.js';
+import { createSession, currentUser, endSession, setSessionCookie, startSession } from './sessions.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 10;
@@ -27,16 +28,17 @@ function publicUser({ id, name, email }) {
 
 /**
  * Las rutas de cuentas. Las dependencias (base de datos, sesiones, contraseñas, antispam, freno
- * del login) se pueden sustituir en las pruebas; `auth`, más abajo, usa las reales.
+ * del login, registro) se pueden sustituir en las pruebas; `auth`, más abajo, usa las reales.
  */
 export function createAuthRouter({
   db = pool,
-  sessions = { currentUser, endSession, startSession },
+  sessions = { createSession, currentUser, endSession, setSessionCookie, startSession },
   passwords = { hashPassword, verifyPassword },
   captcha = loadCaptchaConfig(),
   throttle = createLoginThrottle(),
   attemptsLimit = 20,
   providers = oauth,
+  log = console.error,
 } = {}) {
   const attempts = clientRateLimit({
     windowMs: 15 * 60 * 1000,
@@ -63,14 +65,31 @@ export function createAuthRouter({
       return res.status(400).json({ error: `The password must be at least ${MIN_PASSWORD} characters long.` });
     }
 
+    // El hash, antes de la transacción: scrypt tarda y no debe tener ocupada una conexión del pool.
+    const passwordHash = await passwords.hashPassword(password);
+
+    // La cuenta y su primera sesión, juntas o ninguna: si la sesión no se puede guardar, no queda
+    // una cuenta creada a medias. La cookie se pone solo cuando la transacción se ha confirmado.
     let userId;
+    let token;
+    let rollbackFailed = false;
+    const connection = await db.getConnection();
     try {
-      const [result] = await db.execute(
+      await connection.beginTransaction();
+      const [result] = await connection.execute(
         'INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
-        [name, email, await passwords.hashPassword(password)],
+        [name, email, passwordHash],
       );
       userId = result.insertId;
+      token = await sessions.createSession(connection, userId);
+      await connection.commit();
     } catch (error) {
+      // Si el rollback también falla, lo que cuenta es el error original (el 409 sigue siendo un 409).
+      // Del fallo del rollback queda una línea con su tipo y su código, sin mensaje ni datos.
+      rollbackFailed = await connection.rollback().then(() => false, (rollbackError) => {
+        log(`auth: sign-up rollback failed (${describeError(rollbackError)})`);
+        return true;
+      });
       // Revela que el email ya tiene cuenta. Evitarlo exige confirmar el email por correo, que el
       // sitio no envía: es una decisión pendiente (ver «Tareas pendientes y riesgos» en
       // nexora/docs/playground.md).
@@ -78,9 +97,14 @@ export function createAuthRouter({
         return res.status(409).json({ error: 'An account with that email already exists.' });
       }
       throw error;
+    } finally {
+      // Una conexión cuyo rollback falló pudo quedar con la transacción abierta: no vuelve al pool,
+      // se cierra (mysql2 la quita del pool al destruirla).
+      if (rollbackFailed) connection.destroy();
+      else connection.release();
     }
 
-    await sessions.startSession(res, userId);
+    sessions.setSessionCookie(res, token);
     res.status(201).json({ user: publicUser({ id: userId, name, email }) });
   });
 

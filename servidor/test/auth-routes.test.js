@@ -16,50 +16,121 @@ const { createAuthRouter } = await import('../src/auth.js');
 const { loadCaptchaConfig } = await import('../src/captcha.js');
 const { ACCOUNT_FREE, PAIR_FREE, createLoginThrottle } = await import('../src/login-throttle.js');
 
-function fakeDb() {
+/**
+ * Una base de datos simulada con transacciones: lo que se inserta con una conexión de getConnection()
+ * solo se ve en `users` y `sessions` después de commit(); rollback() lo descarta. `fail` hace fallar
+ * las sentencias que empiecen así (y 'COMMIT' o 'ROLLBACK' esas órdenes), como fallaría MySQL; cada
+ * fallo lleva su propio código, para saber cuál llega al manejador de errores. Vaciar `failures` hace
+ * que la misma base vuelva a funcionar.
+ */
+function fakeDb({ fail = [] } = {}) {
   const users = new Map();
+  const sessions = [];
   const queries = [];
+  const transactions = [];
   let nextId = 1;
+  const failures = [fail].flat().filter(Boolean);
+  const CODES = { COMMIT: 'ER_ERROR_DURING_COMMIT', ROLLBACK: 'ER_ERROR_DURING_ROLLBACK' };
+  // Como los de mysql2, los errores llevan en el mensaje los datos de la última sentencia (nombre,
+  // email, hash): lo que nunca debe llegar al registro.
+  let lastParams = [];
+  const failIf = (what) => {
+    const match = failures.find((prefix) => what.startsWith(prefix));
+    if (match) {
+      throw Object.assign(new Error(`simulated failure after ${JSON.stringify(lastParams)}`), { code: CODES[match] ?? 'ER_LOCK_WAIT_TIMEOUT' });
+    }
+  };
+  function run(sql, params, staged) {
+    queries.push(sql);
+    lastParams = params ?? [];
+    failIf(sql);
+    if (sql.startsWith('INSERT INTO users')) {
+      const [name, email, passwordHash] = params;
+      const all = [...users.values(), ...(staged?.users ?? [])];
+      if (all.some((user) => user.email === email)) throw Object.assign(new Error('duplicate'), { code: 'ER_DUP_ENTRY' });
+      const user = { id: nextId++, name, email, password_hash: passwordHash };
+      if (staged) staged.users.push(user);
+      else users.set(user.id, user);
+      return [{ insertId: user.id }];
+    }
+    if (sql.startsWith('INSERT INTO sessions')) {
+      const session = { tokenHash: params[0], userId: params[1] };
+      if (staged) staged.sessions.push(session);
+      else sessions.push(session);
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.startsWith('SELECT id, name, email, password_hash FROM users WHERE email = ?')) {
+      return [[...users.values()].filter((user) => user.email === params[0])];
+    }
+    throw new Error(`unexpected SQL: ${sql}`);
+  }
   return {
+    users,
+    sessions,
     queries,
+    transactions,
+    failures,
     async execute(sql, params) {
-      queries.push(sql);
-      if (sql.startsWith('INSERT INTO users')) {
-        const [name, email, passwordHash] = params;
-        if ([...users.values()].some((user) => user.email === email)) throw Object.assign(new Error('duplicate'), { code: 'ER_DUP_ENTRY' });
-        const id = nextId++;
-        users.set(id, { id, name, email, password_hash: passwordHash });
-        return [{ insertId: id }];
-      }
-      if (sql.startsWith('SELECT id, name, email, password_hash FROM users WHERE email = ?')) {
-        return [[...users.values()].filter((user) => user.email === params[0])];
-      }
-      throw new Error(`unexpected SQL: ${sql}`);
+      return run(sql, params, null);
+    },
+    async getConnection() {
+      const staged = { users: [], sessions: [] };
+      const record = { began: false, committed: false, rolledBack: false, released: false };
+      transactions.push(record);
+      return {
+        async beginTransaction() { record.began = true; },
+        async execute(sql, params) { return run(sql, params, staged); },
+        async commit() {
+          failIf('COMMIT');
+          for (const user of staged.users) users.set(user.id, user);
+          sessions.push(...staged.sessions);
+          record.committed = true;
+        },
+        async rollback() {
+          failIf('ROLLBACK');
+          record.rolledBack = true;
+        },
+        release() { record.released = true; },
+        destroy() { record.destroyed = true; },
+      };
     },
   };
 }
 
-async function start({ attemptsLimit = 1000, now } = {}) {
+/** Sesiones simuladas que guardan con la base de datos que se les dé, como src/sessions.js. */
+const fakeSessions = {
+  createSession: async (db, id) => {
+    await db.execute('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)', [`hash-${id}`, id, 30]);
+    return `session-${id}`;
+  },
+  setSessionCookie: (res, token) => { res.cookie('nexora_session', token, { httpOnly: true }); },
+  startSession: async (res, id) => { res.cookie('nexora_session', `session-${id}`, { httpOnly: true }); },
+  endSession: async (req, res) => { res.clearCookie('nexora_session'); },
+  currentUser: async () => null,
+};
+
+async function start({ attemptsLimit = 1000, now, fail } = {}) {
   let time = 1_000_000;
   const clock = now ?? (() => time);
-  const db = fakeDb();
+  const db = fakeDb({ fail });
+  const logs = [];
   const app = express();
   app.set('trust proxy', 1);
   app.use('/api/auth', createAuthRouter({
     db,
-    sessions: {
-      startSession: async (res, id) => { res.cookie('nexora_session', `session-${id}`, { httpOnly: true }); },
-      endSession: async (req, res) => { res.clearCookie('nexora_session'); },
-      currentUser: async () => null,
-    },
+    sessions: fakeSessions,
     passwords: { hashPassword: async (password) => `hash:${password}`, verifyPassword: async (password, hash) => hash === `hash:${password}` },
     captcha: loadCaptchaConfig({}),
     throttle: createLoginThrottle({ now: clock }),
     attemptsLimit,
     providers: null,
+    log: (line) => logs.push(line),
   }));
+  // Los errores que llegan al manejador final: para comprobar cuál es (el original, no el del rollback).
+  const errors = [];
   app.use((error, req, res, next) => {
     if (error.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid request.' });
+    errors.push(error.code);
     res.status(500).json({ error: 'Internal server error.' });
   });
   const server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
@@ -67,13 +138,22 @@ async function start({ attemptsLimit = 1000, now } = {}) {
     const response = await fetch(`http://127.0.0.1:${server.address().port}/api/auth${route}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': from }, body: JSON.stringify(body),
     });
-    return { status: response.status, json: await response.json().catch(() => ({})), retryAfter: response.headers.get('retry-after') };
+    return { status: response.status, json: await response.json().catch(() => ({})), retryAfter: response.headers.get('retry-after'), setCookie: response.headers.get('set-cookie') };
   };
-  return { post, db, advance: (ms) => { time += ms; }, close: () => new Promise((resolve) => server.close(resolve)) };
+  return { post, db, errors, logs, advance: (ms) => { time += ms; }, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
 const ADA = { name: 'Ada', email: 'ada@example.com', password: 'correct horse battery' };
 const login = (password, email = ADA.email) => ({ email, password });
+
+/** El registro de un rollback fallido: una línea con tipo y código, sin nada de la petición. */
+const ROLLBACK_LOG = 'auth: sign-up rollback failed (Error ER_ERROR_DURING_ROLLBACK)';
+function assertLogsClean(logs) {
+  const text = logs.join('\n');
+  for (const secret of [ADA.email, ADA.password, ADA.name, 'hash:', 'session-', 'nexora_session', 'simulated failure']) {
+    assert.ok(!text.includes(secret), `the log contains ${secret}: ${text}`);
+  }
+}
 
 describe('sign-up', () => {
   test('creates the account and starts a session (contract unchanged)', async () => {
@@ -90,8 +170,12 @@ describe('sign-up', () => {
     try {
       await s.post('/signup', ADA);
       assert.deepEqual(await s.post('/signup', { ...ADA, name: 'Other' }), {
-        status: 409, json: { error: 'An account with that email already exists.' }, retryAfter: null,
+        status: 409, json: { error: 'An account with that email already exists.' }, retryAfter: null, setCookie: null,
       });
+      assert.equal(s.db.users.size, 1);
+      assert.equal(s.db.sessions.length, 1);
+      const refused = s.db.transactions.at(-1);
+      assert.deepEqual([refused.committed, refused.rolledBack, refused.released], [false, true, true]);
     } finally { await s.close(); }
   });
 
@@ -106,6 +190,111 @@ describe('sign-up', () => {
   });
 });
 
+describe('sign-up is atomic: the account and its first session, or neither', () => {
+  test('success: both rows in one committed transaction, and the cookie only then', async () => {
+    const s = await start();
+    try {
+      const { status, setCookie } = await s.post('/signup', ADA);
+      assert.equal(status, 201);
+      assert.match(setCookie, /^nexora_session=session-1;/);
+      assert.equal(s.db.users.size, 1);
+      assert.deepEqual(s.db.sessions, [{ tokenHash: 'hash-1', userId: 1 }]);
+      assert.deepEqual(s.db.transactions, [{ began: true, committed: true, rolledBack: false, released: true }]);
+    } finally { await s.close(); }
+  });
+
+  for (const [where, fail] of [['storing the session', 'INSERT INTO sessions'], ['the commit', 'COMMIT']]) {
+    test(`a failure in ${where} leaves no account, no session and no cookie`, async () => {
+      const s = await start({ fail });
+      try {
+        const { status, setCookie } = await s.post('/signup', ADA);
+        assert.equal(status, 500);
+        assert.equal(setCookie, null);
+        assert.equal(s.db.users.size, 0, 'no account was left behind');
+        assert.equal(s.db.sessions.length, 0);
+        assert.deepEqual(s.db.transactions, [{ began: true, committed: false, rolledBack: true, released: true }]);
+        assert.deepEqual(s.errors, [fail === 'COMMIT' ? 'ER_ERROR_DURING_COMMIT' : 'ER_LOCK_WAIT_TIMEOUT'], 'the original error');
+        assert.deepEqual(s.logs, [], 'a rollback that works leaves no log line of its own');
+      } finally { await s.close(); }
+    });
+  }
+
+  // Si también falla el rollback: el error que cuenta es el original, la respuesta no lleva cookie y la
+  // conexión no vuelve al pool (podría haber quedado con la transacción abierta): se destruye.
+  for (const [where, first, expected] of [
+    ['storing the session', 'INSERT INTO sessions', 'ER_LOCK_WAIT_TIMEOUT'],
+    ['the commit', 'COMMIT', 'ER_ERROR_DURING_COMMIT'],
+  ]) {
+    test(`a failure in ${where} and then in the rollback: the original error, no cookie, the connection destroyed`, async () => {
+      const s = await start({ fail: [first, 'ROLLBACK'] });
+      try {
+        const { status, setCookie } = await s.post('/signup', ADA);
+        assert.equal(status, 500);
+        assert.equal(setCookie, null);
+        assert.deepEqual(s.errors, [expected], 'the error of the rollback does not replace the original one');
+        assert.deepEqual(s.logs, [ROLLBACK_LOG], 'the failed rollback is recorded, once, beside the original error');
+        assertLogsClean(s.logs);
+        assert.equal(s.db.users.size, 0);
+        assert.deepEqual(s.db.transactions, [{ began: true, committed: false, rolledBack: false, released: false, destroyed: true }]);
+      } finally { await s.close(); }
+    });
+  }
+
+  test('a duplicated email whose rollback fails still answers 409, and the connection is destroyed', async () => {
+    const s = await start({ fail: 'ROLLBACK' });
+    try {
+      assert.equal((await s.post('/signup', ADA)).status, 201);
+      const { status, json, setCookie } = await s.post('/signup', { ...ADA, name: 'Other' });
+      assert.equal(status, 409);
+      assert.deepEqual(json, { error: 'An account with that email already exists.' });
+      assert.equal(setCookie, null);
+      assert.deepEqual(s.errors, []);
+      assert.deepEqual(s.logs, [ROLLBACK_LOG], 'recorded, and the answer is still the 409');
+      assertLogsClean(s.logs);
+      assert.deepEqual(s.db.transactions.at(-1), { began: true, committed: false, rolledBack: false, released: false, destroyed: true });
+    } finally { await s.close(); }
+  });
+
+  test('after a failed sign-up, the same email can sign up again (nothing was half created)', async () => {
+    // La misma base de datos: si el primer intento hubiera dejado la cuenta, el segundo daría 409.
+    const s = await start({ fail: 'INSERT INTO sessions' });
+    try {
+      assert.equal((await s.post('/signup', ADA)).status, 500);
+      assert.equal(s.db.users.size, 0);
+      s.db.failures.length = 0; // la base de datos vuelve a funcionar
+      assert.equal((await s.post('/signup', ADA)).status, 201);
+      assert.equal(s.db.users.size, 1);
+      assert.equal(s.db.sessions.length, 1);
+    } finally { await s.close(); }
+  });
+
+  test('the password hash is computed before the transaction: no connection is held during scrypt', async () => {
+    const order = [];
+    const db = fakeDb();
+    const getConnection = db.getConnection.bind(db);
+    db.getConnection = async () => { order.push('connection'); return getConnection(); };
+    const app = express();
+    app.use('/api/auth', createAuthRouter({
+      db,
+      sessions: fakeSessions,
+      passwords: { hashPassword: async (password) => { order.push('hash'); return `hash:${password}`; }, verifyPassword: async () => false },
+      captcha: loadCaptchaConfig({}),
+      attemptsLimit: 1000,
+      providers: null,
+    }));
+    const server = await new Promise((resolve) => { const sv = app.listen(0, '127.0.0.1', () => resolve(sv)); });
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.address().port}/api/auth/signup`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ADA),
+      });
+      assert.equal(response.status, 201);
+      assert.deepEqual(order, ['hash', 'connection']);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+});
+
 describe('log-in', () => {
   test('a wrong password and an unknown email look exactly the same', async () => {
     const s = await start();
@@ -114,7 +303,7 @@ describe('log-in', () => {
       const wrong = await s.post('/login', login('wrong password!'));
       const unknown = await s.post('/login', login('wrong password!', 'nobody@example.com'));
       assert.deepEqual(wrong, unknown);
-      assert.deepEqual(wrong, { status: 401, json: { error: 'Incorrect email or password.' }, retryAfter: null });
+      assert.deepEqual(wrong, { status: 401, json: { error: 'Incorrect email or password.' }, retryAfter: null, setCookie: null });
     } finally { await s.close(); }
   });
 
