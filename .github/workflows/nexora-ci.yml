@@ -82,13 +82,22 @@ jobs:
   npm:
     name: Paquete de npm · Node ${{ matrix.node }} · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # Node 26 es una prueba no bloqueante (experimental): si falla, el flujo no falla.
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        # 18: el mínimo de npm/package.json. 20: anterior a los patrones de `node --test` (Node 21).
-        # 22: LTS.
-        node: ["18", "20", "22"]
+        # 18: el mínimo que declara npm/package.json (engines ">=18"). Ya no tiene soporte oficial
+        # (desde el 30/04/2025), pero se prueba mientras el paquete lo declare; también es anterior a
+        # los patrones de `node --test` (Node 21). 22 y 24: las LTS con soporte. Node 20 se quitó por
+        # redundante para lo que comprueba este trabajo hoy: el caso anterior a Node 21 ya lo cubre 18.
+        node: ["18", "22", "24"]
+        include:
+          # Node 26, todavía sin probar: solo en Linux y sin bloquear.
+          - os: ubuntu-latest
+            node: "26"
+            experimental: true
     defaults:
       run:
         working-directory: npm
