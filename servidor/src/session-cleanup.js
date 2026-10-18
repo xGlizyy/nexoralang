@@ -15,6 +15,8 @@
 // alternativa es seleccionar primero las claves de la tanda y borrarlas por su clave primaria. Es una
 // decisión pendiente: depende del MySQL de producción, que no se conoce desde el repositorio.
 
+import { describeError } from './safe-log.js';
+
 export const PURGE_BATCH = 1000;
 // Tope de tandas en una pasada: lo que quede se borra en la siguiente.
 const MAX_BATCHES = 100;
@@ -63,7 +65,10 @@ export async function purgeExpiredSessions(pool, { timeout = QUERY_TIMEOUT_MS, s
 /**
  * Borra las sesiones caducadas al arrancar y después cada hora. Un fallo (por ejemplo, la base de
  * datos no disponible) se anota y se reintenta en la siguiente pasada; nunca detiene el servidor.
- * Devuelve una función que detiene el borrado periódico.
+ * Devuelve { done, stop }: `done`, la primera pasada; `stop()`, que deja de programar pasadas, pide a
+ * la que esté en curso que no envíe más tandas y devuelve una promesa que se cumple cuando termina
+ * su tanda en curso (bien o con un error: nunca se rechaza). El apagado (lifecycle.js) la espera,
+ * con un límite de tiempo, antes de cerrar el pool.
  */
 export function startSessionCleanup(pool, {
   interval = PURGE_INTERVAL_MS,
@@ -73,13 +78,18 @@ export function startSessionCleanup(pool, {
 } = {}) {
   // Las consultas de la pasada en curso, hasta que terminen de verdad (no hasta que venza el tope).
   let inFlight = null;
+  // La señal de la pasada en curso, para que stop() le pida que no envíe más tandas.
+  let current = null;
+  let stopped = false;
   const run = async () => {
+    if (stopped) return;
     if (inFlight) {
       log('sessions: the previous pass is still running; skipping this one');
       return;
     }
     // Al vencer el plazo, la pasada deja de enviar tandas nuevas; la que esté en curso sigue.
     const stop = new AbortController();
+    current = stop;
     let timedOut = false;
     const purge = purgeExpiredSessions(pool, { timeout: queryTimeout, signal: stop.signal });
     inFlight = purge;
@@ -90,7 +100,8 @@ export function startSessionCleanup(pool, {
       },
       (error) => {
         inFlight = null;
-        if (timedOut) log(`sessions: the timed-out pass has ended with an error (${error.code ?? error.message})`);
+        // Solo el tipo y un código conocido (safe-log.js): el mensaje de MySQL puede llevar datos.
+        if (timedOut) log(`sessions: the timed-out pass has ended with an error (${describeError(error)})`);
       },
     );
     let timer;
@@ -106,7 +117,7 @@ export function startSessionCleanup(pool, {
         stop.abort();
         log('sessions: the pass timed out; it sends no more batches, but the batch in flight may still be running in MySQL; the next pass will retry');
       } else {
-        log(`sessions: could not delete expired sessions (${error.code ?? error.message}); retrying in the next pass`);
+        log(`sessions: could not delete expired sessions (${describeError(error)}); retrying in the next pass`);
       }
     } finally {
       clearTimeout(timer);
@@ -115,5 +126,11 @@ export function startSessionCleanup(pool, {
   const done = run();
   const timer = setInterval(run, interval);
   timer.unref(); // no mantiene vivo el proceso por sí solo
-  return { done, stop: () => clearInterval(timer) };
+  const stop = () => {
+    stopped = true;
+    clearInterval(timer);
+    current?.abort(); // la pasada en curso no envía más tandas; la que ya está en MySQL sigue
+    return (inFlight ?? Promise.resolve()).then(() => {}, () => {});
+  };
+  return { done, stop };
 }

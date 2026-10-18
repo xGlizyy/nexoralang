@@ -7,6 +7,28 @@ import { test } from 'node:test';
 import { PURGE_BATCH, PURGE_SQL, QUERY_TIMEOUT_MS, purgeExpiredSessions, startSessionCleanup } from '../src/session-cleanup.js';
 
 /**
+ * Espera a `work` con el bucle de eventos vivo, como lo mantienen en el servidor real el servidor HTTP
+ * y la conexión del pool. El plazo de cada pasada y su intervalo usan temporizadores con unref(), que no
+ * lo mantienen por sí solos: si la consulta simulada no responde, no queda nada pendiente y el ejecutor
+ * de pruebas de Node 20 y 22 cancela la prueba antes de que salte el plazo. No cambia lo que se
+ * comprueba: el plazo, el intervalo y lo que se anota siguen siendo los de session-cleanup.js. El caso
+ * en que no queda ningún otro recurso activo es otro, y estas pruebas no lo cubren.
+ * El temporizador que mantiene vivo el bucle es también un límite: si `work` no termina en `limitMs`,
+ * la prueba falla en vez de quedarse esperando para siempre (node:test no tiene límite por defecto).
+ */
+async function whileAlive(work, limitMs = 5_000) {
+  let alive;
+  const limit = new Promise((resolve, reject) => {
+    alive = setTimeout(() => reject(new Error(`still pending after ${limitMs} ms`)), limitMs);
+  });
+  try {
+    return await Promise.race([work(), limit]);
+  } finally {
+    clearTimeout(alive);
+  }
+}
+
+/**
  * Un pool que borra `pending` filas caducadas, de PURGE_BATCH en PURGE_BATCH, y anota cada consulta.
  * `fail`: cada consulta falla; `hang`: ninguna responde nunca.
  */
@@ -67,7 +89,7 @@ test('it runs at start-up and a database error is logged, never thrown', async (
   const cleanup = startSessionCleanup(fakePool(0, { fail: true }), { log: (line) => logs.push(line) });
   await cleanup.done;
   cleanup.stop();
-  assert.deepEqual(logs, ['sessions: could not delete expired sessions (ECONNREFUSED); retrying in the next pass']);
+  assert.deepEqual(logs, ['sessions: could not delete expired sessions (Error ECONNREFUSED); retrying in the next pass']);
 });
 
 test('a query that never answers: the pass gives up, and later passes are skipped and logged instead of piling up', async () => {
@@ -76,7 +98,7 @@ test('a query that never answers: the pass gives up, and later passes are skippe
   const logs = [];
   const pool = fakePool(0, { hang: true });
   const cleanup = startSessionCleanup(pool, { interval: 40, passTimeout: 20, log: (line) => logs.push(line) });
-  await cleanup.done;
+  await whileAlive(() => cleanup.done);
   assert.deepEqual(logs, ['sessions: the pass timed out; it sends no more batches, but the batch in flight may still be running in MySQL; the next pass will retry']);
   await new Promise((resolve) => setTimeout(resolve, 150));
   cleanup.stop();
@@ -97,7 +119,7 @@ test('once the late query finally ends, the next pass runs again', async () => {
     },
   };
   const cleanup = startSessionCleanup(pool, { interval: 30, passTimeout: 10, log: (line) => logs.push(line) });
-  await cleanup.done;
+  await whileAlive(() => cleanup.done);
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(queries.length, 1, 'nothing new while the first query runs');
   release();
@@ -130,7 +152,7 @@ test('past its deadline a pass sends no new batch; the batch in flight is not ca
     },
   };
   const cleanup = startSessionCleanup(pool, { interval: 60_000, passTimeout: 10, log: (line) => logs.push(line) });
-  await cleanup.done;
+  await whileAlive(() => cleanup.done);
   release();
   await new Promise((resolve) => setTimeout(resolve, 30));
   cleanup.stop();
@@ -146,11 +168,11 @@ test('a timed-out pass that later fails says so', async () => {
   let fail;
   const pool = { query: () => new Promise((resolve, reject) => { fail = reject; }) };
   const cleanup = startSessionCleanup(pool, { interval: 60_000, passTimeout: 10, log: (line) => logs.push(line) });
-  await cleanup.done;
+  await whileAlive(() => cleanup.done);
   fail(Object.assign(new Error('timeout'), { code: 'PROTOCOL_SEQUENCE_TIMEOUT' }));
   await new Promise((resolve) => setTimeout(resolve, 10));
   cleanup.stop();
-  assert.equal(logs[1], 'sessions: the timed-out pass has ended with an error (PROTOCOL_SEQUENCE_TIMEOUT)');
+  assert.equal(logs[1], 'sessions: the timed-out pass has ended with an error (Error PROTOCOL_SEQUENCE_TIMEOUT)');
 });
 
 test('it repeats on its interval, never overlaps, and can be stopped', async () => {
@@ -175,4 +197,82 @@ test('it repeats on its interval, never overlaps, and can be stopped', async () 
   assert.ok(runs >= 2, `ran ${runs} times`);
   await new Promise((resolve) => setTimeout(resolve, 60));
   assert.equal(queries.length, runs, 'no pass after stop()');
+});
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test('stop() waits for the batch in flight, sends no more batches and starts no more passes', async () => {
+  // El apagado (lifecycle.js) espera a stop() antes de cerrar el pool: la tanda en curso termina, y
+  // no se envía ninguna más aunque quedaran sesiones por borrar.
+  let release;
+  const queries = [];
+  const pool = {
+    async query(options) {
+      queries.push(options);
+      if (queries.length === 1) {
+        await new Promise((resolve) => { release = resolve; });
+        return [{ affectedRows: PURGE_BATCH }]; // una tanda llena: sin stop(), pediría otra
+      }
+      return [{ affectedRows: 0 }];
+    },
+  };
+  // El intervalo vence mientras la tanda sigue en curso: esas pasadas se saltan y se anotan aquí.
+  const logs = [];
+  const cleanup = startSessionCleanup(pool, { interval: 20, log: (line) => logs.push(line) });
+  await sleep(10);
+  let stopped = false;
+  const stopping = Promise.resolve(cleanup.stop()).then(() => { stopped = true; });
+  await sleep(60);
+  assert.equal(stopped, false, 'stop() waits while the batch is in flight');
+  release();
+  await stopping;
+  assert.equal(queries.length, 1, 'no batch after stop()');
+  await sleep(60);
+  assert.equal(queries.length, 1, 'no pass after stop()');
+  const skipped = 'sessions: the previous pass is still running; skipping this one';
+  assert.ok(logs.every((line) => line === skipped), logs.join('\n'));
+});
+
+test('stop() with no pass in flight ends at once, and can be called again', async () => {
+  const cleanup = startSessionCleanup(fakePool(0), { interval: 60_000 });
+  await cleanup.done;
+  const first = cleanup.stop();
+  assert.ok(first instanceof Promise);
+  await first;
+  await cleanup.stop();
+});
+
+test('stop() while the batch in flight fails: it ends, never rejects, and logs no message', async () => {
+  const logs = [];
+  const pool = {
+    async query() {
+      await sleep(30);
+      throw new Error('Access denied for user ana@example.com to database nexora');
+    },
+  };
+  const cleanup = startSessionCleanup(pool, { interval: 60_000, log: (line) => logs.push(line) });
+  await cleanup.stop();
+  await cleanup.done;
+  assert.deepEqual(logs, ['sessions: could not delete expired sessions (Error); retrying in the next pass']);
+});
+
+test('a database error without a code is logged by its type only, never by its message', async () => {
+  const logs = [];
+  const pool = { async query() { throw new TypeError("Cannot read properties of undefined (reading 'ana@example.com')"); } };
+  const cleanup = startSessionCleanup(pool, { log: (line) => logs.push(line) });
+  await cleanup.done;
+  cleanup.stop();
+  assert.deepEqual(logs, ['sessions: could not delete expired sessions (TypeError); retrying in the next pass']);
+});
+
+test('a timed-out pass that later fails without a code: its message is not logged either', async () => {
+  const logs = [];
+  let fail;
+  const pool = { query: () => new Promise((resolve, reject) => { fail = reject; }) };
+  const cleanup = startSessionCleanup(pool, { interval: 60_000, passTimeout: 10, log: (line) => logs.push(line) });
+  await whileAlive(() => cleanup.done);
+  fail(new Error('Lock wait timeout exceeded; try restarting transaction for ana@example.com'));
+  await sleep(10);
+  cleanup.stop();
+  assert.equal(logs[1], 'sessions: the timed-out pass has ended with an error (Error)');
 });
