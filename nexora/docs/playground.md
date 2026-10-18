@@ -313,7 +313,7 @@ cd servidor && npm test
 | `nexora/tests/test_worker.py` | El proceso worker: protocolo, peticiones malformadas, modo aislado. Los límites del sistema operativo solo se ejecutan en Linux y macOS |
 | `servidor/test/playground-api.test.js` | La API por HTTP contra el intérprete real: validación, códigos HTTP, esquema, límites, tiempo agotado, concurrencia, fallos del worker, entorno del worker, orígenes, y paridad con la línea de comandos |
 | `servidor/test/playground-containers.test.js` | El ciclo de vida de los contenedores con un Docker falso (`test/fixtures/fake-docker.js`), sin Docker: nombre único por petición, eliminación y confirmación tras tiempo agotado, respuesta excesiva o error, hueco ocupado hasta confirmar, intentos limitados, ningún intento si la herramienta no arranca, y el [formato de la orden de contenedor](#formato-de-la-orden-de-contenedor): la orden documentada en `.env.example`, esta guía y el `Dockerfile`, opciones ausentes, repetidas, con otro valor o desconocidas, y elementos después de la imagen |
-| `servidor/test/playground-config.test.js` | La activación con la configuración real: desactivado sin `PLAYGROUND_ENABLED`, vacía o `false`; activado solo con `true`; error al arrancar con cualquier otro valor; `/status` y 503 en las demás rutas sin arrancar el worker, y un programa real con `true` |
+| `servidor/test/playground-config.test.js` | La activación con la configuración real: desactivado sin `PLAYGROUND_ENABLED`, vacía o `false`; activado solo con `true`; error al arrancar con cualquier otro valor; `/status` y 503 en las demás rutas sin arrancar el worker, y un programa real con `true`; en producción, que el playground activado sin la orden de contenedor impide arrancar |
 | `servidor/test/playground-frontend.test.js` | La lógica de la página (cliente, estado, resaltado) contra un servidor real y con fallos simulados |
 | `servidor/test/web-guide.test.js` | Los ejemplos de la guía web y los enlaces entre páginas |
 
@@ -565,6 +565,9 @@ User=nexora
 WorkingDirectory=/srv/nexora/app/servidor
 ExecStart=/usr/bin/node --env-file=.env src/index.js
 Restart=on-failure
+# El servidor se apaga solo al recibir SIGTERM: espera hasta 10 s a las peticiones en curso y otros
+# 10 s al pool de MySQL. Este margen deja que termine antes de que systemd lo mate.
+TimeoutStopSec=30
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
@@ -584,15 +587,57 @@ El servidor escucha en el puerto de `PORT` (3000). **No lo expongas directamente
 ciérralo en el cortafuegos y deja que solo nginx llegue a él. El worker no escucha en ningún
 puerto: solo se comunica con el servidor por su entrada y salida estándar.
 
+Al recibir `SIGTERM` (`systemctl stop` o `restart`), el servidor deja de aceptar conexiones y
+`/api/health` pasa a responder 503. Desde ese momento cada respuesta lleva `Connection: close`, para
+que una conexión persistente no lo retenga. Espera, como mucho 10 s, a las peticiones en curso y a
+la tanda de borrado de sesiones que esté en MySQL (no se envía ninguna más); después cierra el pool
+de MySQL, otros 10 s como mucho. Si el borrado no termina a tiempo, el pool se cierra igualmente;
+según el código de mysql2 3.24.6, cada conexión se cierra detrás de su consulta en curso, sin
+cortarla (sin comprobar todavía contra un MySQL real). Sale con código 0 si todo
+terminó a tiempo y con 1 si tuvo que cortar algo; el registro dice qué.
+**Probado solo con pruebas automatizadas en Windows**: la señal real, con systemd, sigue sin probar.
+
 ### 5. Proxy inverso (nginx)
 
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name tu-dominio.example;
-    # ssl_certificate y ssl_certificate_key: los de tu certificado
+**Sin probar**: esta configuración no se ha usado con un nginx real. Es un punto de partida que hay
+que comprobar en un servidor de pruebas antes de publicar. Los valores de los límites son una
+propuesta, no una medición.
 
+```nginx
+# En el bloque http (por ejemplo, /etc/nginx/conf.d/nexora-limits.conf): un cupo por cliente para
+# la API, además de los límites del propio servidor.
+limit_req_zone $binary_remote_addr zone=nexora_api:10m rate=10r/s;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name tu-dominio.example;
+    return 301 https://tu-dominio.example$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name tu-dominio.example;
+
+    ssl_certificate     /etc/letsencrypt/live/tu-dominio.example/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/tu-dominio.example/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    server_tokens off;
+
+    # El cuerpo más grande que acepta el servidor es el del playground (unos 385 KiB).
     client_max_body_size 512k;
+
+    location /api/ {
+        limit_req zone=nexora_api burst=20 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -604,8 +649,23 @@ server {
 }
 ```
 
-`proxy_set_header Host $host` es necesario: el servidor compara la cabecera `Origin` con `Host`
-para rechazar peticiones de otros sitios.
+- `http2 on;` es la forma de nginx 1.25.1 y posteriores. Con una versión anterior, quita esa línea y
+  escribe `listen 443 ssl http2;` (y lo mismo para `[::]:443`).
+- `proxy_set_header Host $host` es necesario: el servidor compara la cabecera `Origin` con `Host`
+  para rechazar peticiones de otros sitios.
+- `X-Forwarded-Proto` es lo que permite al servidor saber que la petición llegó por HTTPS (con
+  `TRUST_PROXY=loopback`) y enviar HSTS. El servidor envía también la CSP y las demás cabeceras de
+  seguridad: no hace falta repetirlas en nginx.
+- `limit_req` frena a un mismo cliente antes de que llegue al servidor. Los límites del servidor
+  siguen actuando detrás (y están en memoria: se pierden al reiniciar).
+- Las páginas de error de nginx (502 si el servidor no responde, 413 si el cuerpo es demasiado
+  grande, 429 del límite) no dicen nada del servidor. Las del servidor tampoco: un error interno
+  responde `{"error":"Internal server error."}` y deja en el registro solo el tipo y un código.
+- `/api/health` puede quedarse abierto (no revela nada) o limitarse a la red del monitor con
+  `allow` y `deny` en un `location = /api/health` propio.
+
+El certificado puede obtenerse con Let's Encrypt (por ejemplo, `certbot --nginx`), que además lo
+renueva. Comprueba después la renovación con `certbot renew --dry-run`.
 
 ### 6. Registros
 
@@ -617,6 +677,17 @@ El servidor escribe una línea por cada fallo del playground, con el tipo de fal
 (`playground: worker failed`, `playground: worker unavailable`…). Nunca escribe el código enviado.
 
 ### 7. Verificar el despliegue
+
+Primero, que el proceso responde:
+
+```bash
+curl -s https://tu-dominio.example/api/health
+```
+
+Tiene que responder `{"status":"ok","checks":{"http":"ok"}}`. Solo dice que el proceso está en marcha
+y atiende peticiones: **no comprueba MySQL, Google, GitHub, reCAPTCHA ni el playground**. Durante un
+apagado responde 503 con `{"status":"shutting_down"}`. Comprueba también que `http://` redirige a
+`https://` (`curl -sI http://tu-dominio.example/` devuelve 301).
 
 Mientras el playground esté desactivado, comprueba que de verdad lo está:
 
@@ -688,16 +759,63 @@ copia del intérprete. Si la orden usa una etiqueta (`nexora-worker:0.6.0`), con
 la etiqueta nueva, cámbiala en `PLAYGROUND_WORKER_COMMAND` y reinicia el servicio; ver
 [Imagen del worker](#3-imagen-del-worker).
 
+### 9. Copias de seguridad de MySQL
+
+**Sin probar**: ningún paso de esta sección se ha ejecutado todavía, ni la copia ni la restauración.
+Hasta comprobar una restauración completa en un servidor de pruebas, no hay que dar por buena
+ninguna copia.
+
+La base de datos guarda cuentas (nombres, emails y resúmenes de contraseñas), sesiones y enlaces con
+Google y GitHub: cada copia contiene datos personales. Guárdala cifrada, fuera del servidor, con
+acceso restringido, y bórrala cuando pase el plazo que fije la política de privacidad.
+
+Las credenciales van en un archivo de opciones, nunca en la línea de órdenes (se verían en `ps`):
+
+```ini
+# /home/nexora-backup/.my.cnf  (chmod 600, propiedad del usuario que hace la copia)
+[client]
+user=nexora_backup
+password=...
+```
+
+El usuario de la copia solo necesita leer: `GRANT SELECT, SHOW VIEW, LOCK TABLES ON nexora.* TO
+'nexora_backup'@'localhost';`. La copia, coherente sin bloquear las tablas (todas son InnoDB):
+
+```bash
+mysqldump --single-transaction --quick --default-character-set=utf8mb4 nexora \
+  | gzip > nexora-$(date +%F).sql.gz
+```
+
+En MariaDB la orden se llama también `mariadb-dump`. Para restaurar, **primero en una base de datos
+distinta** y comprueba que las tablas y el número de filas coinciden:
+
+```bash
+mysql -e 'CREATE DATABASE nexora_restore CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+gunzip -c nexora-AAAA-MM-DD.sql.gz | mysql nexora_restore
+mysql -e 'SELECT COUNT(*) FROM nexora_restore.users; SELECT COUNT(*) FROM nexora_restore.oauth_accounts'
+```
+
+Solo después, con el servicio parado (`systemctl stop nexora`), se restaura sobre la base de datos de
+producción. Las sesiones de la copia que ya hayan caducado se borran solas al arrancar.
+
 ### Sin Docker
 
-Si no puedes usar Docker, el modo de proceso (sin `PLAYGROUND_WORKER_COMMAND`) funciona, y en Linux
-aplica los límites del sistema operativo. Reduce el riesgo ejecutando el servidor con un usuario
-dedicado sin acceso a nada más. **No es una sandbox**, y no se recomienda para un servicio abierto a
-cualquiera.
+Si no puedes usar Docker, el modo de proceso (sin `PLAYGROUND_WORKER_COMMAND`) funciona en tu
+equipo, y en Linux aplica los límites del sistema operativo. **No es una sandbox**: ejecuta el código
+de los visitantes con los permisos del servidor. Por eso, con `NODE_ENV=production`, el servidor no
+arranca con `PLAYGROUND_ENABLED=true` sin la orden de contenedor admitida: dice por qué y termina. Que
+la orden de contenedor esté configurada tampoco demuestra que el aislamiento funcione: hay que
+completar antes [Comprobar el aislamiento](#comprobar-el-aislamiento).
 
 ## Tareas pendientes y riesgos
 
 - Construir y probar la imagen del worker, y completar la tabla de comprobación del aislamiento.
+- Probar en un servidor de pruebas la configuración de nginx (redirección a HTTPS, `limit_req`,
+  certificado), el apagado con `systemctl stop` y una copia de MySQL restaurada de principio a fin.
+- En el modo contenedor, el usuario del servidor web tiene que poder usar Docker, y eso equivale a
+  tener permisos de administrador en el equipo: quien comprometiera el servidor web controlaría el
+  equipo. Antes de activar el playground en público hay que decidir cómo separarlos (por ejemplo,
+  un servicio aparte, con su propio usuario, que sea el único que lanza contenedores).
 - Comprobar los límites del sistema operativo dentro del contenedor. En Linux ya pasan con el worker
   lanzado como proceso, sin contenedor ([Pruebas](testing.md#linux)).
 - Medir el tiempo de arranque de un contenedor por petición. Si es demasiado, la alternativa es un

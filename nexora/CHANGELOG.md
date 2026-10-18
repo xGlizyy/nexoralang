@@ -58,8 +58,28 @@ a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no 
 - Las páginas legales llevan `<meta name="robots" content="noindex, nofollow">` mientras sean un
   borrador, y una prueba lo exige. Solo pide a los buscadores que no las indexen: no impide abrirlas
   a quien tenga el enlace.
+- `GET /api/health`: dice si el proceso está en marcha y responde peticiones
+  (`{"status":"ok","checks":{"http":"ok"}}`), y nada más: no comprueba MySQL, Google, GitHub,
+  reCAPTCHA ni el playground, ni revela la versión o la configuración. Durante el apagado responde 503.
+- **Apagado ordenado** (`servidor/src/lifecycle.js`): con `SIGTERM` o `SIGINT`, el servidor deja de
+  aceptar conexiones y responde con `Connection: close`, para que una conexión persistente no lo
+  retenga; espera hasta 10 s a las peticiones en curso y a la tanda de borrado de sesiones que esté
+  en MySQL (no envía ninguna más); cierra el pool de MySQL (otros 10 s como mucho) y sale con 0, o
+  con 1 si tuvo que cortar algo. Si durante el apagado llega la otra
+  señal, no se repite; si llega otra vez la misma, Node termina el proceso en el acto, sin esperar.
+  El límite de cada espera mantiene vivo el proceso hasta que vence: si lo único pendiente no tiene
+  ningún recurso detrás (un cierre del pool que no termina), el proceso ya no sale con 0 antes de
+  tiempo sin registrarlo, sino que espera el límite, lo registra y sale con 1. Probado con pruebas
+  automatizadas en Windows (Node 20.6.1, 22.23.3 y 24.21.0), sin señales reales: con systemd, sin
+  probar.
 
 ### Cambios incompatibles
+
+- **Con `NODE_ENV=production`, `PLAYGROUND_ENABLED=true` exige la orden de contenedor** en
+  `PLAYGROUND_WORKER_COMMAND`. Sin ella (o con una orden de proceso), el servidor no arranca: el modo
+  de proceso ejecuta el código de los visitantes con los permisos del servidor. Fuera de producción,
+  el modo de proceso sigue disponible para probar en un equipo propio. Configurar la orden de
+  contenedor no demuestra que el aislamiento funcione: sigue sin comprobarse con Docker real.
 
 - **`NODE_ENV` solo admite `development`, `test` o `production`, en minúsculas.** Antes cualquier
   valor distinto de `production` (`Production`, `prod`, vacío) dejaba el servidor en desarrollo, sin
@@ -137,6 +157,34 @@ a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no 
   aparece si además el intérprete respondió; si no, «Unavailable». Activado, se comporta como antes.
 - El formulario de registro cabe entero, botón incluido, en una pantalla de 1366×768. El inicio de
   sesión ya cabía y no cambia.
+- **El registro es atómico.** Antes se creaba la cuenta y después, aparte, su primera sesión: si la
+  sesión no se podía guardar, la cuenta quedaba creada, la persona recibía un error y, al volver a
+  intentarlo, un 409. Ahora la cuenta y la sesión se guardan en una sola transacción, la cookie solo
+  se envía después de confirmarla, y el resumen de la contraseña se calcula antes de abrirla, para no
+  ocupar una conexión del pool durante scrypt. Si además falla el `ROLLBACK`, cuenta el error
+  original (un email duplicado sigue respondiendo 409) y esa conexión no vuelve al pool, porque podría
+  haber quedado con la transacción abierta: se destruye. El fallo del `ROLLBACK` queda en el registro
+  con su tipo y su código (`auth: sign-up rollback failed (Error ER_ERROR_DURING_ROLLBACK)`), sin el
+  mensaje ni ningún dato de la petición. Probado con una base de datos simulada; contra MySQL real, la
+  prueba está preparada y sin ejecutar.
+- El inicio de sesión con Google o GitHub sigue la misma regla en su transacción: si falla el
+  `ROLLBACK`, cuenta el error original (por ejemplo, `account_exists` sigue siendo `account_exists`), la
+  conexión se destruye en vez de volver al pool (una sola vez, nunca devuelta y destruida) y queda una
+  línea `oauth: <proveedor>: rollback failed (…)` sin datos. Antes, un `ROLLBACK` fallido sustituía al
+  error original y la conexión volvía al pool. Probado con una base de datos simulada.
+- **El registro del servidor ya no copia los errores enteros.** Un error interno de la aplicación o
+  del inicio de sesión con Google o GitHub escribía el objeto completo, que en un error de MySQL
+  incluye la consulta y el mensaje del servidor (con el email, por ejemplo). Ahora solo se escribe el
+  tipo y un código conocido (`Error ER_DUP_ENTRY`, `ProviderError token_http_500`), nunca el mensaje,
+  la pila, la consulta, el token, el código de autorización ni el secreto. La ruta se escribe por su
+  plantilla (`/api/auth/:provider/callback`), nunca por el camino pedido ni su cadena de consulta; sin
+  una ruta que coincida, `(no route)`. El borrado de sesiones caducadas sigue la misma regla: antes
+  escribía el mensaje del error cuando no tenía código.
+- Google: una cuenta solo se crea o se enlaza si `email_verified` es exactamente `true`; antes
+  bastaba cualquier valor que JavaScript tome por verdadero. Un perfil sin identificador, o una lista
+  de emails de GitHub que no es una lista, son ahora un fallo del proveedor con su propio código.
+- Un resumen de contraseña guardado con campos de más (`…$extra`) ya no se acepta como válido: el
+  formato tiene que ser exactamente el de `hashPassword`.
 
 ### Documentación
 
@@ -149,6 +197,11 @@ a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no 
   nunca se habían ejecutado) y las de `npm/` y `servidor/`, y los paquetes de pip y npm se instalan
   y funcionan. No hizo falta cambiar código. Docker y el aislamiento del playground siguen sin
   comprobar.
+- Despliegue ([guía del playground](docs/playground.md#despliegue-en-un-servidor-propio)): nginx con
+  redirección de HTTP a HTTPS, `limit_req`, `server_tokens off` y la sintaxis `http2 on` de las
+  versiones actuales; `TimeoutStopSec` en systemd; la ruta de salud; y copias de seguridad y
+  restauración de MySQL. **Nada de ello se ha probado** con nginx, systemd ni MySQL reales: la guía
+  lo dice en cada apartado.
 
 ### Limitaciones
 
@@ -172,8 +225,10 @@ a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no 
 - El antispam, el freno del inicio de sesión, el borrado de sesiones y las cabeceras se han probado
   con la base de datos, Google reCAPTCHA y el navegador simulados: no contra un MySQL real, con claves
   reales de reCAPTCHA, en un navegador ni detrás de nginx. Las pruebas automatizadas del servidor,
-  con esos mismos servicios simulados, dan 575 superadas y 0 fallos en cada una de tres ejecuciones
-  en Windows 11; en Ubuntu 24.04 en WSL 2 se ejecutaron antes de las últimas correcciones de la web
+  con esos mismos servicios simulados, dan 810 superadas y 0 fallos con Node 24.21.0 (en cada una de
+  tres ejecuciones), 24.14.0, 22.23.3 y 22.22.3, y 796 superadas, 14 omitidas (las que necesitan Node
+  22.22.3 o posterior en la rama 22, o 24.14.0 o posterior) y 0 fallos con Node 20.6.1 y 22.15.0 (una
+  ejecución con cada una de esas versiones), en Windows 11; en Ubuntu 24.04 en WSL 2 se ejecutaron antes de las últimas correcciones de la web
   (567 superadas, 0 fallos, en cada una de tres ejecuciones) ([Pruebas](docs/testing.md)).
 - Los contadores de los límites y del freno del inicio de sesión están en memoria: se pierden al
   reiniciar y no se comparten entre varias instancias del servidor.

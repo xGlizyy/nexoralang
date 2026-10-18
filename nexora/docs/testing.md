@@ -98,6 +98,17 @@ anterior de ese mismo día, 522 superadas, solo en Windows, corresponde a un est
 | `a160829` con los cambios sin commit (auditoría) | **565 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | **565 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones |
 | El mismo árbol tras las correcciones de la auditoría | **567 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | **567 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones |
 | `dce6061` con las correcciones de la revisión visual, sin commit | **575 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
+| `75661aa` con la fase 1 de la auditoría de producción, sin commit | **643 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
+| El mismo árbol con las correcciones de la revisión de la fase 1 | **658 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
+| El mismo árbol con la prueba del arranque real | **659 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
+| El mismo árbol con las guardas de las pruebas de integración | **701 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
+| El mismo árbol con el registro atómico y las guardas revisadas | **721 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
+| El mismo árbol sin `DROP`, con el comodín escapado y el rollback protegido | **741 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
+| El mismo árbol con las correcciones de la auditoría final (preflight, rollbacks registrados) | **766 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
+| El mismo árbol con la revisión del preflight (módulos permitidos, proceso de migraciones, playground, Node sin `registerHooks`) | **784 superadas**, 0 fallos, 0 omitidas, en una ejecución | No se ejecutó |
+| El mismo árbol con el límite del apagado corregido | **797 superadas**, 0 fallos, 0 omitidas, en una ejecución | No se ejecutó |
+| El mismo árbol con la revisión final de la auditoría (pruebas sin esperas fijas, apagado por pasos) | **798 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
+| El mismo árbol con el bloqueo de las pruebas de integración, los mínimos de Node medidos y `captcha.test.js` sin dependencia de orden | **810 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
 
 En Linux se usó una copia nueva del árbol de trabajo, comprobada archivo por archivo con SHA-256, con
 las dependencias instaladas con `npm ci` y el intérprete de `nexora/.venv` (Python 3.12.3). La fila
@@ -111,6 +122,327 @@ mientras el servidor no confirme que el playground está activado (sin respuesta
 que no entiende o con un error del servicio); que en un servidor anterior sin `/status` decide
 `/info`, como antes; que una conexión perdida después se sigue avisando al pulsar Run; y que las
 páginas legales en borrador llevan `noindex`.
+
+Las 68 pruebas nuevas de la fila de 643, todas sin red y sin base de datos real:
+
+- `playground-config.test.js` (11): en producción, el playground activado sin la orden de contenedor
+  impide arrancar (sin orden y con una orden de proceso); con la orden de contenedor, desactivado o
+  fuera de producción, arranca. Una de ellas lanza `src/index.js` en un proceso aparte, sin
+  `servidor/.env`, con el puerto 0 y la base de datos en un puerto cerrado: termina con error antes
+  de escuchar y antes de borrar sesiones.
+- `passwords.test.js` (7): scrypt real; formato guardado, sal distinta en cada hash, contraseñas
+  incorrectas, 10 y 200 caracteres, texto no ASCII, otros parámetros, formatos inválidos y parámetros
+  imposibles (un error, no una contraseña incorrecta).
+- `oauth.test.js` (32): Google y GitHub simulados. `state` ausente, distinto, repetido o de otra
+  longitud; cancelación; proveedor sin configurar; errores HTTP, respuestas que no son JSON o sin los
+  campos esperados, tiempo agotado y red caída; emails sin verificar; cuenta con contraseña que no se
+  enlaza; fallos de la base de datos dentro y fuera de la transacción; y que en ningún fallo se
+  confirma (`commit`) una cuenta ni se abre una sesión, ni el registro recibe el secreto, el token,
+  el código o el email. Que una cuenta deshecha con `rollback` no quede guardada de verdad solo se
+  puede comprobar con un MySQL real.
+- `health.test.js` (6), `lifecycle.test.js` (8) y `safe-log.test.js` (4): `/api/health`, el apagado
+  ordenado con servidores HTTP reales en puertos libres, y la descripción de errores en el registro.
+  Las señales en sí (`SIGTERM`, `SIGINT`) no se prueban: en Windows, matar un proceso no ejecuta sus
+  manejadores. Siguen pendientes en Linux.
+
+Las 15 pruebas de la fila de 658 corrigen lo que encontró la revisión de esa fase. Cada una se
+escribió antes que la corrección y falló sin ella:
+
+- `lifecycle.test.js` (4): una conexión keep-alive (con `http.Agent` y con `fetch`) ya no retiene el
+  apagado: la respuesta lleva `Connection: close` y sale con 0 en menos de 1,5 s, donde antes agotaba
+  un límite de 3 s; el pool se cierra solo después de la tanda de borrado en curso; si el borrado no
+  termina a tiempo o falla, el pool se cierra igualmente y sale con 1, sin el mensaje del error.
+- `session-cleanup.test.js` (5): `stop()` espera a la tanda en curso, no envía otra aunque quedaran
+  sesiones y no programa más pasadas; termina enseguida si no hay ninguna en curso; nunca se rechaza;
+  y un error sin código se registra por su tipo, nunca por su mensaje.
+- `health.test.js` (3) y `safe-log.test.js` (3 más; la de `describePath` se sustituye por cuatro de
+  `describeRoute`): la ruta se registra por su plantilla, también la anidada
+  (`/api/auth/:provider/callback`) y escrita con otras mayúsculas; sin ruta que coincida,
+  `(no route)`; nunca el camino pedido, la cadena de consulta, un email o un identificador.
+
+En la fila de 659, la prueba que leía `src/index.js` con expresiones regulares se sustituye por dos
+que arrancan el servidor real en un proceso aparte (puerto libre, sin `servidor/.env`, base de datos
+en un puerto cerrado, playground desactivado) y le envían `SIGTERM` o `SIGINT` a través de
+`test/fixtures/signal-bridge.js`, que emite el evento en `process`: ejecuta los mismos manejadores que
+una señal, pero no es una señal del sistema. Con `SIGTERM` llega mientras hay un registro en curso:
+la respuesta lleva `Connection: close` y el proceso sale con 0. Las dos detectan tres fallos
+introducidos a propósito en una copia de `src/index.js`: sin manejador de `SIGTERM`, el apagado
+creado tarde y el seguimiento de respuestas empezado después de la primera petición. La señal del
+sistema operativo y systemd siguen sin probar.
+
+En la fila de 797, el apagado ya no puede terminar antes de su límite. `within()`
+(`servidor/src/lifecycle.js`), que limita cada espera del apagado, ponía su temporizador con
+`unref()`: si lo único pendiente no tenía ningún recurso detrás (por ejemplo, un cierre del pool que
+no termina nunca), al proceso no le quedaba nada que lo mantuviera vivo y salía con 0 en 1–2 ms, sin
+registrar el límite ni llegar a `exit()`. Ahora el temporizador no lleva `unref()`: mantiene vivo el
+proceso hasta que la espera termina o vence, y `clearTimeout` lo sigue limpiando en cuanto termina.
+Con el flujo actual, el apagado puede tardar hasta unas dos veces el límite (`timeoutMs`, 10 s): las
+peticiones en curso y el borrado de sesiones se esperan a la vez, y el pool después. Las 13 pruebas
+nuevas de `lifecycle.test.js`:
+
+- 6 con temporizadores simulados: ningún temporizador del límite usa `unref()`; todos se limpian tras
+  el cierre, el error y el vencimiento; un cierre tardío no añade nada al registro; y cada orden entre
+  el límite y el cierre del pool tiene un resultado fijo (en el mismo turno, en cualquier orden, cuenta
+  como vencimiento; si el pool cierra antes de que llegue el límite, como cierre).
+- 7 en un proceso propio (`test/fixtures/shutdown-child.js`, con `process.exit` de verdad, un pool
+  simulado y un servidor HTTP en un puerto libre de 127.0.0.1): un pool que no cierra, sin nada más
+  vivo, espera el límite, lo registra y sale con 1 (antes, con 0 en 1–2 ms); uno que cierra enseguida
+  sale con 0 sin esperar; uno más lento que el límite y uno que rechaza salen con 1 y una sola línea;
+  sin `process.exit`, el proceso termina en cuanto acaba el apagado, sin ningún temporizador
+  pendiente; y, con el mismo plazo que el límite, gana el temporizador que se puso antes (el del
+  límite o, si se puso antes de empezar el apagado, el del pool).
+
+Las dos pruebas que ya esperaban un límite vencido (un pool o un borrado de sesiones que no terminan)
+lo esperan ahora sin nada más que mantenga vivo el proceso. Antes de la corrección, en Node 20.6.1 y
+22.23.3 se cancelaban 19 pruebas de `lifecycle.test.js` y `session-cleanup.test.js`: siete esperaban
+un temporizador con `unref()` sin nada más vivo, y las demás caían en cadena tras ellas (el ejecutor de
+pruebas de Node 24 no las cancela). Las cinco de `session-cleanup.test.js` esperan ahora con el bucle
+de eventos vivo, como en el servidor real; las dos de `lifecycle.test.js` ya no lo necesitan.
+
+`npm test` con esta fila, en Windows 11, una ejecución por versión, el 18 de octubre de 2026 (Node
+20.6.1 y 22.23.3 son las distribuciones portátiles oficiales, con su SHA-256 comprobado; 24.21.0 es el
+del sistema):
+
+| Node | Pruebas | Superadas | Omitidas | Fallos | Canceladas |
+|------|---------|-----------|----------|--------|------------|
+| 20.6.1 | 797 | 783 | 14 (las de `preflight.js`, sin `registerHooks`) | 0 | 0 |
+| 22.23.3 | 797 | 797 | 0 | 0 | 0 |
+| 24.21.0 | 797 | 797 | 0 | 0 | 0 |
+
+Sigue sin demostrarse: el caso con un MySQL real (que el cierre del pool quede pendiente sin ningún
+socket abierto), las señales reales del sistema operativo (las pruebas usan
+`test/fixtures/signal-bridge.js`) y el `TimeoutStopSec` de systemd, que tiene que superar esas dos
+veces el límite.
+
+En la fila de 798, la revisión final de la auditoría:
+
+- `servidor/src/lifecycle.js`: marcar el servidor como en apagado (`onDraining`, que pone
+  `/api/health` en 503) y parar el borrado de sesiones (`stopCleanup`) se intentan por separado. Antes
+  estaban en el mismo bloque: si fallaba el primero, el segundo no se llegaba a llamar. La prueba nueva
+  es la 798.
+- `lifecycle.test.js` ya no espera tiempos fijos. Las pruebas que necesitaban una petición en curso
+  esperaban 100 ms y daban por hecho que había llegado; ahora esperan a que el servidor la reciba, y la
+  respuesta lenta llega cuando la prueba lo decide. La del `SIGTERM` al servidor real enviaba la señal
+  mientras scrypt calculaba el resumen (unos 100 ms); ahora envía el cuerpo en dos partes, y la segunda
+  solo cuando `test/fixtures/signal-bridge.js` confirma por IPC que ha emitido la señal. Además usa un
+  cliente keep-alive: con `agent: false` el propio cliente pedía `Connection: close`, y comprobar esa
+  cabecera en la respuesta no demostraba nada.
+- `whileAlive()` (`session-cleanup.test.js`) tiene un límite de 5 s. Antes, si una pasada no terminaba
+  nunca, la prueba esperaba para siempre: `node:test` no pone límite por defecto.
+- `auth-routes.test.js`: la prueba de que un registro fallido no deja la cuenta a medias repetía el
+  registro con una base simulada nueva, así que no comprobaba nada; ahora lo repite con la misma.
+- La prueba de `stop()` con una tanda en curso anota sus líneas en vez de escribirlas en la salida de
+  error.
+
+Cinco fallos introducidos a propósito en copias del árbol (sin `servidor/.env`) los detectan estas
+pruebas: los dos pasos del apagado otra vez juntos, sin el manejador de `SIGTERM`, sin
+`Connection: close`, el registro confirmando (`COMMIT`) en vez de deshacer, y un plazo de pasada que
+no vence nunca (las cinco pruebas con `whileAlive()` fallan a los 5 s, en vez de quedarse esperando).
+Sin `Connection: close`, la prueba del `SIGTERM` real solo lo detecta desde que usa el cliente
+keep-alive.
+
+`npm test` con esta fila, en Windows 11, el 18 de octubre de 2026 (las mismas distribuciones de Node
+que en la fila de 797, con su SHA-256 comprobado de nuevo):
+
+| Node | Ejecuciones | Pruebas | Superadas | Omitidas | Fallos | Canceladas |
+|------|-------------|---------|-----------|----------|--------|------------|
+| 20.6.1 | 1 | 798 | 784 | 14 (las de `preflight.js`, sin `registerHooks`) | 0 | 0 |
+| 22.23.3 | 1 | 798 | 798 | 0 | 0 | 0 |
+| 24.21.0 | 3 | 798 | 798 | 0 | 0 | 0 |
+
+Después de cada ejecución no quedó ningún proceso de Node abierto. Con Node 20.6.1, el ejecutor de
+pruebas avisa una vez `MaxListenersExceededWarning` en `integration-guard.test.js`: según la traza, lo
+produce su propia forma de aplicar el `timeout` de cada prueba (`stopTest`), no el código del servidor.
+
+Con las pruebas de cada archivo en orden aleatorio (`node --test --test-randomize`, Node 24.21.0), en
+seis ejecuciones: en cuatro pasan las 798; en dos fallan las mismas dos pruebas de `captcha.test.js`
+(confirmadas en `cda0ee9` y `a160829`), porque comparten el límite estricto de una misma IP: la segunda
+da por hecho que la primera ya lo agotó. Con el orden normal, `node:test` ejecuta las pruebas de un
+archivo en el orden en que están escritas, y `npm test` no fallaba. Se corrigen en la fila de 810.
+
+En la fila de 810:
+
+- **`captcha.test.js` sin dependencia de orden.** Las dos pruebas que gastan el límite estricto usan
+  ahora cada una su propia ruta, con el cupo entero (`protectedRoute`), y gastan el cupo ellas mismas:
+  una puntuación baja y una caída de Google pasan dos veces y después las dos se frenan. Con la versión
+  anterior, las semillas 2774676119 y 4 reproducen el fallo (48 superadas, 2 fallos); con la nueva, esas
+  dos semillas y 100 más (1000–1099) pasan las 50 pruebas del archivo.
+- **Las pruebas de integración tienen un bloqueo de ejecución** (ver más abajo). 11 pruebas nuevas en
+  `integration-guard.test.js`, con conexiones simuladas.
+- **El mínimo de Node de las pruebas de integración estaba mal.** `module.registerHooks` existe desde
+  Node 22.15, pero hasta 22.22.2 (rama 22) y 24.13.1 (rama 24), al importar un módulo CommonJS desde
+  ESM, Node lo vuelve a resolver por dentro con su ruta absoluta y sin `parentURL`: el gancho de
+  `preflight.js` no puede saber quién lo pide y bloquea `mysql2` también en el orden legítimo. Fallaba
+  de forma segura (no deja pasar nada), pero las pruebas de integración no podían ejecutarse, y `npm
+  test` fallaba en esas versiones (3 fallos en Node 22.15.0) en lugar de omitir esas pruebas. Medido con
+  el caso «legit» de `test/fixtures/preflight-probe.js` y las distribuciones oficiales para Windows, con
+  su SHA-256 comprobado: lo bloquean 22.15.0, 22.18.0, 22.19.0, 22.20.0, 22.21.0, 22.22.0, 22.22.1,
+  22.22.2, 24.0.0, 24.11.1, 24.13.0 y 24.13.1; lo cargan 22.22.3, 22.23.0, 22.23.3, 24.14.0, 24.14.1,
+  24.15.0, 24.16.0, 24.21.0, 25.9.0 y 26.12.0. `checkHookSupport` (`guard.js`) exige ahora esas
+  versiones y explica por qué; en las demás, `npm test` omite las 14 pruebas que lanzan procesos con
+  `preflight.js`, cada una con su motivo. Una prueba nueva fija la tabla de versiones.
+
+`npm test` con esta fila, en Windows 11, el 18 de octubre de 2026, una ejecución por versión salvo
+24.21.0 (tres). Las cifras salen de los registros de cada ejecución:
+
+| Node | Pruebas | Superadas | Fallos | Omitidas | Canceladas | Código de salida |
+|------|---------|-----------|--------|----------|------------|------------------|
+| 20.6.1 | 810 | 796 | 0 | 14 (sin `registerHooks`) | 0 | 0 |
+| 22.15.0 | 810 | 796 | 0 | 14 (gancho que no ve quién carga cada módulo) | 0 | 0 |
+| 22.22.3 | 810 | 810 | 0 | 0 | 0 | 0 |
+| 22.23.3 | 810 | 810 | 0 | 0 | 0 | 0 |
+| 24.14.0 | 810 | 810 | 0 | 0 | 0 | 0 |
+| 24.21.0 (×3) | 810 | 810 | 0 | 0 | 0 | 0 |
+
+Con orden aleatorio, Node 24.21.0, semillas 2774676119, 1, 2, 3, 4 y 5: las 810 superadas en cada una
+de las seis, código de salida 0. Después de cada ejecución no quedó ningún proceso de Node abierto.
+
+**Fallos intermitentes, sin corregir.** En una ejecución anterior de esta misma ronda, con el mismo
+código de servidor, fallaron por tiempo agotado pruebas que arrancan el intérprete real de Python o
+procesos con un límite de tiempo: 1 en Node 20.6.1 (`playground-api.test.js`) y 4 en Node 22.23.3
+(`playground-api`, `playground-containers`, `playground-frontend` y `web-guide`). Son pruebas
+confirmadas antes de esta auditoría. No se reprodujeron: esos cuatro archivos pasaron 3 veces seguidas
+con cada una de las dos versiones (326 de 326), y en la tabla de arriba. Lo más probable es que fuera
+carga momentánea del equipo mientras `node --test` ejecuta varios archivos a la vez, pero no está
+demostrado.
+
+#### Pruebas de integración con MySQL: preparadas, nunca ejecutadas
+
+`servidor/test/integration/` contiene pruebas contra una base de datos real (migraciones y esquema,
+cuentas y sesiones, borrado de sesiones y cierre del pool con consultas en curso y bloqueos, OAuth
+con persistencia y concurrencia, y errores de SQL). **No se han ejecutado nunca**: hace falta antes
+crear la base `nexora_test`, el esquema de la marca `nexora_test_guard` y dos cuentas con
+`servidor/test/integration/setup-admin.sql`, que también está sin ejecutar. La cuenta de migraciones
+solo tiene `CREATE`, `ALTER`, `INSERT` y `REFERENCES` sobre las tres tablas de la aplicación, **sin
+`DROP`** y ningún permiso sobre la base entera: no puede borrar tablas, crear otras ni borrar la base.
+La de la aplicación tiene `SELECT`, `INSERT` y `DELETE` sobre `` `nexora\_test`.* ``, con el `_`
+escapado: sin escapar, en un permiso sobre una base entera `_` es un comodín y daría acceso también a
+`nexoraXtest`. Las dos solo pueden leer la marca. Solo se lanzan con `npm run test:integration`,
+nunca con `npm test`, y cargan `servidor/.env.integration` (ignorado por git), nunca `servidor/.env`.
+
+**La prueba de esquema nuevo** solo se ejecuta si ninguna de las tres tablas existe, es decir, con la
+base recién creada. Si existen, se omite y lo dice; si solo existen algunas, falla, porque la base
+quedó a medio migrar. Para repetirla, una persona con permisos de administración ejecuta antes, a
+mano y en el servidor de pruebas, `servidor/test/integration/prepare-fresh-schema-admin.sql`, que borra
+solo las tres tablas de la aplicación (ni la base, ni la marca, ni las cuentas). El script **no
+garantiza por sí solo** estar en el servidor de pruebas: muestra la marca, y comprobarla es tarea de
+quien lo ejecuta. Antes de nada hay que revisar el destino (servidor, puerto y cuenta del cliente);
+después, usar el cliente de MySQL o MariaDB **sin `--force`**, para que se detenga en el primer error
+(si la marca no existe, su consulta falla y los `DROP` no se ejecutan); y mirar el resultado de la
+consulta de la marca: tiene que ser exactamente una fila, `nexora-integration-tests-only`. Con
+cualquier otra cosa, hay que detenerse. Lo más seguro es ejecutar primero solo esa consulta.
+
+La prueba de esquema desviado deshace su cambio con `ALTER`, sin borrar nada, también si fallan las
+migraciones o una comprobación (`undoAfter` en `guard.js`). Si lo que falla es deshacerlo, no tapa el
+error original: lo anota aparte y pide `prepare-fresh-schema-admin.sql`.
+
+Antes de cargar ninguna prueba, `servidor/test/integration/preflight.js` (con `--import` en el script, y
+además la primera importación de `run.js`) rechaza un entorno inseguro: sin `npm run test:integration`,
+con cualquier variable `DB_*`, con el playground activable (`PLAYGROUND_ENABLED` solo puede faltar o
+valer exactamente `false`, y no se admite ninguna otra variable `PLAYGROUND_*`) o con una configuración
+de pruebas que no sea la autorizada. Además instala un gancho de resolución de módulos de Node: de
+`servidor/src/` solo se pueden cargar los módulos de la lista `APP_MODULES` de `guard.js` (los que
+importan las pruebas y todo lo que estos importan; `npm test` comprueba que la lista es exactamente
+eso), y solo cuando una conexión de la aplicación se ha verificado y `useAppDatabase()` ha preparado el
+entorno. `src/index.js` (escucharía en `PORT`, 3000 si no hay otro, y arrancaría el borrado de
+sesiones) y `src/migrate.js` (conecta y migra al cargarse) no se cargan nunca en ese proceso. `mysql2`
+solo lo puede cargar `guard.js` (con el proceso ya marcado) o esos módulos. Esto vale para cualquier
+forma de cargarlos: importación estática, `import()` con texto, variable o plantilla, `require` y
+`createRequire`, y otras formas de escribir la misma ruta (`SRC`, `%73rc`). `playground/worker.js`, que
+está en la lista porque lo importa `app.js`, crea al cargarse su carpeta de trabajo en el directorio
+temporal, como en `npm test`.
+
+**Las pruebas de integración requieren Node 22.22.3 o posterior en la rama 22, o 24.14.0 o
+posterior** (`module.registerHooks`, y que su gancho vea quién carga cada módulo; ver la fila de 810).
+La rama 23 no se admite. Es un requisito solo de `npm run test:integration`, no de todo el proyecto: la
+compatibilidad declarada en `servidor/package.json` (`engines`, Node 20.6 o posterior) y la matriz de la
+integración continua (20.6 y 22) no cambian. En cualquier otro Node:
+- `preflight.js` se niega a ejecutar las pruebas de integración y explica por qué;
+- `npm test` puede ejecutar todo lo demás; de `integration-guard.test.js` se omiten las 14 pruebas que
+  lanzan procesos con `preflight.js`, cada una con su motivo, y el resumen las cuenta como omitidas
+  (`skipped 14`), no como superadas.
+
+Con Node 20.6.1 y 22.15.0 reales, en Windows 11, `npm test` omite exactamente esas 14, cada una con su
+motivo (ver las filas de 797, 798 y 810). Que `preflight.js` se niegue con `npm run test:integration` no se ha ejecutado en Node
+20.6: solo se ha simulado en Node 24, quitando `registerHooks` antes de cargar `preflight.js` (`node
+--import ./test/fixtures/without-register-hooks.js --test test/integration-guard.test.js`). La
+integración continua tampoco valida nunca las pruebas de
+integración: solo ejecuta `npm test`, sin base de datos; que ese paso salga bien no dice nada de ellas.
+La alternativa que existe desde Node 20.6, `module.register`, ejecuta sus ganchos de forma asíncrona en
+otro hilo y en Node 20 no ve `require`; habría que completarla con una función interna de Node, así que
+no se usa.
+
+Las migraciones se ejecutan en un proceso aparte, a través de `servidor/test/integration/migrate-child.js`.
+Su entorno es exactamente el de `migratorProcessEnv` (la cuenta de migraciones, `127.0.0.1`,
+`nexora_test`, `NODE_ENV=test`, `PATH` y `SystemRoot`; en Windows, además, las variables del sistema que
+Node añade a todo proceso hijo, como `TEMP` o `USERPROFILE`): cualquier otra, como `NODE_OPTIONS`, una
+`TEST_*` o la cuenta de la aplicación, lo detiene antes de conectar. Con su propia conexión verifica la
+cuenta de migraciones (identidad, permisos exactos y marca, solo lecturas) antes de cargar
+`src/migrate.js` y otra vez después de migrar; si la primera falla, no migra.
+
+**Dos ejecuciones no cambian `nexora_test` a la vez.** Antes de abrir cualquier otra conexión, la
+ejecución toma un bloqueo con nombre, `GET_LOCK('nexora_test.integration_run', 0)`, con una conexión
+propia verificada como la de la aplicación, y la conserva hasta el final (`holdRunLock` en `guard.js`).
+No espera: si otra ejecución lo tiene, se detiene sin abrir nada más y sin cambiar nada. Antes de
+vaciar las tablas y antes de lanzar las migraciones, comprueba en el servidor que el bloqueo sigue
+siendo suyo (`IS_USED_LOCK(…) = CONNECTION_ID()`); si se perdió (la conexión se cortó o venció
+`wait_timeout`), se detiene. Al terminar, `run.js` lo libera (`RELEASE_LOCK`); si el proceso acaba de
+otra forma, también si se cae, lo libera el servidor al cerrarse la conexión, y su socket no mantiene
+vivo el proceso. No necesita ningún permiso. **No es una barrera de seguridad**: es un bloqueo de todo
+el servidor MySQL o MariaDB que solo ordena estas pruebas entre sí; no aísla nada de producción, y en
+un clúster con varios servidores (Galera, réplicas) cada servidor tiene sus propios bloqueos. Probado
+solo con conexiones simuladas: que MySQL o MariaDB lo liberen al cortarse la conexión, y el
+comportamiento con dos ejecuciones reales, sin comprobar.
+
+**Nada de esto es una barrera absoluta**: protege de errores, no de código escrito para saltárselo.
+Quedan estos límites:
+- el proceso de migraciones no tiene el gancho (ejecuta `src/migrate.js` a propósito);
+- **`src/migrate.js` abre una conexión diferente de la que verifica el proceso de migraciones.** Usa
+  la misma configuración (las variables `DB_*` ya comprobadas) y se ejecuta entre las dos
+  verificaciones, pero lo que hace esa conexión no se verifica por sí mismo: lo que se verifica es la
+  cuenta y su configuración;
+- un `Worker`, un proceso hijo propio, `--preserve-symlinks` o un socket abierto a mano no pasan por el
+  gancho;
+- si `run.js` se lanzara sin `--import`, el entorno se comprueba igualmente antes de evaluar ninguna
+  prueba (`preflight.js` es su primera importación), pero el gancho llegaría después de enlazar sus
+  importaciones estáticas: una importación estática de `src/` se evaluaría. Sin variables `DB_*`,
+  `src/config.js` se detendría al cargarse. Las comprobaciones de texto de `npm test` lo avisan antes,
+  pero no lo garantizan.
+
+Lo que sí se ejecuta con `npm test` son las 127 pruebas de `integration-guard.test.js`: las guardas
+que esas pruebas tienen que superar antes de hacer nada. Rechazan variables `DB_*` en el entorno,
+`NODE_ENV` distinto de `test`, otro host, otra base, otro usuario, una contraseña de plantilla, otra
+identidad efectiva (`CURRENT_USER()`), cualquier permiso de más o de menos (también globales, sobre
+otra base, la base sin el `_` escapado o con nombres parecidos como `nexoraXtest`, `DROP` o
+cualquier permiso sobre la base entera para la cuenta de migraciones, escritura en la marca, roles,
+`PROXY` o `GRANT OPTION`, en el formato de MySQL 8 y en el de MariaDB) y la falta de la marca; la única
+operación destructiva (vaciar las tres tablas) solo acepta conexiones verificadas; ninguna función
+abre una conexión si el proceso no lo lanzó `run.js` con `npm run test:integration` y una lista de
+archivos idéntica a la de la carpeta; ningún archivo de la carpeta llega a `src/` ni a `mysql2` por
+importaciones estáticas, ni directa ni indirectamente; y `src/` solo se importa con `import()`, dentro
+de funciones y después de llamar a una guarda. Las pruebas de `preflight.js` lanzan procesos aparte
+con `--import` (con conexiones falsas y el puerto 1, nunca un servidor de bases de datos): un entorno
+inseguro se detiene antes de cargar nada; once formas de cargar `src/` o `mysql2` antes de tiempo
+(importación estática, `import()` con texto, variable o plantilla, `await` a nivel superior, `require`,
+`createRequire`, `%73rc`, `SRC` en Windows, con el proceso solo marcado y `mysql2` desde una prueba) se
+paran; y el orden legítimo (conexión verificada, `useAppDatabase()`, `src/db.js` y `mysql2` a través de
+él) sigue funcionando. `src/index.js` y `src/migrate.js` se rechazan antes y después de ese momento, con
+`import()` y con `require`, y la prueba de que no se evaluaron es que no hay ningún manejador de
+`SIGTERM` (`index.js` lo registra al cargarse) ni rastro de que escuchara o migrara; esas pruebas dan
+`PORT=0` y `LISTEN_HOST=127.0.0.1`, para que un fallo nunca tocara el puerto 3000. `PLAYGROUND_ENABLED`
+se acepta sin definir o con `false`, y se rechaza con `true` o cualquier otro valor, igual que
+cualquier otra `PLAYGROUND_*`. Del proceso de migraciones se prueba, con conexiones falsas, la
+verificación antes y después (y que sin la primera no migra, que un cambio de permisos durante la
+migración se detecta después y que la conexión se cierra siempre); y, con procesos reales que se
+detienen antes de conectar, que el entorno exacto se acepta y uno distinto se rechaza. Esa prueba con
+un proceso real encontró que en Windows Node añade variables del sistema a todo proceso hijo: sin
+admitirlas, el proceso de migraciones se habría negado a arrancar en Windows. Las comprobaciones de texto (`require`, `createRequire`, `process.env[…]`,
+variables `DB_*`, `import()` sin un texto fijo, `await` a nivel superior también tras `export`) se
+aplican a todos los archivos de la carpeta, no solo a las pruebas; son heurísticas sobre el formato
+habitual del código, un aviso temprano, no un análisis sintáctico. Los fallos introducidos a propósito
+en copias de `guard.js`, `preflight.js`, `run.js`, `package.json`, `setup-admin.sql` y los archivos de
+integración los detectan. Que MySQL o MariaDB se comporten así de verdad (el comodín, los permisos de
+tabla, el formato de `SHOW GRANTS`) sigue sin comprobar: no se ha conectado a ningún servidor.
 
 Son pruebas automatizadas: la base de datos MySQL, las respuestas de Google reCAPTCHA y el navegador
 están simulados (el gestor de consentimiento y los formularios se ejecutan en un DOM mínimo,
@@ -334,6 +666,9 @@ y 3.13, no se sabe si pasan. Por eso el
 - **Ningún modelo de IA.** Las tareas de referencia miden las herramientas deterministas.
 - **El aislamiento del playground con contenedor** no se ha ejecutado. Los límites POSIX del worker,
   lanzado como proceso sin contenedor, sí, en Linux.
+- **El servidor contra servicios reales**: MySQL (las sesiones, las cuentas y OAuth se prueban con
+  una base de datos simulada), Google y GitHub, reCAPTCHA, nginx, HTTPS, el apagado con `systemctl
+  stop` y las copias de seguridad de MySQL.
 - **La web del proyecto** (`web/`): el playground y la guía tienen pruebas en `servidor/test/`
   (lógica del editor, API, enlaces); el aspecto visual y el resto de páginas, no.
 - **La instalación del paquete en un entorno limpio** no se ha repetido desde que se añadieron las
