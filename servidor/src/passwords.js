@@ -20,8 +20,15 @@ export async function hashPassword(password) {
   return ['scrypt', N, r, p, salt.toString('base64'), hash.toString('base64')].join('$');
 }
 
+/**
+ * true si `password` corresponde a `stored`; false si no, o si `stored` no tiene el formato de
+ * hashPassword (otro esquema, campos de más o de menos). Unos parámetros de scrypt imposibles (un hash
+ * dañado en la base de datos) lanzan un error: no son una contraseña incorrecta.
+ */
 export async function verifyPassword(password, stored) {
-  const [scheme, N, r, p, salt, hash] = stored.split('$');
+  const fields = stored.split('$');
+  if (fields.length !== 6) return false;
+  const [scheme, N, r, p, salt, hash] = fields;
   if (scheme !== 'scrypt' || !hash) return false;
   const expected = Buffer.from(hash, 'base64');
   const actual = await derive(
