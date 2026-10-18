@@ -109,6 +109,7 @@ anterior de ese mismo día, 522 superadas, solo en Windows, corresponde a un est
 | El mismo árbol con el límite del apagado corregido | **797 superadas**, 0 fallos, 0 omitidas, en una ejecución | No se ejecutó |
 | El mismo árbol con la revisión final de la auditoría (pruebas sin esperas fijas, apagado por pasos) | **798 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
 | El mismo árbol con el bloqueo de las pruebas de integración, los mínimos de Node medidos y `captcha.test.js` sin dependencia de orden | **810 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
+| `5eae954` con la lista cerrada de ramas de Node en las guardas de integración, sin commit | **811 superadas**, 0 fallos, 0 omitidas, en una ejecución | No se ejecutó |
 
 En Linux se usó una copia nueva del árbol de trabajo, comprobada archivo por archivo con SHA-256, con
 las dependencias instaladas con `npm ci` y el intérprete de `nexora/.venv` (Python 3.12.3). La fila
@@ -308,6 +309,17 @@ con cada una de las dos versiones (326 de 326), y en la tabla de arriba. Lo más
 carga momentánea del equipo mientras `node --test` ejecuta varios archivos a la vez, pero no está
 demostrado.
 
+En la fila de 811 (`5eae954` con los cambios sin commit), las guardas de las pruebas de integración
+admiten solo las ramas de `HOOK_MINIMUMS` (Node 22 desde 22.22.3 y Node 24 desde 24.14.0) y rechazan
+cualquier otra rama y las versiones que no son exactamente X.Y.Z. Antes admitían cualquier versión de
+las ramas 25 y posteriores, y versiones incompletas como `v24`. El mensaje de rechazo dice el motivo
+(versión ilegible, rama sin mínimo medido o versión por debajo del mínimo) y ya no presenta como un
+hecho la causa del bloqueo de mysql2. La prueba de esas versiones se reescribe con cada motivo y con el
+límite de cada rama, y una prueba nueva comprueba que todo lo que admite `engines` en
+`servidor/package.json` está dentro de esa lista. `npm test`, en Windows 11 con Node 24.21.0, una
+ejecución, el 18 de octubre de 2026: 811 superadas, 0 fallos, 0 omitidas, código de salida 0. No se ha
+ejecutado con Node 22.23.2 ni con 24.18.1, ni en Linux ni en macOS.
+
 #### Pruebas de integración con MySQL: preparadas, nunca ejecutadas
 
 `servidor/test/integration/` contiene pruebas contra una base de datos real (migraciones y esquema,
@@ -354,11 +366,15 @@ forma de cargarlos: importación estática, `import()` con texto, variable o pla
 está en la lista porque lo importa `app.js`, crea al cargarse su carpeta de trabajo en el directorio
 temporal, como en `npm test`.
 
-**Las pruebas de integración requieren Node 22.22.3 o posterior en la rama 22, o 24.14.0 o
-posterior** (`module.registerHooks`, y que su gancho vea quién carga cada módulo; ver la fila de 810).
-Es una observación en Windows, con las distribuciones oficiales: en las versiones anteriores que se
-probaron, el gancho bloqueaba mysql2 también en el orden legítimo. La documentación de Node no describe
-ese cambio, así que su causa exacta no está confirmada. La rama 23 no se admite.
+**Las pruebas de integración solo admiten Node 22.22.3 o posterior en la rama 22, o 24.14.0 o
+posterior en la rama 24** (`module.registerHooks`, y que su gancho vea quién carga cada módulo; ver las
+filas de 810 y 811). Son mínimos medidos en Windows, con las distribuciones oficiales: en las versiones
+anteriores que se probaron, el gancho bloqueaba mysql2 también en el orden legítimo. La documentación
+de Node no describe ese cambio, así que su causa exacta no está confirmada. La lista es cerrada
+(`HOOK_MINIMUMS` en `servidor/test/integration/guard.js`): cualquier otra rama (23, 25, 26, 27 o
+posterior) se rechaza hasta medirla y añadirla, aunque alguna versión suelta no bloqueara mysql2 en la
+medición (25.9.0 y 26.12.0). También se rechazan las versiones que no son exactamente X.Y.Z, como las
+que llevan sufijo (`-pre`, `-rc`) o ceros a la izquierda.
 
 La compatibilidad declarada en `servidor/package.json` (`engines`) es más estricta:
 `^22.23.2 || ^24.18.1`, las últimas versiones de seguridad de cada rama en octubre de 2026. El código
@@ -367,8 +383,11 @@ soporte desde el 30 de abril de 2026 y las versiones anteriores de las ramas 22 
 seguridad publicados. Dentro de ese rango se han probado en local 22.23.3 y 24.21.0 (Windows 11); los
 mínimos exactos, 22.23.2 y 24.18.1, no. La integración continua prueba esos mínimos fijos, la última
 versión de las ramas 22 y 24 y, en Linux y sin bloquear, Node 26, que queda fuera de `engines` hasta
-validarlo; no se ha ejecutado nunca. En cualquier Node sin el gancho que necesitan las pruebas de
-integración:
+validarlo; no se ha ejecutado nunca. Los mínimos de `engines` y los de las guardas son cosas
+distintas: `engines` dice dónde se admite el servidor, y las guardas, dónde se pueden ejecutar las
+pruebas de integración. Una prueba de `integration-guard.test.js` comprueba que todo lo que admite
+`engines` está dentro de lo que admiten las guardas. En cualquier Node que las guardas no admiten
+(también en la ejecución experimental de Node 26 de la integración continua):
 - `preflight.js` se niega a ejecutar las pruebas de integración y explica por qué;
 - `npm test` puede ejecutar todo lo demás; de `integration-guard.test.js` se omiten las 14 pruebas que
   lanzan procesos con `preflight.js`, cada una con su motivo, y el resumen las cuenta como omitidas

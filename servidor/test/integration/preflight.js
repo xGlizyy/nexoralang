@@ -2,9 +2,11 @@
 // carga con `--import` (que node --test pasa también al proceso de cada archivo), y run.js lo importa
 // además en primer lugar, por si alguien lanza run.js de otra forma.
 //
-//   1. Comprueba que este Node tiene un module.registerHooks que sirve (Node 22.22.3 o posterior en la
-//      rama 22, o 24.14.0 o posterior; ver hookSupportProblem en guard.js). Si no, se detiene:
-//      las pruebas de integración no se ejecutan en esos Node, aunque el servidor y npm test sí.
+//   1. Comprueba que este Node tiene module.registerHooks y es de una de las ramas medidas, desde su
+//      mínimo: Node 22.22.3 o posterior en la rama 22, o 24.14.0 o posterior en la rama 24; ninguna otra
+//      rama (HOOK_MINIMUMS y hookSupportProblem en guard.js). Si no, se detiene: las pruebas de
+//      integración no se ejecutan en ese Node, aunque npm test sí. Son los mínimos medidos para estas
+//      guardas, no los de `engines` en servidor/package.json.
 //   2. Rechaza un entorno inseguro (checkPreflight en guard.js): sin `npm run test:integration`, con
 //      alguna variable DB_*, con el playground activable o con una configuración de pruebas que no sea
 //      la autorizada, se detiene aquí, sin haber cargado nada de servidor/src/ ni mysql2.

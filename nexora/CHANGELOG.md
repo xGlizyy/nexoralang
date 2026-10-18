@@ -72,6 +72,23 @@ a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no 
   tiempo sin registrarlo, sino que espera el límite, lo registra y sale con 1. Probado con pruebas
   automatizadas en Windows (Node 20.6.1, 22.23.3 y 24.21.0), sin señales reales: con systemd, sin
   probar.
+- **Pruebas de integración con MySQL, preparadas y nunca ejecutadas** (`servidor/test/integration/`).
+  `npm run test:integration` ejecutaría las consultas reales de la aplicación contra una base de pruebas
+  aislada (`nexora_test`), con una cuenta para las migraciones y otra para la aplicación, que un
+  administrador tendría que crear a mano con `setup-admin.sql` (una propuesta pendiente de revisión).
+  No forman parte de `npm test` ni de la integración continua. Antes de cargar nada, unas guardas
+  rechazan cualquier otro entorno (variables `DB_*`, otro servidor, el playground activable o permisos
+  distintos de los previstos), y un bloqueo con nombre (`GET_LOCK`) impide dos ejecuciones a la vez.
+  Las guardas solo admiten Node 22 desde 22.22.3 y Node 24 desde 24.14.0 (`HOOK_MINIMUMS` en
+  `servidor/test/integration/guard.js`): son los mínimos medidos en Windows para el gancho de módulos de
+  `preflight.js`, no los de `engines` en `servidor/package.json` (`^22.23.2 || ^24.18.1`), y una prueba
+  de `npm test` comprueba que todo lo que admite `engines` está dentro. Las demás ramas (23, 25, 26 y
+  posteriores) y las versiones que no son exactamente X.Y.Z se rechazan hasta medirlas. En las
+  versiones medidas por debajo de esos mínimos, el gancho bloqueó mysql2 también en el orden legítimo;
+  la causa no está confirmada. En un Node que las guardas no admiten, `npm test` omite con su motivo las 14 pruebas que lanzan
+  `preflight.js`: así ocurrirá en la ejecución experimental de Node 26 de la integración continua
+  cuando se ejecute, porque todavía no se ha ejecutado. **Nada de esto se ha ejecutado contra un MySQL
+  real**: ni el SQL de administración, ni las migraciones con permisos reducidos, ni el bloqueo.
 
 ### Cambios incompatibles
 
@@ -232,10 +249,13 @@ a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no 
 - El antispam, el freno del inicio de sesión, el borrado de sesiones y las cabeceras se han probado
   con la base de datos, Google reCAPTCHA y el navegador simulados: no contra un MySQL real, con claves
   reales de reCAPTCHA, en un navegador ni detrás de nginx. Las pruebas automatizadas del servidor,
-  con esos mismos servicios simulados, dan 810 superadas y 0 fallos con Node 24.21.0 (en cada una de
+  con esos mismos servicios simulados, dan 811 superadas y 0 fallos con Node 24.21.0 (una ejecución,
+  en Windows 11, con las guardas de las pruebas de integración limitadas a las ramas medidas). Antes de
+  ese cambio dieron 810 superadas y 0 fallos con Node 24.21.0 (en cada una de
   tres ejecuciones), 24.14.0, 22.23.3 y 22.22.3, y 796 superadas, 14 omitidas (las que necesitan Node
   22.22.3 o posterior en la rama 22, o 24.14.0 o posterior) y 0 fallos con Node 20.6.1 y 22.15.0 (una
-  ejecución con cada una de esas versiones), en Windows 11; en Ubuntu 24.04 en WSL 2 se ejecutaron antes de las últimas correcciones de la web
+  ejecución con cada una de esas versiones), en Windows 11. Con los mínimos de `engines` (22.23.2 y
+  24.18.1) no se han ejecutado. En Ubuntu 24.04 en WSL 2 se ejecutaron antes de las últimas correcciones de la web
   (567 superadas, 0 fallos, en cada una de tres ejecuciones) ([Pruebas](docs/testing.md)).
 - Los contadores de los límites y del freno del inicio de sesión están en memoria: se pierden al
   reiniciar y no se comparten entre varias instancias del servidor.

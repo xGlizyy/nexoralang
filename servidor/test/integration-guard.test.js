@@ -16,10 +16,10 @@ import {
   undoAfter, useAppDatabase, verifyQueryable, assertRunLock, hookSupportProblem,
 } from './integration/guard.js';
 
-// El gancho de preflight.js necesita module.registerHooks, y que este vea quién carga cada módulo: Node
-// 22.22.3 o posterior en la rama 22, o 24.14.0 o posterior (hookSupportProblem en guard.js). En otro
-// Node, las pruebas que lanzan procesos con preflight.js se omiten y dicen por qué; la que simula la
-// ausencia de registerHooks, no.
+// El gancho de preflight.js necesita module.registerHooks y una de las ramas medidas de HOOK_MINIMUMS:
+// Node 22.22.3 o posterior en la rama 22, o 24.14.0 o posterior en la rama 24; ninguna otra rama
+// (hookSupportProblem en guard.js). En otro Node, las pruebas que lanzan procesos con preflight.js se
+// omiten y dicen por qué; la que simula la ausencia de registerHooks, no.
 const HOOK_PROBLEM = hookSupportProblem(nodeModule.registerHooks);
 const HOOKS = HOOK_PROBLEM === null ? {} : { skip: HOOK_PROBLEM };
 
@@ -712,19 +712,56 @@ describe('the module gate of preflight.js (checkModuleLoad)', () => {
 
   test('checkHookSupport: without module.registerHooks (Node 20.6–22.14) the integration tests refuse to run', () => {
     for (const value of [undefined, null, {}, 'registerHooks']) {
-      refused(() => checkHookSupport(value, 'v20.6.0'), /need module\.registerHooks \(Node 22\.22\.3 or later in the 22 line, or 24\.14\.0 or later\), and this is Node v20\.6\.0/);
+      refused(() => checkHookSupport(value, 'v20.6.0'), /need module\.registerHooks \(Node 22\.22\.3 or later in the 22 line, or 24\.14\.0 or later in the 24 line\), and this is Node v20\.6\.0/);
     }
   });
 
-  test('checkHookSupport: only the versions measured to work, where the hook sees who loads each module', () => {
-    // Medido con las distribuciones oficiales (caso «legit» de preflight-probe.js): por debajo de estos
-    // mínimos, Node resuelve otra vez los módulos CommonJS importados desde ESM sin parentURL.
+  test('checkHookSupport: only the lines of HOOK_MINIMUMS, each from its measured minimum; any other line is refused', () => {
+    // Medido con las distribuciones oficiales para Windows (caso «legit» de preflight-probe.js): por
+    // debajo de estos mínimos, el gancho bloqueó mysql2 también en el orden legítimo. La causa no está
+    // confirmada.
     assert.deepEqual(HOOK_MINIMUMS, { 22: [22, 22, 3], 24: [24, 14, 0] });
-    for (const version of ['v22.22.3', 'v22.23.0', 'v22.23.3', 'v24.14.0', 'v24.21.0', 'v25.9.0', 'v26.12.0']) {
+    for (const version of ['v22.22.3', 'v22.23.0', 'v22.23.2', 'v22.23.3', 'v24.14.0', 'v24.18.1', 'v24.21.0', '24.21.0']) {
       checkHookSupport(() => {}, version);
     }
-    for (const version of ['v22.15.0', 'v22.18.0', 'v22.22.2', 'v23.11.0', 'v24.0.0', 'v24.13.1', 'v21.7.0', 'nonsense']) {
-      refused(() => checkHookSupport(() => {}, version), /need Node 22\.22\.3 or later in the 22 line, or 24\.14\.0 or later: in Node \S+, module\.registerHooks does not see who loads/);
+    const need = 'need Node 22\\.22\\.3 or later in the 22 line, or 24\\.14\\.0 or later in the 24 line, and this is Node \\S*: ';
+    const below = new RegExp(`${need}it is below the minimum measured for its line\\. .*the cause is not confirmed`);
+    for (const version of ['v22.15.0', 'v22.18.0', 'v22.22.2', 'v24.0.0', 'v24.13.1']) {
+      refused(() => checkHookSupport(() => {}, version), below);
+    }
+    // El límite de cada rama, sacado de la tabla: su mínimo se admite y la versión anterior no.
+    for (const [major, minor, patch] of Object.values(HOOK_MINIMUMS)) {
+      checkHookSupport(() => {}, `v${major}.${minor}.${patch}`);
+      const previous = patch > 0 ? `v${major}.${minor}.${patch - 1}` : `v${major}.${minor - 1}.999`;
+      refused(() => checkHookSupport(() => {}, previous), below);
+    }
+    // 25.9.0 y 26.12.0 no bloquearon mysql2 en la medición, pero sus ramas no tienen mínimo medido.
+    for (const version of ['v21.7.0', 'v23.11.0', 'v25.0.0', 'v25.9.0', 'v26.0.0', 'v26.12.0', 'v27.0.0', 'v30.1.2']) {
+      refused(() => checkHookSupport(() => {}, version), new RegExp(`${need}no minimum has been measured for its line\\.`));
+    }
+    for (const version of ['nonsense', '', 'v24', 'v24.14', 'v24.14.0-pre', 'v24.14.0.1', 'v24.x.0', 'v024.14.0', 'v24.014.0']) {
+      refused(() => checkHookSupport(() => {}, version), new RegExp(`${need}its version could not be read\\.`));
+    }
+  });
+
+  test('checkHookSupport: every Node allowed by engines in servidor/package.json can run the integration tests', () => {
+    const { engines } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    const clauses = engines.node.split('||').map((part) => part.trim());
+    assert.ok(clauses.length > 0, 'engines.node is empty');
+    for (const clause of clauses) {
+      // Solo rangos ^X.Y.Z con X >= 1: de X.Y.Z hasta antes de (X+1).0.0. Otra forma obliga a revisar esta prueba.
+      const match = clause.match(/^\^([1-9]\d*)\.(\d+)\.(\d+)$/);
+      assert.ok(match, `engines clause not understood by this test: ${clause}`);
+      const [major, minor, patch] = match.slice(1).map(Number);
+      // Todo el rango, no solo unos ejemplos: su rama tiene un mínimo medido y el rango no empieza por debajo.
+      // Como hookSupportProblem admite cada versión de la rama desde su mínimo, eso cubre el rango entero.
+      assert.ok(Object.hasOwn(HOOK_MINIMUMS, major), `engines allows the ${major} line, which has no measured minimum`);
+      const [, minimumMinor, minimumPatch] = HOOK_MINIMUMS[major];
+      assert.ok(minor > minimumMinor || (minor === minimumMinor && patch >= minimumPatch), `${clause} starts below the measured minimum`);
+      // Y la función lo confirma en el principio del rango y en una versión alta de la rama.
+      for (const version of [`v${major}.${minor}.${patch}`, `v${major}.999.999`]) {
+        assert.equal(hookSupportProblem(() => {}, version), null, version);
+      }
     }
   });
 });
@@ -755,7 +792,7 @@ describe('preflight.js on a Node without module.registerHooks (simulated in this
     const result = launch(['--import', without, '--import', PREFLIGHT, 'test/fixtures/preflight-probe.js', 'literal'], PROBE_ENV);
     assert.notEqual(result.status, 0);
     assert.doesNotMatch(result.stdout, /PROBE STARTED/);
-    assert.match(result.stderr, /need module\.registerHooks \(Node 22\.22\.3 or later in the 22 line, or 24\.14\.0 or later\)/);
+    assert.match(result.stderr, /need module\.registerHooks \(Node 22\.22\.3 or later in the 22 line, or 24\.14\.0 or later in the 24 line\)/);
   });
 });
 

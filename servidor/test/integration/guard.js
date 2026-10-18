@@ -450,20 +450,35 @@ export function checkPreflight(env) {
 // distribuciones oficiales y solo en estas versiones: lo bloquearon 22.15.0, 22.18.0, 22.19.0, 22.20.0,
 // 22.21.0, 22.22.0, 22.22.1, 22.22.2, 24.0.0, 24.11.1, 24.13.0 y 24.13.1; no lo bloquearon 22.22.3,
 // 22.23.0, 22.23.3, 24.14.0, 24.14.1, 24.15.0, 24.16.0, 24.21.0, 25.9.0 y 26.12.0. Los mínimos de abajo
-// salen de esa medición. La rama 23 no se admite (sin soporte).
+// salen de esa medición.
+//
+// La tabla es cerrada: solo se admiten sus ramas, cada una desde su mínimo. Cualquier otra rama (23, 25,
+// 26, 27 o posterior) se rechaza hasta que se mida y se añada aquí, aunque alguna versión suelta no lo
+// bloqueara (25.9.0 y 26.12.0): una versión medida no dice nada de las demás de su rama. Lo que admite
+// `engines` en servidor/package.json queda dentro; integration-guard.test.js lo
+// comprueba.
 export const HOOK_MINIMUMS = Object.freeze({ 22: Object.freeze([22, 22, 3]), 24: Object.freeze([24, 14, 0]) });
-const HOOK_REQUIREMENT = 'Node 22.22.3 or later in the 22 line, or 24.14.0 or later';
+// El texto de los mensajes sale de la tabla: los mínimos están escritos en un solo sitio.
+const HOOK_REQUIREMENT = `Node ${Object.values(HOOK_MINIMUMS)
+  .map(([major, minor, patch]) => `${major}.${minor}.${patch} or later in the ${major} line`).join(', or ')}`;
 
 /** Por qué este Node no puede ejecutar las pruebas de integración, o null si puede. */
 export function hookSupportProblem(registerHooks, version = process.version) {
   if (typeof registerHooks !== 'function') {
     return `the integration tests need module.registerHooks (${HOOK_REQUIREMENT}), and this is Node ${version}: they do not run on it`;
   }
-  const [major, minor, patch] = String(version).replace(/^v/, '').split('.').map(Number);
-  const minimum = HOOK_MINIMUMS[major];
-  const below = minimum && (minor < minimum[1] || (minor === minimum[1] && patch < minimum[2]));
-  if (!(major >= 22) || major === 23 || below || [minor, patch].some(Number.isNaN)) {
-    return `the integration tests need ${HOOK_REQUIREMENT}: in Node ${version}, module.registerHooks does not see who loads a CommonJS module imported from ESM, and the guards would block mysql2`;
+  // Exactamente X.Y.Z, sin ceros a la izquierda: una versión con menos partes, o con sufijo (-pre, -rc…),
+  // no se puede comparar.
+  const parts = String(version).match(/^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+  const [major, minor, patch] = parts ? parts.slice(1).map(Number) : [];
+  // Solo las ramas de la tabla; una rama sin mínimo medido se rechaza.
+  const minimum = parts && Object.hasOwn(HOOK_MINIMUMS, major) ? HOOK_MINIMUMS[major] : null;
+  let reason = null;
+  if (!parts) reason = 'its version could not be read';
+  else if (minimum === null) reason = 'no minimum has been measured for its line';
+  else if (minor < minimum[1] || (minor === minimum[1] && patch < minimum[2])) reason = 'it is below the minimum measured for its line';
+  if (reason !== null) {
+    return `the integration tests need ${HOOK_REQUIREMENT}, and this is Node ${version}: ${reason}. Below those minimums, the module hook of preflight.js was seen to block mysql2 also in the legitimate order (measured on Windows; the cause is not confirmed)`;
   }
   return null;
 }
