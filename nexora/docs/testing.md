@@ -317,22 +317,43 @@ las ramas 25 y posteriores, y versiones incompletas como `v24`. El mensaje de re
 hecho la causa del bloqueo de mysql2. La prueba de esas versiones se reescribe con cada motivo y con el
 límite de cada rama, y una prueba nueva comprueba que todo lo que admite `engines` en
 `servidor/package.json` está dentro de esa lista. `npm test`, en Windows 11 con Node 24.21.0, una
-ejecución, el 18 de octubre de 2026: 811 superadas, 0 fallos, 0 omitidas, código de salida 0. No se ha
+ejecución, el 18 de octubre de 2026: 813 superadas, 0 fallos, 0 omitidas, código de salida 0, en 26,3 s.
+La ejecución anterior, con 811 superadas, fue la de la fila a la que se refiere este párrafo. No se ha
 ejecutado con Node 22.23.2 ni con 24.18.1, ni en Linux ni en macOS.
 
-#### Pruebas de integración con MySQL: preparadas, nunca ejecutadas
+#### Pruebas de integración con MySQL: ejecutadas una vez
 
 `servidor/test/integration/` contiene pruebas contra una base de datos real (migraciones y esquema,
 cuentas y sesiones, borrado de sesiones y cierre del pool con consultas en curso y bloqueos, OAuth
-con persistencia y concurrencia, y errores de SQL). **No se han ejecutado nunca**: hace falta antes
-crear la base `nexora_test`, el esquema de la marca `nexora_test_guard` y dos cuentas con
-`servidor/test/integration/setup-admin.sql`, que también está sin ejecutar. La cuenta de migraciones
+con persistencia y concurrencia, y errores de SQL). Necesitan antes la base `nexora_test`, el esquema
+de la marca `nexora_test_guard` y dos cuentas, que se crean con
+`servidor/test/integration/setup-admin.sql`. Ese script **sí se ha ejecutado**: el 18 de octubre de
+2026 creó la base, el esquema de la marca y las dos cuentas con sus permisos. La cuenta de migraciones
 solo tiene `CREATE`, `ALTER`, `INSERT` y `REFERENCES` sobre las tres tablas de la aplicación, **sin
 `DROP`** y ningún permiso sobre la base entera: no puede borrar tablas, crear otras ni borrar la base.
 La de la aplicación tiene `SELECT`, `INSERT` y `DELETE` sobre `` `nexora\_test`.* ``, con el `_`
 escapado: sin escapar, en un permiso sobre una base entera `_` es un comodín y daría acceso también a
 `nexoraXtest`. Las dos solo pueden leer la marca. Solo se lanzan con `npm run test:integration`,
 nunca con `npm test`, y cargan `servidor/.env.integration` (ignorado por git), nunca `servidor/.env`.
+
+**Resultado medido.** El 18 de octubre de 2026 se ejecutó `npm run test:integration` **una única vez**,
+en la rama `feature/server-hardening` (HEAD `74f2a03`, con `test/integration/context.js`, `run.js`,
+`guard.js` y `test/integration-guard.test.js` modificados y sin commitear), dentro de un contenedor
+auxiliar aislado que comparte el espacio de red de un contenedor `nexora-mysql-test` con MySQL 8.4.11,
+publicado solo en `127.0.0.1:3307` del anfitrión: **30 superadas, 0 fallos, 0 omitidas, código de
+salida 0**, en 20,36 s. Por suite: migraciones 6/6, cuentas 8/8, sesiones 3/3, cierre del pool con
+consultas en curso 2/2, OAuth 6/6 y errores de SQL 5/5.
+
+Las migraciones se ejecutaron y terminaron correctamente. Pasaron las tres comprobaciones que las
+cubren: crear el esquema esperado desde una base sin tablas, repetirlas sin cambiar ninguna tabla ni
+perder filas, y no reparar un esquema desviado a mano; esta última deshizo su propio `ALTER`. La
+ejecución terminó sola y emitió su resumen.
+
+Fue **una sola ejecución**: no se ha repetido, así que el dato no dice nada de que el resultado sea
+determinista, ni de que lo sea en otro sistema operativo o con otra versión de Node. Aquí el proceso
+era Node 24.21.0 dentro de un contenedor de Linux sobre MySQL 8.4.11, no en el anfitrión de Windows
+como la medición de `npm test` de arriba. El límite de tiempo al liberar el bloqueo de ejecución
+(10 s en `guard.js`) no llegó a activarse: la ejecución fue rápida y limpia.
 
 **La prueba de esquema nuevo** solo se ejecuta si ninguna de las tres tablas existe, es decir, con la
 base recién creada. Si existen, se omite y lo dice; si solo existen algunas, falla, porque la base
@@ -345,6 +366,11 @@ después, usar el cliente de MySQL o MariaDB **sin `--force`**, para que se dete
 (si la marca no existe, su consulta falla y los `DROP` no se ejecutan); y mirar el resultado de la
 consulta de la marca: tiene que ser exactamente una fila, `nexora-integration-tests-only`. Con
 cualquier otra cosa, hay que detenerse. Lo más seguro es ejecutar primero solo esa consulta.
+
+Como la ejecución del 18 de octubre de 2026 creó las tres tablas, esa preparación ya no hace falta
+para volver a lanzar la suite en ese mismo servidor de pruebas: mientras las tablas existan, la
+prueba de esquema nuevo **se omite y lo dice**. Para volver a ejercitarla hay que ejecutar antes
+`prepare-fresh-schema-admin.sql`, como describe el párrafo anterior.
 
 La prueba de esquema desviado deshace su cambio con `ALTER`, sin borrar nada, también si fallan las
 migraciones o una comprobación (`undoAfter` en `guard.js`). Si lo que falla es deshacerlo, no tapa el

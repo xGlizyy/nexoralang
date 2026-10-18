@@ -69,13 +69,14 @@ const MARIADB = {
 function fakeConnection({ identity = { db: 'nexora_test', who: 'nexora_test_app@127.0.0.1' }, grants = MYSQL.app, guard = [{ purpose: GUARD_VALUE }], lock = {} } = {}) {
   const asked = [];
   const params = [];
-  const { got = 1, mine = 1, lockError = null, checkError = null } = lock;
+  const { got = 1, mine = 1, lockError = null, checkError = null, releaseError = null, endError = null } = lock;
   return {
     asked,
     params,
     grants,
     lock: { got, mine },
     ended: false,
+    closed: false,
     async query(sql, values) {
       asked.push(sql);
       params.push(values);
@@ -87,7 +88,10 @@ function fakeConnection({ identity = { db: 'nexora_test', who: 'nexora_test_app@
         if (checkError) throw checkError;
         return [[{ mine: this.lock.mine }]];
       }
-      if (sql.startsWith('SELECT RELEASE_LOCK')) return [[{ released: 1 }]];
+      if (sql.startsWith('SELECT RELEASE_LOCK')) {
+        if (releaseError) throw releaseError;
+        return [[{ released: 1 }]];
+      }
       if (sql.startsWith('SELECT DATABASE()')) return [[identity]];
       if (sql.startsWith('SHOW GRANTS')) return [this.grants.map((line) => ({ 'Grants for x': line }))];
       if (sql === GUARD_SQL) {
@@ -96,7 +100,13 @@ function fakeConnection({ identity = { db: 'nexora_test', who: 'nexora_test_app@
       }
       return [[]];
     },
-    async end() { this.ended = true; },
+    async end() {
+      if (endError) throw endError;
+      this.ended = true;
+    },
+    // La conexión real expone close() (mysql2 lo delega en la base): no espera a la cola de comandos,
+    // marca la conexión cerrada y cierra el socket. Es lo que releaseRunLock() usa en su finally.
+    async close() { this.closed = true; },
   };
 }
 
@@ -1151,10 +1161,36 @@ describe('the run lock: two runs never change nexora_test at the same time', () 
     assert.equal(lock.asked.at(-1), 'SELECT RELEASE_LOCK(?)');
     assert.deepEqual(lock.params.at(-1), [RUN_LOCK]);
     assert.equal(lock.ended, true);
+    assert.equal(lock.closed, true, 'the socket is closed for good, not only asked to end');
     await rejectsGuard(connectVerified('app', { env: env(), mysql }), /already released/);
     await rejectsGuard(assertRunLock(), /does not hold the integration run lock/);
     assert.equal(opened.length, 1);
     await releaseRunLock(); // otra vez: no hace nada
+  });
+
+  test('a release that fails is not hidden, and the connection is closed anyway', async () => {
+    mark();
+    const releaseError = Object.assign(new Error('release failed'), { code: 'PROTOCOL_CONNECTION_LOST' });
+    const { opened, mysql } = driver({ releaseError });
+    await connectVerified('app', { env: env(), mysql });
+    await assert.rejects(releaseRunLock(), (error) => error === releaseError, 'the error of RELEASE_LOCK reaches the caller');
+    const [lock] = opened;
+    assert.equal(lock.ended, true, 'the close was asked for even though the release failed');
+    assert.equal(lock.closed, true, 'and the socket is closed for good: that is what drops the lock server-side');
+  });
+
+  test('a release and a close that both fail travel together, and the socket is closed anyway', async () => {
+    mark();
+    const releaseError = Object.assign(new Error('release failed'), { code: 'PROTOCOL_CONNECTION_LOST' });
+    const endError = Object.assign(new Error('close failed'), { code: 'PROTOCOL_CONNECTION_LOST' });
+    const { opened, mysql } = driver({ releaseError, endError });
+    await connectVerified('app', { env: env(), mysql });
+    await assert.rejects(releaseRunLock(), (error) => {
+      assert.ok(error instanceof AggregateError, 'the two failures travel together');
+      assert.deepEqual(error.errors, [releaseError, endError]);
+      return true;
+    });
+    assert.equal(opened[0].closed, true, 'forcing the socket closed does not hide the original failures');
   });
 
   test('the socket of the lock does not keep the process alive, except while a check waits for its answer', async () => {
@@ -1168,9 +1204,32 @@ describe('the run lock: two runs never change nexora_test at the same time', () 
     assert.deepEqual(calls, ['unref', 'ref', 'unref']);
   });
 
-  test('run.js releases the lock after all the tests, and migrations are only spawned with the lock held', () => {
-    const run = readFileSync(new URL('./integration/run.js', import.meta.url), 'utf8');
-    assert.match(run, /^after\(\(\) => releaseRunLock\(\)\);$/m);
+  test('run.js closes the shared pool and releases the lock after all the tests, hiding neither failure; migrations are only spawned with the lock held', () => {
+    const run = withoutComments(readFileSync(new URL('./integration/run.js', import.meta.url), 'utf8'));
+    // Un solo hook raíz de cierre, y con esta forma exacta: cerrar el contexto compartido y, en el
+    // finally, liberar el bloqueo, en ese orden. No basta con que aparezcan las dos llamadas.
+    const hooks = [...run.matchAll(/^after\(/gm)];
+    assert.equal(hooks.length, 1, 'run.js registers exactly one root after hook');
+    const hook = run.slice(hooks[0].index, run.indexOf('\nconst FILES')).replace(/\s+/g, ' ').trim();
+    assert.match(hook, /^after\(async \(\) => \{[\s\S]*await closeAppContext\(\);[\s\S]*\} finally \{[\s\S]*await releaseRunLock\(\);[\s\S]*\} \}\);$/);
+    assert.ok(hook.indexOf('closeAppContext()') < hook.indexOf('releaseRunLock()'), 'the shared pool is closed before the lock is released');
+    // Los dos fallos se lanzan juntos: con un finally que solo lanza el último, el error del pool
+    // desaparecería del diagnóstico, que es el que explica por qué el proceso no terminaba.
+    assert.match(hook, /const failures = \[poolFailure, lockFailure\]\.filter\(Boolean\);[\s\S]*throw new AggregateError\(failures,/);
+    // Y en guard.js: RELEASE_LOCK y connection.end() salen a la vez, ninguno se silencia, y el cierre no
+    // depende de la respuesta de la consulta. Si los dos fallan, se lanzan los dos.
+    const guard = withoutComments(readFileSync(new URL('./integration/guard.js', import.meta.url), 'utf8'));
+    const release = guard.slice(guard.indexOf('export async function releaseRunLock()'), guard.indexOf('export async function connectVerified(')).replace(/\s+/g, ' ').trim();
+    assert.doesNotMatch(release, /\.catch\(\(\) => \{\}\)/, 'releaseRunLock() must not swallow the release or the close');
+    assert.match(release, /const releasing = connection\.query\('SELECT RELEASE_LOCK\(\?\)', \[RUN_LOCK\]\)\.then\(\(\) => null, \(error\) => error\);/);
+    assert.match(release, /const closing = connection\.end\(\)\.then\(\(\) => null, \(error\) => error\);/);
+    assert.ok(release.indexOf('connection.end()') < release.indexOf('await Promise.all('), 'the close is asked for before waiting on the query');
+    assert.match(release, /if \(outcome\) failures\.push\(outcome\);/);
+    assert.match(release, /if \(failures\.length > 1\) throw new AggregateError\(failures,/);
+    // Con el límite, la liberación no se da por confirmada; y en el finally, la conexión se cierra sin
+    // esperar a la cola de comandos y el socket queda sin referenciar.
+    assert.match(release, /bounded\([\s\S]*could not be confirmed released within/);
+    assert.match(release, /\} finally \{[\s\S]*connection\.close\(\);[\s\S]*socketOf\(connection\)\?\.unref\?\.\(\);[\s\S]*\}/);
     const migrations = readFileSync(new URL('./integration/migrations.test.js', import.meta.url), 'utf8');
     const body = migrations.slice(migrations.indexOf('async function migrate()'));
     assert.ok(body.indexOf('await assertRunLock();') >= 0 && body.indexOf('await assertRunLock();') < body.indexOf('spawn('));

@@ -18,6 +18,7 @@
 import './preflight.js';
 import { readdirSync } from 'node:fs';
 import { after } from 'node:test';
+import { closeAppContext } from './context.js';
 import { markRunner, releaseRunLock } from './guard.js';
 import './migrations.test.js';
 import './auth.test.js';
@@ -25,9 +26,31 @@ import './sessions.test.js';
 import './oauth.test.js';
 import './errors.test.js';
 
-// Al terminar todas las pruebas, se libera el bloqueo de la ejecución (guard.js). Si el proceso acaba
-// antes, por cualquier motivo, lo libera el servidor al cerrarse la conexión.
-after(() => releaseRunLock());
+// Al terminar todas las pruebas, en un solo hook: primero se cierra el pool real de src/db.js, que
+// comparten cuatro archivos y que mantiene vivos los sockets del proceso, y después se libera el
+// bloqueo de la ejecución (guard.js). El bloqueo se intenta liberar en el finally aunque el pool
+// falle, y en un único hook el orden no depende de cómo se ejecuten varios hooks raíz. Si fallan los
+// dos cierres, se lanzan los dos errores juntos: un finally que solo lanza el último taparía el
+// primero, que es justo el que explica por qué el proceso no podía terminar. Si el proceso acaba
+// antes, por cualquier motivo, lo libera el servidor al cerrarse la conexión del bloqueo.
+after(async () => {
+  let poolFailure = null;
+  try {
+    await closeAppContext();
+  } catch (error) {
+    poolFailure = error;
+  } finally {
+    let lockFailure = null;
+    try {
+      await releaseRunLock();
+    } catch (error) {
+      lockFailure = error;
+    }
+    const failures = [poolFailure, lockFailure].filter(Boolean);
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, 'the integration run could not close the shared pool and the run lock cleanly');
+  }
+});
 
 const FILES = ['migrations.test.js', 'auth.test.js', 'sessions.test.js', 'oauth.test.js', 'errors.test.js'];
 const present = readdirSync(new URL('./', import.meta.url)).filter((name) => name.endsWith('.test.js'));

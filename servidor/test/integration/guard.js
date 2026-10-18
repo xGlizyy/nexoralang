@@ -252,6 +252,11 @@ export async function verifyQueryable(queryable, role) {
 // No necesita ningún permiso.
 export const RUN_LOCK = 'nexora_test.integration_run';
 const RUN_LOCK_WAIT_SECONDS = 0;
+// Cuánto se espera, como máximo, a que el bloqueo se libere y su conexión se cierre, ya con las pruebas
+// terminadas. Acotado para que un servidor que no conteste no deje el runner colgado sin resumen. El
+// temporizador va sin referenciar (bounded): esperar el límite no puede ser, en sí mismo, otra espera
+// que mantenga vivo el proceso.
+const LOCK_RELEASE_TIMEOUT_MS = 10_000;
 // null: sin tomar; una promesa: tomándose o tomado ({ connection }); 'released': ya liberado.
 let runLock = null;
 
@@ -265,6 +270,31 @@ async function referenced(connection, work) {
     return await work();
   } finally {
     socket?.unref?.();
+  }
+}
+
+/**
+ * Espera a `work` como máximo `ms`. Al agotarse, falla con `message` en vez de quedarse esperando
+ * para siempre: una promesa que no resuelve nunca se rechaza, y aquí lo que no se resuelve es el
+ * último hook de la ejecución. El temporizador se limpia al terminar y va sin referenciar.
+ *
+ * No cancela `work`: al vencer el límite, `work` sigue su curso en segundo plano. Quien lo use tiene
+ * que garantizar tres cosas: que su trabajo nunca rechaza sin que nadie lo escuche, que suelta por su
+ * cuenta lo que lo mantiene vivo, y que su finally hace lo que haga falta para que nada quede abierto
+ * (porque el finally de quien llama es lo único que se ejecuta).
+ */
+async function bounded(work, ms, message) {
+  let timer;
+  try {
+    return await Promise.race([
+      work,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new IntegrationGuardError(message)), ms);
+        timer.unref();
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -327,7 +357,15 @@ export async function assertRunLock() {
   if (!(row?.mine === 1 || row?.mine === '1')) fail('this process no longer holds the integration run lock: nothing is changed');
 }
 
-/** Libera el bloqueo y cierra su conexión (run.js, al terminar). Después no se abre ninguna conexión. */
+/**
+ * Libera el bloqueo y cierra su conexión (run.js, al terminar). Después no se abre ninguna conexión.
+ *
+ * El estado pasa a 'released' antes de intentarlo, y es deliberado: esa es la marca de exclusión mutua,
+ * para que una segunda llamada concurrente no libere dos veces. No significa «ha liberado bien»: si algo
+ * falla, esta función lanza y el fallo se ve. Tampoco hace falta reintentar después, porque el finally de
+ * abajo fuerza el cierre de la conexión pase lo que pase, y es ese cierre —no la respuesta de
+ * RELEASE_LOCK— lo que devuelve el bloqueo en el servidor.
+ */
 export async function releaseRunLock() {
   const current = runLock;
   runLock = 'released';
@@ -338,10 +376,39 @@ export async function releaseRunLock() {
   } catch {
     return; // no llegó a tomarse
   }
-  await referenced(connection, async () => {
-    await connection.query('SELECT RELEASE_LOCK(?)', [RUN_LOCK]).catch(() => {});
-    await connection.end().catch(() => {});
-  });
+  // Con límite: si el servidor no contesta, la ejecución tiene que poder terminar igualmente y dejar
+  // constancia, no colgarse en silencio. Promise.race no cancela el trabajo: al vencer el límite, lo que
+  // hubiera quedado pendiente sigue su curso. Lo que rompe esa dependencia está en el finally de abajo;
+  // lo que no se puede es confirmar la respuesta de RELEASE_LOCK, y el mensaje de error lo dice.
+  try {
+    await bounded(referenced(connection, async () => {
+      const failures = [];
+      // Los dos intentos salen a la vez y ninguno se silencia. mysql2 end() encola su Quit detrás del
+      // comando en vuelo (base/connection.js, end()), así que encadenarlos haría que el cierre
+      // dependiera de una respuesta que puede no llegar nunca. Cada uno trae su resultado como valor:
+      // null si fue bien, el error si no, y los errores se recogen al final para no taparse entre sí.
+      const releasing = connection.query('SELECT RELEASE_LOCK(?)', [RUN_LOCK]).then(() => null, (error) => error);
+      const closing = connection.end().then(() => null, (error) => error);
+      for (const outcome of await Promise.all([releasing, closing])) {
+        if (outcome) failures.push(outcome);
+      }
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1) throw new AggregateError(failures, `the lock ${RUN_LOCK} could not be released cleanly`);
+    }), LOCK_RELEASE_TIMEOUT_MS, `the lock ${RUN_LOCK} could not be confirmed released within ${LOCK_RELEASE_TIMEOUT_MS} ms: the release was attempted and the server drops the lock when its connection goes away`);
+  } finally {
+    // Pase lo que pase, la conexión no se queda abierta. close() no espera a la cola de comandos: marca
+    // la conexión como cerrada y cierra el socket ya. Así, un RELEASE_LOCK que no responde deja de
+    // retener al Quit, y es el propio cierre de la conexión lo que devuelve el bloqueo en el servidor.
+    // Puede dejar esa consulta a medias, y por eso el error del límite no afirma que la liberación esté
+    // confirmada, solo que se intentó.
+    try {
+      connection.close();
+    } catch {
+      // El socket ya estaba cerrado, o la conexión nunca tuvo uno: no hay nada que hacer.
+    }
+    // Y el socket, sin referenciar: su referencia no puede ser lo único que mantenga vivo el proceso.
+    socketOf(connection)?.unref?.();
+  }
 }
 
 /** Abre una conexión verificada de un papel. mysql2 se pasa desde fuera para poder probar sin él. */

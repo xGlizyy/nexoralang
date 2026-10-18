@@ -22,6 +22,22 @@ export function appContext() {
   return ready;
 }
 
+/**
+ * Cierra el pool real de src/db.js, como mucho una vez por proceso. Lo llama run.js al terminar las
+ * pruebas: sin cerrarlo, sus sockets quedan referenciados, el bucle de eventos no se vacía y el
+ * proceso no termina nunca. Si el contexto nunca llegó a iniciarse, o falló al iniciarse, no hay pool
+ * que cerrar y no hace nada. Un cierre que sí falla propaga su error: silenciarlo haría parecer limpia
+ * una ejecución que no lo está.
+ */
+export async function closeAppContext() {
+  if (ready === null) return;
+  const pending = ready;
+  ready = null; // a partir de aquí, aunque se llame otra vez, no hay nada que cerrar
+  const context = await pending.catch(() => null);
+  if (context === null) return;
+  await context.pool.end();
+}
+
 /** Sirve una aplicación de Express en 127.0.0.1 y un puerto libre (nunca el 3000). */
 export async function listen(app) {
   const server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
