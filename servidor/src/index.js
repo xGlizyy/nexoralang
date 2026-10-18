@@ -4,13 +4,16 @@ import { createApp } from './app.js';
 import { captchaKeyWarnings, loadCaptchaConfig, readSiteKeyFile } from './captcha.js';
 import { config } from './config.js';
 import { pool } from './db.js';
+import { createShutdown } from './lifecycle.js';
 import { listenWarnings } from './listen.js';
 import { startSessionCleanup } from './session-cleanup.js';
 
-const app = createApp();
+// Lo que /api/health necesita saber del ciclo de vida: durante el apagado responde 503.
+const lifecycle = { draining: false };
+const app = createApp({ lifecycle });
 
 // Las sesiones caducadas se borran al arrancar y cada hora (session-cleanup.js).
-startSessionCleanup(pool);
+const cleanup = startSessionCleanup(pool);
 
 for (const warning of listenWarnings(config)) console.error(`warning: ${warning}`);
 // Las dos claves de reCAPTCHA se configuran en sitios distintos: se avisa si no van a la par. Si falta
@@ -26,3 +29,13 @@ server.on('listening', () => {
   const { address, port } = server.address();
   console.log(`NEXORA en http://localhost:${port} (${config.environment}, escuchando en ${address === '::' || address === '0.0.0.0' ? 'todas las interfaces' : address})`);
 });
+
+// Apagado ordenado (lifecycle.js): termina las peticiones en curso y cierra el pool de MySQL.
+const shutdown = createShutdown({
+  server,
+  closePool: () => pool.end(),
+  stopCleanup: cleanup.stop,
+  onDraining: () => { lifecycle.draining = true; },
+});
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => shutdown('SIGINT'));
