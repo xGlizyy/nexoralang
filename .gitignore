@@ -1,2 +1,6 @@
 node_modules/
 .env
+# Archivos de entorno con credenciales: servidor/.env y cualquier variante (.env.integration...).
+# Las plantillas sin secretos sí se versionan.
+.env.*
+!.env.example
