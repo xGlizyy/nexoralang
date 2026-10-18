@@ -272,23 +272,41 @@ describe('anti-spam middleware on a form route', () => {
     assert.equal(fake.calls.length, before);
   });
 
+  // Las dos pruebas siguientes gastan el límite estricto: cada una usa su propia ruta, con el cupo
+  // entero (protectedRoute, más abajo), y no depende de lo que hayan gastado las demás ni de su orden.
   test('without a token (reCAPTCHA refused) the form still works, up to the strict limit', async () => {
-    fake = google();
-    assert.equal((await post({ name: 'Grace' })).status, 201);
-    assert.equal((await post({ name: 'Grace' })).status, 201);
-    const limited = await post({ name: 'Grace' });
-    assert.equal(limited.status, 429);
-    assert.equal(limited.json.code, 'captcha_required');
-    // A verified submission is not affected by that limit.
-    assert.equal((await post({ name: 'Grace', captchaToken: TOKEN })).status, 201);
+    const route = await protectedRoute({ fake: google() });
+    try {
+      assert.equal((await route.post({ name: 'Grace' })).status, 201);
+      assert.equal((await route.post({ name: 'Grace' })).status, 201);
+      const limited = await route.post({ name: 'Grace' });
+      assert.equal(limited.status, 429);
+      assert.equal(limited.json.code, 'captcha_required');
+      // A verified submission is not affected by that limit.
+      assert.equal((await route.post({ name: 'Grace', captchaToken: TOKEN })).status, 201);
+    } finally {
+      await route.close();
+    }
   });
 
   test('a low score and an unavailable Google fall under the same strict limit, and the outage is logged', async () => {
-    fake = google({ score: 0.1 });
-    assert.equal((await post({ captchaToken: TOKEN })).status, 429, 'the strict limit of this IP is already used up');
-    fake = { fetch: async () => { throw new TypeError('fetch failed'); }, calls: [] };
-    assert.equal((await post({ captchaToken: TOKEN })).status, 429);
-    assert.ok(logs.some((line) => line.startsWith('captcha: signup: unavailable (TypeError): Google could not be reached')));
+    let answer = google({ score: 0.1 });
+    const unavailable = { fetch: async () => { throw new TypeError('fetch failed'); }, calls: [] };
+    const route = await protectedRoute({ fake: { fetch: (...args) => answer.fetch(...args) } });
+    try {
+      // Una puntuación baja y una caída de Google gastan el mismo cupo de 2...
+      assert.equal((await route.post({ captchaToken: TOKEN })).status, 201);
+      answer = unavailable;
+      assert.equal((await route.post({ captchaToken: TOKEN })).status, 201);
+      // ...y, gastado, las dos se frenan.
+      answer = google({ score: 0.1 });
+      assert.equal((await route.post({ captchaToken: TOKEN })).status, 429, 'the strict limit of this IP is used up');
+      answer = unavailable;
+      assert.equal((await route.post({ captchaToken: TOKEN })).status, 429);
+      assert.ok(route.logs.some((line) => line.startsWith('captcha: signup: unavailable (TypeError): Google could not be reached')));
+    } finally {
+      await route.close();
+    }
   });
 });
 
