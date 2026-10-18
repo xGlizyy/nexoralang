@@ -270,11 +270,13 @@ En la fila de 810:
 - **Las pruebas de integración tienen un bloqueo de ejecución** (ver más abajo). 11 pruebas nuevas en
   `integration-guard.test.js`, con conexiones simuladas.
 - **El mínimo de Node de las pruebas de integración estaba mal.** `module.registerHooks` existe desde
-  Node 22.15, pero hasta 22.22.2 (rama 22) y 24.13.1 (rama 24), al importar un módulo CommonJS desde
-  ESM, Node lo vuelve a resolver por dentro con su ruta absoluta y sin `parentURL`: el gancho de
-  `preflight.js` no puede saber quién lo pide y bloquea `mysql2` también en el orden legítimo. Fallaba
-  de forma segura (no deja pasar nada), pero las pruebas de integración no podían ejecutarse, y `npm
-  test` fallaba en esas versiones (3 fallos en Node 22.15.0) en lugar de omitir esas pruebas. Medido con
+  Node 22.15, pero en las versiones de abajo, al importar un módulo CommonJS desde ESM, el gancho
+  recibió en las mediciones una segunda resolución con la ruta absoluta y sin `parentURL`: el gancho de
+  `preflight.js` no puede saber quién lo pide y bloquea `mysql2` también en el orden legítimo. Es una
+  observación en Windows: la documentación de Node no describe ese comportamiento ni su cambio, así que
+  su causa exacta no está confirmada. Fallaba de forma segura (no deja pasar nada), pero las pruebas de
+  integración no podían ejecutarse, y `npm test` fallaba en esas versiones (3 fallos en Node 22.15.0)
+  en lugar de omitir esas pruebas. Medido con
   el caso «legit» de `test/fixtures/preflight-probe.js` y las distribuciones oficiales para Windows, con
   su SHA-256 comprobado: lo bloquean 22.15.0, 22.18.0, 22.19.0, 22.20.0, 22.21.0, 22.22.0, 22.22.1,
   22.22.2, 24.0.0, 24.11.1, 24.13.0 y 24.13.1; lo cargan 22.22.3, 22.23.0, 22.23.3, 24.14.0, 24.14.1,
@@ -354,9 +356,19 @@ temporal, como en `npm test`.
 
 **Las pruebas de integración requieren Node 22.22.3 o posterior en la rama 22, o 24.14.0 o
 posterior** (`module.registerHooks`, y que su gancho vea quién carga cada módulo; ver la fila de 810).
-La rama 23 no se admite. Es un requisito solo de `npm run test:integration`, no de todo el proyecto: la
-compatibilidad declarada en `servidor/package.json` (`engines`, Node 20.6 o posterior) y la matriz de la
-integración continua (20.6 y 22) no cambian. En cualquier otro Node:
+Es una observación en Windows, con las distribuciones oficiales: en las versiones anteriores que se
+probaron, el gancho bloqueaba mysql2 también en el orden legítimo. La documentación de Node no describe
+ese cambio, así que su causa exacta no está confirmada. La rama 23 no se admite.
+
+La compatibilidad declarada en `servidor/package.json` (`engines`) es más estricta:
+`^22.23.2 || ^24.18.1`, las últimas versiones de seguridad de cada rama en octubre de 2026. El código
+del servidor no necesita esas versiones (`npm test` pasaba con Node 20.6.1), pero Node 20 no tiene
+soporte desde el 30 de abril de 2026 y las versiones anteriores de las ramas 22 y 24 tienen fallos de
+seguridad publicados. Dentro de ese rango se han probado en local 22.23.3 y 24.21.0 (Windows 11); los
+mínimos exactos, 22.23.2 y 24.18.1, no. La integración continua prueba esos mínimos fijos, la última
+versión de las ramas 22 y 24 y, en Linux y sin bloquear, Node 26, que queda fuera de `engines` hasta
+validarlo; no se ha ejecutado nunca. En cualquier Node sin el gancho que necesitan las pruebas de
+integración:
 - `preflight.js` se niega a ejecutar las pruebas de integración y explica por qué;
 - `npm test` puede ejecutar todo lo demás; de `integration-guard.test.js` se omiten las 14 pruebas que
   lanzan procesos con `preflight.js`, cada una con su motivo, y el resumen las cuenta como omitidas

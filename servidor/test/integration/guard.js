@@ -443,11 +443,14 @@ export function checkPreflight(env) {
 }
 
 // Las versiones en las que el gancho de preflight.js funciona como esperan las guardas. module.registerHooks
-// existe desde Node 22.15 y 23.5, pero hasta 22.22.2 (rama 22) y 24.13.1 (rama 24), al importar un módulo
-// CommonJS desde ESM, Node lo vuelve a resolver por dentro con su ruta absoluta y SIN parentURL: el
-// gancho no puede saber quién lo pide y bloquea mysql2 también en el orden legítimo. Medido en Windows
-// con las distribuciones oficiales: 22.15.0–22.22.2 y 24.0.0–24.13.1 lo bloquean; 22.22.3, 22.23.0,
-// 22.23.3, 24.14.0–24.16.0, 24.21.0, 25.9.0 y 26.12.0, no. La rama 23 no se admite (sin soporte).
+// existe desde Node 22.15 y 23.5. Observación empírica, con causa sin confirmar: en algunas versiones, al
+// importar un módulo CommonJS desde ESM, el gancho recibió una segunda resolución con la ruta absoluta y
+// sin parentURL; así no puede saber quién lo pide y bloquea mysql2 también en el orden legítimo. La
+// documentación de Node no describe ese comportamiento ni su cambio. Medido solo en Windows, con las
+// distribuciones oficiales y solo en estas versiones: lo bloquearon 22.15.0, 22.18.0, 22.19.0, 22.20.0,
+// 22.21.0, 22.22.0, 22.22.1, 22.22.2, 24.0.0, 24.11.1, 24.13.0 y 24.13.1; no lo bloquearon 22.22.3,
+// 22.23.0, 22.23.3, 24.14.0, 24.14.1, 24.15.0, 24.16.0, 24.21.0, 25.9.0 y 26.12.0. Los mínimos de abajo
+// salen de esa medición. La rama 23 no se admite (sin soporte).
 export const HOOK_MINIMUMS = Object.freeze({ 22: Object.freeze([22, 22, 3]), 24: Object.freeze([24, 14, 0]) });
 const HOOK_REQUIREMENT = 'Node 22.22.3 or later in the 22 line, or 24.14.0 or later';
 

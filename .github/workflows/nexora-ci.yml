@@ -117,12 +117,22 @@ jobs:
   servidor:
     name: Servidor y web · Node ${{ matrix.node }} · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # Node 26 es una prueba no bloqueante (experimental): si falla, el flujo no falla.
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        # 20.6: el mínimo de servidor/package.json. 22: LTS.
-        node: ["20.6", "22"]
+        # servidor/package.json admite "^22.23.2 || ^24.18.1".
+        # 22.23.2 y 24.18.1: los mínimos, fijos (las últimas versiones de seguridad de cada rama en
+        # octubre de 2026).
+        # "22" y "24": la última versión de cada rama, para detectar regresiones de versiones nuevas.
+        node: ["22.23.2", "24.18.1", "22", "24"]
+        include:
+          # Node 26, fuera de engines hasta validarlo: solo en Linux y sin bloquear.
+          - os: ubuntu-latest
+            node: "26"
+            experimental: true
     defaults:
       run:
         working-directory: servidor

@@ -20,7 +20,8 @@ Licencia: [MIT](LICENSE).
 
 ## Arrancar el servidor
 
-Requiere Node.js 20.6 o superior y una base de datos MySQL o MariaDB.
+Requiere Node.js 22.23.2 o posterior en la rama 22, o 24.18.1 o posterior en la rama 24, y una base
+de datos MySQL o MariaDB. Usa la última versión de tu rama.
 
 ```
 cd servidor

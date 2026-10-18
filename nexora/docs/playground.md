@@ -258,8 +258,9 @@ Solo se usa la imagen local `nexora-worker`, que Docker no descarga nunca (`--pu
 
 ## Ejecutarlo en local
 
-Requisitos: Node.js 20.6 o superior, Python 3.11 o superior y, para las cuentas de usuario de la
-web, MySQL o MariaDB (el playground en sí no usa la base de datos).
+Requisitos: Node.js 22.23.2 o posterior en la rama 22, o 24.18.1 o posterior en la rama 24; Python
+3.11 o superior y, para las cuentas de usuario de la web, MySQL o MariaDB (el playground en sí no usa
+la base de datos).
 
 ```bash
 # 1. El intérprete
@@ -347,7 +348,8 @@ despliegue en un VPS con Linux, con software gratuito. Adapta rutas y nombres.
 
 ### 1. Dependencias
 
-- Node.js 20.6 o superior.
+- Node.js 22.23.2 o posterior en la rama 22, o 24.18.1 o posterior en la rama 24 (`engines` en
+  `servidor/package.json`). Instala la última versión de la rama.
 - Python 3.11 o superior.
 - MySQL o MariaDB (para las cuentas de la web).
 - nginx como proxy inverso, con un certificado TLS (por ejemplo, de Let's Encrypt).

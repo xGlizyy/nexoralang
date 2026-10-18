@@ -1,5 +1,6 @@
-// El script `npm test` nombra cada archivo de prueba: `node --test` solo acepta patrones desde
-// Node 21, y engines admite Node 20.6. Esta prueba comprueba que la lista está completa y al día.
+// El script `npm test` nombra cada archivo de prueba: se escribió así cuando engines admitía Node 20.6,
+// y `node --test` solo acepta patrones desde Node 21. Esta prueba comprueba que la lista está completa y
+// al día.
 
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';

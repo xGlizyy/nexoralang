@@ -75,6 +75,13 @@ a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no 
 
 ### Cambios incompatibles
 
+- **El servidor requiere Node.js 22.23.2 o posterior en la rama 22, o 24.18.1 o posterior en la rama
+  24** (`engines` en `servidor/package.json`: `^22.23.2 || ^24.18.1`; antes, 20.6 o posterior). Node 20
+  no tiene soporte desde el 30 de abril de 2026, y las mínimas son las últimas versiones de seguridad
+  de cada rama en octubre de 2026. Las ramas 23, 25 y 26 quedan fuera. npm solo avisa (`EBADENGINE`)
+  con otra versión, no impide instalar. Dentro del rango se han probado en local, en Windows, 22.23.3
+  y 24.21.0; los mínimos exactos no. La integración continua del servidor pasa a probar 22.23.2,
+  24.18.1, la última de las ramas 22 y 24 y, sin bloquear, Node 26; todavía no se ha ejecutado.
 - **Con `NODE_ENV=production`, `PLAYGROUND_ENABLED=true` exige la orden de contenedor** en
   `PLAYGROUND_WORKER_COMMAND`. Sin ella (o con una orden de proceso), el servidor no arranca: el modo
   de proceso ejecuta el código de los visitantes con los permisos del servidor. Fuera de producción,
