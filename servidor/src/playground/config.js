@@ -2,6 +2,7 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isProduction } from '../environment.js';
 
 /** En la orden de un contenedor, el servidor sustituye este marcador por un nombre único. */
 export const CONTAINER_PLACEHOLDER = '{container}';
@@ -150,12 +151,26 @@ function checkContainerCommand(command) {
   }
 }
 
+// En producción, el playground activado solo arranca con la orden de contenedor admitida. El modo de
+// proceso ejecuta el código de los visitantes con los permisos del servidor, sin aislamiento: sirve
+// para probar en un equipo propio, nunca para un servidor público. Que la orden de contenedor esté
+// configurada no demuestra que el aislamiento funcione: eso se comprueba aparte, con Docker real
+// (nexora/docs/playground.md, «Comprobar el aislamiento»).
+function checkProductionIsolation(enabled, command) {
+  if (!enabled || !isProduction(process.env.NODE_ENV)) return;
+  if (command.includes(CONTAINER_PLACEHOLDER)) return; // ya validada por checkContainerCommand
+  throw new Error('PLAYGROUND_ENABLED=true en producción exige PLAYGROUND_WORKER_COMMAND con la orden de contenedor admitida: sin ella, el código de los visitantes se ejecutaría en este equipo sin aislamiento. Desactiva el playground o configura la orden de servidor/.env.example (revisa servidor/.env)');
+}
+
 /** Lee la configuración del entorno. Se llama una vez al arrancar; las pruebas pasan la suya. */
 export function loadPlaygroundConfig() {
   const timeoutMs = integer('PLAYGROUND_TIMEOUT_MS', 2000, 100);
+  const enabled = enabledFlag();
+  const command = workerCommand();
+  checkProductionIsolation(enabled, command);
   return {
-    enabled: enabledFlag(),
-    workerCommand: workerCommand(),
+    enabled,
+    workerCommand: command,
     examplesDir: process.env.NEXORA_EXAMPLES_DIR || root('nexora/examples'),
 
     // Límites de una petición.

@@ -113,3 +113,86 @@ describe('the API with the real configuration', () => {
     });
   });
 });
+
+/** Ejecuta `body` con estas variables (undefined: sin definir) y deja process.env como estaba. */
+async function withEnv(values, body) {
+  const before = Object.fromEntries(Object.keys(values).map((name) => [name, [Object.hasOwn(process.env, name), process.env[name]]]));
+  for (const [name, value] of Object.entries(values)) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+  try {
+    return await body();
+  } finally {
+    for (const [name, [had, value]] of Object.entries(before)) {
+      if (had) process.env[name] = value;
+      else delete process.env[name];
+    }
+  }
+}
+
+const CONTAINER = JSON.stringify(['docker', 'run', '--rm', '-i', '--init', '--pull', 'never', '--name', '{container}', '--network', 'none',
+  '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '32', '--memory', '256m', '--memory-swap', '256m',
+  '--cpus', '0.5', '--user', '65534:65534', '--tmpfs', '/tmp:rw,size=1m,noexec', 'nexora-worker']);
+const PROCESS = JSON.stringify(['/srv/nexora/nexora/.venv/bin/python', '-I', '-m', 'nexora.worker']);
+const ISOLATION = /PLAYGROUND_ENABLED=true en producción exige PLAYGROUND_WORKER_COMMAND con la orden de contenedor/;
+
+describe('in production, the enabled playground needs the container command', () => {
+  // Cada caso: [NODE_ENV, PLAYGROUND_ENABLED, PLAYGROUND_WORKER_COMMAND, resultado].
+  const cases = [
+    ['production', 'true', undefined, 'refused'],
+    ['production', 'true', PROCESS, 'refused'],
+    ['production', 'true', CONTAINER, 'container'],
+    ['production', undefined, undefined, 'disabled'],
+    ['production', 'false', undefined, 'disabled'],
+    ['production', 'false', PROCESS, 'disabled'],
+    ['development', 'true', undefined, 'process'],
+    ['test', 'true', PROCESS, 'process'],
+    [undefined, 'true', undefined, 'process'],
+  ];
+  for (const [environment, enabled, command, expected] of cases) {
+    test(`NODE_ENV=${environment}, PLAYGROUND_ENABLED=${enabled}, ${command === undefined ? 'no worker command' : command === CONTAINER ? 'container command' : 'process command'}: ${expected}`, async () => {
+      await withEnv({ NODE_ENV: environment, PLAYGROUND_ENABLED: enabled, PLAYGROUND_WORKER_COMMAND: command, NEXORA_PYTHON: undefined }, () => {
+        if (expected === 'refused') {
+          assert.throws(() => loadPlaygroundConfig(), ISOLATION);
+          return;
+        }
+        const config = loadPlaygroundConfig();
+        assert.equal(config.enabled, expected !== 'disabled');
+        if (expected === 'container') assert.equal(config.workerCommand[0], 'docker');
+        if (expected === 'process') assert.ok(config.workerCommand.includes('nexora.worker'));
+      });
+    });
+  }
+
+  test('an invalid container command is still refused with its own message, also in production', async () => {
+    const wrong = JSON.stringify(JSON.parse(CONTAINER).filter((part) => part !== '--read-only'));
+    await withEnv({ NODE_ENV: 'production', PLAYGROUND_ENABLED: 'true', PLAYGROUND_WORKER_COMMAND: wrong }, () => {
+      assert.throws(() => loadPlaygroundConfig(), /no incluye antes de la imagen: "--read-only"/);
+    });
+  });
+
+  test('the real server stops before listening, and before touching the database', async () => {
+    // Un proceso aparte con src/index.js, sin servidor/.env: puerto 0, base de datos en un puerto
+    // cerrado. Si el arranque no se detuviera, la prueba fallaría por el mensaje de escucha.
+    const { spawn } = await import('node:child_process');
+    const { fileURLToPath } = await import('node:url');
+    const cwd = fileURLToPath(new URL('..', import.meta.url));
+    const env = {
+      PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, NODE_ENV: 'production', PLAYGROUND_ENABLED: 'true',
+      PORT: '0', LISTEN_HOST: '127.0.0.1', DB_HOST: '127.0.0.1', DB_PORT: '1', DB_USER: 'test', DB_NAME: 'test',
+    };
+    const child = spawn(process.execPath, ['src/index.js'], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    const timer = setTimeout(() => child.kill('SIGKILL'), 15_000);
+    const code = await new Promise((resolve) => child.on('close', resolve));
+    clearTimeout(timer);
+    assert.notEqual(code, 0);
+    assert.match(stderr, ISOLATION);
+    assert.doesNotMatch(stdout, /NEXORA en http/);
+    assert.doesNotMatch(stderr, /sessions:/, 'the session cleanup never started');
+  });
+});
