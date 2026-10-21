@@ -683,6 +683,21 @@ code { font-family: var(--mono); font-size: 0.9em; }
 
 .hero__note { margin-top: 12px; color: var(--muted); font-size: 0.9rem; }
 
+/* What the last version added, as a link to the guide: one line, so the install window stays in the first screen. */
+.hero__news {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 14px 3px 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.2s, border-color 0.2s;
+}
+.hero__news:hover, .hero__news:focus-visible { color: var(--text); border-color: rgba(102, 217, 166, 0.45); }
+.hero__news code { font-size: 0.85em; }
+
 .actions { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 30px; }
 .actions--center { justify-content: center; }
 

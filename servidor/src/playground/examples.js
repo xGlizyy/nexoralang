@@ -13,13 +13,17 @@ const CATALOGUE = [
   { id: 'functions', file: 'functions.nex', title: 'Functions and recursion', expect: 'success' },
   { id: 'contracts', file: 'contracts.nex', title: 'Contracts', expect: 'success' },
   { id: 'refined-types', file: 'refined_types.nex', title: 'Refined types', expect: 'success' },
+  { id: 'loops', file: 'loops.nex', title: 'Loops that say why they end', expect: 'success' },
+  { id: 'texts', file: 'texts.nex', title: 'Texts', expect: 'success' },
+  { id: 'lists', file: 'lists.nex', title: 'Lists and for', expect: 'success' },
   { id: 'type-errors', file: 'invalid/type_errors.nex', title: 'Type errors, on purpose', expect: 'invalid' },
   { id: 'runtime-error', file: 'failing/runtime_error.nex', title: 'A runtime error, on purpose', expect: 'runtime_error' },
   { id: 'contract-violation', file: 'failing/contract_violation.nex', title: 'A broken contract, on purpose', expect: 'contract_violation' },
   { id: 'refinement-violation', file: 'failing/refinement_violation.nex', title: 'A broken refined type, on purpose', expect: 'contract_violation' },
 ];
 
-// La descripción es el comentario con el que empieza el propio archivo.
+// La descripción es la primera frase del comentario con el que empieza el propio archivo. Llega
+// hasta el primer punto: un título con dos puntos ("Lists: ...") se queda con lo que lo explica.
 function descriptionOf(code) {
   const lines = [];
   for (const line of code.split(/\r?\n/)) {
@@ -27,8 +31,8 @@ function descriptionOf(code) {
     lines.push(line.replace(/^\/\/\s?/, ''));
   }
   const text = lines.join(' ').trim();
-  const firstSentence = text.match(/^.*?[.:](?=\s|$)/);
-  return (firstSentence ? firstSentence[0] : text).replace(/:$/, '.');
+  const firstSentence = text.match(/^.*?\.(?=\s|$)/);
+  return firstSentence ? firstSentence[0] : text;
 }
 
 /** Lee los ejemplos del disco. Lanza si falta alguno: el servidor no debe ofrecer una lista rota. */
