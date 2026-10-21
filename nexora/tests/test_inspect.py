@@ -35,7 +35,7 @@ EXPECTED_FIELDS = {
     "Function": ["kind", "span", "name", "name_span", "params", "return_type", "contracts", "body", "examples"],
     "Example": ["kind", "span", "condition", "message"],
     "Param": ["kind", "span", "name", "name_span", "type"],
-    "TypeRef": ["kind", "span", "name"],
+    "TypeRef": ["kind", "span", "name", "arguments"],
     "Contract": ["kind", "span", "clause", "condition", "message"],
     "Block": ["kind", "span", "statements"],
     "Let": ["kind", "span", "name", "name_span", "declared_type", "value"],
@@ -47,6 +47,7 @@ EXPECTED_FIELDS = {
     "FloatLiteral": ["kind", "span", "value", "type"],
     "TextLiteral": ["kind", "span", "value", "type"],
     "BoolLiteral": ["kind", "span", "value", "type"],
+    "ListLiteral": ["kind", "span", "elements", "type"],
     "Name": ["kind", "span", "name", "type"],
     "Unary": ["kind", "span", "operator", "operand", "type"],
     "Binary": ["kind", "span", "operator", "operator_span", "left", "right", "type"],
@@ -110,7 +111,10 @@ def test_every_node_has_exactly_the_documented_fields():
     # A program that uses every node kind except Assign (which is always an error).
     seen = {}
     refined = 'type Small = Int where value < 10, "Small numbers only"\n'
-    extra = 'fn extra(n: Small) -> Int {\n    example extra(1) == 2, "One more"\n    return (n) + 1\n}\n'
+    extra = (
+        'fn extra(n: Small) -> Int {\n    example extra(1) == 2, "One more"\n'
+        "    let xs: List[Int] = [1, 2]\n    return (n) + 1\n}\n"
+    )
     for node in walk(inspect(refined + PROGRAM + "\n" + extra)):
         seen.setdefault(node["kind"], list(node))
     assert_fields(seen)
@@ -127,7 +131,8 @@ def assert_fields(seen: dict) -> None:
 
 def test_every_expression_of_a_valid_program_has_a_type():
     expression_kinds = {
-        "IntLiteral", "FloatLiteral", "TextLiteral", "BoolLiteral", "Name", "Unary", "Binary", "Group", "Call",
+        "IntLiteral", "FloatLiteral", "TextLiteral", "BoolLiteral", "ListLiteral", "Name", "Unary", "Binary",
+        "Group", "Call",
     }
     for node in walk(inspect(PROGRAM)):
         if node["kind"] in expression_kinds:

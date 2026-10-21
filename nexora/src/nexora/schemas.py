@@ -115,8 +115,9 @@ def node_definitions() -> dict:
         if node_class in ast.EXPRESSION_NODES:
             properties["type"] = {
                 "type": ["string", "null"],
-                "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a "
-                               "refined type the program declares. Null if the expression has an error.",
+                "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as "
+                               "List[Int], or the name of a refined type the program declares. Null if the "
+                               "expression has an error.",
             }
             required.append("type")
         definitions[node_class.__name__] = {"type": "object", "required": required, "properties": properties}
@@ -215,14 +216,18 @@ _CONTEXT_FUNCTION = {
                                                   "requirements each one declares. Checked on every turn when "
                                                   "the program runs; the analysis never evaluates them.",
                   "items": {
-                      "type": "object", "required": ["line", "condition", "invariants", "measure"],
+                      "type": "object", "required": ["line", "kind", "condition", "invariants", "measure"],
                       "properties": {
                           "line": {"type": "integer", "minimum": 1},
-                          "condition": {"type": "string", "description": "The loop condition, as written."},
+                          "kind": {"enum": ["while", "for"],
+                                   "description": "Which form of loop this is."},
+                          "condition": {"type": "string",
+                                        "description": "The text after the keyword: the condition of a 'while', "
+                                                       "or 'name in iterable' for a 'for'."},
                           "invariants": {"type": "array", "items": {"$ref": "#/$defs/loop_clause"}},
                           "measure": {"oneOf": [{"$ref": "#/$defs/loop_clause"}, {"type": "null"}],
-                                      "description": "The 'decreases' clause. Null only in a program with "
-                                                     "errors (E2021)."}}}},
+                                      "description": "The 'decreases' clause. Null for every 'for' loop and "
+                                                     "in a program with errors (E2021)."}}}},
     },
 }
 

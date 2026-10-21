@@ -21,6 +21,8 @@ _SINGLE = {
     ")": TokenType.RPAREN,
     "{": TokenType.LBRACE,
     "}": TokenType.RBRACE,
+    "[": TokenType.LBRACKET,
+    "]": TokenType.RBRACKET,
     ",": TokenType.COMMA,
     ":": TokenType.COLON,
     # A '.' inside a number ("1.5") is read with the number. Any other '.' is this token, which is

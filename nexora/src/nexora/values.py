@@ -1,6 +1,7 @@
 """Runtime values of NEXORA and how they are named and printed.
 
-A NEXORA value is represented by a Python `int`, `float`, `bool` or `str`.
+A NEXORA value is represented by a Python `int`, `float`, `bool`, `str` or an
+immutable tuple of values (a list).
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ VOID = "Void"
 # The types a variable, a parameter or an expression can have. Void is only a return type.
 VALUE_TYPES = (INT, FLOAT, BOOL, TEXT)
 
-Value = int | float | bool | str
+Value = int | float | bool | str | tuple["Value", ...]
 
 
 def format_value(value: Value) -> str:
@@ -27,6 +28,8 @@ def format_value(value: Value) -> str:
     if isinstance(value, float):
         # Shortest text that reads back as the same Float; it always shows a '.' or an exponent.
         return repr(value)
+    if isinstance(value, tuple):
+        return "[" + ", ".join(format_value(item) for item in value) + "]"
     return str(value)
 
 
@@ -35,4 +38,6 @@ def show_value(value: Value) -> str:
     if isinstance(value, str):
         escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
         return f'"{escaped}"'
+    if isinstance(value, tuple):
+        return "[" + ", ".join(show_value(item) for item in value) + "]"
     return format_value(value)

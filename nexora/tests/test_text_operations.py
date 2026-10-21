@@ -275,17 +275,25 @@ def test_and_and_or_do_not_check_what_they_do_not_evaluate():  # [8]
 @pytest.mark.parametrize("name", sorted(prelude.CONTRACTS))
 def test_the_built_in_contracts_are_valid_nexora_that_cannot_fail(name):  # [9]
     signature = BUILTINS[name]
-    params = ", ".join(f"{param}: {kind}" for param, kind in signature.params)
-    some_value = {"Int": "0", "Float": "0.0", "Text": '""', "Bool": "true"}[signature.return_type]
+    # A parametric contract is probed with a concrete instance of its type variables.
+    concrete = {
+        "List.get": ("xs: List[Int], i: Int", "Int"),
+    }.get(name)
+    if concrete is None:
+        params = ", ".join(f"{param}: {kind}" for param, kind in signature.params)
+        return_type = signature.return_type
+    else:
+        params, return_type = concrete
+    some_value = {"Int": "0", "Float": "0.0", "Text": '""', "Bool": "true"}[return_type]
     for contract in prelude.CONTRACTS[name]:
         # The clause, checked by the real checker in a function with the same parameters and result.
-        program = (f"fn probe({params}) -> {signature.return_type} {{\n    {contract.clause} {contract.source}\n"
+        program = (f"fn probe({params}) -> {return_type} {{\n    {contract.clause} {contract.source}\n"
                    f"    return {some_value}\n}}\n") + in_main("")
         assert check_codes(program) == [], (name, contract.source)
         assert unparse(contract.condition) == contract.source
-        # Only functions that have an answer for any text.
+        # Only functions that have an answer for any text or any list.
         called = {node.callee for node in _walk(contract.condition) if isinstance(node, ast.Call)}
-        assert called <= {"Text.length", "Int.can_parse", "Float.can_parse"}
+        assert called <= {"Text.length", "Int.can_parse", "Float.can_parse", "List.length"}
         assert not any(isinstance(node, ast.Binary) and node.operator == "/" for node in _walk(contract.condition))
 
 
@@ -380,9 +388,9 @@ def test_unknown_qualified_calls(call, label, hint, note):  # [12], [13]
 
 
 @pytest.mark.parametrize("call, hint", [
-    ("length(t)", "Did you mean 'Text.length'?"),
+    ("length(t)", "Did you mean 'List.length' or 'Text.length'?"),
     ("parse(t)", "Did you mean 'Float.parse' or 'Int.parse'?"),
-    ("lenght(t)", "Did you mean 'Text.length'?"),
+    ("lenght(t)", "Did you mean 'List.length' or 'Text.length'?"),
     ("to_txt(1)", "Did you mean 'to_text'?"),
 ])
 def test_an_unqualified_name_suggests_the_function_of_a_type(call, hint):  # [13]
@@ -449,7 +457,7 @@ def test_variables_named_like_the_types_stay_valid():  # [17]
 
 
 OLD_PROGRAMS = sorted(path for path in (ROOT / "examples").rglob("*.nex")
-                      if path.name not in ("texts.nex", "parse_number.nex"))
+                      if path.name not in ("texts.nex", "parse_number.nex", "lists.nex"))
 
 
 @pytest.mark.parametrize("path", OLD_PROGRAMS, ids=lambda path: path.name)

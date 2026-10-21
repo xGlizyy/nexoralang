@@ -1184,6 +1184,7 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E2019` | Too many refinement checks | `semantic` | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (sección 4.4) |
 | `E2020` | Example without its function | `semantic` | Un ejemplo no contiene ninguna llamada a su función (sección 9.4) |
 | `E2021` | Missing loop measure | `semantic` | Un `while` sin `decreases`, o con más de uno (sección 9.5) |
+| `E2022` | Unsupported loop clause | `semantic` | Un `decreases` en un `for`, que no lo admite (sección 9.6) |
 | `E3001` | Division by zero | `runtime` | División por cero |
 | `E3002` | Integer overflow | `runtime` | Un resultado `Int` fuera del rango de 64 bits |
 | `E3003` | Float result out of range | `runtime` | Un resultado `Float` demasiado grande |

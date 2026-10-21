@@ -170,10 +170,9 @@ def test_ast_converts_to_json():
     ("print(1", "E1101", 2, 12),               # missing ')' in a call
     ("let x = )", "E1101", 2, 13),             # unexpected token
     ("let x = * 2", "E1101", 2, 13),           # operator with no left operand
-    ("let for = 1", "E1103", 2, 9),            # reserved word as a name
+    ("let for = 1", "E1101", 2, 9),            # keyword as a name
     ("let true = 1", "E1101", 2, 9),           # keyword as a name
     ("let if = 1", "E1101", 2, 9),
-    ("for x in y", "E1103", 2, 5),             # reserved statement
     ("let x = match", "E1103", 2, 13),         # reserved word in an expression
     ("let x: = 1", "E1101", 2, 12),            # annotation without a type
     ("let x: Int", "E1101", 2, 15),            # annotation without a value

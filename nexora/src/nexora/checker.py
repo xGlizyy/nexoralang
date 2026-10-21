@@ -21,7 +21,9 @@ import difflib
 from dataclasses import dataclass, field, fields
 
 from . import ast_nodes as ast
+from . import types as type_model
 from .diagnostics import MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Span
+from .type_adapter import TypeAdapter
 from .values import BOOL, FLOAT, INT, TEXT, VALUE_TYPES, VOID
 
 KNOWN_TYPES = (VOID, *VALUE_TYPES)
@@ -42,6 +44,20 @@ LOGICAL = ("and", "or")
 
 
 @dataclass(frozen=True)
+class ParametricSignature:
+    """The internal type of a built-in whose parameters or result mention a type variable.
+
+    The language cannot write generic functions yet (D03); this is only how the
+    built-ins of `List` state that every element has the same type. Each call
+    instantiates the variables with the types of its arguments through `unify`
+    (D01.5), and the signature object itself is never changed.
+    """
+
+    params: tuple[tuple[str, type_model.Type], ...]
+    return_type: type_model.Type
+
+
+@dataclass(frozen=True)
 class Signature:
     """What a call needs to know about a function. A type is None when it was written wrong
     in the declaration; calls then skip the checks that depend on it."""
@@ -50,10 +66,25 @@ class Signature:
     params: tuple[tuple[str, str | None], ...]
     return_type: str | None
     builtin: bool = False
+    # Present only for a built-in whose types contain type variables, such as List.length.
+    parametric: ParametricSignature | None = None
 
     def describe(self) -> str:
         params = ", ".join(f"{name}: {kind or '?'}" for name, kind in self.params)
         return f"fn {self.name}({params}) -> {self.return_type or '?'}"
+
+
+# The item variable shared by the signatures of the functions of List. `unify` returns a
+# fresh mapping for each call, so the same variable can be reused without keeping state.
+_LIST_ITEM = type_model.TypeVariable(0, "T")
+
+
+def _parametric_signature(name: str, params: tuple[tuple[str, type_model.Type], ...],
+                          return_type: type_model.Type) -> Signature:
+    """A built-in signature that also carries its structured parametric type."""
+    parametric = ParametricSignature(params, return_type)
+    shown = tuple((param_name, type_model.display(kind)) for param_name, kind in params)
+    return Signature(name, shown, type_model.display(return_type), builtin=True, parametric=parametric)
 
 
 # The built-in functions. These are the only conversions between types: nothing converts implicitly.
@@ -75,6 +106,26 @@ BUILTINS: dict[str, Signature] = {
         Signature("Int.parse", (("text", TEXT),), INT, builtin=True),
         Signature("Float.can_parse", (("text", TEXT),), BOOL, builtin=True),
         Signature("Float.parse", (("text", TEXT),), FLOAT, builtin=True),
+        # The essential functions of List (D08/D.2.1). `List.get` is partial and declares
+        # its precondition in prelude.py; the rest are total.
+        _parametric_signature(
+            "List.length", (("xs", type_model.list_of(_LIST_ITEM)),), type_model.INT,
+        ),
+        _parametric_signature(
+            "List.get", (("xs", type_model.list_of(_LIST_ITEM)), ("i", type_model.INT)), _LIST_ITEM,
+        ),
+        _parametric_signature(
+            "List.append", (("xs", type_model.list_of(_LIST_ITEM)), ("x", _LIST_ITEM)),
+            type_model.list_of(_LIST_ITEM),
+        ),
+        _parametric_signature(
+            "List.concat",
+            (("xs", type_model.list_of(_LIST_ITEM)), ("ys", type_model.list_of(_LIST_ITEM))),
+            type_model.list_of(_LIST_ITEM),
+        ),
+        _parametric_signature(
+            "List.contains", (("xs", type_model.list_of(_LIST_ITEM)), ("x", _LIST_ITEM)), type_model.BOOL,
+        ),
     )
 }
 
@@ -99,6 +150,8 @@ class Symbol:
     references: list[Span] = field(default_factory=list)
     # True only for a variable declared with 'var'.
     mutable: bool = False
+    # True for the iterator a 'for' loop declares: it is immutable for its own reason.
+    loop_variable: bool = False
     # Where the variable is given a new value. Each of these is also in `references`.
     assignments: list[Span] = field(default_factory=list)
 
@@ -131,7 +184,20 @@ def _size(node: ast.Expr) -> int:
         return 1 + _size(node.expression)
     if isinstance(node, ast.Call):
         return 1 + sum(_size(argument) for argument in node.arguments)
+    if isinstance(node, ast.ListLiteral):
+        return 1 + sum(_size(element) for element in node.elements)
     return 1
+
+
+def _contains_type_variable(kind: type_model.Type) -> bool:
+    """Whether `kind` still mentions a type variable that a call has not bound."""
+    if isinstance(kind, type_model.TypeVariable):
+        return True
+    if isinstance(kind, type_model.Application):
+        return any(_contains_type_variable(argument) for argument in kind.arguments)
+    if isinstance(kind, type_model.Refined):
+        return _contains_type_variable(kind.base)
+    return False
 
 
 @dataclass(frozen=True)
@@ -280,6 +346,9 @@ class Checker:
         # Every declared type name, including those whose declaration has an error.
         self._type_names: dict[str, ast.TypeDecl] = {}
         self._refined: dict[str, RefinedType] = {}
+        # Phase A of D01: a model object beside every valid string type. `_root`
+        # uses it for representable names; the other rules still decide with strings.
+        self._type_adapter = TypeAdapter()
         # Every function name the program declares, known before any condition is checked.
         self._function_names: set[str] = set()
         # Work spent so far checking constants (see MAX_REFINEMENT_STEPS); None once over the limit.
@@ -384,6 +453,15 @@ class Checker:
         if name in visiting:
             # Reported once, at the declaration where the chain started.
             return None
+        if declaration.base.name == "List" and declaration.base.arguments:
+            if not visiting:
+                self._report(
+                    "E2016",
+                    f"The refined type '{name}' cannot refine a list type yet",
+                    declaration.base.span,
+                    hint="Refining 'List[T]' is not supported yet. Refine a built-in type such as Int or Text.",
+                )
+            return None
         base_name = declaration.base.name
         if base_name in self._type_names:
             base = self._resolve(base_name, [*visiting, name])
@@ -403,6 +481,9 @@ class Checker:
                 return None
             refined = RefinedType(name, declaration, base_type, base_type, (declaration,))
         self._refined[name] = refined
+        # The declaration and its base are already valid. Keep the model beside
+        # the metadata; a failure here would be an internal inconsistency.
+        self._type_adapter.register_refined(refined.name, refined.base, refined.declaration)
         return refined
 
     def _in_cycle(self, name: str) -> bool:
@@ -440,15 +521,71 @@ class Checker:
         for other in [kind for kind, refined in self._refined.items()
                       if any(step.name == name for step in refined.chain)]:
             del self._refined[other]
+            self._type_adapter.drop_refined(other)
 
     def _root(self, kind: str) -> str:
-        """The built-in type a type is made of: itself, or the end of a chain of refinements."""
-        refined = self._refined.get(kind)
-        return refined.root if refined is not None else kind
+        """The built-in type a type is made of: itself, or the end of a chain of refinements.
+
+        Primitive names, refined types valid in the current checker state and list
+        types go through the D01 model. Names outside that model keep the legacy
+        behaviour and are returned unchanged: `ANY_VALUE`, qualifiers, unknown names
+        and constructors the language does not enable yet. A known primitive or a
+        valid refined type missing from the model is an internal inconsistency, not a
+        fallback case, so it raises instead of hiding the broken bridge.
+        """
+        if kind in self._refined:
+            model = self._type_adapter.refined(kind)
+            if model is None:
+                raise RuntimeError(f"the refined type {kind!r} is missing from the type model")
+            return type_model.display(type_model.root(model))
+        if kind in KNOWN_TYPES:
+            model = self._type_adapter.resolve(kind)
+            if model is None:
+                raise RuntimeError(f"the primitive type {kind!r} is missing from the type model")
+            return type_model.display(type_model.root(model))
+        model = self._type_adapter.try_resolve(kind)
+        if model is not None:
+            return type_model.display(type_model.root(model))
+        return kind
 
     def _accepts(self, expected: str, found: str) -> bool:
-        """Whether a value of type `found` can be used where `expected` is needed: the same type,
-        or a refinement of it (a Percent is an Int, an Int is not a Percent)."""
+        """Whether a value of type `found` can be used where `expected` is needed.
+
+        Primitive names and refined types that are valid in the current checker
+        state use the D01 `assignable` rule, with the expected type first. Names
+        outside that model keep the legacy name-chain rule: unknown names,
+        qualifiers, `ANY_VALUE` and generic constructions are unchanged. A
+        representable type missing from the model is an internal inconsistency,
+        not a fallback case.
+        """
+        expected_model = self._current_type_model(expected)
+        found_model = self._current_type_model(found)
+        if expected_model is not None and found_model is not None:
+            return type_model.assignable(expected_model, found_model)
+        return self._accepts_legacy(expected, found)
+
+    def _current_type_model(self, kind: str) -> type_model.Type | None:
+        """The model for a type the checker currently represents, or None if it is outside D01.
+
+        A primitive or a refined type valid in `_refined` must have a model; a
+        missing one is an internal inconsistency and raises instead of falling back.
+        A canonical list type such as `List[Int]` resolves through the adapter; a
+        malformed or unsupported composite name stays outside the model.
+        """
+        if kind in self._refined:
+            model = self._type_adapter.refined(kind)
+            if model is None:
+                raise RuntimeError(f"the refined type {kind!r} is missing from the type model")
+            return model
+        if kind in KNOWN_TYPES:
+            model = self._type_adapter.resolve(kind)
+            if model is None:
+                raise RuntimeError(f"the primitive type {kind!r} is missing from the type model")
+            return model
+        return self._type_adapter.try_resolve(kind)
+
+    def _accepts_legacy(self, expected: str, found: str) -> bool:
+        """The pre-D01 name-chain rule, kept for names outside the model."""
         kind: str | None = found
         while kind is not None:
             if kind == expected:
@@ -514,19 +651,30 @@ class Checker:
         the condition, which is checked here. Any other value has to be checked explicitly."""
         if self._accepts(expected, found):
             return
-        if expected in self._refined and self._root(found) == self._root(expected):
-            if self._constant(node) is not None and found not in self._refined:
-                self._check_constant(node, expected)
+        expected_model = self._current_type_model(expected)
+        if expected_model is not None and isinstance(expected_model, type_model.Refined):
+            found_model = self._current_type_model(found)
+            if found_model is None:
+                same_root = self._root(found) == self._root(expected)
+                found_is_refined = False
+            else:
+                same_root = type_model.equal(
+                    type_model.root(found_model), type_model.root(expected_model)
+                )
+                found_is_refined = isinstance(found_model, type_model.Refined)
+            if same_root:
+                if self._constant(node) is not None and not found_is_refined:
+                    self._check_constant(node, expected)
+                    return
+                self._report(
+                    "E2011",
+                    f"Expected {expected}, found {found}",
+                    node.span,
+                    hint=f"Check the value explicitly with {expected}(...). "
+                         f"The program stops there if the value does not satisfy the condition of {expected}.",
+                    notes=notes,
+                )
                 return
-            self._report(
-                "E2011",
-                f"Expected {expected}, found {found}",
-                node.span,
-                hint=f"Check the value explicitly with {expected}(...). "
-                     f"The program stops there if the value does not satisfy the condition of {expected}.",
-                notes=notes,
-            )
-            return
         self._report(
             "E2011",
             f"Expected {expected}, found {found}",
@@ -556,6 +704,27 @@ class Checker:
         return self._known_type(reference)
 
     def _known_type(self, reference: ast.TypeRef) -> str | None:
+        if reference.arguments:
+            if reference.name != "List":
+                self._report(
+                    "E2012",
+                    f"'{reference.name}' cannot take type arguments",
+                    reference.span,
+                    hint="Only 'List' takes a type argument in this version: List[Int].",
+                )
+                return None
+            if len(reference.arguments) != 1:
+                self._report(
+                    "E2012",
+                    f"'List' takes exactly one type argument, but {len(reference.arguments)} were given",
+                    reference.span,
+                    hint="Write List[Int].",
+                )
+                return None
+            element = self._value_type(reference.arguments[0], "A list element")
+            if element is None:
+                return None
+            return f"List[{element}]"
         if reference.name in KNOWN_TYPES:
             return reference.name
         if reference.name in self._type_names:
@@ -595,7 +764,8 @@ class Checker:
                 main.params[0].span.to(main.params[-1].span),
                 hint="Write: fn main() -> Void",
             )
-        if main.return_type.name in VALUE_TYPES or main.return_type.name in self._type_names:
+        signature = self._signatures.get("main")
+        if signature is not None and signature.return_type not in (None, VOID):
             self._report("E2004", "'main' must return Void", main.return_type.span, hint="Write: fn main() -> Void")
 
     def _function(self, function: ast.Function, signature: Signature) -> None:
@@ -697,8 +867,9 @@ class Checker:
     # Statements. Each returns True when it always ends the function with 'return'.
 
     def _declare(self, scope: _Scope, name: str, category: str, kind: str | None, span: Span, *,
-                 mutable: bool = False) -> None:
-        symbol = Symbol(name, category, kind, span, self._function_name, scope.span, mutable=mutable)
+                 mutable: bool = False, loop_variable: bool = False) -> None:
+        symbol = Symbol(name, category, kind, span, self._function_name, scope.span, mutable=mutable,
+                        loop_variable=loop_variable)
         scope.names[name] = symbol
         self._symbols.append(symbol)
 
@@ -732,6 +903,8 @@ class Checker:
             return self._block(statement, _Scope(scope))
         elif isinstance(statement, ast.While):
             self._while(statement, scope)
+        elif isinstance(statement, ast.For):
+            self._for(statement, scope)
         elif isinstance(statement, ast.Assign):
             self._assign(statement, scope)
         else:
@@ -756,21 +929,24 @@ class Checker:
         return False
 
     def _let(self, statement: ast.Let | ast.Var, scope: _Scope) -> None:
-        # The initialiser is checked first: a variable is not visible inside its own declaration.
-        value_type = self._expression(statement.value, scope)
+        # The annotation is read first because it is the expected type of the initialiser:
+        # `let xs: List[Int] = []` needs it to infer the element type. The variable itself is
+        # still not visible inside its own declaration.
+        declared = None
+        if statement.declared_type is not None:
+            declared = self._value_type(statement.declared_type, f"The variable '{statement.name}'")
+        value_type = self._expression(statement.value, scope, declared)
         if value_type == VOID:
             self._report("E2011", "This call does not produce a value to store", statement.value.span)
             value_type = None
 
         variable_type = value_type
-        if statement.declared_type is not None:
-            declared = self._value_type(statement.declared_type, f"The variable '{statement.name}'")
-            if declared is not None:
-                # The annotation decides the type, so later uses are checked against what was intended.
-                variable_type = declared
-                if value_type is not None:
-                    self._expect_type(declared, value_type, statement.value,
-                                      (f"'{statement.name}' is declared as {declared}.",))
+        if declared is not None:
+            # The annotation decides the type, so later uses are checked against what was intended.
+            variable_type = declared
+            if value_type is not None:
+                self._expect_type(declared, value_type, statement.value,
+                                  (f"'{statement.name}' is declared as {declared}.",))
 
         if self._name_is_free(statement.name, statement.name_span, scope):
             self._declare(scope, statement.name, "variable", variable_type, statement.name_span,
@@ -779,9 +955,11 @@ class Checker:
     def _assign(self, statement: ast.Assign, scope: _Scope) -> None:
         """`name = value`: only a variable declared with 'var' takes a new value, and only of its type.
         Parameters stay immutable, so 'ensures' and the diagnostics see the values a call received."""
-        value_type = self._expression(statement.value, scope)
         name, span = statement.name, statement.name_span
         target = scope.find(name)
+        # The variable's type is the expected type of the value: `xs = []` needs it to
+        # infer the element type. Looking the name up reports nothing by itself.
+        value_type = self._expression(statement.value, scope, None if target is None else target.type)
         if target is None:
             self._unknown_variable(name, span, scope)
             return
@@ -791,6 +969,14 @@ class Checker:
                 f"'{name}' is a parameter and cannot be given a new value",
                 span,
                 hint=f"Copy it into a variable: 'var name = {name}'.",
+            )
+            return
+        if target.loop_variable:
+            self._report(
+                "E2007",
+                f"'{name}' is the iterator of a 'for' loop and cannot be given a new value",
+                span,
+                hint="The iterator takes each element of the list in turn; declare a 'var' for anything that changes.",
             )
             return
         if not target.mutable:
@@ -820,13 +1006,18 @@ class Checker:
                 self._condition(clause.condition, scope, "'invariant'")
                 continue
             found = self._expression(clause.condition, scope)
-            if found is not None and self._root(found) != INT:
-                self._report(
-                    "E2011",
-                    f"The measure of 'decreases' must be Int, found {found}",
-                    clause.condition.span,
-                    hint="The measure is a whole number that gets smaller on every turn and never goes below 0.",
-                )
+            if found is not None:
+                # The measure is valid when the root of its type is exactly Int. A name outside
+                # the model (`ANY_VALUE`, unknown names, dropped refinements) is not an Int and
+                # keeps the same diagnostic; a representable type missing from it raises.
+                measure_model = self._current_type_model(self._root(found))
+                if measure_model is None or not type_model.equal(measure_model, type_model.INT):
+                    self._report(
+                        "E2011",
+                        f"The measure of 'decreases' must be Int, found {found}",
+                        clause.condition.span,
+                        hint="The measure is a whole number that gets smaller on every turn and never goes below 0.",
+                    )
         if not measures:
             keyword = statement.span
             self._report(
@@ -847,6 +1038,41 @@ class Checker:
             )
         self._block(statement.body, _Scope(scope))
 
+    def _for(self, statement: ast.For, scope: _Scope) -> None:
+        """A `for` loop over a `List[T]` (decision 0012). The iterable is checked once, in the
+        scope where the loop appears; its element type becomes the type of the iterator, which is
+        declared immutable in the scope of the body. The clauses see the same names as the loop,
+        never the iterator, as in a `while`; a `for` has no measure because the list is finite."""
+        found = self._expression(statement.iterable, scope)
+        item: str | None = None
+        if found == VOID:
+            self._report("E2011", "This call does not produce a value to walk over", statement.iterable.span)
+        elif found is not None:
+            item = self._list_item(found)
+            if item is None:
+                self._report(
+                    "E2011",
+                    f"The value a 'for' walks over must be a List, found {found}",
+                    statement.iterable.span,
+                    hint="Write the list the loop walks over, for example: for x in xs { ... }.",
+                )
+        for clause in statement.clauses:
+            if clause.clause == "invariant":
+                self._condition(clause.condition, scope, "'invariant'")
+            else:
+                self._report(
+                    "E2022",
+                    "'decreases' has no meaning in a 'for' loop",
+                    clause.span,
+                    hint="A 'for' loop ends when the list is exhausted; remove the 'decreases' clause.",
+                )
+        body_scope = _Scope(scope)
+        body_scope.span = statement.body.span
+        if self._name_is_free(statement.name, statement.name_span, body_scope):
+            self._declare(body_scope, statement.name, "variable", item, statement.name_span,
+                          loop_variable=True)
+        self._block(statement.body, body_scope)
+
     def _return(self, statement: ast.Return, scope: _Scope) -> None:
         expected = self._return_type
         name = self._function_name
@@ -861,7 +1087,7 @@ class Checker:
                 )
             return
 
-        found = self._expression(statement.value, scope)
+        found = self._expression(statement.value, scope, expected if expected not in (None, VOID) else None)
         if found is None or expected is None:
             return
         if expected == VOID:
@@ -889,7 +1115,13 @@ class Checker:
 
     def _condition(self, condition: ast.Expr, scope: _Scope, owner: str) -> None:
         found = self._expression(condition, scope)
-        if found is None or self._root(found) == BOOL:
+        if found is None:
+            return
+        found_model = self._current_type_model(found)
+        if found_model is not None:
+            if type_model.assignable(type_model.BOOL, found_model):
+                return
+        elif self._root(found) == BOOL:
             return
         hint = None
         if found in (INT, FLOAT):
@@ -930,13 +1162,14 @@ class Checker:
     # Expressions. Each returns the type of the expression, or None after an error
     # (None silences follow-up errors about the same expression).
 
-    def _expression(self, node: ast.Expr, scope: _Scope) -> str | None:
-        found = self._infer(node, scope)
+    def _expression(self, node: ast.Expr, scope: _Scope, expected: str | None = None) -> str | None:
+        found = self._infer(node, scope, expected)
         if found is not None:
             self._types[id(node)] = found
+            self._type_adapter.record_expression(id(node), found)
         return found
 
-    def _infer(self, node: ast.Expr, scope: _Scope) -> str | None:
+    def _infer(self, node: ast.Expr, scope: _Scope, expected: str | None = None) -> str | None:
         if isinstance(node, ast.IntLiteral):
             return INT
         if isinstance(node, ast.FloatLiteral):
@@ -945,20 +1178,24 @@ class Checker:
             return TEXT
         if isinstance(node, ast.BoolLiteral):
             return BOOL
+        if isinstance(node, ast.ListLiteral):
+            return self._list_literal(node, scope, expected)
         if isinstance(node, ast.Group):
-            return self._expression(node.expression, scope)
+            return self._expression(node.expression, scope, expected)
         if isinstance(node, ast.Name):
             return self._name(node, scope)
         if isinstance(node, ast.Unary):
             return self._unary(node, scope)
         if isinstance(node, ast.Binary):
             left = self._expression(node.left, scope)
-            right = self._expression(node.right, scope)
+            # The left side is an expected type for an empty list on the right: `[1] == []`.
+            right_expected = left if isinstance(node.right, ast.ListLiteral) and not node.right.elements else None
+            right = self._expression(node.right, scope, right_expected)
             if left is None or right is None:
                 return None
             # A refined value takes part in operations as a value of its base type: the result of
             # Percent + Percent is an Int, which may well be outside the range of Percent.
-            result = binary_result(node.operator, self._root(left), self._root(right))
+            result = self._binary_result(node.operator, self._root(left), self._root(right))
             if result is None:
                 self._report(
                     "E2011",
@@ -968,6 +1205,90 @@ class Checker:
                 )
             return result
         return self._call(node, scope)
+
+    def _list_item(self, expected: str | None) -> str | None:
+        """The element type an expected list type fixes, or None if it fixes none."""
+        model = self._current_type_model(expected)
+        if isinstance(model, type_model.Application) and model.constructor.identity == type_model.LIST.identity:
+            return type_model.display(model.arguments[0])
+        return None
+
+    def _list_literal(self, node: ast.ListLiteral, scope: _Scope, expected: str | None) -> str | None:
+        """The type of `[a, b]`, or None if an element is invalid or an empty list is ambiguous.
+
+        The first element (or the expected type) fixes the element type. Every other
+        element has to be usable as that type; generic arguments are invariant, so a
+        `List[Percent]` is not a `List[Int]` merely because `Percent` widens to `Int`.
+        An empty list needs an expected `List[T]` to know `T`.
+        """
+        item = self._list_item(expected)
+        if not node.elements:
+            if item is None:
+                self._report(
+                    "E2011",
+                    "Cannot infer the type of an empty list without an expected type",
+                    node.span,
+                    hint="Write the type of its elements, for example: let xs: List[Int] = [].",
+                )
+                return None
+            return f"List[{item}]"
+
+        invalid = False
+        for element in node.elements:
+            found = self._expression(element, scope, item)
+            if found is None:
+                invalid = True
+                continue
+            if found == VOID:
+                self._report("E2011", "This call does not produce a value to put in a list", element.span)
+                invalid = True
+                continue
+            if item is None:
+                item = found
+                continue
+            if not self._accepts(item, found):
+                self._report(
+                    "E2011",
+                    f"Expected {item}, found {found}",
+                    element.span,
+                    hint=f"Every element of a list has the same type: {item}.",
+                    notes=(f"The first element of this list is {item}.",) if expected is None else (),
+                )
+                invalid = True
+        if invalid or item is None:
+            return None
+        return f"List[{item}]"
+
+    def _binary_result(self, operator: str, left: str, right: str) -> str | None:
+        """The type of `left operator right`, or None if the operation is not defined.
+
+        `left` and `right` arrive already rooted by `_infer`. The decision uses the identity
+        and value-type rules of the D01 model with the operator categories that already exist;
+        a name outside the model keeps the legacy string result unchanged. `assignable` is
+        deliberately not used: both operands must be the same exact type, with no implicit
+        promotion. A list is a value type, so `==` and `!=` are defined for it.
+        """
+        left_model = self._current_type_model(left)
+        right_model = self._current_type_model(right)
+        if left_model is None or right_model is None:
+            return binary_result(operator, left, right)
+        if not type_model.is_value_type(left_model) or not type_model.equal(left_model, right_model):
+            return None
+        if operator in LOGICAL:
+            return BOOL if type_model.equal(left_model, type_model.BOOL) else None
+        if operator in EQUALITY:
+            return BOOL
+        if operator in ORDERING:
+            if (type_model.equal(left_model, type_model.INT)
+                    or type_model.equal(left_model, type_model.FLOAT)
+                    or type_model.equal(left_model, type_model.TEXT)):
+                return BOOL
+            return None
+        if type_model.equal(left_model, type_model.INT) or type_model.equal(left_model, type_model.FLOAT):
+            return type_model.display(left_model)
+        if type_model.equal(left_model, type_model.TEXT) and operator == "+":
+            return TEXT
+        return None
 
     def _name(self, node: ast.Name, scope: _Scope) -> str | None:
         found = scope.find(node.name)
@@ -997,21 +1318,66 @@ class Checker:
         if found is None:
             return None
         operand = self._root(found)
+        # A representable operand is decided with the model. `None` means a name outside it
+        # (`ANY_VALUE`, unknown names, unenabled generics, dropped refinements), which neither
+        # operator accepts, so the legacy diagnostics are kept unchanged.
+        operand_model = self._current_type_model(operand)
         if node.operator == "-":
-            if operand in (INT, FLOAT):
-                return operand
+            if operand_model is not None and (
+                type_model.equal(operand_model, type_model.INT)
+                or type_model.equal(operand_model, type_model.FLOAT)
+            ):
+                return type_model.display(operand_model)
             self._report("E2011", f"Cannot apply '-' to {operand}", node.span, hint="'-' negates an Int or a Float.")
             return None
-        if operand == BOOL:
+        if operand_model is not None and type_model.equal(operand_model, type_model.BOOL):
             return BOOL
         hint = "'not' negates a Bool."
-        if operand in (INT, FLOAT):
+        if operand_model is not None and (
+            type_model.equal(operand_model, type_model.INT)
+            or type_model.equal(operand_model, type_model.FLOAT)
+        ):
             hint += " To negate a comparison, put it in parentheses: not (a == b)"
         self._report("E2011", f"Cannot apply 'not' to {operand}", node.span, hint=hint)
         return None
 
+    def _argument_expectations(self, node: ast.Call) -> list[str | None]:
+        """The type each argument is checked against, before the arguments are read.
+
+        Only a resolved signature or a refined-type check fixes one; `ANY_VALUE` fixes
+        nothing. The empty list uses it to learn its element type, as in `take([])`.
+        """
+        missing = [None] * len(node.arguments)
+        if node.callee in self._type_names:
+            return missing
+        if node.qualifier is not None and node.callee not in BUILTINS:
+            return missing
+        signature = BUILTINS.get(node.callee) or self._signatures.get(node.callee)
+        if signature is None:
+            return missing
+        if signature.parametric is not None:
+            # A parameter that still mentions a type variable has no concrete type to
+            # offer: `List.append([], 1)` needs a list whose element type is written.
+            # A concrete parameter, such as the index of List.get, is used as usual.
+            return [
+                None
+                if index >= len(signature.parametric.params)
+                or _contains_type_variable(signature.parametric.params[index][1])
+                else type_model.display(signature.parametric.params[index][1])
+                for index in range(len(node.arguments))
+            ]
+        return [
+            None if index >= len(signature.params) or signature.params[index][1] == ANY_VALUE
+            else signature.params[index][1]
+            for index in range(len(node.arguments))
+        ]
+
     def _call(self, node: ast.Call, scope: _Scope) -> str | None:
-        argument_types = [self._expression(argument, scope) for argument in node.arguments]
+        expectations = self._argument_expectations(node)
+        argument_types = [
+            self._expression(argument, scope, expected)
+            for argument, expected in zip(node.arguments, expectations, strict=True)
+        ]
         if node.qualifier is not None and node.callee not in BUILTINS:
             self._unknown_qualified_call(node, scope)
             return None
@@ -1053,7 +1419,12 @@ class Checker:
                 node.span,
                 notes=(f"Its signature is: {signature.describe()}",),
             )
-            return signature.return_type
+            # A parametric result such as 'T' is not a type until a call binds it, so
+            # there is nothing safe to report as the type of this failed call.
+            return None if signature.parametric is not None else signature.return_type
+
+        if signature.parametric is not None:
+            return self._parametric_call(node, argument_types, signature)
 
         checked_arguments = zip(node.arguments, argument_types, signature.params, strict=True)
         for argument, found, (param_name, expected) in checked_arguments:
@@ -1065,6 +1436,80 @@ class Checker:
                 self._expect_type(expected, found, argument,
                                   (f"This is the argument for '{param_name}' in: {signature.describe()}",))
         return signature.return_type
+
+    def _parametric_call(self, node: ast.Call, argument_types: list[str | None],
+                         signature: Signature) -> str | None:
+        """Checks a call to a built-in whose signature mentions type variables.
+
+        Each argument is unified, in order, with its parameter type. Later parameters
+        see what earlier ones bound, and the result is the return type after the same
+        substitution. When a parameter is already concrete, the ordinary assignment
+        rule applies, so a refined element can still widen to its base type.
+        """
+        parametric = signature.parametric
+        if parametric is None:
+            raise TypeError(f"'{signature.name}' is not a parametric signature")
+
+        mapping: dict[int, type_model.Type] = {}
+        invalid = False
+        checked_arguments = zip(node.arguments, argument_types, parametric.params, strict=True)
+        for argument, found, (param_name, declared) in checked_arguments:
+            if found is None:
+                invalid = True
+                continue
+            if found == VOID:
+                self._report("E2011", "This call does not produce a value to pass as an argument", argument.span)
+                invalid = True
+                continue
+            found_model = self._current_type_model(found)
+            if found_model is None:
+                # A checked expression always has a representable type. A name outside
+                # the model cannot be unified, so it is reported as the mismatch it is.
+                self._report(
+                    "E2011",
+                    f"Expected {type_model.display(declared)}, found {found}",
+                    argument.span,
+                    notes=(f"This is the argument for '{param_name}' in: {signature.describe()}",),
+                )
+                invalid = True
+                continue
+
+            expected = type_model.substitute(declared, mapping)
+            if _contains_type_variable(expected):
+                unified = type_model.unify(expected, found_model, mapping)
+                if unified is None:
+                    self._report(
+                        "E2011",
+                        f"Expected {type_model.display(expected)}, found {found}",
+                        argument.span,
+                        hint="A list accepts only one element type: List[Int] and List[Text] are different types.",
+                        notes=(f"This is the argument for '{param_name}' in: {signature.describe()}",),
+                    )
+                    invalid = True
+                else:
+                    mapping = unified
+                continue
+
+            before = len(self._diagnostics)
+            self._expect_type(
+                type_model.display(expected), found, argument,
+                (f"This is the argument for '{param_name}' in: {signature.describe()}",),
+            )
+            if len(self._diagnostics) != before:
+                invalid = True
+
+        if invalid:
+            return None
+        result = type_model.substitute(parametric.return_type, mapping)
+        if _contains_type_variable(result):
+            self._report(
+                "E2011",
+                "Cannot infer the type of the elements of this list",
+                node.span,
+                hint="Write the type of the list explicitly, for example: let xs: List[Int] = [].",
+            )
+            return None
+        return type_model.display(result)
 
     def _function_hint(self, callee: str) -> str | None:
         """The suggestion for a call to a function that does not exist. A name that is a function of
@@ -1092,7 +1537,7 @@ class Checker:
         hint: str | None = None
         notes: tuple[str, ...] = ()
         symbol = scope.find(qualifier)
-        if qualifier in KNOWN_TYPES:
+        if qualifier in KNOWN_TYPES or qualifier == type_model.LIST.name:
             label = f"'{qualifier}' has no function named '{function}'"
             functions = TYPE_FUNCTIONS.get(qualifier, [])
             if functions:
@@ -1115,7 +1560,9 @@ class Checker:
             label = f"'{qualifier}' is a function, not a type"
         else:
             label = f"There is no type named '{qualifier}'"
-            close = difflib.get_close_matches(qualifier, [*KNOWN_TYPES, *self._type_names], n=1)
+            close = difflib.get_close_matches(
+                qualifier, [*KNOWN_TYPES, type_model.LIST.name, *self._type_names], n=1,
+            )
             hint = f"Did you mean '{close[0]}'?" if close else None
             if qualifier[:1].islower():
                 notes = ("Before the '.' goes the name of a type, such as Text. "
@@ -1150,16 +1597,26 @@ class Checker:
             return name
         if found == VOID:
             self._report("E2011", "This call does not produce a value to check", argument.span)
-        elif self._root(found) != refined.root:
-            self._report(
-                "E2011",
-                f"Expected {refined.root}, found {found}",
-                argument.span,
-                hint=_conversion_hint(self._root(found), refined.root),
-                notes=(f"'{name}' refines {refined.base}, so it checks values of type {refined.root}.",),
-            )
         else:
-            self._check_constant(argument, name)
+            # Both roots are resolved before deciding, so a representable root missing from
+            # the model raises even when the other root is outside it. `None` means a name
+            # outside the model, which is not a matching root.
+            found_root_model = self._current_type_model(self._root(found))
+            expected_root_model = self._current_type_model(refined.root)
+            if (
+                found_root_model is None
+                or expected_root_model is None
+                or not type_model.equal(found_root_model, expected_root_model)
+            ):
+                self._report(
+                    "E2011",
+                    f"Expected {refined.root}, found {found}",
+                    argument.span,
+                    hint=_conversion_hint(self._root(found), refined.root),
+                    notes=(f"'{name}' refines {refined.base}, so it checks values of type {refined.root}.",),
+                )
+            else:
+                self._check_constant(argument, name)
         return name
 
 

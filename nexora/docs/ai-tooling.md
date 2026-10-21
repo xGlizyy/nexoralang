@@ -160,7 +160,8 @@ fn main() -> Void {
             "end_line": 1,
             "end_column": 18
           },
-          "name": "Void"
+          "name": "Void",
+          "arguments": []
         },
         "contracts": [],
         "body": {

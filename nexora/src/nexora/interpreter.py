@@ -329,6 +329,8 @@ class Interpreter:
             return None
         if isinstance(statement, ast.While):
             return self._while(statement, environment)
+        if isinstance(statement, ast.For):
+            return self._for(statement, environment)
         if isinstance(statement, ast.Return):
             if statement.value is None:
                 return _Returned(None)
@@ -408,6 +410,43 @@ class Interpreter:
             if outcome is not None:
                 return outcome
 
+    def _for(self, loop: ast.For, environment: Environment) -> _Returned | None:
+        """Walks the list once. The iterable is evaluated once, before the first turn, and every
+        turn runs the body in a new environment where the iterator is that element. Invariants are
+        checked before each turn and once after the last one, exactly as in a `while`; the list is
+        finite, so a `for` has no measure (decision 0012)."""
+        items = self._evaluate(loop.iterable, environment)
+        invariants = [clause for clause in loop.clauses if clause.clause == "invariant"]
+        line = loop.span.line
+        turn = 0
+        while True:
+            when = (f"Before the first turn of the loop at line {line}." if turn == 0
+                    else f"After turn {turn} of the loop at line {line}.")
+            for invariant in invariants:
+                if not self._in_loop(when, lambda clause=invariant: self._evaluate(clause.condition, environment)):
+                    raise self._fail(
+                        "E4005",
+                        "This condition is false",
+                        invariant.condition.span,
+                        notes=(
+                            f"The condition at line {invariant.span.line} is false: "
+                            f"invariant {unparse(invariant.condition)}",
+                            *self._reason_note(invariant),
+                            when,
+                            *self._loop_values(environment),
+                        ),
+                    )
+            if turn == len(items):
+                return None
+            item = items[turn]
+            turn += 1
+            body = Environment(environment)
+            body.declare(loop.name, item)
+            outcome = self._in_loop(f"In turn {turn} of the loop at line {line}.",
+                                    lambda body=body: self._block(loop.body, body))
+            if outcome is not None:
+                return outcome
+
     def _in_loop(self, where: str, action: Callable[[], object]):
         """Runs part of a loop. A diagnostic raised inside it gains a note saying where in the loop it
         happened, so an error nested in several loops names each one, innermost first. Anything else
@@ -439,6 +478,8 @@ class Interpreter:
         """Evaluates an expression. Only a call to a Void function yields None."""
         if isinstance(node, (ast.IntLiteral, ast.FloatLiteral, ast.TextLiteral, ast.BoolLiteral)):
             return node.value
+        if isinstance(node, ast.ListLiteral):
+            return tuple(self._evaluate(element, environment) for element in node.elements)
         if isinstance(node, ast.Name):
             return environment.lookup(node.name)
         if isinstance(node, ast.Group):
@@ -611,6 +652,8 @@ class Interpreter:
                 pending.append(current.operand)
             elif isinstance(current, ast.Group):
                 pending.append(current.expression)
+            elif isinstance(current, ast.ListLiteral):
+                pending.extend(current.elements)
 
 
 def unparse(node: ast.Expr) -> str:
@@ -628,6 +671,8 @@ def unparse(node: ast.Expr) -> str:
         return f"{node.operator}{separator}{unparse(node.operand)}"
     if isinstance(node, ast.Binary):
         return f"{unparse(node.left)} {node.operator} {unparse(node.right)}"
+    if isinstance(node, ast.ListLiteral):
+        return "[" + ", ".join(unparse(element) for element in node.elements) + "]"
     return f"{node.callee}({', '.join(unparse(argument) for argument in node.arguments)})"
 
 

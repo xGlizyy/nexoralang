@@ -43,9 +43,9 @@ def loop(*lines: str, condition: str = "i < 3", setup: str = "var i = 0", after:
 def test_var_while_invariant_and_decreases_are_keywords():
     from nexora.tokens import KEYWORDS, RESERVED_WORDS
 
-    for word in ("var", "while", "invariant", "decreases"):
+    for word in ("var", "while", "for", "in", "invariant", "decreases"):
         assert word in KEYWORDS and word not in RESERVED_WORDS
-    assert {"break", "continue", "for"} <= RESERVED_WORDS
+    assert {"break", "continue"} <= RESERVED_WORDS
 
 
 def test_var_assignment_and_while_are_parsed_into_their_nodes():  # [1]
@@ -77,16 +77,14 @@ def test_a_var_with_a_type_annotation():
     (in_main("let decreases = 1"), "E1101"),
     (in_main("break"), "E1103"),                               # [2]
     (in_main("continue"), "E1103"),
-    (in_main("for i in items {\n}"), "E1103"),
 ])
 def test_syntax_errors(text, code):
     assert check_codes(text)[0] == code
 
 
 @pytest.mark.parametrize("word, hint", [
-    ("break", "a loop ends when its condition is false, or with 'return'"),
+    ("break", "a loop ends when its condition is false or its list is exhausted, or with 'return'"),
     ("continue", "put the rest of the turn inside an 'if'"),
-    ("for", "write a 'while' loop with a counter declared with 'var'"),
 ])
 def test_reserved_loop_words_point_to_what_exists(word, hint):
     (error,) = diagnostics_of(in_main(word))
@@ -94,8 +92,8 @@ def test_reserved_loop_words_point_to_what_exists(word, hint):
 
 
 @pytest.mark.parametrize("text, label", [  # [3]
-    (in_main("invariant true"), "'invariant' must come at the start of the body of a 'while'"),
-    (in_main("decreases 1"), "'decreases' must come at the start of the body of a 'while'"),
+    (in_main("invariant true"), "'invariant' must come at the start of the body of a loop"),
+    (in_main("decreases 1"), "'decreases' must come at the start of the body of a loop"),
     (loop("decreases 3 - i", "i = i + 1", "invariant true"), "'invariant' must come at the start of the body"),
     (loop("decreases 3 - i", "requires true"), "'requires' must come at the start of a function body"),
     (loop("decreases 3 - i", "example true"), "'example' must come at the start of a function body"),
@@ -533,6 +531,7 @@ def test_context_lists_the_loops_and_their_requirements():
     assert [(v["name"], v["mutable"]) for v in function["variables"]] == [("total", True), ("i", True)]
     assert function["loops"] == [{
         "line": 6,
+        "kind": "while",
         "condition": "i < n",
         "invariants": [{"condition": "total == i * (i + 1) / 2",
                         "message": "total is the sum of the numbers already added", "line": 7}],

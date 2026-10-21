@@ -96,9 +96,9 @@ Los campos de cada nodo aparecen siempre, en el orden indicado. Un campo opciona
 | `Function` | `name`: texto · `name_span`: posición · `params`: lista de `Param` · `return_type`: `TypeRef` · `contracts`: lista de `Contract` · `body`: `Block` · `examples`: lista de `Example` | Una función. `examples` es el último campo |
 | `Example` | `condition`: expresión · `message`: texto o `null` | Una cláusula `example`. `nex inspect` nunca la evalúa |
 | `Param` | `name`: texto · `name_span`: posición · `type`: `TypeRef` | Un parámetro |
-| `TypeRef` | `name`: texto | Un tipo escrito en el código: `Int`, `Float`, `Bool`, `Text`, `Void` o un tipo refinado |
+| `TypeRef` | `name`: texto · `arguments`: lista de `TypeRef` | Un tipo escrito en el código: `Int`, `Float`, `Bool`, `Text`, `Void`, un tipo refinado o `List[T]`. `arguments` está vacío para un nombre sin corchetes; `List[Int]` tiene un argumento `Int` |
 | `Contract` | `clause`: `"requires"` o `"ensures"` · `condition`: expresión · `message`: texto o `null` | Una cláusula de contrato. `message` es la explicación escrita tras la coma |
-| `LoopClause` | `clause`: `"invariant"` o `"decreases"` · `condition`: expresión (`Bool` en un invariante, `Int` en una medida) · `message`: texto o `null` | Una cláusula del principio del cuerpo de un `While` |
+| `LoopClause` | `clause`: `"invariant"` o `"decreases"` · `condition`: expresión (`Bool` en un invariante, `Int` en una medida) · `message`: texto o `null` | Una cláusula del principio del cuerpo de un `While` o un `For` |
 
 ### Sentencias
 
@@ -110,6 +110,7 @@ Los campos de cada nodo aparecen siempre, en el orden indicado. Un campo opciona
 | `Return` | `value`: expresión o `null` | `return`, con o sin valor |
 | `If` | `condition`: expresión · `then_block`: `Block` · `else_branch`: `Block`, `If` o `null` | Condicional. `else_branch` es otro `If` en un `else if` |
 | `While` | `condition`: expresión · `clauses`: lista de `LoopClause`, en el orden del código · `body`: `Block` | Un bucle. `body` contiene las sentencias, sin las cláusulas |
+| `For` | `name`: texto · `name_span`: posición · `iterable`: expresión · `clauses`: lista de `LoopClause`, en el orden del código · `body`: `Block` | Un `for` sobre una `List[T]`. El iterador y su posición van primero; `body` contiene las sentencias, sin las cláusulas |
 | `ExprStatement` | `expression`: expresión | Una llamada usada como sentencia |
 | `Assign` | `name`: texto · `name_span`: posición · `value`: expresión | Una asignación. Solo es válida sobre una variable `var`; sobre una `let` o un parámetro va acompañada del error `E2007` |
 
@@ -127,6 +128,7 @@ contiene un error. Una llamada a una función que no devuelve nada tiene tipo
 | `FloatLiteral` | `value`: número decimal | |
 | `TextLiteral` | `value`: texto, con los escapes ya resueltos | |
 | `BoolLiteral` | `value`: booleano | |
+| `ListLiteral` | `elements`: lista de expresiones | Un literal de lista: `[1, 2, 3]` o `[]` |
 | `Name` | `name`: texto | Uso de una variable, un parámetro, `result` (en `ensures`) o `value` (en la condición de un tipo refinado) |
 | `Unary` | `operator`: `"-"` o `"not"` · `operand`: expresión | |
 | `Binary` | `operator`: texto · `operator_span`: posición · `left`: expresión · `right`: expresión | `operator` es uno de `+ - * / == != < <= > >= and or` |

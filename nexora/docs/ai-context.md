@@ -236,15 +236,13 @@ error no forman parte del resumen:
 ```nex
 fn main() -> Void {
     let items = 3
-    for item in items {
-        print(item)
-    }
+    break
     let first = match
 }
 ```
 
 ```text
-program.nex | NEXORA 0.6.0 | 7 lines
+program.nex | NEXORA 0.6.0 | 5 lines
 Static analysis: 2 errors.
 The program was not run to produce this summary.
 Partial summary: only the code that could be parsed is described.
@@ -257,11 +255,11 @@ Functions (1):
 Features used: none
 
 Diagnostics:
-  syntax E1103 at 3:5: 'for' is reserved for a future version of NEXORA and is not implemented yet
-  syntax E1103 at 6:17: 'match' is reserved for a future version of NEXORA and cannot be used here
+  syntax E1103 at 3:5: 'break' is reserved for a future version of NEXORA and is not implemented yet
+  syntax E1103 at 4:17: 'match' is reserved for a future version of NEXORA and cannot be used here
 
 Notes:
-  - The program uses words reserved for features that are not implemented: for, in, match.
+  - The program uses words reserved for features that are not implemented: break, match.
   - The program has syntax errors, so this summary is partial: it covers only the code that could be parsed. Statements with errors, and functions whose declaration has errors, are missing, and a type that depends on them is unknown.
 ```
 
@@ -427,6 +425,89 @@ fn main() -> Void {
           "checked_at_run_time": true
         }
       ]
+    },
+    {
+      "name": "List.append",
+      "signature": "fn List.append(xs: List[T], x: T) -> List[T]",
+      "params": [
+        {
+          "name": "xs",
+          "type": "List[T]"
+        },
+        {
+          "name": "x",
+          "type": "T"
+        }
+      ],
+      "return_type": "List[T]",
+      "contracts": []
+    },
+    {
+      "name": "List.concat",
+      "signature": "fn List.concat(xs: List[T], ys: List[T]) -> List[T]",
+      "params": [
+        {
+          "name": "xs",
+          "type": "List[T]"
+        },
+        {
+          "name": "ys",
+          "type": "List[T]"
+        }
+      ],
+      "return_type": "List[T]",
+      "contracts": []
+    },
+    {
+      "name": "List.contains",
+      "signature": "fn List.contains(xs: List[T], x: T) -> Bool",
+      "params": [
+        {
+          "name": "xs",
+          "type": "List[T]"
+        },
+        {
+          "name": "x",
+          "type": "T"
+        }
+      ],
+      "return_type": "Bool",
+      "contracts": []
+    },
+    {
+      "name": "List.get",
+      "signature": "fn List.get(xs: List[T], i: Int) -> T",
+      "params": [
+        {
+          "name": "xs",
+          "type": "List[T]"
+        },
+        {
+          "name": "i",
+          "type": "Int"
+        }
+      ],
+      "return_type": "T",
+      "contracts": [
+        {
+          "clause": "requires",
+          "condition": "0 <= i and i < List.length(xs)",
+          "message": "An index must be inside the list",
+          "checked_at_run_time": true
+        }
+      ]
+    },
+    {
+      "name": "List.length",
+      "signature": "fn List.length(xs: List[T]) -> Int",
+      "params": [
+        {
+          "name": "xs",
+          "type": "List[T]"
+        }
+      ],
+      "return_type": "Int",
+      "contracts": []
     },
     {
       "name": "Text.contains",

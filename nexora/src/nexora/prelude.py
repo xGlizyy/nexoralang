@@ -71,6 +71,10 @@ CONTRACTS: dict[str, tuple[Contract, ...]] = {
         _contract("requires", "Float.can_parse(text)",
                   "Only a decimal number that fits in a Float can be read as a Float"),
     ),
+    "List.get": (
+        _contract("requires", "0 <= i and i < List.length(xs)",
+                  "An index must be inside the list"),
+    ),
 }
 
 
@@ -148,4 +152,11 @@ IMPLEMENTATIONS = {
     "Int.parse": parse_int,
     "Float.can_parse": can_parse_float,
     "Float.parse": parse_float,
+    # Lists are immutable tuples: append and concat build a new value and never change
+    # the one they receive. List.get is only reached after its 'requires' holds.
+    "List.length": lambda xs: len(xs),
+    "List.get": lambda xs, i: xs[i],
+    "List.append": lambda xs, x: xs + (x,),
+    "List.concat": lambda xs, ys: xs + ys,
+    "List.contains": lambda xs, x: x in xs,
 }

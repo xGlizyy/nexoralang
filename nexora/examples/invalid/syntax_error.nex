@@ -7,8 +7,7 @@ fn main() -> Void {
     let total 10
     print("missing parenthesis"
     let chained = 1 < 2 < 3
-    for item in items {
-    }
+    let missing_value =
     print("this line is fine")
 }
 

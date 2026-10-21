@@ -425,6 +425,7 @@
             "type": "object",
             "required": [
               "line",
+              "kind",
               "condition",
               "invariants",
               "measure"
@@ -434,9 +435,16 @@
                 "type": "integer",
                 "minimum": 1
               },
+              "kind": {
+                "enum": [
+                  "while",
+                  "for"
+                ],
+                "description": "Which form of loop this is."
+              },
               "condition": {
                 "type": "string",
-                "description": "The loop condition, as written."
+                "description": "The text after the keyword: the condition of a 'while', or 'name in iterable' for a 'for'."
               },
               "invariants": {
                 "type": "array",
@@ -453,7 +461,7 @@
                     "type": "null"
                   }
                 ],
-                "description": "The 'decreases' clause. Null only in a program with errors (E2021)."
+                "description": "The 'decreases' clause. Null for every 'for' loop and in a program with errors (E2021)."
               }
             }
           }

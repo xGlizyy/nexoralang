@@ -112,6 +112,8 @@ def test_the_built_in_functions_are_exactly_the_documented_ones():
         # The functions of a type (decision 0011): pure, they only read their arguments.
         "Text.length", "Text.slice", "Text.contains", "Text.starts_with", "Text.ends_with",
         "Int.can_parse", "Int.parse", "Float.can_parse", "Float.parse",
+        # The functions of List (D08): immutable, they build a new value or read one.
+        "List.length", "List.get", "List.append", "List.concat", "List.contains",
     }
 
 
@@ -126,7 +128,6 @@ def test_python_functions_do_not_exist_in_nexora(name):
     'import os',                                # reserved word
     'let x = __import__("os").system("echo hi")',   # no attribute access in the language
     'let x = os.system("echo hi")',
-    'let x = [1, 2]',                           # no list syntax
     'let x = lambda: 1',
     'exec("print(1)")',
     'let x = `echo hi`',

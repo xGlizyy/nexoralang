@@ -194,7 +194,7 @@
             "string",
             "null"
           ],
-          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -221,7 +221,7 @@
             "string",
             "null"
           ],
-          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -248,7 +248,7 @@
             "string",
             "null"
           ],
-          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -275,7 +275,68 @@
             "string",
             "null"
           ],
-          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "ListLiteral": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "elements",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "ListLiteral"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "elements": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/IntLiteral"
+              },
+              {
+                "$ref": "#/$defs/FloatLiteral"
+              },
+              {
+                "$ref": "#/$defs/TextLiteral"
+              },
+              {
+                "$ref": "#/$defs/BoolLiteral"
+              },
+              {
+                "$ref": "#/$defs/ListLiteral"
+              },
+              {
+                "$ref": "#/$defs/Name"
+              },
+              {
+                "$ref": "#/$defs/Unary"
+              },
+              {
+                "$ref": "#/$defs/Binary"
+              },
+              {
+                "$ref": "#/$defs/Group"
+              },
+              {
+                "$ref": "#/$defs/Call"
+              }
+            ]
+          }
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -302,7 +363,7 @@
             "string",
             "null"
           ],
-          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -340,6 +401,9 @@
               "$ref": "#/$defs/BoolLiteral"
             },
             {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
               "$ref": "#/$defs/Name"
             },
             {
@@ -361,7 +425,7 @@
             "string",
             "null"
           ],
-          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -404,6 +468,9 @@
               "$ref": "#/$defs/BoolLiteral"
             },
             {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
               "$ref": "#/$defs/Name"
             },
             {
@@ -435,6 +502,9 @@
               "$ref": "#/$defs/BoolLiteral"
             },
             {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
               "$ref": "#/$defs/Name"
             },
             {
@@ -456,7 +526,7 @@
             "string",
             "null"
           ],
-          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -490,6 +560,9 @@
               "$ref": "#/$defs/BoolLiteral"
             },
             {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
               "$ref": "#/$defs/Name"
             },
             {
@@ -511,7 +584,7 @@
             "string",
             "null"
           ],
-          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -556,6 +629,9 @@
                 "$ref": "#/$defs/BoolLiteral"
               },
               {
+                "$ref": "#/$defs/ListLiteral"
+              },
+              {
                 "$ref": "#/$defs/Name"
               },
               {
@@ -588,7 +664,7 @@
             "string",
             "null"
           ],
-          "description": "The type the checker computed: Int, Float, Bool, Text, Void or the name of a refined type the program declares. Null if the expression has an error."
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -597,7 +673,8 @@
       "required": [
         "kind",
         "span",
-        "name"
+        "name",
+        "arguments"
       ],
       "properties": {
         "kind": {
@@ -608,6 +685,12 @@
         },
         "name": {
           "type": "string"
+        },
+        "arguments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TypeRef"
+          }
         }
       }
     },
@@ -651,6 +734,9 @@
             },
             {
               "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
             },
             {
               "$ref": "#/$defs/Name"
@@ -729,6 +815,9 @@
               "$ref": "#/$defs/BoolLiteral"
             },
             {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
               "$ref": "#/$defs/Name"
             },
             {
@@ -795,6 +884,9 @@
               "$ref": "#/$defs/BoolLiteral"
             },
             {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
               "$ref": "#/$defs/Name"
             },
             {
@@ -850,6 +942,9 @@
               "$ref": "#/$defs/BoolLiteral"
             },
             {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
               "$ref": "#/$defs/Name"
             },
             {
@@ -895,6 +990,9 @@
             },
             {
               "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
             },
             {
               "$ref": "#/$defs/Name"
@@ -947,6 +1045,9 @@
             },
             {
               "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
             },
             {
               "$ref": "#/$defs/Name"
@@ -1012,6 +1113,9 @@
               "$ref": "#/$defs/BoolLiteral"
             },
             {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
               "$ref": "#/$defs/Name"
             },
             {
@@ -1067,6 +1171,9 @@
                 "$ref": "#/$defs/While"
               },
               {
+                "$ref": "#/$defs/For"
+              },
+              {
                 "$ref": "#/$defs/ExprStatement"
               },
               {
@@ -1109,6 +1216,9 @@
             },
             {
               "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
             },
             {
               "$ref": "#/$defs/Name"
@@ -1168,6 +1278,78 @@
             },
             {
               "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            }
+          ]
+        },
+        "clauses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LoopClause"
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/Block"
+        }
+      }
+    },
+    "For": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "iterable",
+        "clauses",
+        "body"
+      ],
+      "properties": {
+        "kind": {
+          "const": "For"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "iterable": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
             },
             {
               "$ref": "#/$defs/Name"
@@ -1258,6 +1440,9 @@
               "$ref": "#/$defs/BoolLiteral"
             },
             {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
               "$ref": "#/$defs/Name"
             },
             {
@@ -1314,6 +1499,9 @@
             },
             {
               "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
             },
             {
               "$ref": "#/$defs/Name"

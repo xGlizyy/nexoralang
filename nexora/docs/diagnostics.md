@@ -120,6 +120,7 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E2019` | Too many refinement checks | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (100 000 nodos de condición). Solo ocurre con muchas constantes de cadenas largas de tipos refinados | Usa menos constantes de esos tipos o condiciones más cortas |
 | `E2020` | Example without its function | Un ejemplo no contiene ninguna llamada a su propia función: su expresión no la nombra en ningún punto. Una llamada que solo ocurre dentro de otra función no cuenta | Escribe la llamada con sus entradas: `example f(2) == 4` |
 | `E2021` | Missing loop measure | Un `while` no declara su medida (`decreases`), o declara más de una. Sin medida, nada dice por qué el bucle termina | Añade `decreases` con un `Int` que baje en cada vuelta y no pase de 0, por ejemplo `decreases n - i` |
+| `E2022` | Unsupported loop clause | Un `for` declara `decreases`, pero recorre una lista finita y no lleva medida | Quita el `decreases`; si necesitas invariantes, escríbelos con `invariant` |
 
 ### De tipos
 

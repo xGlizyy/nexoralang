@@ -1,0 +1,53 @@
+// Lists: an immutable List[T], its length, one element by index, and new lists built from it.
+//
+// Every element of a list has the same type. List.get is partial: its 'requires' is checked
+// on every call, exactly like the requirement of a function of the program.
+// List.append and List.concat build a new list; they never change the list they receive.
+// A 'for' walks the list and declares each element as an immutable name.
+
+fn total(numbers: List[Int]) -> Int {
+    requires List.length(numbers) > 0, "There is something to add"
+    var sum = 0
+    var i = 0
+    while i < List.length(numbers) {
+        invariant i <= List.length(numbers)
+        decreases List.length(numbers) - i, "Each turn reads one more element"
+        sum = sum + List.get(numbers, i)
+        i = i + 1
+    }
+    return sum
+}
+
+fn count_positive(numbers: List[Int]) -> Int {
+    var count = 0
+    for number in numbers {
+        invariant count >= 0, "A count never goes down"
+        if number > 0 {
+            count = count + 1
+        }
+    }
+    return count
+}
+
+fn main() -> Void {
+    let numbers = [1, 2, 3]
+    print(List.length(numbers))
+    print(List.get(numbers, 0))
+    print(List.get(numbers, List.length(numbers) - 1))
+
+    // append and concat return a new list: the old one keeps its value.
+    let grown = List.append(numbers, 4)
+    let joined = List.concat(numbers, grown)
+    print(numbers)
+    print(grown)
+    print(joined)
+
+    print(List.contains(joined, 4))
+    print(List.contains(joined, 9))
+
+    let nested: List[List[Int]] = [[1], [2, 3]]
+    print(List.contains(nested, [2, 3]))
+    print(List.append(["a", "b"], "c"))
+    print(total(numbers))
+    print(count_positive([-2, 0, 5, 7]))
+}

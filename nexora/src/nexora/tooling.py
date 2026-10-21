@@ -226,7 +226,7 @@ _FEATURES = (
     ("refined_types", lambda node, types: isinstance(node, ast.TypeDecl)),
     ("examples", lambda node, types: isinstance(node, ast.Example)),
     ("mutable_variables", lambda node, types: isinstance(node, ast.Var)),
-    ("loops", lambda node, types: isinstance(node, ast.While)),
+    ("loops", lambda node, types: isinstance(node, (ast.While, ast.For))),
     ("loop_invariants", lambda node, types: isinstance(node, ast.LoopClause) and node.clause == "invariant"),
     ("type_annotations", lambda node, types: isinstance(node, ast.Let) and node.declared_type is not None),
     ("arithmetic", lambda node, types: isinstance(node, ast.Binary) and node.operator in ("+", "-", "*", "/")
@@ -279,9 +279,10 @@ def _notes(analysis: Analysis, features: list[str], reserved_used: list[str]) ->
                      "constants given to refined types; any other value is checked by 'Type(x)' while the "
                      "program runs (E4003).")
     if "loops" in features:
-        notes.append("Every loop declares a measure ('decreases') that is checked on every turn: a loop ends, or "
-                     "stops with E4006. Invariants are checked before every evaluation of the loop condition "
-                     "(E4005). This analysis verified their types, not that they hold.")
+        notes.append("Every 'while' declares a measure ('decreases') that is checked on every turn: a loop ends, or "
+                     "stops with E4006. A 'for' walks a finite list and needs no measure. Invariants are checked "
+                     "before every turn and once after the last one (E4005). This analysis verified their types, "
+                     "not that they hold.")
     if "recursion" in features:
         notes.append(f"Recursion is limited to {MAX_CALL_DEPTH} nested calls (runtime error E3004).")
     types = analysis.types or {}
@@ -341,19 +342,27 @@ def _function_context(function: ast.Function, analysis: Analysis, calls: dict[st
              "line": example.span.line}
             for example in function.examples
         ],
-        # The loops of the function and the requirements each one declares (decision 0010).
-        "loops": [_loop_context(loop, analysis.source) for loop in _walk(function.body) if isinstance(loop, ast.While)],
+        # The loops of the function and the requirements each one declares (decisions 0010 and 0012).
+        "loops": [_loop_context(loop, analysis.source) for loop in _walk(function.body)
+                  if isinstance(loop, (ast.While, ast.For))],
     }
 
 
-def _loop_context(loop: ast.While, source: Source) -> dict:
+def _loop_context(loop: ast.While | ast.For, source: Source) -> dict:
     def clause(node: ast.LoopClause) -> dict:
         return {"condition": _text_of(source, node.condition.span), "message": node.message, "line": node.span.line}
 
-    measures = [node for node in loop.clauses if node.clause == "decreases"]
+    measures = [] if isinstance(loop, ast.For) else [node for node in loop.clauses if node.clause == "decreases"]
+    if isinstance(loop, ast.For):
+        kind = "for"
+        header = f"{loop.name} in {_text_of(source, loop.iterable.span)}"
+    else:
+        kind = "while"
+        header = _text_of(source, loop.condition.span)
     return {
         "line": loop.span.line,
-        "condition": _text_of(source, loop.condition.span),
+        "kind": kind,
+        "condition": header,
         "invariants": [clause(node) for node in loop.clauses if node.clause == "invariant"],
         "measure": clause(measures[0]) if measures else None,
     }
@@ -459,7 +468,7 @@ def render_context(document: dict) -> str:
                                       for v in function["variables"])
                 lines.append(f"      variables: {variables}")
             for loop in function["loops"]:
-                lines.append(f"      loop at line {loop['line']}: while {loop['condition']}")
+                lines.append(f"      loop at line {loop['line']}: {loop['kind']} {loop['condition']}")
                 for clause, entry in [*(("invariant", item) for item in loop["invariants"]),
                                       *([("decreases", loop["measure"])] if loop["measure"] else [])]:
                     lines.append(f"          {clause} {entry['condition']}")

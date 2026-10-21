@@ -394,10 +394,10 @@ def test_context_notes_are_tied_to_what_the_program_contains():
 
 
 def test_context_reports_unsupported_constructs_instead_of_guessing():
-    document = tooling.get_context("fn main() -> Void {\n    for item in items {\n    }\n    let x = match\n}\n")
+    document = tooling.get_context("fn main() -> Void {\n    break\n    let x = match\n}\n")
     assert (document["ok"], document["analysed"], document["complete"]) == (False, True, False)
-    assert document["reserved_words_used"] == ["for", "in", "match"]
-    assert any("reserved for features that are not implemented: for, in, match" in note for note in document["notes"])
+    assert document["reserved_words_used"] == ["break", "match"]
+    assert any("reserved for features that are not implemented: break, match" in note for note in document["notes"])
     assert any("this summary is partial" in note for note in document["notes"])
     # Text that cannot even be split into tokens: no structure, and the list of words is
     # unknown, not empty.

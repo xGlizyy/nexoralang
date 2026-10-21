@@ -42,6 +42,12 @@ class BoolLiteral(Node):
 
 
 @dataclass(frozen=True)
+class ListLiteral(Node):
+    """`[a, b]` or `[]`: a list value written in the source."""
+    elements: tuple[Expr, ...]
+
+
+@dataclass(frozen=True)
 class Name(Node):
     """A reference to a variable or a parameter (or to `result` inside `ensures`, or to `value`
     inside the condition of a refined type)."""
@@ -83,16 +89,22 @@ class Call(Node):
     qualifier: str | None = None
 
 
-Expr = IntLiteral | FloatLiteral | TextLiteral | BoolLiteral | Name | Unary | Binary | Group | Call
-EXPRESSION_NODES = (IntLiteral, FloatLiteral, TextLiteral, BoolLiteral, Name, Unary, Binary, Group, Call)
+Expr = IntLiteral | FloatLiteral | TextLiteral | BoolLiteral | ListLiteral | Name | Unary | Binary | Group | Call
+EXPRESSION_NODES = (IntLiteral, FloatLiteral, TextLiteral, BoolLiteral, ListLiteral, Name, Unary, Binary, Group, Call)
 
 
 # Types
 
 @dataclass(frozen=True)
 class TypeRef(Node):
-    """A type written in the source: `Int`, `Text`, `Percent`..."""
+    """A type written in the source: `Int`, `Text`, `Percent` or `List[Int]`.
+
+    `arguments` holds the type arguments, in order. It is empty for a name written
+    without brackets: `Int` has no arguments and `List[Int]` has one, which is itself
+    a `TypeRef`.
+    """
     name: str
+    arguments: tuple[TypeRef, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -181,7 +193,19 @@ class While(Node):
     body: Block
 
 
-Statement = Let | Var | Assign | Return | If | While | ExprStatement | Block
+@dataclass(frozen=True)
+class For(Node):
+    """`for name in iterable { clauses statements }`. Iterates over a `List[T]`; the iterator is a
+    new immutable name in every turn, and the loop body may declare invariants but not `decreases`
+    (decision 0012)."""
+    name: str
+    name_span: Span
+    iterable: Expr
+    clauses: tuple[LoopClause, ...]
+    body: Block
+
+
+Statement = Let | Var | Assign | Return | If | While | For | ExprStatement | Block
 
 
 # Declarations

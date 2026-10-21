@@ -27,6 +27,8 @@ class TokenType(Enum):
     EXAMPLE = "example"
     VAR = "var"
     WHILE = "while"
+    FOR = "for"
+    IN = "in"
     INVARIANT = "invariant"
     DECREASES = "decreases"
     # A word reserved for a future version: recognised so it can be rejected clearly.
@@ -41,6 +43,8 @@ class TokenType(Enum):
     RPAREN = ")"
     LBRACE = "{"
     RBRACE = "}"
+    LBRACKET = "["
+    RBRACKET = "]"
     COMMA = ","
     COLON = ":"
     DOT = "."
@@ -79,20 +83,22 @@ KEYWORDS: dict[str, TokenType] = {
     "example": TokenType.EXAMPLE,
     "var": TokenType.VAR,
     "while": TokenType.WHILE,
+    "for": TokenType.FOR,
+    "in": TokenType.IN,
     "invariant": TokenType.INVARIANT,
     "decreases": TokenType.DECREASES,
 }
 
 # Keywords that can only start a statement or a declaration, never appear inside parentheses.
 STATEMENT_KEYWORDS: frozenset[str] = frozenset({
-    "fn", "let", "var", "return", "if", "else", "while", "requires", "ensures", "example", "invariant",
-    "decreases", "type", "where",
+    "fn", "let", "var", "return", "if", "else", "while", "for", "requires", "ensures", "example",
+    "invariant", "decreases", "type", "where",
 })
 
 # Words the language design sets aside for features that are not implemented yet.
 # Reserving them now means adding those features later cannot break existing programs.
 RESERVED_WORDS: frozenset[str] = frozenset({
-    "ai", "assert", "break", "const", "continue", "enum", "for", "import", "in",
+    "ai", "assert", "break", "const", "continue", "enum", "import",
     "match", "pub", "test", "tool", "try", "uses",
 })
 

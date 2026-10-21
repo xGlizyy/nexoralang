@@ -11,6 +11,7 @@ from __future__ import annotations
 from . import ast_nodes as ast
 from .diagnostics import MAX_DIAGNOSTICS, Diagnostic, Span
 from .tokens import Token, TokenType
+from .values import VOID
 
 # Limits that keep any accepted program well inside Python's recursion limit.
 MAX_NESTING = 64      # parentheses, unary operators, blocks and 'else if' chains inside one another
@@ -37,8 +38,8 @@ _COMPARISON_OPERATORS = ("==", "!=", "<", "<=", ">", ">=")
 _NAME_KEYWORDS = (
     TokenType.FN, TokenType.LET, TokenType.RETURN, TokenType.IF, TokenType.ELSE, TokenType.TRUE,
     TokenType.FALSE, TokenType.AND, TokenType.OR, TokenType.NOT, TokenType.REQUIRES, TokenType.ENSURES,
-    TokenType.TYPE, TokenType.WHERE, TokenType.EXAMPLE, TokenType.VAR, TokenType.WHILE, TokenType.INVARIANT,
-    TokenType.DECREASES,
+    TokenType.TYPE, TokenType.WHERE, TokenType.EXAMPLE, TokenType.VAR, TokenType.WHILE, TokenType.FOR,
+    TokenType.IN, TokenType.INVARIANT, TokenType.DECREASES,
 )
 _DECLARATION_KEYWORDS = (TokenType.FN, TokenType.TYPE)
 # The clauses that open a function body: the contracts and the examples.
@@ -47,9 +48,8 @@ _CONTRACT_KEYWORDS = (TokenType.REQUIRES, TokenType.ENSURES, TokenType.EXAMPLE)
 _LOOP_KEYWORDS = (TokenType.INVARIANT, TokenType.DECREASES)
 # Hints for the reserved words a program is most likely to reach for.
 _RESERVED_HINTS = {
-    "break": "There is no 'break': a loop ends when its condition is false, or with 'return'.",
+    "break": "There is no 'break': a loop ends when its condition is false or its list is exhausted, or with 'return'.",
     "continue": "There is no 'continue': put the rest of the turn inside an 'if'.",
-    "for": "There is no 'for' yet: write a 'while' loop with a counter declared with 'var'.",
 }
 _STATEMENT_END = (TokenType.NEWLINE, TokenType.RBRACE, TokenType.EOF)
 
@@ -155,8 +155,54 @@ class Parser:
         return self._expect(TokenType.IDENT, expected)
 
     def _type(self, expected: str, *, hint: str | None = None) -> ast.TypeRef:
-        token = self._expect(TokenType.IDENT, expected, hint=hint)
-        return ast.TypeRef(token.span, token.lexeme)
+        """`Name`, or `List[Type]` with nested arguments (I2)."""
+        name = self._expect(TokenType.IDENT, expected, hint=hint)
+        if not self._check(TokenType.LBRACKET):
+            return ast.TypeRef(name.span, name.lexeme)
+        opening = self._advance()
+        self._enter(opening)
+        arguments: list[ast.TypeRef] = []
+        if not self._check(TokenType.RBRACKET):
+            arguments.append(self._type("a type argument"))
+            while self._match(TokenType.COMMA):
+                arguments.append(self._type("a type argument"))
+        closing = self._expect(
+            TokenType.RBRACKET,
+            "']' to close the type arguments",
+            notes=(self._opened_bracket_at(opening),),
+        )
+        self._nesting -= 1
+        span = name.span.to(closing.span)
+        if name.lexeme != "List":
+            raise self._error(
+                "E1101",
+                f"'{name.lexeme}' cannot take type arguments",
+                span=span,
+                hint="Only 'List' takes a type argument in this version: List[Int].",
+            )
+        if len(arguments) == 0:
+            raise self._error(
+                "E1101",
+                "'List' needs a type argument: write List[Int]",
+                span=span,
+                hint="A list type always states the type of its elements.",
+            )
+        if len(arguments) != 1:
+            raise self._error(
+                "E1101",
+                f"'List' takes exactly one type argument, but {len(arguments)} were given",
+                span=span,
+                hint="Write List[Int].",
+            )
+        element = arguments[0]
+        if element.name == VOID:
+            raise self._error(
+                "E1101",
+                "Void cannot be an element of a list",
+                span=element.span,
+                hint="Void means 'no value'. Use a type that has values, such as Int or Text.",
+            )
+        return ast.TypeRef(span, name.lexeme, tuple(arguments))
 
     # Recovery
 
@@ -379,6 +425,8 @@ class Parser:
             return self._if()
         if token.type is TokenType.WHILE:
             return self._while()
+        if token.type is TokenType.FOR:
+            return self._for()
         if token.type is TokenType.LBRACE:
             return self._block()
         if token.type is TokenType.IDENT and self._peek(1).type is TokenType.EQUAL:
@@ -395,7 +443,7 @@ class Parser:
         if token.type in _LOOP_KEYWORDS:
             raise self._error(
                 "E1106",
-                f"'{token.lexeme}' must come at the start of the body of a 'while', before any other statement",
+                f"'{token.lexeme}' must come at the start of the body of a loop, before any other statement",
                 hint="Move this clause to the first lines of the loop body.",
             )
         if token.type is TokenType.ELSE:
@@ -486,6 +534,33 @@ class Parser:
         self._nesting -= 1
         return ast.While(keyword.span.to(body.span), condition, tuple(clauses), body)
 
+    def _for(self) -> ast.For:
+        """`for name in iterable { clauses statements }`. The iterator is declared by the loop and
+        cannot be assigned; the loop body takes the same clauses as a `while` (decision 0012)."""
+        keyword = self._advance()
+        self._enter(keyword)
+        name = self._expect_name("a name for the iterator after 'for'")
+        self._expect(
+            TokenType.IN,
+            f"'in' after the iterator name '{name.lexeme}'",
+            hint="Write for x in xs { ... }.",
+        )
+        if self._check(TokenType.LBRACE):
+            raise self._error(
+                "E1101",
+                f"Expected a list after '{name.lexeme} in', found '{{'",
+                hint="Write the list the loop walks over, for example 'for x in xs'.",
+            )
+        iterable = self._expression()
+        opening = self._expect(TokenType.LBRACE, "'{' to start the body of 'for'")
+        self._enter(opening)
+        level = self._nesting
+        self._skip_newlines()
+        clauses = self._loop_clauses(level)
+        body = self._block_rest(opening, level)
+        self._nesting -= 1
+        return ast.For(keyword.span.to(body.span), name.lexeme, name.span, iterable, tuple(clauses), body)
+
     def _loop_clauses(self, level: int) -> list[ast.LoopClause]:
         """The `invariant` and `decreases` clauses that open the body of a loop, in any order."""
         clauses: list[ast.LoopClause] = []
@@ -566,12 +641,33 @@ class Parser:
             closing = self._expect(TokenType.RPAREN, "')'", notes=(self._opened_at(token),))
             self._nesting -= 1
             return self._built(ast.Group(token.span.to(closing.span), inner), inner)
+        if token.type is TokenType.LBRACKET:
+            return self._list_literal()
         if token.type is TokenType.RESERVED:
             raise self._error(
                 "E1103",
                 f"'{token.lexeme}' is reserved for a future version of NEXORA and cannot be used here",
             )
         raise self._error("E1101", f"Expected a value or an expression, found {token.describe()}")
+
+    def _list_literal(self) -> ast.ListLiteral:
+        """`[a, b]`, or `[]`. A comma is a separator: a trailing comma is not accepted."""
+        opening = self._advance()
+        self._enter(opening)
+        elements: list[ast.Expr] = []
+        if not self._check(TokenType.RBRACKET):
+            elements.append(self._expression())
+            while self._match(TokenType.COMMA):
+                if self._check(TokenType.RBRACKET):
+                    raise self._error("E1101", "Expected a value or an expression after ','")
+                elements.append(self._expression())
+        closing = self._expect(
+            TokenType.RBRACKET,
+            "']' to close the list",
+            notes=(self._opened_bracket_at(opening),),
+        )
+        self._nesting -= 1
+        return self._built(ast.ListLiteral(opening.span.to(closing.span), tuple(elements)), *elements)
 
     def _qualified_call(self, qualifier: Token) -> ast.Call:
         """`Name.function(...)`. Only the form is checked here: whether `Name` is a type that has
@@ -615,6 +711,10 @@ class Parser:
     @staticmethod
     def _opened_at(token: Token) -> str:
         return f"The '(' was opened at line {token.span.line}, column {token.span.column}."
+
+    @staticmethod
+    def _opened_bracket_at(token: Token) -> str:
+        return f"The '[' was opened at line {token.span.line}, column {token.span.column}."
 
     # Size limits
 
