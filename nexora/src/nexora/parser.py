@@ -53,6 +53,10 @@ _RESERVED_HINTS = {
 }
 _STATEMENT_END = (TokenType.NEWLINE, TokenType.RBRACE, TokenType.EOF)
 
+# The names of the built-in types. A name that is a type is never a value, so `Text.length`
+# is a call to a function of a type and never the reading of a field.
+_BUILTIN_TYPE_NAMES = frozenset({"Int", "Float", "Bool", "Text", "Void", "List"})
+
 
 class ParseError(Exception):
     def __init__(self, diagnostic: Diagnostic) -> None:
@@ -65,12 +69,16 @@ class _TooManyErrors(Exception):
 
 
 class Parser:
-    def __init__(self, tokens: list[Token]) -> None:
+    def __init__(self, tokens: list[Token], type_names: frozenset[str] = _BUILTIN_TYPE_NAMES,
+                 record_names: frozenset[str] = frozenset()) -> None:
         self._tokens = tokens
         self._pos = 0
         self._nesting = 0
         self._depths: dict[int, int] = {}
         self._diagnostics: list[Diagnostic] = []
+        # The names that declare a type, and the ones that declare a record.
+        self._type_names = type_names
+        self._record_names = record_names
 
     def parse(self) -> tuple[ast.Program, list[Diagnostic]]:
         """Returns the program and the syntax errors found.
@@ -79,13 +87,18 @@ class Parser:
         statements that parsed, without the statements that have an error and without the
         functions whose declaration has one. It is for tools; it is never run."""
         types: list[ast.TypeDecl] = []
+        records: list[ast.RecordDecl] = []
         functions: list[ast.Function] = []
         self._skip_newlines()
         try:
             while not self._check(TokenType.EOF):
                 try:
                     if self._check(TokenType.TYPE):
-                        types.append(self._type_declaration())
+                        declaration = self._type_declaration()
+                        if isinstance(declaration, ast.RecordDecl):
+                            records.append(declaration)
+                        else:
+                            types.append(declaration)
                     elif self._check(TokenType.FN):
                         functions.append(self._function())
                     else:
@@ -100,7 +113,7 @@ class Parser:
 
         end = self._peek().span
         start = self._tokens[0].span
-        return ast.Program(start.to(end), tuple(types), tuple(functions)), self._diagnostics
+        return ast.Program(start.to(end), tuple(types), tuple(functions), tuple(records)), self._diagnostics
 
     def _record(self, error: ParseError) -> None:
         """Keeps a syntax error. Stops the whole parse once the limit is reached."""
@@ -113,6 +126,19 @@ class Parser:
     def _peek(self, offset: int = 0) -> Token:
         index = min(self._pos + offset, len(self._tokens) - 1)
         return self._tokens[index]
+
+    def _peek_significant(self, offset: int = 0) -> Token:
+        """The next token that is not a line break, without consuming anything."""
+        index = self._pos
+        found = 0
+        while index < len(self._tokens):
+            token = self._tokens[index]
+            if token.type is not TokenType.NEWLINE:
+                if found == offset:
+                    return token
+                found += 1
+            index += 1
+        return self._tokens[-1]
 
     def _check(self, kind: TokenType) -> bool:
         return self._peek().type is kind
@@ -141,7 +167,7 @@ class Parser:
             return self._advance()
         raise self._error("E1101", f"Expected {expected}, found {self._peek().describe()}", hint=hint, notes=notes)
 
-    def _expect_name(self, expected: str) -> Token:
+    def _expect_name(self, expected: str, *, hint: str | None = None) -> Token:
         """A name being declared. Keywords and reserved words get their own message."""
         token = self._peek()
         if token.type is TokenType.RESERVED:
@@ -152,7 +178,7 @@ class Parser:
             )
         if token.type in _NAME_KEYWORDS:
             raise self._error("E1101", f"Expected {expected}, but '{token.lexeme}' is a keyword")
-        return self._expect(TokenType.IDENT, expected)
+        return self._expect(TokenType.IDENT, expected, hint=hint)
 
     def _type(self, expected: str, *, hint: str | None = None) -> ast.TypeRef:
         """`Name`, or `List[Type]` with nested arguments (I2)."""
@@ -246,12 +272,18 @@ class Parser:
 
     # Declarations
 
-    def _type_declaration(self) -> ast.TypeDecl:
-        """`type Name = Base where condition` with an optional `, "explanation"`."""
+    def _type_declaration(self) -> ast.TypeDecl | ast.RecordDecl:
+        """`type Name = Base where condition` with an optional `, "explanation"`.
+
+        A record is declared the same way but with its fields: `type Name = { x: Int }`.
+        The two are told apart by what comes after the '='.
+        """
         keyword = self._advance()
         name = self._expect_name("a type name after 'type'")
         self._expect(TokenType.EQUAL, f"'=' after the type name '{name.lexeme}'",
                      hint=f"A refined type is written: type {name.lexeme} = Int where value > 0")
+        if self._peek_significant().type is TokenType.LBRACE:
+            return self._record_declaration(keyword, name)
         base = self._type(f"the type that '{name.lexeme}' refines, after '='")
         self._expect(
             TokenType.WHERE,
@@ -266,6 +298,51 @@ class Parser:
         message, end = self._explanation("where", condition.span)
         self._end_of_statement()
         return ast.TypeDecl(keyword.span.to(end), name.lexeme, name.span, base, condition, message)
+
+    def _record_declaration(self, keyword: Token, name: Token) -> ast.RecordDecl:
+        """`type Point = { x: Int, y: Int }`: a record type.
+
+        The '{' goes on the same line as the '='. Inside the braces a line break is
+        allowed between fields. A record has at least one field, and no field is left
+        out after a comma (decision 0014, 2).
+        """
+        if self._peek().type is not TokenType.LBRACE:
+            raise self._error(
+                "E1101",
+                f"The '{{' of the record '{name.lexeme}' must be on the same line as the '='",
+                hint=f"Write it as: type {name.lexeme} = {{ x: Int }}",
+            )
+        opening = self._advance()
+        self._enter(opening)
+        fields: list[ast.FieldDecl] = []
+        self._skip_newlines()
+        if self._check(TokenType.RBRACE):
+            raise self._error(
+                "E1101",
+                f"The record '{name.lexeme}' needs at least one field",
+                opening,
+                hint=f"Write the fields of {name.lexeme}: type {name.lexeme} = {{ x: Int }}",
+            )
+        while True:
+            field = self._expect_name("a field name", hint=f"Write a field as: {name.lexeme}(x: 1)")
+            self._expect(TokenType.COLON, f"':' and the type of the field '{field.lexeme}'",
+                         hint=f"Write a field as: {field.lexeme}: Int")
+            field_type = self._type(f"the type of the field '{field.lexeme}'")
+            fields.append(ast.FieldDecl(field.span.to(field_type.span), field.lexeme, field.span, field_type))
+            self._skip_newlines()
+            if not self._match(TokenType.COMMA):
+                break
+            self._skip_newlines()
+            if self._check(TokenType.RBRACE):
+                raise self._error(
+                    "E1101",
+                    "A field cannot be left out after ','",
+                    hint=f"Write the fields of {name.lexeme}: type {name.lexeme} = {{ x: Int, y: Int }}",
+                )
+        closing = self._expect(TokenType.RBRACE, "'}' to close the record declaration",
+                               notes=(self._opened_at(opening),))
+        self._nesting -= 1
+        return ast.RecordDecl(keyword.span.to(closing.span), name.lexeme, name.span, tuple(fields))
 
     def _explanation(self, clause: str, end: Span) -> tuple[str | None, Span]:
         """The optional `, "explanation"` after a condition. Returns it and where the clause ends."""
@@ -434,6 +511,8 @@ class Parser:
             self._advance()
             value = self._expression()
             return ast.Assign(name.span.to(value.span), name.lexeme, name.span, value)
+        if token.type is TokenType.IDENT and self._peek(1).type is TokenType.DOT and self._assigns_a_field():
+            return self._field_assignment(token)
         if token.type in _CONTRACT_KEYWORDS:
             raise self._error(
                 "E1106",
@@ -475,6 +554,34 @@ class Parser:
 
         expression = self._expression()
         return ast.ExprStatement(expression.span, expression)
+
+    def _assigns_a_field(self) -> bool:
+        """Whether the statement at the current position assigns to a field.
+
+        It looks at the tokens ahead: `p.x = 1` assigns, `p.x` only reads.
+        """
+        index = 1
+        while self._peek(index).type is TokenType.DOT and self._peek(index + 1).type is TokenType.IDENT:
+            index += 2
+        return self._peek(index).type is TokenType.EQUAL
+
+    def _field_assignment(self, root: Token) -> ast.FieldAssign:
+        """`p.x = value`: giving a new value to a field of a record.
+
+        A record is immutable, so this is always an error; the checker says so
+        (decision 0014, 2 and 5).
+        """
+        self._advance()
+        steps = self._field_steps(root)
+        name, name_span = steps[-1]
+        target: ast.Expr = ast.Name(root.span, root.lexeme)
+        span = root.span
+        for field, field_span in steps[:-1]:
+            span = span.to(field_span)
+            target = ast.FieldAccess(span, target, field, field_span)
+        self._expect(TokenType.EQUAL, f"'=' and the new value of the field '{name}'")
+        value = self._expression()
+        return ast.FieldAssign(root.span.to(value.span), target, name, name_span, value)
 
     def _let(self) -> ast.Let | ast.Var:
         """`let` and `var` share one form; only `var` can be assigned again later."""
@@ -630,8 +737,16 @@ class Parser:
         if token.type is TokenType.IDENT:
             self._advance()
             if self._check(TokenType.DOT):
-                return self._qualified_call(token)
+                # A name that declares a type is never a value: `Text.length` is a call
+                # to a function of a type, never the reading of a field. A name that is
+                # called is a call too, whatever it is: `name.length()` says that a
+                # value has no functions of its own.
+                if token.lexeme in self._type_names or self._peek(2).type is TokenType.LPAREN:
+                    return self._qualified_call(token)
+                return self._field_access(token)
             if self._check(TokenType.LPAREN):
+                if token.lexeme in self._record_names:
+                    return self._record_construction(token)
                 return self._call(token)
             return ast.Name(token.span, token.lexeme)
         if token.type is TokenType.LPAREN:
@@ -668,6 +783,70 @@ class Parser:
         )
         self._nesting -= 1
         return self._built(ast.ListLiteral(opening.span.to(closing.span), tuple(elements)), *elements)
+
+    def _field_steps(self, root: Token) -> list[tuple[str, Span]]:
+        """The fields read after a name: `p.x.y` gives [("x", ...), ("y", ...)].
+
+        The root is always a name. A call, a construction, a group or a list cannot be
+        the root of a field access (decision 0014, 2).
+        """
+        steps: list[tuple[str, Span]] = []
+        while self._check(TokenType.DOT):
+            dot = self._advance()
+            name = self._peek()
+            if name.type is not TokenType.IDENT:
+                raise self._error("E1101", f"Expected the name of a field after '{root.lexeme}.'", dot)
+            if not (_touches(root.span, dot.span) and _touches(dot.span, name.span)):
+                raise self._error(
+                    "E1101",
+                    f"Write '{root.lexeme}.{name.lexeme}' without spaces around the '.'",
+                    span=root.span.to(name.span),
+                )
+            self._advance()
+            steps.append((name.lexeme, name.span))
+            root = name
+        return steps
+
+    def _field_access(self, root: Token) -> ast.Expr:
+        """`p.x` and `p.x.y`: reading the fields of a record value."""
+        target: ast.Expr = ast.Name(root.span, root.lexeme)
+        span = root.span
+        for name, name_span in self._field_steps(root):
+            span = span.to(name_span)
+            target = ast.FieldAccess(span, target, name, name_span)
+        return target
+
+    def _record_construction(self, name: Token) -> ast.RecordConstruction:
+        """`Point(x: 1, y: 2)`: building a record value.
+
+        Every field is given by name, and every name is given once. The order of the
+        text does not have to be the order of the declaration (decision 0014, 2).
+        """
+        opening = self._advance()
+        self._enter(opening)
+        fields: list[ast.FieldInitializer] = []
+        if not self._check(TokenType.RPAREN):
+            while True:
+                field = self._expect_name(
+                    "a field name",
+                    hint=f"A record is built with named fields: {name.lexeme}(x: 1, y: 2)",
+                )
+                self._expect(TokenType.COLON, f"':' and the value of the field '{field.lexeme}'",
+                             hint=f"A record is built with named fields: {name.lexeme}(x: 1, y: 2)")
+                value = self._expression()
+                fields.append(ast.FieldInitializer(field.span.to(value.span), field.lexeme, field.span, value))
+                if not self._match(TokenType.COMMA):
+                    break
+                if self._check(TokenType.RPAREN):
+                    raise self._error(
+                        "E1101",
+                        "A field cannot be left out after ','",
+                        hint=f"A record is built with named fields: {name.lexeme}(x: 1, y: 2)",
+                    )
+        closing = self._expect(TokenType.RPAREN, "')' to close the construction",
+                               notes=(self._opened_at(opening),))
+        self._nesting -= 1
+        return ast.RecordConstruction(name.span.to(closing.span), name.lexeme, name.span, tuple(fields))
 
     def _qualified_call(self, qualifier: Token) -> ast.Call:
         """`Name.function(...)`. Only the form is checked here: whether `Name` is a type that has
@@ -748,8 +927,35 @@ def _touches(left: Span, right: Span) -> bool:
     return left.end_line == right.line and left.end_column == right.column
 
 
+def _declared_type_names(tokens: list[Token]) -> tuple[frozenset[str], frozenset[str]]:
+    """The type names the program declares, and the ones that declare a record.
+
+    The parser needs both before it reads the program. A name that declares a type is
+    never a value, so `Point.x` keeps the meaning of a qualified call; a name that
+    declares a record can only be used to build one (decision 0014, 2).
+
+    The scan is lexical: a `type` inside a function body is a syntax error anyway, and
+    the checker is the one that decides whether a declaration is valid.
+    """
+    names: set[str] = set(_BUILTIN_TYPE_NAMES)
+    records: set[str] = set()
+    index = 0
+    while index < len(tokens) - 1:
+        if tokens[index].type is TokenType.TYPE and tokens[index + 1].type is TokenType.IDENT:
+            name = tokens[index + 1].lexeme
+            names.add(name)
+            following = tokens[index + 2:index + 4]
+            if (len(following) == 2 and following[0].type is TokenType.EQUAL
+                    and following[1].type is TokenType.LBRACE):
+                records.add(name)
+            index += 2
+        index += 1
+    return frozenset(names), frozenset(records)
+
+
 def parse(tokens: list[Token]) -> tuple[ast.Program, list[Diagnostic]]:
-    return Parser(tokens).parse()
+    type_names, record_names = _declared_type_names(tokens)
+    return Parser(tokens, type_names, record_names).parse()
 
 
 def parse_expression(tokens: list[Token]) -> ast.Expr:

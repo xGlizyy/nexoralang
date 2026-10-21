@@ -41,7 +41,7 @@ fn main() -> Void {
 `nex context program.nex` escribe:
 
 ```text
-program.nex | NEXORA 0.7.0 | 14 lines
+program.nex | NEXORA 0.8.0 | 14 lines
 Static analysis: no errors.
 The program was not run to produce this summary.
 Entry point: main
@@ -129,7 +129,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.context/1",
-  "nexora_version": "0.7.0",
+  "nexora_version": "0.8.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
@@ -140,6 +140,7 @@ fn main() -> Void {
   "complete": true,
   "entry_point": "main",
   "types": [],
+  "records": [],
   "functions": [
     {
       "name": "double",
@@ -242,7 +243,7 @@ fn main() -> Void {
 ```
 
 ```text
-program.nex | NEXORA 0.7.0 | 5 lines
+program.nex | NEXORA 0.8.0 | 5 lines
 Static analysis: 2 errors.
 The program was not run to produce this summary.
 Partial summary: only the code that could be parsed is described.
@@ -305,7 +306,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.symbols/1",
-  "nexora_version": "0.7.0",
+  "nexora_version": "0.8.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],

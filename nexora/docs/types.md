@@ -16,11 +16,12 @@ explica con ejemplos; todos se comprueban en las pruebas del proyecto.
 | `Bool` | Verdadero o falso | `true`, `false` |
 | `Text` | Texto Unicode, inmutable | `"Hello"` |
 | `List[T]` | Secuencia inmutable y finita de valores de tipo `T` | `[1, 2, 3]`, `[]` (con un tipo esperado) |
+| Un registro | Los valores que se construyen con `Nombre(campo: valor, ...)` | `Point(x: 1, y: 2)` |
 | `Void` | Ningún valor | No tiene literales |
 
 `Int`, `Float`, `Bool` y `Text` son los **tipos de valor** integrados. `List[T]` es un tipo de valor
-compuesto, y un programa puede declarar tipos refinados sobre los integrados. `Void` solo puede
-usarse como tipo de retorno de una función que no devuelve nada.
+compuesto, y un programa puede declarar tipos refinados sobre los integrados y registros. `Void`
+solo puede usarse como tipo de retorno de una función que no devuelve nada.
 
 Detalles de cada uno:
 
@@ -469,9 +470,63 @@ una relación entre argumentos y se escribe como [contrato](contracts.md).
 | Valor calculado usado sin `Percent(...)` | `E2011` | Sin ejecutar |
 | `Percent(x)` con un valor que no cumple la condición | `E4003` | Al ejecutar |
 
+## Registros
+
+Un **registro** es un tipo que declara el programa, con campos **inmutables** y **obligatorios**.
+Se declara con `type` y unas llaves:
+
+```nex
+type Point = { x: Int, y: Int }
+```
+
+El nombre empieza por mayúscula, como el de cualquier tipo, y no puede ser el de un tipo integrado
+ni el de otro tipo declarado (`E2016`). El tipo de un campo puede ser un tipo integrado, `List[T]`,
+un tipo refinado u **otro registro**.
+
+Se construye dando a cada campo su valor **por nombre**:
+
+```nex
+let p = Point(x: 1, y: 2)
+```
+
+Los campos se pueden escribir en cualquier orden, pero cada uno se da **una sola vez** y **todos**
+están obligatorios: un campo que falta, uno que se repite o uno que el registro no tiene son el
+error `E2023`. El valor de un campo tiene que tener el tipo del campo (`E2011`).
+
+Los campos se leen con un punto, y la raíz es siempre un nombre:
+
+```nex
+print(p.x)
+```
+
+Se pueden encadenar (`segment.to.x`), sin límite de longitud, siempre que cada paso intermedio sea
+un registro; si el valor no es un registro, o el registro no tiene ese campo, es el error `E2024`.
+
+Un registro **no cambia**: no hay forma de asignar a un campo. `p.x = 1` es el error `E2025`.
+
+Un registro es **nominal**: su identidad es la de su declaración, no la de su nombre ni la de sus
+campos. Dos registros con los mismos campos son tipos distintos, y un valor de uno no se acepta
+donde se espera el otro (`E2011`). Dos valores del **mismo** registro se comparan **por valor**,
+campo a campo.
+
+Un registro no puede contenerse a sí mismo, ni directamente ni a través de otro registro ni de una
+lista: es el error `E2016`, y el mensaje escribe el ciclo (`A -> B -> A`).
+
+### Errores de los registros
+
+| Situación | Código | Cuándo |
+|-----------|--------|--------|
+| Nombre en minúscula, repetido, de un tipo integrado, un campo repetido o un ciclo | `E2016` | Sin ejecutar |
+| El tipo de un campo no existe, o es `Void` | `E2012` | Sin ejecutar |
+| Falta un campo, sobra uno o se repite uno | `E2023` | Sin ejecutar |
+| El valor de un campo no tiene el tipo del campo | `E2011` | Sin ejecutar |
+| Se lee un campo de algo que no es un registro, o de un registro sin ese campo | `E2024` | Sin ejecutar |
+| Se asigna a un campo | `E2025` | Sin ejecutar |
+
 ## Lo que no existe
 
-Registros, mapas, enumeraciones, valores opcionales (`Option`, `Result`), alias de tipos sin
-condición, genéricos de usuario y cualquier otro tipo compuesto que no sea `List[T]`. Las listas no
-tienen sintaxis de índice ni mutación, y no se pueden refinar. Están en la
-[hoja de ruta](roadmap.md) como trabajo previsto, y no funcionan hoy.
+Mapas, enumeraciones, valores opcionales (`Option`, `Result`), alias de tipos sin condición,
+genéricos de usuario y cualquier otro tipo compuesto que no sea `List[T]` o un registro. Las listas
+no tienen sintaxis de índice ni mutación, y no se pueden refinar; los registros no admiten métodos,
+refinamientos ni recursión. Están en la [hoja de ruta](roadmap.md) como trabajo previsto, y no
+funcionan hoy.

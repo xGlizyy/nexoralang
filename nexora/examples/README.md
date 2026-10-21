@@ -31,6 +31,7 @@ Superan `nex check` y `nex run` termina con código `0`.
 | [`loops.nex`](loops.nex) | Variables `var` y bucles `while` con su medida (`decreases`) y sus invariantes (`invariant`), comprobados en cada vuelta |
 | [`texts.nex`](texts.nex) | Textos: `Text.length`, `Text.slice` y la búsqueda dentro de un texto, el orden entre textos y la lectura de números con `Int.parse` y `Float.parse`, cada una con sus requisitos |
 | [`lists.nex`](lists.nex) | Listas inmutables `List[T]`: longitud, acceso por índice con su requisito, listas nuevas con `List.append` y `List.concat`, `List.contains`, y un `for` que recorre la lista con su `invariant` |
+| [`records.nex`](records.nex) | Registros nominales inmutables: declaración, construcción con campos nombrados en cualquier orden, lectura de campos y cadenas de acceso, igualdad por valor, un registro dentro de otro y una lista de registros |
 
 ## Inválidos (`invalid/`)
 

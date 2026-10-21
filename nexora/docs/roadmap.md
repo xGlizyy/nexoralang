@@ -74,7 +74,7 @@ sólido:
 | 2 | **Una explicación en lenguaje natural unida a cada condición**, que aparece en el diagnóstico cuando la condición se incumple | **Completado en la 0.3.0**, en contratos y en tipos refinados |
 | 3 | **Casos concretos en la función (`example`)** y un comando que los ejecute sin escribir `main` | **Completado en la 0.4.0** ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
 | 4 | **Avisar cuando una edición elimina o debilita un requisito** | En investigación: no está decidido cómo detectar que una condición es más débil que otra |
-| 5 | **Tipos refinados** (`type Percent = Int where ...`) | **Completado en la 0.3.0** sobre los tipos integrados. Falta refinar registros, cuando existan |
+| 5 | **Tipos refinados** (`type Percent = Int where ...`) | **Completado en la 0.3.0** sobre los tipos integrados. Falta refinar registros: no está implementado |
 | 5b | **Requisitos de los bucles**: la medida (`decreases`) y los invariantes (`invariant`), con su explicación, comprobados en cada vuelta | **Completado en la 0.5.0** ([decisión 0010](decisions/0010-var-y-while.md)) |
 | 6 | **Evaluar si los requisitos en el código ayudan a un agente de IA** a no romperlos | Planificado; ver la última fila de [En investigación](#en-investigación) |
 
@@ -89,7 +89,7 @@ primero:
 
 1. ~~**Operaciones sobre textos**~~: hechas en la 0.6.0 ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)).
 2. ~~**Un primer tipo compuesto: listas**~~: hechas en la 0.7.0, con `for` sobre listas ([decisión 0013](decisions/0013-listas-y-for.md)). El modelo de tipos y las listas están descritos en la [especificación](language-spec.md), secciones 4.5, 8.2 y 9.6.
-3. **Registros y valores opcionales** (`Option`, `Result`), para representar la ausencia de un
+3. ~~**Registros**~~: hechos en la 0.8.0, con identidad nominal y campos inmutables ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)); están descritos en la [especificación](language-spec.md), sección 4.6. Quedan los **valores opcionales** (`Option`, `Result`), para representar la ausencia de un
    valor y los errores sin excepciones.
 4. **Entrada de datos**: argumentos del programa y lectura de la entrada estándar.
 5. **Módulos e importaciones.**

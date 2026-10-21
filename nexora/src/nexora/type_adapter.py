@@ -21,9 +21,10 @@ authority is `resolve`/`refined`, which are pruned by `drop_refined`.
 
 `ANY_VALUE` is a private checker sentinel and is not represented here. A composite
 type enters only through the canonical textual form of the built-in constructors
-this version admits: today `List[T]`, nested as needed. `Option`, `Result`,
-records and every other constructor stay outside until their syntax and rules
-exist.
+this version admits: today `List[T]`, nested as needed. `Option` and `Result`
+stay outside until their syntax and rules exist. A record type is not composite:
+the checker registers it with `register_record`, with the identity of its
+declaration.
 """
 
 from __future__ import annotations
@@ -47,6 +48,7 @@ _MODEL_TYPE_VARIANTS = (
     type_model.Primitive,
     type_model.Application,
     type_model.Refined,
+    type_model.Nominal,
     type_model.TypeVariable,
 )
 
@@ -70,6 +72,7 @@ class TypeAdapter:
     def __init__(self) -> None:
         self._primitives = dict(PRIMITIVE_TYPES)
         self._refined: dict[str, type_model.Refined] = {}
+        self._records: dict[str, type_model.Nominal] = {}
         self._resolved_types: dict[int, type_model.Type] = {}
 
     @property
@@ -164,7 +167,10 @@ class TypeAdapter:
         primitive = self._primitives.get(name)
         if primitive is not None:
             return primitive
-        return self._refined.get(name)
+        refined = self._refined.get(name)
+        if refined is not None:
+            return refined
+        return self._records.get(name)
 
     def try_resolve(self, name: str | None) -> type_model.Type | None:
         """Resolve a name that may be missing, preserving `None` as "not resolved"."""
@@ -205,6 +211,27 @@ class TypeAdapter:
             return None
         kind = self._refined.get(name)
         return kind
+
+    def register_record(self, name: str, fields: tuple[tuple[str, type_model.Type], ...],
+                        identity: type_model.RecordIdentity) -> type_model.Nominal:
+        """Build the model object for a record type the checker has already accepted.
+
+        The fields are given as model types, so the checker calls this only when every
+        field type is already resolved: a record that depends on another one is
+        registered after the ones it depends on.
+        """
+        existing = self._records.get(name)
+        if existing is not None:
+            return existing
+        nominal = type_model.Nominal(name, fields, identity)
+        self._records[name] = nominal
+        return nominal
+
+    def record(self, name: str | None) -> type_model.Nominal | None:
+        """The model for a valid record type, or None if it is absent."""
+        if name is None:
+            return None
+        return self._records.get(name)
 
     def drop_refined(self, name: str) -> None:
         """Forget a refined type that the checker has made unusable.

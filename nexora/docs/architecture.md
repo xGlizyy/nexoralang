@@ -59,7 +59,7 @@ Reglas del flujo:
 | `version.py` | El número de versión. Único lugar donde se define | — |
 | `diagnostics.py` | `Span`, `Source`, `Diagnostic`, el registro de códigos y categorías, y el formato de texto | — |
 | `values.py` | Nombres de los tipos, límites de `Int` y cómo se escribe un valor | — |
-| `types.py` | Modelo de tipos estructurado: primitivos, `List[T]`, tipos refinados y variables de tipo; identidad, compatibilidad, sustitución y unificación | — |
+| `types.py` | Modelo de tipos estructurado: primitivos, `List[T]`, tipos refinados, registros y variables de tipo; identidad, compatibilidad, sustitución y unificación | — |
 | `type_adapter.py` | Puente entre los nombres de tipo del comprobador y el modelo; resuelve solo los tipos habilitados | `types`, `values` |
 | `tokens.py` | Tipos de token, palabras clave y palabras reservadas | `diagnostics` |
 | `lexer.py` | Texto → tokens | `tokens`, `diagnostics`, `values` |
@@ -201,7 +201,8 @@ si alguna de las listas anteriores queda sin sincronizar.
   sobre identidad, compatibilidad, unificación y tipos compuestos, el comprobador construye objetos
   de `types.py` a través de `type_adapter.py`. La migración es incremental: las reglas que aún no
   usan el modelo conservan su representación de cadena. `List[T]` es el primer tipo compuesto que
-  usa esta vía; los registros y el resto de la propuesta 0012 no están implementados.
+  usa esta vía, y los registros la usan con una identidad propia: la de su declaración, que el
+  comprobador crea y el intérprete hereda del `CheckedProgram` ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)). El resto de la propuesta 0012 no está implementado.
 - **El análisis estático es obligatorio.** Permite que el intérprete sea pequeño y que la lista de
   errores de ejecución sea corta y cerrada.
 - **El AST es la interfaz pública de `nex inspect`.** Acopla el esquema JSON a las clases internas;

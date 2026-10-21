@@ -22,7 +22,7 @@ from . import ast_nodes as ast
 from .checker import BUILTINS, CheckedProgram, refinement_notes
 from .diagnostics import Diagnostic, NexoraRuntimeError, Span
 from .prelude import IMPLEMENTATIONS, parse_hint, requirements
-from .values import INT_MAX, INT_MIN, Value, format_value, show_value
+from .values import INT_MAX, INT_MIN, RecordValue, Value, format_value, show_value
 
 # The deepest chain of calls a program may have (main counts as the first).
 MAX_CALL_DEPTH = 1000
@@ -116,6 +116,9 @@ class Interpreter:
         self._functions = checked.functions
         # Refined type -> the declarations whose conditions its values satisfy, root first.
         self._refined = {name: refined.chain for name, refined in checked.refined.items()}
+        # Record type -> its declaration. The identity comes from here: the interpreter
+        # never rebuilds it from the name (decision 0014, 3).
+        self._records = checked.records
         self._write = write
         self._text_limit = text_limit
         # The calls in progress: (function name, where it was called from). main has no call site.
@@ -482,6 +485,10 @@ class Interpreter:
             return tuple(self._evaluate(element, environment) for element in node.elements)
         if isinstance(node, ast.Name):
             return environment.lookup(node.name)
+        if isinstance(node, ast.RecordConstruction):
+            return self._record(node, environment)
+        if isinstance(node, ast.FieldAccess):
+            return self._field(node, environment)
         if isinstance(node, ast.Group):
             return self._evaluate(node.expression, environment)
         if isinstance(node, ast.Binary):
@@ -494,6 +501,24 @@ class Interpreter:
                 return -operand
             return self._int(-operand, node.span)
         return self._call(node, environment)
+
+    def _record(self, node: ast.RecordConstruction, environment: Environment) -> Value:
+        """`Point(x: 1, y: 2)`: builds a record value.
+
+        The fields are kept in the order of the declaration, not in the order they were
+        written, so two records built the same way are the same value.
+        """
+        record = self._records[node.name]
+        values = {field.name: self._evaluate(field.value, environment) for field in node.fields}
+        fields = tuple((name, values[name]) for name, _ in record.fields)
+        return RecordValue(record.identity, record.name, fields)
+
+    def _field(self, node: ast.FieldAccess, environment: Environment) -> Value:
+        """`p.x`: reads a field of a record value."""
+        target = self._evaluate(node.target, environment)
+        if not isinstance(target, RecordValue):
+            raise LookupError(f"the value of '{node.target.span}' is not a record")
+        return target.value_of(node.name)
 
     def _binary(self, node: ast.Binary, environment: Environment) -> Value:
         operator = node.operator
@@ -654,6 +679,10 @@ class Interpreter:
                 pending.append(current.expression)
             elif isinstance(current, ast.ListLiteral):
                 pending.extend(current.elements)
+            elif isinstance(current, ast.RecordConstruction):
+                pending.extend(field.value for field in current.fields)
+            elif isinstance(current, ast.FieldAccess):
+                pending.append(current.target)
 
 
 def unparse(node: ast.Expr) -> str:
@@ -673,6 +702,11 @@ def unparse(node: ast.Expr) -> str:
         return f"{unparse(node.left)} {node.operator} {unparse(node.right)}"
     if isinstance(node, ast.ListLiteral):
         return "[" + ", ".join(unparse(element) for element in node.elements) + "]"
+    if isinstance(node, ast.RecordConstruction):
+        fields = ", ".join(f"{field.name}: {unparse(field.value)}" for field in node.fields)
+        return f"{node.name}({fields})"
+    if isinstance(node, ast.FieldAccess):
+        return f"{unparse(node.target)}.{node.name}"
     return f"{node.callee}({', '.join(unparse(argument) for argument in node.arguments)})"
 
 

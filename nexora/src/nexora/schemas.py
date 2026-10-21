@@ -253,6 +253,28 @@ _CONTEXT_TYPE = {
     },
 }
 
+_CONTEXT_RECORD_FIELD = {
+    "type": "object",
+    "required": ["name", "type"],
+    "properties": {
+        "name": {"type": "string", "description": "The name of the field."},
+        "type": {**_NULLABLE_STRING, "description": "The type of the field. Null when it could not be resolved."},
+    },
+}
+
+_CONTEXT_RECORD = {
+    "type": "object",
+    "required": ["name", "fields", "valid", "line", "reason"],
+    "properties": {
+        "name": {"type": "string", "description": "The name of the record type."},
+        "fields": {"type": "array", "items": {"$ref": "#/$defs/record_field"},
+                   "description": "The fields of the record, in the order of the declaration."},
+        "valid": {"type": "boolean", "description": "True when the declaration can be used as a type."},
+        "line": {"type": "integer", "minimum": 1},
+        "reason": {**_NULLABLE_STRING, "description": "Why the declaration cannot be used, if it cannot."},
+    },
+}
+
 
 _TEST_CALL = {
     "type": "object",
@@ -353,15 +375,18 @@ def all_schemas() -> dict[str, dict]:
          "entry_point": _NULLABLE_STRING,
          "types": {**nullable({"type": "array", "items": {"$ref": "#/$defs/type"}}),
                    "description": "The refined types the program declares. Null when there is no structure."},
+         "records": {**nullable({"type": "array", "items": {"$ref": "#/$defs/record"}}),
+                     "description": "The record types the program declares. Null when there is no structure."},
          "functions": nullable({"type": "array", "items": {"$ref": "#/$defs/function"}}),
          "features": nullable({"type": "array", "items": {"type": "string"}}),
          "reserved_words_used": {**nullable({"type": "array", "items": {"type": "string"}}),
                                  "description": "Words reserved for unimplemented features. Null if the text "
                                                 "could not be split into tokens."},
          "notes": {"type": "array", "items": {"type": "string"}}},
-        [*_HEADER_REQUIRED, "executed", "lines", "analysed", "complete", "entry_point", "types", "functions",
-         "features", "reserved_words_used", "notes"],
-        {**base, "param": _PARAM, "function": _CONTEXT_FUNCTION, "type": _CONTEXT_TYPE, "loop_clause": _LOOP_CLAUSE},
+        [*_HEADER_REQUIRED, "executed", "lines", "analysed", "complete", "entry_point", "types", "records",
+         "functions", "features", "reserved_words_used", "notes"],
+        {**base, "param": _PARAM, "function": _CONTEXT_FUNCTION, "type": _CONTEXT_TYPE, "loop_clause": _LOOP_CLAUSE,
+         "record": _CONTEXT_RECORD, "record_field": _CONTEXT_RECORD_FIELD},
     )
     spec = _document(
         "nexora-spec", "nexora.spec/1: the language specification, or one section of it",

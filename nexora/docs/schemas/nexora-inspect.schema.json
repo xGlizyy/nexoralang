@@ -327,6 +327,12 @@
               },
               {
                 "$ref": "#/$defs/Call"
+              },
+              {
+                "$ref": "#/$defs/RecordConstruction"
+              },
+              {
+                "$ref": "#/$defs/FieldAccess"
               }
             ]
           }
@@ -417,6 +423,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         },
@@ -484,6 +496,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         },
@@ -518,6 +536,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         },
@@ -576,6 +600,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         },
@@ -645,6 +675,12 @@
               },
               {
                 "$ref": "#/$defs/Call"
+              },
+              {
+                "$ref": "#/$defs/RecordConstruction"
+              },
+              {
+                "$ref": "#/$defs/FieldAccess"
               }
             ]
           }
@@ -658,6 +694,180 @@
               "type": "null"
             }
           ]
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "FieldInitializer": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "const": "FieldInitializer"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
+            }
+          ]
+        }
+      }
+    },
+    "RecordConstruction": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "fields",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "RecordConstruction"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldInitializer"
+          }
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "FieldAccess": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "target",
+        "name",
+        "name_span",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "FieldAccess"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "target": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
         },
         "type": {
           "type": [
@@ -752,6 +962,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         },
@@ -764,6 +980,63 @@
               "type": "null"
             }
           ]
+        }
+      }
+    },
+    "FieldDecl": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "FieldDecl"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "type": {
+          "$ref": "#/$defs/TypeRef"
+        }
+      }
+    },
+    "RecordDecl": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "fields"
+      ],
+      "properties": {
+        "kind": {
+          "const": "RecordDecl"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldDecl"
+          }
         }
       }
     },
@@ -831,6 +1104,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         }
@@ -900,6 +1179,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         }
@@ -958,6 +1243,117 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
+            }
+          ]
+        }
+      }
+    },
+    "FieldAssign": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "target",
+        "name",
+        "name_span",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "const": "FieldAssign"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "target": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         }
@@ -1008,6 +1404,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             },
             {
               "type": "null"
@@ -1063,6 +1465,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         },
@@ -1129,6 +1537,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         }
@@ -1160,6 +1574,9 @@
               },
               {
                 "$ref": "#/$defs/Assign"
+              },
+              {
+                "$ref": "#/$defs/FieldAssign"
               },
               {
                 "$ref": "#/$defs/Return"
@@ -1234,6 +1651,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         },
@@ -1296,6 +1719,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         },
@@ -1365,6 +1794,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         },
@@ -1456,6 +1891,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         },
@@ -1517,6 +1958,12 @@
             },
             {
               "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
             }
           ]
         },
@@ -1590,7 +2037,8 @@
         "kind",
         "span",
         "types",
-        "functions"
+        "functions",
+        "records"
       ],
       "properties": {
         "kind": {
@@ -1609,6 +2057,12 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/Function"
+          }
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RecordDecl"
           }
         }
       }

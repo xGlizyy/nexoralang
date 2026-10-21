@@ -115,12 +115,13 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E2013` | Invalid parameter | `main` tiene parámetros, o un parámetro se llama `result` | Quita los parámetros de `main`, o cambia el nombre |
 | `E2014` | Missing return | Una función que devuelve un valor puede terminar sin `return` | Asegúrate de que todas las ramas terminan con `return` |
 | `E2015` | Unreachable code | Código situado después de un `return` | Elimínalo o muévelo antes del `return` |
-| `E2016` | Invalid type declaration | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, una cadena de tipos que no termina en un tipo integrado, o una base que es una lista | Corrige el nombre o la base; el mensaje dice cuál de los casos es |
+| `E2016` | Invalid type declaration | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, una cadena de tipos que no termina en un tipo integrado, o una base que es una lista. También un registro con nombre inválido o repetido, un campo repetido, o un registro que se contiene a sí mismo | Corrige el nombre o la base; el mensaje dice cuál de los casos es |
 | `E2018` | Invalid refinement condition | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado | Escribe la regla con operadores sobre `value`, o pásala a un `requires` |
 | `E2019` | Too many refinement checks | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (100 000 nodos de condición). Solo ocurre con muchas constantes de cadenas largas de tipos refinados | Usa menos constantes de esos tipos o condiciones más cortas |
 | `E2020` | Example without its function | Un ejemplo no contiene ninguna llamada a su propia función: su expresión no la nombra en ningún punto. Una llamada que solo ocurre dentro de otra función no cuenta | Escribe la llamada con sus entradas: `example f(2) == 4` |
 | `E2021` | Missing loop measure | Un `while` no declara su medida (`decreases`), o declara más de una. Sin medida, nada dice por qué el bucle termina | Añade `decreases` con un `Int` que baje en cada vuelta y no pase de 0, por ejemplo `decreases n - i` |
 | `E2022` | Unsupported loop clause | Un `for` declara `decreases`, pero recorre una lista finita y no lleva medida | Quita el `decreases`; si necesitas invariantes, escríbelos con `invariant` |
+| `E2025` | Cannot reassign a field | Se asigna a un campo de un registro, que es inmutable ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) | Construye otro registro con el valor que quieres |
 
 ### De tipos
 
@@ -129,7 +130,9 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E2004` | Invalid return type | `main` declara un tipo de retorno distinto de `Void` | Escribe `fn main() -> Void` |
 | `E2009` | Wrong number of arguments | La llamada no pasa tantos argumentos como parámetros tiene la función | La nota muestra la firma de la función |
 | `E2011` | Type mismatch | Un tipo no es el que exige la regla: anotación, asignación, operador, argumento, retorno, condición, elemento de una lista, iterable de un `for`, medida de un bucle (`Int`), o un `Void` usado como valor | El mensaje indica el tipo esperado y el encontrado. Convierte de forma explícita si existe una conversión |
-| `E2012` | Invalid type | Un nombre que no es un tipo, `List` sin argumento, un argumento de tipo que no existe, o `Void` donde hace falta un tipo de valor | Los tipos son `Int`, `Float`, `Bool`, `Text`, `Void` y `List[T]`, y los tipos refinados que declara el programa |
+| `E2012` | Invalid type | Un nombre que no es un tipo, `List` sin argumento, un argumento de tipo que no existe, o `Void` donde hace falta un tipo de valor | Los tipos son `Int`, `Float`, `Bool`, `Text`, `Void` y `List[T]`, los tipos refinados que declara el programa y sus registros |
+| `E2023` | Invalid record construction | Una construcción de un registro a la que le falta un campo, le sobra uno o se le da dos veces el mismo ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) | Da cada campo una vez, con el nombre del campo |
+| `E2024` | Invalid field access | Se lee un campo de un valor que no es un registro, o de un registro que no tiene ese campo ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) | El mensaje dice qué campos tiene el registro |
 | `E2017` | Value outside refined type | Una constante usada como valor de un tipo refinado no cumple su condición. Las notas muestran la condición, el valor y la explicación de la regla | Cambia el valor, o revisa la regla si era incorrecta |
 
 ### De ejecución
@@ -228,7 +231,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.7.0",
+  "nexora_version": "0.8.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

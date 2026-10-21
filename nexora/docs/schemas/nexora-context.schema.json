@@ -15,6 +15,7 @@
     "complete",
     "entry_point",
     "types",
+    "records",
     "functions",
     "features",
     "reserved_words_used",
@@ -77,6 +78,20 @@
         }
       ],
       "description": "The refined types the program declares. Null when there is no structure."
+    },
+    "records": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The record types the program declares. Null when there is no structure."
     },
     "functions": {
       "oneOf": [
@@ -532,6 +547,64 @@
         "line": {
           "type": "integer",
           "minimum": 1
+        }
+      }
+    },
+    "record": {
+      "type": "object",
+      "required": [
+        "name",
+        "fields",
+        "valid",
+        "line",
+        "reason"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the record type."
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record_field"
+          },
+          "description": "The fields of the record, in the order of the declaration."
+        },
+        "valid": {
+          "type": "boolean",
+          "description": "True when the declaration can be used as a type."
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Why the declaration cannot be used, if it cannot."
+        }
+      }
+    },
+    "record_field": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the field."
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type of the field. Null when it could not be resolved."
         }
       }
     }

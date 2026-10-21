@@ -42,6 +42,17 @@ EQUALITY = ("==", "!=")
 ORDERING = ("<", "<=", ">", ">=")
 LOGICAL = ("and", "or")
 
+# The identity of every record declaration of the process: nothing but this counter
+# tells two declarations apart, not their name nor their fields (decision 0014, 3).
+_IDENTITY = 0
+
+
+def _next_identity() -> int:
+    """A number that no other record declaration of this process has."""
+    global _IDENTITY
+    _IDENTITY += 1
+    return _IDENTITY
+
 
 @dataclass(frozen=True)
 class ParametricSignature:
@@ -214,6 +225,31 @@ class CheckedProgram:
     calls: tuple[tuple[str, str], ...] = ()
     # The refined types whose declaration is valid, by name.
     refined: dict[str, RefinedType] = field(default_factory=dict)
+    # The record types whose declaration is valid, by name. The interpreter reads the
+    # identity from here: it never rebuilds it from the name (decision 0014, 3).
+    records: dict[str, RecordType] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RecordType:
+    """A record type whose declaration is valid.
+
+    `fields` holds the name and the type of every field, in declaration order, and
+    `identity` is what tells this declaration from any other one.
+    """
+
+    name: str
+    declaration: ast.RecordDecl
+    fields: tuple[tuple[str, str], ...]
+    identity: type_model.RecordIdentity
+    nominal: type_model.Nominal
+
+    def field_type(self, name: str) -> str | None:
+        """The type of the field `name`, or None if the record has no such field."""
+        for field_name, kind in self.fields:
+            if field_name == name:
+                return kind
+        return None
 
 
 def binary_result(operator: str, left: str, right: str) -> str | None:
@@ -346,6 +382,17 @@ class Checker:
         # Every declared type name, including those whose declaration has an error.
         self._type_names: dict[str, ast.TypeDecl] = {}
         self._refined: dict[str, RefinedType] = {}
+        # The record types the program declares, and the ones that are valid.
+        self._record_names: dict[str, ast.RecordDecl] = {}
+        self._records: dict[str, RecordType] = {}
+        # The fields of each record, by name, once their types are resolved.
+        self._record_fields: dict[str, tuple[tuple[str, str], ...]] = {}
+        # The type each field was written with, to know what it depends on.
+        self._record_refs: dict[str, tuple[tuple[str, ast.TypeRef], ...]] = {}
+        # The records that cannot contain themselves.
+        self._cyclic_records: set[str] = set()
+        # The identity of each record declaration, in the order they were declared.
+        self._record_identities: dict[str, type_model.RecordIdentity] = {}
         # Phase A of D01: a model object beside every valid string type. `_root`
         # uses it for representable names; the other rules still decide with strings.
         self._type_adapter = TypeAdapter()
@@ -372,6 +419,7 @@ class Checker:
             pass
         checked = CheckedProgram(
             program, declared, self._types, tuple(self._symbols), tuple(self._calls), dict(self._refined),
+            dict(self._records),
         )
         return checked, self._diagnostics
 
@@ -379,10 +427,14 @@ class Checker:
         # Types first: any signature or annotation may name one, wherever it is declared. Their
         # conditions are checked before the signatures, so that a type whose condition is wrong is
         # already unusable when a signature names it: its error is reported once, not at every use.
+        self._declare_names(program.types, program.records)
         self._declare_types(program.types)
         self._function_names = {function.name for function in program.functions}
         for declaration in program.types:
             self._type_condition(declaration)
+        # The records come after the conditions of the refined types, for the same reason:
+        # a type whose condition is wrong is already unusable when another type names it.
+        self._declare_records(program.records)
         own_signatures: list[tuple[ast.Function, Signature]] = []
 
         # Signatures first: a function can be called before the line that declares it.
@@ -396,12 +448,15 @@ class Checker:
                     function.name_span,
                     hint="Choose a different name for this function.",
                 )
-            elif function.name in self._type_names:
+            elif function.name in self._type_names or function.name in self._record_names:
+                hint = (f"{function.name}(x) already means: build one: {function.name}(field: value)"
+                        if function.name in self._record_names
+                        else f"{function.name}(x) already means: check that x is a valid {function.name}.")
                 self._report(
                     "E2006",
                     f"'{function.name}' is the name of a type and cannot be used for a function",
                     function.name_span,
-                    hint=f"{function.name}(x) already means: check that x is a valid {function.name}.",
+                    hint=hint,
                 )
             elif function.name in declared:
                 first = declared[function.name].name_span
@@ -425,11 +480,20 @@ class Checker:
 
     # Refined types
 
-    def _declare_types(self, declarations: tuple[ast.TypeDecl, ...]) -> None:
-        """Registers the type names, then resolves what each one refines."""
-        for declaration in declarations:
+    def _declare_names(self, refined: tuple[ast.TypeDecl, ...], records: tuple[ast.RecordDecl, ...]) -> None:
+        """Registers the name of every type the program declares, in the order they appear.
+
+        A name belongs to one type: it cannot be declared twice, whatever the kind of the
+        two declarations (decision 0014, 5).
+        """
+        declarations = [(declaration.span.line, declaration.span.column, declaration) for declaration in refined]
+        declarations += [(declaration.span.line, declaration.span.column, declaration)
+                         for declaration in records]
+        declarations.sort(key=lambda item: (item[0], item[1]))
+        for _, _, declaration in declarations:
             name, span = declaration.name, declaration.name_span
-            if name in KNOWN_TYPES:
+            record = isinstance(declaration, ast.RecordDecl)
+            if name in KNOWN_TYPES or (record and name == type_model.LIST.name):
                 self._report("E2016", f"'{name}' is a built-in type and cannot be declared again", span,
                              hint="Choose a different name for this type.")
             elif not name[0].isupper():
@@ -439,9 +503,17 @@ class Checker:
                 first = self._type_names[name].name_span
                 self._report("E2016", f"The type '{name}' is declared more than once", span,
                              notes=(f"It was first declared at line {first.line}, column {first.column}.",))
+            elif name in self._record_names:
+                first = self._record_names[name].name_span
+                self._report("E2016", f"The type '{name}' is declared more than once", span,
+                             notes=(f"It was first declared at line {first.line}, column {first.column}.",))
+            elif record:
+                self._record_names[name] = declaration
             else:
                 self._type_names[name] = declaration
 
+    def _declare_types(self, declarations: tuple[ast.TypeDecl, ...]) -> None:
+        """Resolves what each refined type refines."""
         for name in self._type_names:
             self._resolve(name, [])
 
@@ -460,6 +532,15 @@ class Checker:
                     f"The refined type '{name}' cannot refine a list type yet",
                     declaration.base.span,
                     hint="Refining 'List[T]' is not supported yet. Refine a built-in type such as Int or Text.",
+                )
+            return None
+        if declaration.base.name in self._record_names:
+            if not visiting:
+                self._report(
+                    "E2016",
+                    f"The refined type '{name}' cannot refine a record type",
+                    declaration.base.span,
+                    hint="Refining a record is not supported yet. Refine a built-in type such as Int or Text.",
                 )
             return None
         base_name = declaration.base.name
@@ -522,6 +603,146 @@ class Checker:
                       if any(step.name == name for step in refined.chain)]:
             del self._refined[other]
             self._type_adapter.drop_refined(other)
+
+    # Record types
+
+    def _declare_records(self, declarations: tuple[ast.RecordDecl, ...]) -> None:
+        """Resolves the record types the program declares, and decides which ones are valid.
+
+        The names are already registered, so that a record can use another one declared
+        later (a forward reference). Then the fields are resolved, the cycles are
+        found, and the valid declarations get their identity.
+        """
+        self._cyclic_records = set()
+        # The fields: their names and their types. A field repeated, or a type that is
+        # not a type, is a declaration that cannot be used; the error is reported once,
+        # where it happens.
+        field_types: dict[str, tuple[tuple[str, str], ...]] = {}
+        field_refs: dict[str, tuple[tuple[str, ast.TypeRef], ...]] = {}
+        for name, declaration in self._record_names.items():
+            fields: list[tuple[str, str]] = []
+            references: list[tuple[str, ast.TypeRef]] = []
+            seen: set[str] = set()
+            broken = False
+            for declared_field in declaration.fields:
+                if declared_field.name in seen:
+                    self._report("E2016", f"The field '{declared_field.name}' is declared more than once in '{name}'",
+                                 declared_field.name_span,
+                                 notes=(f"'{name}' is declared at line {declaration.name_span.line}.",))
+                    broken = True
+                    continue
+                seen.add(declared_field.name)
+                kind = self._value_type(declared_field.type, f"The field '{declared_field.name}' of '{name}'",
+                                        declared_records=True)
+                if kind is None:
+                    broken = True
+                    continue
+                fields.append((declared_field.name, kind))
+                references.append((declared_field.name, declared_field.type))
+            if not broken:
+                field_types[name] = tuple(fields)
+                field_refs[name] = tuple(references)
+        self._record_refs = field_refs
+
+        # The cycles: a record cannot contain itself, directly or through another one.
+        self._find_record_cycles(field_refs)
+
+        # A record that uses a record that cannot be used is not usable either. Its own
+        # declaration has no error: the error is the one of the record it depends on.
+        invalid = set(self._cyclic_records)
+        invalid.update(name for name in self._record_names if name not in field_types)
+        changed = True
+        while changed:
+            changed = False
+            for name, fields in field_refs.items():
+                if name in invalid:
+                    continue
+                for _, reference in fields:
+                    if any(dependency in invalid for dependency in self._record_dependencies(reference)):
+                        invalid.add(name)
+                        changed = True
+                        break
+
+        # What is left is a valid declaration. Each one gets its own identity, and the
+        # types that depend on it are built after it, so the model can be filled in.
+        self._record_fields = field_types
+        for name in field_types:
+            if name in invalid:
+                continue
+            self._record_identities[name] = type_model.RecordIdentity(_next_identity())
+        for name in self._build_order([name for name in field_types if name not in invalid]):
+            declaration = self._record_names[name]
+            identity = self._record_identities[name]
+            model_fields = []
+            for field_name, kind in field_types[name]:
+                model = self._type_adapter.resolve(kind)
+                if model is None:
+                    raise RuntimeError(f"the type {kind!r} of the field {field_name!r} is missing from the type model")
+                model_fields.append((field_name, model))
+            nominal = self._type_adapter.register_record(name, tuple(model_fields), identity)
+            self._records[name] = RecordType(name, declaration, field_types[name], identity, nominal)
+
+    def _record_dependencies(self, reference: ast.TypeRef) -> list[str]:
+        """The record types a type reference depends on, looking inside `List[...]` too.
+
+        The reference is read, not its text: a field of type `List[List[Point]]`
+        depends on `Point` just as one of type `Point` does.
+        """
+        found: list[str] = []
+        if reference.name in self._record_names:
+            found.append(reference.name)
+        for argument in reference.arguments:
+            found.extend(self._record_dependencies(argument))
+        return found
+
+    def _find_record_cycles(self, field_refs: dict[str, tuple[tuple[str, ast.TypeRef], ...]]) -> None:
+        """Reports every cycle of record types, once, where the cycle starts."""
+        visiting: list[str] = []
+        done: set[str] = set()
+
+        def walk(name: str) -> None:
+            if name in done:
+                return
+            if name in visiting:
+                cycle = visiting[visiting.index(name):] + [name]
+                start = cycle[0]
+                declaration = self._record_names[start]
+                self._report(
+                    "E2016",
+                    f"The record '{start}' cannot contain itself",
+                    declaration.name_span,
+                    hint="A record cannot hold a value of its own type, directly or through another record.",
+                    notes=(f"The cycle is: {' -> '.join(cycle)}",),
+                )
+                self._cyclic_records.update(cycle)
+                return
+            visiting.append(name)
+            for _, reference in field_refs.get(name, ()):
+                for dependency in self._record_dependencies(reference):
+                    walk(dependency)
+            visiting.pop()
+            done.add(name)
+
+        for name in list(field_refs):
+            walk(name)
+
+    def _build_order(self, names: list[str]) -> list[str]:
+        """The records ordered so that every one comes after the ones it depends on."""
+        ordered: list[str] = []
+        done: set[str] = set()
+
+        def build(name: str) -> None:
+            if name in done:
+                return
+            done.add(name)
+            for _, reference in self._record_refs.get(name, ()):
+                for dependency in self._record_dependencies(reference):
+                    build(dependency)
+            ordered.append(name)
+
+        for name in names:
+            build(name)
+        return ordered
 
     def _root(self, kind: str) -> str:
         """The built-in type a type is made of: itself, or the end of a chain of refinements.
@@ -691,8 +912,13 @@ class Checker:
 
     # Declarations
 
-    def _value_type(self, reference: ast.TypeRef, what: str) -> str | None:
-        """The type named by `reference`, which must be a type a value can have."""
+    def _value_type(self, reference: ast.TypeRef, what: str, *, declared_records: bool = False) -> str | None:
+        """The type named by `reference`, which must be a type a value can have.
+
+        `declared_records` accepts a record the program declares even when its own
+        declaration has an error: the error is reported where it happens, not at
+        every use.
+        """
         if reference.name == VOID:
             self._report(
                 "E2012",
@@ -701,9 +927,9 @@ class Checker:
                 hint="Void means 'no value'. It can only be the return type of a function.",
             )
             return None
-        return self._known_type(reference)
+        return self._known_type(reference, declared_records=declared_records)
 
-    def _known_type(self, reference: ast.TypeRef) -> str | None:
+    def _known_type(self, reference: ast.TypeRef, *, declared_records: bool = False) -> str | None:
         if reference.arguments:
             if reference.name != "List":
                 self._report(
@@ -721,7 +947,8 @@ class Checker:
                     hint="Write List[Int].",
                 )
                 return None
-            element = self._value_type(reference.arguments[0], "A list element")
+            element = self._value_type(reference.arguments[0], "A list element",
+                                        declared_records=declared_records)
             if element is None:
                 return None
             return f"List[{element}]"
@@ -730,7 +957,13 @@ class Checker:
         if reference.name in self._type_names:
             # A declared type whose own declaration has an error: that error is already reported.
             return reference.name if reference.name in self._refined else None
-        candidates = [*KNOWN_TYPES, *self._type_names]
+        if reference.name in self._record_names:
+            # A record the program declares: a type, unless its own declaration has an
+            # error, which is already reported.
+            if reference.name in self._records or declared_records:
+                return reference.name
+            return None
+        candidates = [*KNOWN_TYPES, *self._type_names, *self._record_names]
         close = difflib.get_close_matches(reference.name, candidates, n=1, cutoff=0.5)
         if reference.name == "String":
             hint = "The text type is called Text."
@@ -828,13 +1061,123 @@ class Checker:
                 hint=f"Write the call with its inputs, for example: example {function}(2) == 4",
             )
 
+    # Records
+
+    def _record_construction(self, node: ast.RecordConstruction, scope: _Scope) -> str | None:
+        """`Point(x: 1, y: 2)`: builds a record value.
+
+        Every field of the record is given once, with a value of its type. The order of
+        the text does not matter (decision 0014, 2 and 5).
+        """
+        record = self._records.get(node.name)
+        if record is None:
+            # The declaration of the record has an error, already reported where it
+            # happens. The values are still checked, so that a mistake inside one of
+            # them is not hidden.
+            for field in node.fields:
+                self._expression(field.value, scope)
+            return None
+        given: dict[str, ast.FieldInitializer] = {}
+        repeated: list[ast.FieldInitializer] = []
+        unknown: list[ast.FieldInitializer] = []
+        for field in node.fields:
+            if record.field_type(field.name) is None:
+                unknown.append(field)
+            elif field.name in given:
+                repeated.append(field)
+            else:
+                given[field.name] = field
+        for field in unknown:
+            self._report(
+                "E2023",
+                f"The record '{record.name}' has no field named '{field.name}'",
+                field.name_span,
+                hint=f"The fields of {record.name} are: {', '.join(name for name, _ in record.fields)}.",
+            )
+        for field in repeated:
+            self._report("E2023", f"The field '{field.name}' is given twice", field.name_span)
+        for name, _ in record.fields:
+            if name not in given:
+                self._report(
+                    "E2023",
+                    f"The field '{name}' of '{record.name}' is missing",
+                    node.name_span,
+                    hint=f"Give it a value: {record.name}({name}: ...)",
+                )
+        for field in node.fields:
+            expected = record.field_type(field.name)
+            value_type = self._expression(field.value, scope, expected)
+            if value_type is not None and expected is not None:
+                self._expect_type(
+                    expected, value_type, field.value,
+                    (f"The field '{field.name}' of '{record.name}' is {expected}.",),
+                )
+        return record.name
+
+    def _field_access(self, node: ast.FieldAccess, scope: _Scope) -> str | None:
+        """`p.x`: reads a field of a record value."""
+        target = self._expression(node.target, scope)
+        if target is None:
+            return None
+        record = self._records.get(target)
+        if record is None:
+            self._report(
+                "E2024",
+                f"A value of type {target} is not a record, so it has no fields",
+                node.target.span,
+                hint="Only a record has fields.",
+            )
+            return None
+        kind = record.field_type(node.name)
+        if kind is None:
+            self._report(
+                "E2024",
+                f"The record '{target}' has no field named '{node.name}'",
+                node.name_span,
+                hint=f"The fields of {target} are: {', '.join(name for name, _ in record.fields)}.",
+            )
+            return None
+        return kind
+
+    def _field_assign(self, statement: ast.FieldAssign, scope: _Scope) -> None:
+        """`p.x = value`: a record is immutable, so its fields never change."""
+        target = self._expression(statement.target, scope)
+        if target is None:
+            return
+        record = self._records.get(target)
+        if record is None:
+            self._report(
+                "E2024",
+                f"A value of type {target} is not a record, so it has no fields",
+                statement.target.span,
+                hint="Only a record has fields.",
+            )
+            return
+        if record.field_type(statement.name) is None:
+            self._report(
+                "E2024",
+                f"The record '{target}' has no field named '{statement.name}'",
+                statement.name_span,
+                hint=f"The fields of {target} are: {', '.join(name for name, _ in record.fields)}.",
+            )
+            return
+        self._report(
+            "E2025",
+            f"The field '{statement.name}' of '{target}' cannot be given a new value",
+            statement.name_span,
+            hint="A record is immutable: build another one with the value you want.",
+        )
+        # The value is checked, but its type is not compared with the type of the field:
+        # the field cannot be given a new value anyway (decision 0014, 5).
+        self._expression(statement.value, scope)
+
     def _name_is_free(self, name: str, span: Span, scope: _Scope) -> bool:
         """Reports E2006 and returns False if `name` cannot be declared in `scope`.
 
         Functions, parameters and variables share one namespace, and a visible name is never
         declared again: every name in a function means exactly one thing.
         """
-        if name in self._type_names:
+        if name in self._type_names or name in self._record_names:
             self._report(
                 "E2006",
                 f"'{name}' is the name of a type and cannot be used for something else",
@@ -907,6 +1250,8 @@ class Checker:
             self._for(statement, scope)
         elif isinstance(statement, ast.Assign):
             self._assign(statement, scope)
+        elif isinstance(statement, ast.FieldAssign):
+            self._field_assign(statement, scope)
         else:
             expression = statement.expression
             found = self._expression(expression, scope)
@@ -1182,6 +1527,10 @@ class Checker:
             return self._list_literal(node, scope, expected)
         if isinstance(node, ast.Group):
             return self._expression(node.expression, scope, expected)
+        if isinstance(node, ast.RecordConstruction):
+            return self._record_construction(node, scope)
+        if isinstance(node, ast.FieldAccess):
+            return self._field_access(node, scope)
         if isinstance(node, ast.Name):
             return self._name(node, scope)
         if isinstance(node, ast.Unary):
@@ -1301,6 +1650,13 @@ class Checker:
                 f"'{node.name}' is a type, not a value",
                 node.span,
                 hint=f"To check a value against it, call it: {node.name}(x)",
+            )
+        elif node.name in self._record_names:
+            self._report(
+                "E2011",
+                f"'{node.name}' is a type, not a value",
+                node.span,
+                hint=f"To build one, write it: {node.name}(field: value)",
             )
         elif node.name in BUILTINS or node.name in self._signatures:
             self._report(
@@ -1546,7 +1902,7 @@ class Checker:
                 notes = (f"The functions of {qualifier}: {', '.join(functions)}.",)
             else:
                 notes = (f"{qualifier} has no functions yet.",)
-        elif qualifier in self._type_names:
+        elif qualifier in self._type_names or qualifier in self._record_names:
             label = f"'{qualifier}' has no functions of its own"
             base = self._root(qualifier)
             if TYPE_FUNCTIONS.get(base):
@@ -1561,7 +1917,7 @@ class Checker:
         else:
             label = f"There is no type named '{qualifier}'"
             close = difflib.get_close_matches(
-                qualifier, [*KNOWN_TYPES, type_model.LIST.name, *self._type_names], n=1,
+                qualifier, [*KNOWN_TYPES, type_model.LIST.name, *self._type_names, *self._record_names], n=1,
             )
             hint = f"Did you mean '{close[0]}'?" if close else None
             if qualifier[:1].islower():

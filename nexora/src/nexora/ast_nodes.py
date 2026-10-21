@@ -89,8 +89,40 @@ class Call(Node):
     qualifier: str | None = None
 
 
-Expr = IntLiteral | FloatLiteral | TextLiteral | BoolLiteral | ListLiteral | Name | Unary | Binary | Group | Call
-EXPRESSION_NODES = (IntLiteral, FloatLiteral, TextLiteral, BoolLiteral, ListLiteral, Name, Unary, Binary, Group, Call)
+@dataclass(frozen=True)
+class FieldInitializer(Node):
+    """`x: 1`: the value given to one field of a record."""
+    name: str
+    name_span: Span
+    value: Expr
+
+
+@dataclass(frozen=True)
+class RecordConstruction(Node):
+    """`Point(x: 1, y: 2)`: building a record value.
+
+    The fields are in the order they were written, which is not necessarily the order of
+    the declaration (decision 0014, 2)."""
+    name: str
+    name_span: Span
+    fields: tuple[FieldInitializer, ...]
+
+
+@dataclass(frozen=True)
+class FieldAccess(Node):
+    """`p.x`: reading a field of a record value.
+
+    `target` is the value the field is read from: a name, or another field access
+    (decision 0014, 2)."""
+    target: Expr
+    name: str
+    name_span: Span
+
+
+Expr = (IntLiteral | FloatLiteral | TextLiteral | BoolLiteral | ListLiteral | Name | Unary | Binary | Group | Call
+        | RecordConstruction | FieldAccess)
+EXPRESSION_NODES = (IntLiteral, FloatLiteral, TextLiteral, BoolLiteral, ListLiteral, Name, Unary, Binary, Group,
+                    Call, RecordConstruction, FieldAccess)
 
 
 # Types
@@ -122,6 +154,26 @@ class TypeDecl(Node):
     message: str | None
 
 
+@dataclass(frozen=True)
+class FieldDecl(Node):
+    """`x: Int`: one field of a record declaration."""
+    name: str
+    name_span: Span
+    type: TypeRef
+
+
+@dataclass(frozen=True)
+class RecordDecl(Node):
+    """`type Point = { x: Int, y: Int }`: a record type declared by the user.
+
+    Its values are built with `RecordConstruction` and cannot be changed afterwards
+    (decision 0014, 1).
+    """
+    name: str
+    name_span: Span
+    fields: tuple[FieldDecl, ...]
+
+
 # Statements
 
 @dataclass(frozen=True)
@@ -144,6 +196,18 @@ class Var(Node):
 @dataclass(frozen=True)
 class Assign(Node):
     """`name = value`: gives a new value to a variable declared with `var`."""
+    name: str
+    name_span: Span
+    value: Expr
+
+
+@dataclass(frozen=True)
+class FieldAssign(Node):
+    """`p.x = value`: gives a new value to a field of a record.
+
+    A record is immutable, so this is always an error (decision 0014, 2). `target` is
+    the value the field belongs to, and `name` the field that would change."""
+    target: Expr
     name: str
     name_span: Span
     value: Expr
@@ -205,7 +269,7 @@ class For(Node):
     body: Block
 
 
-Statement = Let | Var | Assign | Return | If | While | For | ExprStatement | Block
+Statement = Let | Var | Assign | FieldAssign | Return | If | While | For | ExprStatement | Block
 
 
 # Declarations
@@ -253,6 +317,9 @@ class Function(Node):
 class Program(Node):
     types: tuple[TypeDecl, ...]
     functions: tuple[Function, ...]
+    # The record types the program declares, after the functions: a new field goes at
+    # the end, so the order of the existing ones does not change (docs/inspect-schema.md).
+    records: tuple[RecordDecl, ...] = ()
 
 
 def to_dict(node, types: dict[int, str] | None = None):

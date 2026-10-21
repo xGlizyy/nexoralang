@@ -1,7 +1,7 @@
 # Especificación del lenguaje NEXORA
 
-- **Versión de la especificación:** 0.7
-- **Implementación de referencia:** `nexora` 0.7.0 (este repositorio, directorio `nexora/`)
+- **Versión de la especificación:** 0.8
+- **Implementación de referencia:** `nexora` 0.8.0 (este repositorio, directorio `nexora/`)
 - **Estado:** describe exactamente lo que el intérprete hace hoy.
 
 Este documento es la referencia del lenguaje: define la sintaxis y el significado de cada
@@ -12,7 +12,7 @@ Cómo leer el estado de cada parte:
 | Marca | Significado |
 |-------|-------------|
 | *(sin marca)* | **Implementado** y cubierto por pruebas |
-| **Experimental** | Implementado y probado, pero su sintaxis o sus reglas pueden cambiar. En la versión 0.7 ninguna parte del lenguaje lo es |
+| **Experimental** | Implementado y probado, pero su sintaxis o sus reglas pueden cambiar. En la versión 0.8 ninguna parte del lenguaje lo es |
 | **Previsto** | No existe. Reunido en la sección 14; no forma parte del lenguaje |
 
 Los cambios respecto a la versión 0.1 están en [`CHANGELOG.md`](../CHANGELOG.md) y sus motivos
@@ -128,9 +128,12 @@ analizador nunca ignora un carácter desconocido.
 En notación EBNF. `NEWLINE` es uno o más finales de línea seguidos.
 
 ```ebnf
-program    = { NEWLINE } { ( type_decl | function ) { NEWLINE } } ;
+program    = { NEWLINE } { ( type_decl | record_decl | function ) { NEWLINE } } ;
 
 type_decl  = "type" NAME "=" type "where" expression [ explanation ] end ;
+record_decl = "type" NAME "=" "{" record_fields "}" ;
+record_fields = record_field { "," record_field } ;
+record_field = NAME ":" type ;
 function   = "fn" NAME "(" [ params ] ")" "->" type { NEWLINE }
              "{" { NEWLINE } { contract } { statement end } "}" ;
 params     = param { "," param } ;
@@ -142,7 +145,7 @@ explanation = "," TEXT ;
 block      = "{" { NEWLINE } { statement end } "}" ;
 end        = NEWLINE | (* nada, si lo siguiente es "}" *) ;
 
-statement  = let | var | return | if | while | for | block | assignment | expression ;
+statement  = let | var | return | if | while | for | block | assignment | field_assignment | expression ;
 let        = "let" NAME [ ":" type ] "=" expression ;
 var        = "var" NAME [ ":" type ] "=" expression ;
 return     = "return" [ expression ] ;
@@ -151,6 +154,7 @@ while      = "while" expression "{" { NEWLINE } { loop_clause } { statement end 
 for        = "for" NAME "in" expression "{" { NEWLINE } { loop_clause } { statement end } "}" ;
 loop_clause = ( "invariant" | "decreases" ) expression [ explanation ] end ;
 assignment = NAME "=" expression ;
+field_assignment = NAME "." NAME "=" expression ;
 
 expression     = or ;
 or             = and { "or" and } ;
@@ -163,8 +167,12 @@ primary        = INT | FLOAT | TEXT | "true" | "false"
                | NAME
                | NAME "(" [ expression { "," expression } ] ")"
                | NAME "." NAME "(" [ expression { "," expression } ] ")"
+               | NAME "." NAME
+               | NAME "(" record_fields_values ")"
                | "[" [ expression { "," expression } ] "]"
                | "(" expression ")" ;
+record_fields_values = record_value { "," record_value } ;
+record_value = NAME ":" expression ;
 ```
 
 Notas:
@@ -186,6 +194,18 @@ Notas:
   ni saltos de línea a sus lados (`E1101`). Entre el segundo nombre y el `(` puede haber espacios,
   como en cualquier llamada. Que el primer nombre sea un tipo con esa función lo comprueba el análisis
   estático (`E2008`, sección 8.1).
+- Un registro se declara con `type` y unas llaves: `type Point = { x: Int, y: Int }`. Las llaves van
+  en la misma línea que el `=`, y dentro de ellas se permite un salto de línea entre campos. Un
+  registro tiene al menos un campo y no admite coma final (`E1101`).
+- Un registro se construye con el nombre del tipo y los campos con nombre: `Point(x: 1, y: 2)`. El
+  orden en que se escriben los campos no importa, pero cada uno se da una sola vez y todos están
+  obligatorios (`E2023`).
+- Leer un campo se escribe `valor.campo`. La raíz es siempre un nombre; sobre una llamada, una
+  construcción, un grupo o una lista no se puede leer un campo (`E1101`). Las cadenas de acceso
+  (`p.x.y`) no tienen un límite de longitud: cada paso intermedio tiene que ser un registro
+  (`E2024`). El `.` va pegado a los dos nombres, como en una llamada cualificada.
+- Un registro no cambia: `p.x = 1` es el error `E2025`. La forma existe para poder decirlo, no para
+  poder hacerlo.
 - Límites de tamaño: los paréntesis, los operadores unarios, los bloques, las cadenas `else if` y los
   tipos pueden anidarse hasta 64 niveles, y un árbol de expresión puede tener hasta 256 niveles (por
   ejemplo, una suma de 256 términos). Superarlos es el error `E1105`.
@@ -204,10 +224,11 @@ Notas:
 | `Text` | Texto Unicode | Inmutable |
 | `List[T]` | Secuencia inmutable y finita de valores de tipo `T` | `T` no puede ser `Void`; no hay covarianza (sección 4.5) |
 | `Void` | Ningún valor | Solo puede ser el tipo de retorno de una función |
+| Un registro | Los valores que se construyen con `Nombre(campo: valor, ...)` | Lo declara el programa: `type Point = { x: Int, y: Int }` (sección 4.6) |
 
 `Int`, `Float`, `Bool` y `Text` son los **tipos de valor** integrados. `List[T]` es un tipo de valor
 compuesto (sección 4.5); un programa también puede declarar tipos refinados sobre los integrados
-(sección 4.4). Los tipos de valor son los que puede
+(sección 4.4) y registros (sección 4.6). Los tipos de valor son los que puede
 tener una variable, un parámetro o una expresión. `Void` no es un tipo de valor: una variable o un parámetro de tipo
 `Void` es el error `E2012`, y usar una llamada a una función `Void` donde hace falta un valor es
 el error `E2011`.
@@ -487,6 +508,63 @@ true
 No hay sintaxis de índice (`xs[i]`) ni forma de modificar un elemento. Para leer una posición se
 usa `List.get`; para añadir o unir listas, `List.append` y `List.concat` (sección 8.2). Un tipo
 refinado no puede construirse sobre una lista en esta versión (`E2016`).
+
+### 4.6 Registros
+
+Un **registro** es un tipo que declara el programa, con campos **inmutables** y **obligatorios**, que
+se construye dando a cada campo su valor por nombre.
+
+<!-- nex:run -->
+```nex
+type Point = { x: Int, y: Int }
+type Line = { from: Point, to: Point }
+
+fn main() -> Void {
+    let origin = Point(x: 0, y: 0)
+    let end = Point(x: 3, y: 4)
+    let segment = Line(from: origin, to: end)
+    print(segment.from.x)
+    print(segment)
+}
+```
+
+```text
+0
+Line(from: Point(x: 0, y: 0), to: Point(x: 3, y: 4))
+```
+
+**Declaración.** `type Nombre = { campo: Tipo, ... }`. El nombre empieza por mayúscula, como el de
+cualquier tipo, y no puede ser el de un tipo integrado ni el de otro tipo declarado (`E2016`). Cada
+campo tiene un nombre y un tipo; dos campos del mismo registro no pueden llamarse igual (`E2016`).
+El tipo de un campo puede ser un tipo integrado, `List[T]`, un tipo refinado u **otro registro**.
+
+**Construcción.** `Nombre(campo: valor, ...)`. Los campos se pueden escribir en cualquier orden,
+pero cada uno se da **una sola vez** y **todos** están obligatorios: un campo que falta, uno que se
+repite o uno que el registro no tiene son el error `E2023`. El valor de un campo tiene que tener el
+tipo del campo (`E2011`).
+
+**Lectura.** `valor.campo`. La raíz es siempre un nombre: una variable, un parámetro o `result` dentro
+de un `ensures`. Se pueden encadenar (`p.x.y`), sin límite de longitud, siempre que cada paso
+intermedio sea un registro; si el valor no es un registro, o el registro no tiene ese campo, es el
+error `E2024`. Un nombre de tipo no es un valor: `Point.x` no lee un campo, es una llamada cualificada
+como las de la sección 8.1.
+
+**Inmutabilidad.** Un registro no cambia: no hay ninguna forma de asignar a un campo. `p.x = 1` es el
+error `E2025`.
+
+**Identidad.** Un registro es **nominal**: su identidad es la de su declaración, no la de su nombre
+ni la de sus campos. Dos registros con los mismos campos son tipos distintos, y un valor de uno no
+se acepta donde se espera el otro (`E2011`). Dos valores del **mismo** registro se comparan **por
+valor**, campo a campo: `Point(x: 1, y: 2) == Point(x: 1, y: 2)` es `true`.
+
+**Referencias adelantadas y ciclos.** Un registro puede usar otro declarado más abajo, mientras el
+grafo de dependencias no tenga ciclos. Un registro no puede contenerse a sí mismo, ni directamente
+ni a través de otro registro ni de una lista: `type A = { a: A }` es el error `E2016`, y el mensaje
+escribe el ciclo (`A -> B -> A`).
+
+**Qué no hay.** Un registro no tiene métodos ni funciones propias, no se puede refinar, no admite
+genéricos y no puede ser recursivo. Un tipo refinado no puede construirse sobre un registro
+(`E2016`).
 
 ## 5. Variables y ámbitos
 
@@ -1407,13 +1485,16 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E2013` | Invalid parameter | `semantic` | `main` con parámetros, o un parámetro llamado `result` |
 | `E2014` | Missing return | `semantic` | Una función que devuelve un valor puede terminar sin `return` |
 | `E2015` | Unreachable code | `semantic` | Código situado después de un `return` |
-| `E2016` | Invalid type declaration | `semantic` | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, una cadena de tipos sin fin, o una base que es una lista |
+| `E2016` | Invalid type declaration | `semantic` | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, una cadena de tipos sin fin, o una base que es una lista. También un registro con nombre inválido o repetido, un campo repetido, o un registro que se contiene a sí mismo |
 | `E2017` | Value outside refined type | `type` | Una constante usada como valor de un tipo refinado no cumple su condición |
 | `E2018` | Invalid refinement condition | `semantic` | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado |
 | `E2019` | Too many refinement checks | `semantic` | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (sección 4.4) |
 | `E2020` | Example without its function | `semantic` | Un ejemplo no contiene ninguna llamada a su función (sección 9.4) |
 | `E2021` | Missing loop measure | `semantic` | Un `while` sin `decreases`, o con más de uno (sección 9.5) |
 | `E2022` | Unsupported loop clause | `semantic` | Un `decreases` en un `for`, que no lo admite (sección 9.6) |
+| `E2023` | Invalid record construction | `type` | Una construcción de un registro a la que le falta un campo, le sobra uno o se le da dos veces el mismo (sección 4.6) |
+| `E2024` | Invalid field access | `type` | Se lee un campo de un valor que no es un registro, o de un registro que no tiene ese campo (sección 4.6) |
+| `E2025` | Cannot reassign a field | `semantic` | Se asigna a un campo de un registro, que es inmutable (sección 4.6) |
 | `E3001` | Division by zero | `runtime` | División por cero |
 | `E3002` | Integer overflow | `runtime` | Un resultado `Int` fuera del rango de 64 bits |
 | `E3003` | Float result out of range | `runtime` | Un resultado `Float` demasiado grande |
@@ -1453,7 +1534,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.7.0",
+  "nexora_version": "0.8.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -1611,6 +1692,13 @@ En [`examples/`](../examples/README.md) hay más programas, todos ejecutados por
 | `let x: String = "a"` | `E2012` | El tipo se llama `Text` |
 | `let xs: List = []` | `E2012` | `List` necesita un argumento de tipo |
 | `type NonEmpty = List[Int] where value == value` | `E2016` | Un tipo refinado no puede tener una lista como base |
+| `type Point = { x: Int, y: Int }` y `Point(x: 1)` | `E2023` | Falta el campo `y` |
+| `type Point = { x: Int }` y `Point(x: 1, y: 2)` | `E2023` | El registro no tiene ningún campo `y` |
+| `type Point = { x: Int }` y `Point(x: 1, x: 2)` | `E2023` | El campo `x` está dado dos veces |
+| `type Point = { x: Int }` y `Point(x: "a")` | `E2011` | El campo `x` es de tipo `Int` |
+| `type Point = { x: Int }` y `let p = Point(x: 1)` y después `p.y` | `E2024` | El registro no tiene ningún campo `y` |
+| `type Point = { x: Int }` y `let p = Point(x: 1)` y después `p.x = 2` | `E2025` | Un registro es inmutable |
+| `type A = { a: A }` | `E2016` | Un registro no puede contenerse a sí mismo |
 | `add(1)` con `add(a: Int, b: Int)` | `E2009` | Falta un argumento |
 | `add(1, "2")` | `E2011` | El segundo argumento debe ser `Int` |
 | `add(1, 2)` como sentencia | `E2010` | El valor devuelto no se usa |
@@ -1640,8 +1728,11 @@ Son limitaciones reales de esta versión, no fallos:
 - La medida de un `while` es un `Int`: no hay medidas compuestas (pares, textos).
 - Los parámetros no pueden reasignarse.
 - `if` es una sentencia, no una expresión: no puede usarse como valor.
-- No hay registros, mapas, enumeraciones, `Option`, `Result` ni `for` sobre rangos o `Text`. Las
-  listas `List[T]` son inmutables y finitas.
+- No hay mapas, enumeraciones, `Option`, `Result` ni `for` sobre rangos o `Text`. Los registros
+  (sección 4.6) tienen campos inmutables y no admiten métodos, refinamientos ni recursión. Las
+  listas `List[T]` son inmutables y finitas. Los registros tienen una
+  [decisión 0014](decisions/0014-registros-nominales-inmutables.md) aceptada que todavía no está
+  implementada.
 - Las operaciones sobre textos son las de la sección 8.1: no hay `trim`, mayúsculas, `split`,
   `replace` ni búsqueda de posiciones. Un carácter es un punto de código: no se cuentan grafemas.
 - No hay operador de resto (`%`).
@@ -1659,7 +1750,8 @@ Son limitaciones reales de esta versión, no fallos:
 - Los contratos no se verifican estáticamente (sección 9.3). De los tipos refinados, solo se
   comprueban sin ejecutar las constantes.
 - La condición de un tipo refinado no puede llamar a funciones del programa.
-- No hay alias de tipos sin condición (`type Id = Int`): todo tipo declarado lleva `where`.
+- No hay alias de tipos sin condición (`type Id = Int`): un tipo refinado siempre lleva `where`. Un
+  registro (sección 4.6) se declara sin `where`, porque sus campos no llevan condición.
 - `nex inspect` solo tiene salida JSON, y no muestra el árbol si el programa tiene errores léxicos
   o sintácticos.
 - No hay formateador, servidor de lenguaje ni otras herramientas.
@@ -1675,9 +1767,9 @@ Nada de lo que sigue funciona hoy. Es la dirección del diseño, tomada del borr
 - `for` sobre rangos, `break` y `continue`.
 - `if` y `match` como expresiones.
 - Interpolación de textos (`"Hello {name}"`), para la que ya está reservada la `{`.
-- Registros, mapas, enumeraciones, `Option` y `Result`. Las listas `List[T]` ya existen, pero no
-  los genéricos de usuario (`fn f[T]`), las funciones de orden superior ni las funciones como
-  valores.
+- Mapas, enumeraciones, `Option` y `Result`. Los registros (sección 4.6) y las listas `List[T]`
+  ya existen, pero no los genéricos de usuario (`fn f[T]`), las funciones de orden superior ni las
+  funciones como valores.
 - Verificación estática de contratos, y bloques de prueba (`test`) fuera de las funciones.
 - Efectos declarados (`uses`), módulos e importaciones.
 - Características relacionadas con IA (`ai fn`, `tool fn`). No existe ninguna integración con

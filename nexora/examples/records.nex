@@ -1,0 +1,54 @@
+// Records: a type the program declares, with immutable fields that are built by name.
+//
+// A record is nominal: its identity is the identity of its declaration, not its name nor
+// its fields. Two records with the same fields are different types, and a value of one
+// is not accepted where the other is expected. Two values of the same record are
+// compared by value, field by field.
+// A record never changes: there is no way to assign to one of its fields.
+
+type Point = { x: Int, y: Int }
+type Segment = { from: Point, to: Point }
+
+fn distance_squared(a: Point, b: Point) -> Int {
+    let dx = b.x - a.x
+    let dy = b.y - a.y
+    return dx * dx + dy * dy
+}
+
+fn main() -> Void {
+    let origin = Point(x: 0, y: 0)
+    let corner = Point(x: 3, y: 4)
+
+    // The fields can be written in any order, and every field has to be given.
+    let same = Point(y: 4, x: 3)
+
+    print(origin.x)
+    print(corner.y)
+    print(origin)
+    print(corner == same)
+    print(origin == corner)
+
+    // A record can hold other records, and a field can be read through a chain.
+    let segment = Segment(from: origin, to: corner)
+    print(segment.to.x)
+    print(segment)
+
+    print(distance_squared(origin, corner))
+
+    // A record is a value: it can go into a list, and come out of a function.
+    let corners: List[Point] = [origin, corner]
+    print(List.length(corners))
+    print(List.get(corners, 1))
+    print(centre(corners))
+}
+
+fn centre(points: List[Point]) -> Point {
+    var sum_x = 0
+    var sum_y = 0
+    for point in points {
+        invariant sum_x >= 0, "A sum never goes down"
+        sum_x = sum_x + point.x
+        sum_y = sum_y + point.y
+    }
+    return Point(x: sum_x, y: sum_y)
+}

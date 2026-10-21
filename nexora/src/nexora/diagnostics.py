@@ -108,6 +108,9 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E2020": ("Example without its function", SEMANTIC),
     "E2021": ("Missing loop measure", SEMANTIC),
     "E2022": ("Unsupported loop clause", SEMANTIC),
+    "E2023": ("Invalid record construction", TYPE),
+    "E2024": ("Invalid field access", TYPE),
+    "E2025": ("Cannot reassign a field", SEMANTIC),
 
     "E3001": ("Division by zero", RUNTIME),
     "E3002": ("Integer overflow", RUNTIME),

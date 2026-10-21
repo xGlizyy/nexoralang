@@ -19,6 +19,63 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
+## 0.8.0 — Registros nominales inmutables
+
+Estado del repositorio, no una versión publicada: no hay tag ni paquete en ningún repositorio. Esta
+versión implementa la [decisión 0014](docs/decisions/0014-registros-nominales-inmutables.md), que
+acepta la parte de D02 (registros nominales frente a estructurales) de la propuesta
+[0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) en el alcance
+realmente implementado. El resto de la 0012 sigue siendo una propuesta y no forma parte de esta
+versión.
+
+### Añadido
+
+- **Registros**: un tipo que declara el programa, con campos inmutables y obligatorios:
+  `type Point = { x: Int, y: Int }`. Se construyen con los campos por nombre
+  (`Point(x: 1, y: 2)`, en cualquier orden) y sus campos se leen con `p.x`, también en cadena
+  (`p.x.y`). Un registro es **nominal**: su identidad es la de su declaración, no la de su nombre
+  ni la de sus campos, así que dos registros con los mismos campos son tipos distintos (`E2011`) y
+  dos valores del mismo registro se comparan por valor.
+- **Identidad nominal en el modelo de tipos** (`types.py`): la variante `Nominal` y el token opaco
+  `RecordIdentity`, que el comprobador crea una vez por declaración y que viaja en el
+  `CheckedProgram` hasta el intérprete. El intérprete no la reconstruye a partir del nombre.
+- **Herramientas**: `nex inspect` añade los nodos `RecordDecl`, `FieldDecl`, `RecordConstruction`,
+  `FieldInitializer` y `FieldAccess`, la sentencia `FieldAssign` y el campo `records` al final de
+  `Program`; `type` puede ser el nombre de un registro. `nex context` añade el campo `records`
+  (con `name`, `fields`, `valid`, `line` y `reason`) y el valor `records` en `features`. `types`
+  sigue siendo solo de tipos refinados.
+- **Diagnósticos**: `E2023` (Invalid record construction, `type`), `E2024` (Invalid field access,
+  `type`) y `E2025` (Cannot reassign a field, `semantic`).
+- **Ejemplo** [`examples/records.nex`](examples/records.nex), con su salida registrada en las
+  pruebas.
+
+### Cambiado
+
+- Solo en programas que ya eran inválidos: `p.x`, donde `p` es una variable que no es un tipo,
+  pasa de ser `E1101` («Expected '(' to call 'p.x'») a ser un acceso a un campo. La forma de
+  llamada cualificada no cambia: `Text.length(s)` y `name.length()` se siguen diagnosticando igual,
+  y `Point.x` sigue siendo una llamada cualificada, no la lectura de un campo.
+- La versión del repositorio pasa a `0.8.0` y la especificación a `0.8`. Los esquemas JSON no
+  cambian de versión: los campos y nodos nuevos son aditivos.
+
+### Documentación
+
+- La [especificación](docs/language-spec.md) pasa a la versión 0.8 y documenta los registros (4.6),
+  su gramática, su igualdad nominal, su impresión, la tabla de diagnósticos y las limitaciones.
+- Actualizados `types.md`, `limitations.md`, `roadmap.md`, `architecture.md`, `index.md`,
+  `diagnostics.md`, `inspect-schema.md`, `json-protocol.md` y `README.md`.
+- La [decisión 0014](docs/decisions/0014-registros-nominales-inmutables.md) pasa a aceptada, con su
+  implementación. La [0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md)
+  no se reescribe y sigue siendo una propuesta para lo no implementado.
+
+### Limitaciones
+
+- Un registro no tiene métodos, ni funciones propias, ni refinamientos, ni recursión, ni parámetros
+  de tipo. Un tipo refinado no puede construirse sobre un registro (`E2016`).
+- Un registro no puede contenerse a sí mismo, ni directamente ni a través de otro registro ni de
+  una lista (`E2016`).
+- No hay `Option`, `Result`, enums, `match`, genéricos de usuario ni entrada de datos.
+
 ## 0.7.0 — Listas y `for` sobre listas
 
 Estado del repositorio, no una versión publicada: no hay tag ni paquete en ningún repositorio. Esta

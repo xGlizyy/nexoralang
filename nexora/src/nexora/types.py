@@ -19,13 +19,16 @@ resolved type the analysis reasons about. Its pieces are:
 * `Refined`: a nominal refined type. Two refined types with the same name are
   the same type even if they share a base and a condition; the declaration is
   kept as a stable reference for diagnostics and for the interpreter.
+* `Nominal`: a record type declared by the user. Its identity is the identity of
+  its declaration, not its name nor its fields, so two declarations that look the
+  same are still different types.
 * `TypeVariable`: a first-order type variable, identified by an integer. It
   exists for substitution and unification; the language cannot write one yet.
 
 Two operations that must not be confused:
 
 * `equal` is type identity: structural for primitives and applications, nominal
-  for refined types, by identifier for type variables.
+  for refined types and for records, by identifier for type variables.
 * `assignable` is compatibility: a refined type is accepted where its base is
   expected (widening), never the other way round. Generic arguments are
   invariant.
@@ -148,6 +151,38 @@ class TypeVariable(Type):
             raise ValueError("a type variable identifier cannot be negative")
 
 
+@dataclass(frozen=True)
+class RecordIdentity:
+    """The identity of one record declaration.
+
+    It is opaque: it does not come from the name nor from the fields, so two
+    declarations that look the same are still different types. The token is only
+    meaningful inside the program that declared it.
+    """
+
+    token: int
+
+
+@dataclass(frozen=True)
+class Nominal(Type):
+    """A record type declared by the user.
+
+    Equality is by `identity` alone: the name and the fields are presentation, and
+    two declarations that happen to look the same are still different types. `fields`
+    holds the name and the type of every field, in declaration order.
+    """
+
+    name: str = field(compare=False)
+    fields: tuple[tuple[str, Type], ...] = field(compare=False)
+    identity: RecordIdentity = field(compare=True)
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("a record type needs a name")
+        if self.identity is None:
+            raise ValueError("a record type needs an identity")
+
+
 def is_void(kind: Type) -> bool:
     """Whether `kind` is `Void`, the type that has no value."""
     return isinstance(kind, Primitive) and kind.name == VOID_NAME
@@ -214,6 +249,8 @@ def equal(left: Type, right: Type) -> bool:
         )
     if isinstance(left, Refined) and isinstance(right, Refined):
         return left.name == right.name
+    if isinstance(left, Nominal) and isinstance(right, Nominal):
+        return left.identity == right.identity
     if isinstance(left, TypeVariable) and isinstance(right, TypeVariable):
         return left.identifier == right.identifier
     return False
@@ -276,6 +313,12 @@ def _substitute(kind: Type, mapping: Mapping[int, Type], seen: frozenset[int]) -
         )
     if isinstance(kind, Refined):
         return Refined(kind.name, _substitute(kind.base, mapping, seen), kind.declaration)
+    if isinstance(kind, Nominal):
+        return Nominal(
+            kind.name,
+            tuple((name, _substitute(field, mapping, seen)) for name, field in kind.fields),
+            kind.identity,
+        )
     return kind
 
 
@@ -349,6 +392,8 @@ def display(kind: Type) -> str:
         return kind.name
     if isinstance(kind, Refined):
         return kind.name
+    if isinstance(kind, Nominal):
+        return kind.name
     if isinstance(kind, TypeVariable):
         return kind.name or f"T{kind.identifier}"
     if isinstance(kind, Application):
@@ -370,6 +415,8 @@ def to_data(kind: Type) -> dict:
         return {"kind": "primitive", "name": kind.name}
     if isinstance(kind, Refined):
         return {"kind": "refined", "name": kind.name, "base": to_data(kind.base)}
+    if isinstance(kind, Nominal):
+        return {"kind": "nominal", "name": kind.name, "identity": kind.identity.token}
     if isinstance(kind, TypeVariable):
         return {"kind": "type_variable", "identifier": kind.identifier, "name": kind.name}
     if isinstance(kind, Application):
@@ -390,9 +437,11 @@ __all__ = [
     "FLOAT",
     "INT",
     "LIST",
+    "Nominal",
     "OPTION",
     "PRIMITIVE_NAMES",
     "Primitive",
+    "RecordIdentity",
     "RESULT",
     "Refined",
     "TEXT",

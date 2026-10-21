@@ -457,7 +457,7 @@ def test_variables_named_like_the_types_stay_valid():  # [17]
 
 
 OLD_PROGRAMS = sorted(path for path in (ROOT / "examples").rglob("*.nex")
-                      if path.name not in ("texts.nex", "parse_number.nex", "lists.nex"))
+                      if path.name not in ("texts.nex", "parse_number.nex", "lists.nex", "records.nex"))
 
 
 @pytest.mark.parametrize("path", OLD_PROGRAMS, ids=lambda path: path.name)

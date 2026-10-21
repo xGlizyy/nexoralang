@@ -224,6 +224,7 @@ _FEATURES = (
     ("conditionals", lambda node, types: isinstance(node, ast.If)),
     ("contracts", lambda node, types: isinstance(node, ast.Contract)),
     ("refined_types", lambda node, types: isinstance(node, ast.TypeDecl)),
+    ("records", lambda node, types: isinstance(node, ast.RecordDecl)),
     ("examples", lambda node, types: isinstance(node, ast.Example)),
     ("mutable_variables", lambda node, types: isinstance(node, ast.Var)),
     ("loops", lambda node, types: isinstance(node, (ast.While, ast.For))),
@@ -278,6 +279,9 @@ def _notes(analysis: Analysis, features: list[str], reserved_used: list[str]) ->
         notes.append("Every value of a refined type satisfies its condition. This analysis checked the "
                      "constants given to refined types; any other value is checked by 'Type(x)' while the "
                      "program runs (E4003).")
+    if "records" in features:
+        notes.append("A record is a type the program declares: its fields never change, and two records "
+                     "are different types even when they have the same fields.")
     if "loops" in features:
         notes.append("Every 'while' declares a measure ('decreases') that is checked on every turn: a loop ends, or "
                      "stops with E4006. A 'for' walks a finite list and needs no measure. Invariants are checked "
@@ -385,6 +389,43 @@ def _type_entries(analysis: Analysis) -> list[dict]:
     ]
 
 
+def _record_entries(analysis: Analysis) -> list[dict]:
+    """The record types the program declares, as written.
+
+    `valid` says whether the declaration can be used as a type; `reason` says why it
+    cannot, when it cannot (decision 0014, 6).
+    """
+    facts = analysis.facts
+    entries = []
+    for declaration in analysis.program.records:
+        record = facts.records.get(declaration.name) if facts is not None else None
+        entries.append({
+            "name": declaration.name,
+            "fields": [
+                {"name": field.name, "type": record.field_type(field.name) if record else None}
+                for field in declaration.fields
+            ],
+            "valid": record is not None,
+            "line": declaration.span.line,
+            "reason": None if record is not None else _record_reason(analysis, declaration),
+        })
+    return entries
+
+
+def _record_reason(analysis: Analysis, declaration: ast.RecordDecl) -> str | None:
+    """Why a record declaration cannot be used: the error that was found in it."""
+    for diagnostic in analysis.diagnostics:
+        span = diagnostic.span
+        if span is None:
+            continue
+        if declaration.span.line <= span.line <= declaration.span.end_line:
+            return diagnostic.label
+    for diagnostic in analysis.diagnostics:
+        if declaration.name in diagnostic.label:
+            return diagnostic.label
+    return None
+
+
 def context_document(analysis: Analysis) -> dict:
     document = _header(CONTEXT_SCHEMA, analysis.source.name, analysis.diagnostics)
     document["executed"] = False
@@ -395,8 +436,8 @@ def context_document(analysis: Analysis) -> dict:
     document["reserved_words_used"] = reserved_used if analysis.tokens is not None else None
 
     if analysis.facts is None:
-        document.update(analysed=False, complete=False, entry_point=None, types=None, functions=None,
-                        features=None)
+        document.update(analysed=False, complete=False, entry_point=None, types=None, records=None,
+                        functions=None, features=None)
         document["notes"] = _notes(analysis, [], reserved_used)
         return document
 
@@ -415,6 +456,7 @@ def context_document(analysis: Analysis) -> dict:
         complete=analysis.complete,
         entry_point="main" if "main" in facts.functions else None,
         types=_type_entries(analysis),
+        records=_record_entries(analysis),
         functions=functions,
         features=features,
     )
@@ -455,6 +497,14 @@ def render_context(document: dict) -> str:
                              f"[line {kind['line']}]")
                 if kind["message"]:
                     lines.append(f"      reason: {kind['message']}")
+            lines.append("")
+        if document["records"]:
+            lines.append(f"Records ({len(document['records'])}):")
+            for record in document["records"]:
+                fields = ", ".join(f"{field['name']}: {field['type'] or '?'}" for field in record["fields"])
+                lines.append(f"  type {record['name']} = {{ {fields} }}    [line {record['line']}]")
+                if record["reason"]:
+                    lines.append(f"      reason: {record['reason']}")
             lines.append("")
         lines.append(f"Functions ({len(document['functions'])}):")
         for function in document["functions"]:

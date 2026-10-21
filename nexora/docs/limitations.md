@@ -1,8 +1,8 @@
 # Limitaciones
 
-Lo que NEXORA **no** hace en la versión 0.7.0, y los riesgos que conviene conocer antes de usarlo.
+Lo que NEXORA **no** hace en la versión 0.8.0, y los riesgos que conviene conocer antes de usarlo.
 Nada de lo que aparece aquí como "no existe" funciona hoy, aunque se mencione en el borrador de
-diseño o en la hoja de ruta.
+diseño, en la hoja de ruta o en una decisión aceptada y pendiente de implementar.
 
 ## Estado general
 
@@ -28,7 +28,7 @@ NEXORA es un proyecto en una fase temprana (anterior a la versión 1.0):
 | Listas con elementos de tipos distintos, o vacías sin tipo esperado | Todos los elementos tienen el mismo tipo. `[]` y `for x in []` necesitan un tipo esperado (`E2011`) |
 | Refinar una lista (`type NonEmpty = List[Int] where ...`) | Un tipo refinado solo puede construirse sobre `Int`, `Float`, `Bool`, `Text` u otro refinado (`E2016`) |
 | Funciones de `List` más allá de `length`, `get`, `append`, `concat` y `contains` | No hay `map`, `filter`, `fold`, ordenación, `slice` ni búsqueda de posiciones |
-| Mapas, registros, enumeraciones y opcionales | Las listas `List[T]` son inmutables y finitas; no hay otras estructuras de datos |
+| Mapas, enumeraciones y opcionales | Las listas `List[T]` son inmutables y finitas; los registros (sección 4.6 de la [especificación](language-spec.md)) son inmutables y no tienen métodos, refinamientos ni recursión. No hay otras estructuras de datos |
 | Tipos definidos por el usuario y genéricos | Las listas usan `List[T]`, pero el programa no puede declarar tipos genéricos ni funciones genéricas |
 | `trim`, mayúsculas, `split`, `replace`, búsqueda de posiciones | Existen `Text.length`, `Text.slice`, `Text.contains`, `Text.starts_with`, `Text.ends_with` y el orden entre textos ([especificación](language-spec.md), 8.1) |
 | Grafemas y normalización Unicode | Un carácter es un punto de código: una `e` con el acento combinado cuenta 2, y dos textos que se ven iguales pueden ser distintos para `==` |

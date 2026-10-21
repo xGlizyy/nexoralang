@@ -91,8 +91,10 @@ Los campos de cada nodo aparecen siempre, en el orden indicado. Un campo opciona
 
 | `kind` | Campos | Significado |
 |--------|--------|-------------|
-| `Program` | `types`: lista de `TypeDecl` · `functions`: lista de `Function` | El archivo completo, con los tipos y las funciones en el orden en que aparecen |
+| `Program` | `types`: lista de `TypeDecl` · `functions`: lista de `Function` · `records`: lista de `RecordDecl` | El archivo completo, con los tipos y las funciones en el orden en que aparecen. `records` es el último campo |
 | `TypeDecl` | `name`: texto · `name_span`: posición · `base`: `TypeRef` · `condition`: expresión · `message`: texto o `null` | Un tipo refinado. `message` es la explicación escrita tras la coma |
+| `RecordDecl` | `name`: texto · `name_span`: posición · `fields`: lista de `FieldDecl` | Un registro: `type Point = { x: Int, y: Int }` |
+| `FieldDecl` | `name`: texto · `name_span`: posición · `type`: `TypeRef` | Un campo de un registro |
 | `Function` | `name`: texto · `name_span`: posición · `params`: lista de `Param` · `return_type`: `TypeRef` · `contracts`: lista de `Contract` · `body`: `Block` · `examples`: lista de `Example` | Una función. `examples` es el último campo |
 | `Example` | `condition`: expresión · `message`: texto o `null` | Una cláusula `example`. `nex inspect` nunca la evalúa |
 | `Param` | `name`: texto · `name_span`: posición · `type`: `TypeRef` | Un parámetro |
@@ -113,12 +115,14 @@ Los campos de cada nodo aparecen siempre, en el orden indicado. Un campo opciona
 | `For` | `name`: texto · `name_span`: posición · `iterable`: expresión · `clauses`: lista de `LoopClause`, en el orden del código · `body`: `Block` | Un `for` sobre una `List[T]`. El iterador y su posición van primero; `body` contiene las sentencias, sin las cláusulas |
 | `ExprStatement` | `expression`: expresión | Una llamada usada como sentencia |
 | `Assign` | `name`: texto · `name_span`: posición · `value`: expresión | Una asignación. Solo es válida sobre una variable `var`; sobre una `let` o un parámetro va acompañada del error `E2007` |
+| `FieldAssign` | `target`: expresión · `name`: texto · `name_span`: posición · `value`: expresión | Una asignación a un campo de un registro. Un registro es inmutable, así que siempre va acompañada del error `E2025` |
 
 ### Expresiones
 
 Además de sus campos, toda expresión termina con el campo `type`: el tipo que el análisis estático
-le asigna (`"Int"`, `"Float"`, `"Bool"`, `"Text"`, `"Void"`, un tipo de lista como `"List[Int]"`
-o el nombre de un tipo refinado que declara el programa, como `"Percent"`), o `null` si no pudo
+le asigna (`"Int"`, `"Float"`, `"Bool"`, `"Text"`, `"Void"`, un tipo de lista como `"List[Int]"`,
+el nombre de un tipo refinado que declara el programa, como `"Percent"`, o el nombre de un
+registro, como `"Point"`), o `null` si no pudo
 determinarlo porque la expresión contiene un error. Una llamada a una función que no devuelve
 nada tiene tipo `"Void"`.
 
@@ -134,6 +138,9 @@ nada tiene tipo `"Void"`.
 | `Binary` | `operator`: texto · `operator_span`: posición · `left`: expresión · `right`: expresión | `operator` es uno de `+ - * / == != < <= > >= and or` |
 | `Group` | `expression`: expresión | Una expresión entre paréntesis |
 | `Call` | `callee`: texto · `callee_span`: posición · `arguments`: lista de expresiones · `qualifier`: texto o `null` | Llamada a una función propia o integrada, o comprobación de un tipo refinado (`Percent(x)`), cuyo tipo es el del tipo refinado. En una llamada cualificada (`Text.length(s)`), `callee` es el nombre completo (`"Text.length"`), `callee_span` lo abarca entero y `qualifier` es el tipo (`"Text"`); en cualquier otra, `qualifier` es `null` |
+| `RecordConstruction` | `name`: texto · `name_span`: posición · `fields`: lista de `FieldInitializer` | La construcción de un registro: `Point(x: 1, y: 2)`. Los campos van en el orden en que están escritos, que no tiene que ser el de la declaración |
+| `FieldInitializer` | `name`: texto · `name_span`: posición · `value`: expresión | El valor que se da a un campo en una construcción |
+| `FieldAccess` | `target`: expresión · `name`: texto · `name_span`: posición | La lectura de un campo: `p.x`. `target` es el valor del que se lee |
 
 ## Ejemplo
 
@@ -199,6 +206,7 @@ versión 2, y otra comprueba que este documento los menciona todos.
 
 | Versión | Publicada en | Cambios |
 |---------|--------------|---------|
+| `nexora.inspect/2` | `nexora` 0.8.0 | Añadidos, sin cambiar la versión: los nodos `RecordDecl` (`name`, `name_span`, `fields`), `FieldDecl` (`name`, `name_span`, `type`), `RecordConstruction` (`name`, `name_span`, `fields`), `FieldInitializer` (`name`, `name_span`, `value`) y `FieldAccess` (`target`, `name`, `name_span`); la sentencia `FieldAssign` (`target`, `name`, `name_span`, `value`); el campo `records` al final de `Program`; y `type` puede ser el nombre de un registro ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) |
 | `nexora.inspect/1` | `nexora` 0.2.0 | Primera versión |
 | `nexora.inspect/2` | `nexora` 0.7.0 | Añadidos, sin cambiar la versión: `arguments` (lista de `TypeRef`) en `TypeRef`, que es `[]` cuando el tipo no lleva corchetes y tiene un argumento cuando el tipo es `List[Int]`; el nodo `ListLiteral` (`elements`: lista de expresiones) para `[a, b]` y `[]`; el nodo `For` (`name`, `name_span`, `iterable`, `clauses`, `body`) para `for x in xs`; y `type` puede ser `List[...]` ([decisión 0013](decisions/0013-listas-y-for.md)) |
 | `nexora.inspect/2` | `nexora` 0.6.0 | Añadido, sin cambiar la versión: campo `qualifier` en `Call`, en todas las llamadas (`null` si no hay cualificador), después de `arguments` y antes de `type` ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)). `callee` puede contener un punto (`"Text.length"`) en las llamadas cualificadas. Un programa sin ellas produce el mismo documento que en la 0.5.1, más `"qualifier": null` en cada `Call`; el documento valida también con el esquema de la 0.5.1 |

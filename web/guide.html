@@ -92,6 +92,7 @@
       <li><a href="#refined-types">Refined types</a></li>
       <li><a href="#loops">Loops</a></li>
       <li><a href="#lists">Lists</a></li>
+      <li><a href="#records">Records</a></li>
       <li><a href="#texts">Texts</a></li>
       <li><a href="#diagnostics">Diagnostics</a></li>
       <li><a href="#limitations">Limitations</a></li>
@@ -102,7 +103,7 @@
     <p class="eyebrow">Language guide</p>
     <h1>NEXORA, as it works today</h1>
     <p class="lead">
-      A short tour of what the current interpreter (version 0.7) accepts. Every program on this page is
+      A short tour of what the current interpreter (version 0.8) accepts. Every program on this page is
       run by the project's tests, and every one can be tried in the <a href="playground.html">playground</a>.
     </p>
 
@@ -170,6 +171,7 @@ fn main() -&gt; Void {
           <tr><td><code>Bool</code></td><td>True or false</td><td><code>true</code>, <code>false</code></td></tr>
           <tr><td><code>Text</code></td><td>Text</td><td><code>"Hello"</code></td></tr>
           <tr><td><code>List[T]</code></td><td>An immutable <a href="#lists">list</a> of values of type <code>T</code></td><td><code>[1, 2, 3]</code></td></tr>
+          <tr><td>A <a href="#records">record</a></td><td>A type the program declares, with immutable fields</td><td><code>Point(x: 1, y: 2)</code></td></tr>
           <tr><td><code>Void</code></td><td>No value: only as a return type</td><td></td></tr>
         </tbody>
       </table>
@@ -439,6 +441,42 @@ true
       </figure>
     </section>
 
+    <section id="records">
+      <h2>Records</h2>
+      <p>
+        A record is a type the program declares, with fields that never change:
+        <code>type Point = { x: Int, y: Int }</code>. It is built by giving every field a value, by
+        name: <code>Point(x: 1, y: 2)</code>. The order of the fields does not matter, but each one is
+        given once and all of them are required.
+      </p>
+      <p>
+        A field is read with a dot, <code>p.x</code>, and the fields can be chained:
+        <code>segment.to.x</code>. A record never changes, so there is no way to assign to one of its
+        fields.
+      </p>
+      <p>
+        Two records are different types even when they have the same fields: the identity of a record
+        is the identity of its declaration. Two values of the <em>same</em> record are compared by
+        value, field by field.
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="run"><code>type Point = { x: Int, y: Int }
+type Segment = { from: Point, to: Point }
+
+fn main() -&gt; Void {
+    let origin = Point(x: 0, y: 0)
+    let corner = Point(x: 3, y: 4)
+    let segment = Segment(from: origin, to: corner)
+    print(segment.to.x)
+    print(segment)
+    print(corner == Point(x: 3, y: 4))
+}</code></pre>
+        <div class="guide-output"><pre data-expected>3
+Segment(from: Point(x: 0, y: 0), to: Point(x: 3, y: 4))
+true</pre></div>
+      </figure>
+    </section>
+
     <section id="texts">
       <h2>Texts</h2>
       <p>
@@ -509,7 +547,7 @@ true
       <ul class="bullets">
         <li><code>break</code> and <code>continue</code>, and <code>for</code> over anything that is not a list, such as a range of numbers or a text.</li>
         <li>Writing <code>xs[i]</code>, changing an element, or <code>map</code>, <code>filter</code> and sorting on lists.</li>
-        <li>Records and any other compound type besides lists.</li>
+        <li>Any other compound type besides lists and <a href="#records">records</a>: no maps, no enums, no <code>Option</code>.</li>
         <li>Operations on text beyond the ones in <a href="#texts">Texts</a>: no <code>trim</code>, upper case, <code>split</code> or <code>replace</code>.</li>
         <li>Reading input, files or the network: a program can only print.</li>
         <li>Modules: a program is a single file.</li>

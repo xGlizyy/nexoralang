@@ -310,10 +310,17 @@ def test_binary_result_is_differentially_equivalent_on_examples(monkeypatch):
         "context": tooling.get_context,
     }
     paths = sorted(EXAMPLE_DIR.rglob("*.nex"))
-    assert len(paths) == 20
+    assert len(paths) == 21
+    skipped: list[Path] = []
     for path in paths:
         text = path.read_text(encoding="utf-8")
         program, _ = parse_text(text)
+
+        if program.records:
+            # A record is a type the legacy rule does not know: comparing the two would
+            # compare a rule that can express it with one that cannot (decision 0014).
+            skipped.append(path)
+            continue
 
         new_checker = Checker()
         new_checked, new_diagnostics = new_checker.check(program)
@@ -332,6 +339,7 @@ def test_binary_result_is_differentially_equivalent_on_examples(monkeypatch):
         assert new_checked.refined == old_checked.refined, path
         assert new_checked.functions == old_checked.functions, path
         assert new_documents == old_documents, path
+    assert [path.name for path in skipped] == ["records.nex"]
 
 
 # E. Public contracts and the model bridge

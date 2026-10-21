@@ -34,6 +34,7 @@ EXPECTED = {
     "loops.nex": (0, 0),
     "texts.nex": (0, 0),
     "lists.nex": (0, 0),
+    "records.nex": (0, 0),
     # Rejected by the static analysis: never started.
     "invalid/syntax_error.nex": (1, 1),
     "invalid/name_errors.nex": (1, 1),

@@ -30,8 +30,10 @@ PROGRAM = (
 # Every node kind and its fields, in order. This is the contract of schema version 2:
 # removing or renaming anything here requires a new schema version.
 EXPECTED_FIELDS = {
-    "Program": ["kind", "span", "types", "functions"],
+    "Program": ["kind", "span", "types", "functions", "records"],
     "TypeDecl": ["kind", "span", "name", "name_span", "base", "condition", "message"],
+    "RecordDecl": ["kind", "span", "name", "name_span", "fields"],
+    "FieldDecl": ["kind", "span", "name", "name_span", "type"],
     "Function": ["kind", "span", "name", "name_span", "params", "return_type", "contracts", "body", "examples"],
     "Example": ["kind", "span", "condition", "message"],
     "Param": ["kind", "span", "name", "name_span", "type"],
@@ -40,6 +42,7 @@ EXPECTED_FIELDS = {
     "Block": ["kind", "span", "statements"],
     "Let": ["kind", "span", "name", "name_span", "declared_type", "value"],
     "Assign": ["kind", "span", "name", "name_span", "value"],
+    "FieldAssign": ["kind", "span", "target", "name", "name_span", "value"],
     "Return": ["kind", "span", "value"],
     "If": ["kind", "span", "condition", "then_block", "else_branch"],
     "ExprStatement": ["kind", "span", "expression"],
@@ -53,6 +56,9 @@ EXPECTED_FIELDS = {
     "Binary": ["kind", "span", "operator", "operator_span", "left", "right", "type"],
     "Group": ["kind", "span", "expression", "type"],
     "Call": ["kind", "span", "callee", "callee_span", "arguments", "qualifier", "type"],
+    "RecordConstruction": ["kind", "span", "name", "name_span", "fields", "type"],
+    "FieldInitializer": ["kind", "span", "name", "name_span", "value"],
+    "FieldAccess": ["kind", "span", "target", "name", "name_span", "type"],
 }
 
 
@@ -108,20 +114,33 @@ def test_statements_and_expressions_carry_kinds_types_and_positions():
 
 
 def test_every_node_has_exactly_the_documented_fields():
-    # A program that uses every node kind except Assign (which is always an error).
+    # A program that uses every node kind except Assign and FieldAssign (which are
+    # always an error).
     seen = {}
     refined = 'type Small = Int where value < 10, "Small numbers only"\n'
+    records = (
+        "type Point = { x: Int, y: Int }\n"
+        "fn origin() -> Point {\n"
+        "    let p = Point(x: 0, y: 0)\n"
+        "    return Point(x: p.x, y: p.y)\n"
+        "}\n"
+    )
     extra = (
         'fn extra(n: Small) -> Int {\n    example extra(1) == 2, "One more"\n'
         "    let xs: List[Int] = [1, 2]\n    return (n) + 1\n}\n"
     )
-    for node in walk(inspect(refined + PROGRAM + "\n" + extra)):
+    for node in walk(inspect(refined + records + PROGRAM + "\n" + extra)):
         seen.setdefault(node["kind"], list(node))
     assert_fields(seen)
-    assert set(seen) == set(EXPECTED_FIELDS) - {"Assign"}
+    assert set(seen) == set(EXPECTED_FIELDS) - {"Assign", "FieldAssign"}
 
     assign = inspect("fn main() -> Void {\n    let x = 1\n    x = 2\n}\n")["functions"][0]["body"]["statements"][1]
     assert list(assign) == EXPECTED_FIELDS["Assign"]
+
+    field_assign = inspect(
+        "type Point = { x: Int }\nfn main() -> Void {\n    let p = Point(x: 1)\n    p.x = 2\n}\n"
+    )["functions"][0]["body"]["statements"][1]
+    assert list(field_assign) == EXPECTED_FIELDS["FieldAssign"]
 
 
 def assert_fields(seen: dict) -> None:
