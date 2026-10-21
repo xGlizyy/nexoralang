@@ -110,6 +110,7 @@ anterior de ese mismo día, 522 superadas, solo en Windows, corresponde a un est
 | El mismo árbol con la revisión final de la auditoría (pruebas sin esperas fijas, apagado por pasos) | **798 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
 | El mismo árbol con el bloqueo de las pruebas de integración, los mínimos de Node medidos y `captcha.test.js` sin dependencia de orden | **810 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
 | `5eae954` con la lista cerrada de ramas de Node en las guardas de integración, sin commit | **811 superadas**, 0 fallos, 0 omitidas, en una ejecución | No se ejecutó |
+| `e4ec28f` (web y playground al día con el lenguaje 0.7) con `List` en los tipos de `language_info`, sin commit | **818 superadas**, 0 fallos, 0 omitidas, en una ejecución, el 21 de octubre de 2026 | No se ejecutó |
 
 En Linux se usó una copia nueva del árbol de trabajo, comprobada archivo por archivo con SHA-256, con
 las dependencias instaladas con `npm ci` y el intérprete de `nexora/.venv` (Python 3.12.3). La fila
@@ -320,6 +321,12 @@ límite de cada rama, y una prueba nueva comprueba que todo lo que admite `engin
 ejecución, el 18 de octubre de 2026: 813 superadas, 0 fallos, 0 omitidas, código de salida 0, en 26,3 s.
 La ejecución anterior, con 811 superadas, fue la de la fila a la que se refiere este párrafo. No se ha
 ejecutado con Node 22.23.2 ni con 24.18.1, ni en Linux ni en macOS.
+
+En la fila de 818, las listas de palabras del playground, la guía y la documentación de la web se
+ponen al día con el lenguaje 0.7 (listas y `for`): antes de `e4ec28f`, tres pruebas comparaban esas
+listas con el intérprete real y fallaban. `language_info()` incluye además `List` en `types`, y una
+prueba del coloreado comprueba que `List` se marca como tipo. Código de salida 0, 29 s. No se ha ejecutado
+con Node 22.23.2 ni con 24.18.1, ni en Linux ni en macOS.
 
 #### Pruebas de integración con MySQL: ejecutadas una vez
 

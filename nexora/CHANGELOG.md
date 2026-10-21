@@ -46,6 +46,7 @@ realmente implementado, las partes D01 (modelo de tipos), D08 (listas) y D09 (`f
   es parcial y las reglas no migradas conservan sus cadenas.
 - **Herramientas**: `nex inspect` añade `arguments` a `TypeRef`, el nodo `ListLiteral` y el nodo
   `For`; `type` puede ser `List[...]`. `nex context` distingue `while` y `for` en `loops.kind`.
+  `language_info()` incluye `List` en `types`, para que un editor lo coloree como los demás tipos.
 - **Ejemplo** [`examples/lists.nex`](examples/lists.nex), con su salida registrada en las pruebas.
 
 ### Cambiado

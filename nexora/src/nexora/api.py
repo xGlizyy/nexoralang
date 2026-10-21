@@ -36,6 +36,7 @@ from .diagnostics import CONTRACT, MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeErr
 from .interpreter import MAX_CALL_DEPTH, ExampleRun, run, run_example
 from .pipeline import Analysis, analyze
 from .tokens import KEYWORDS, RESERVED_WORDS
+from .types import LIST
 from .values import show_value
 from .version import __version__
 
@@ -318,7 +319,7 @@ def language_info() -> dict:
         "version": __version__,
         "keywords": sorted(KEYWORDS),
         "reserved_words": sorted(RESERVED_WORDS),
-        "types": list(KNOWN_TYPES),
+        "types": [*KNOWN_TYPES, LIST.name],
         "builtins": sorted(BUILTINS),
         "limits": {
             "max_call_depth": MAX_CALL_DEPTH,

@@ -10,7 +10,7 @@ export const FALLBACK_LANGUAGE = Object.freeze({
     'and', 'decreases', 'else', 'ensures', 'example', 'false', 'fn', 'for', 'if', 'in', 'invariant', 'let',
     'not', 'or', 'requires', 'return', 'true', 'type', 'var', 'where', 'while',
   ],
-  types: ['Void', 'Int', 'Float', 'Bool', 'Text'],
+  types: ['Void', 'Int', 'Float', 'Bool', 'Text', 'List'],
   builtins: [
     'Float.can_parse', 'Float.parse', 'Int.can_parse', 'Int.parse', 'List.append', 'List.concat',
     'List.contains', 'List.get', 'List.length', 'Text.contains', 'Text.ends_with', 'Text.length',

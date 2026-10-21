@@ -422,6 +422,9 @@ describe('highlighting and positions', () => {
     assert.deepEqual(classes('break'), [['reserved', 'break']]);
     // The function of a type is a built-in function; the type before the '.' stays a type.
     assert.deepEqual(classes('Text.length(name)'), [['type', 'Text'], ['builtin', 'length']]);
+    assert.deepEqual(classes('xs: List[Int] = List.append(xs, 0)'), [
+      ['type', 'List'], ['type', 'Int'], ['op', '='], ['type', 'List'], ['builtin', 'append'], ['num', '0'],
+    ]);
     assert.deepEqual(classes('Int.parse(t) + length(t)'), [['type', 'Int'], ['builtin', 'parse'], ['op', '+'], ['fn', 'length']]);
   });
 
