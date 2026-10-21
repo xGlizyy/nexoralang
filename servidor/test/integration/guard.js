@@ -35,6 +35,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { operatingSystemVariables } from '../platform.js';
+
 export const TEST_DATABASE = 'nexora_test';
 export const TEST_HOST = '127.0.0.1';
 // La marca vive en su propio esquema, donde las dos cuentas solo pueden leer: ninguna prueba puede
@@ -636,19 +638,18 @@ export function migratorProcessEnv(env = process.env) {
 
 // Las únicas variables que puede tener el proceso de migraciones: las de migratorProcessEnv.
 const MIGRATION_CHILD_VARIABLES = Object.freeze(['DB_HOST', 'DB_NAME', 'DB_PASSWORD', 'DB_PORT', 'DB_USER', 'NODE_ENV', 'PATH', 'SystemRoot']);
-// En Windows, libuv (bajo Node) añade a todo proceso hijo estas variables del sistema, copiadas del
-// padre, aunque no se le pasen: son del sistema operativo, no de configuración, y no llevan
-// credenciales de la base de datos. Solo se admiten en Windows.
-const WINDOWS_CHILD_VARIABLES = Object.freeze(['HOMEDRIVE', 'HOMEPATH', 'LOGONSERVER', 'SYSTEMDRIVE', 'TEMP', 'USERDOMAIN', 'USERNAME', 'USERPROFILE', 'WINDIR']);
+// Las variables que el sistema operativo añade a todo proceso hijo (Windows: las que copia libuv
+// del padre; macOS: __CF_USER_TEXT_ENCODING). Las admite operatingSystemVariables() solo en su
+// plataforma: en otra, serían una fuga del entorno del padre, y no se admiten.
 
 /**
  * Dentro del proceso de migraciones (migrate-child.js): su entorno tiene que ser exactamente el de
- * migratorProcessEnv (más, en Windows, las variables del sistema que añade libuv), con la cuenta de
- * migraciones y nada más (ni NODE_OPTIONS, ni variables TEST_*, ni la cuenta de la aplicación).
- * Devuelve la configuración de conexión.
+ * migratorProcessEnv (más, en su plataforma, las variables que el sistema operativo añade a todo
+ * proceso hijo), con la cuenta de migraciones y nada más (ni NODE_OPTIONS, ni variables TEST_*, ni
+ * la cuenta de la aplicación). Devuelve la configuración de conexión.
  */
 export function readMigrationChildConfig(env, platform = process.platform) {
-  const allowed = [...MIGRATION_CHILD_VARIABLES, ...(platform === 'win32' ? WINDOWS_CHILD_VARIABLES : [])].map((name) => name.toLowerCase());
+  const allowed = [...MIGRATION_CHILD_VARIABLES, ...operatingSystemVariables(platform)].map((name) => name.toLowerCase());
   const extra = Object.keys(env).filter((name) => !allowed.includes(name.toLowerCase())).sort();
   if (extra.length > 0) fail(`the migration process has unexpected variables: ${extra.join(', ')}`);
   const { prefix, user } = ROLES.migrator;

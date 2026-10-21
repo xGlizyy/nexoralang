@@ -13,6 +13,9 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 import { after, before, describe, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+import { fileSystemIgnoresCase } from './platform.js';
 
 const { createApp } = await import('../src/app.js');
 const { API_POLICY, HSTS, pagePolicy } = await import('../src/security-headers.js');
@@ -20,6 +23,9 @@ const { API_POLICY, HSTS, pagePolicy } = await import('../src/security-headers.j
 const web = (file) => readFileSync(new URL(`../../web/${file}`, import.meta.url), 'utf8');
 // Every page of the site, whatever it has: the same headers have to reach a page added later.
 const PAGES = readdirSync(new URL('../../web/', import.meta.url)).filter((name) => name.endsWith('.html')).sort();
+// Si el disco no distingue mayúsculas de minúsculas, /LOGIN y /login son la misma página: se
+// pregunta al disco, en el directorio que se sirve, en vez de suponerlo por el sistema operativo.
+const caseInsensitive = fileSystemIgnoresCase(fileURLToPath(new URL('../../web/', import.meta.url)));
 const AUTH_PATHS = ['/login', '/login.html', '/signup', '/signup.html'];
 // The policy the playground and the guide had before it was extended to every page.
 const PREVIOUS_PLAYGROUND_POLICY = "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
@@ -183,10 +189,10 @@ describe('the page policy follows the file actually served (D2)', () => {
     assert.equal(cached.headers['content-security-policy'], AUTH_POLICY);
   });
 
-  test('upper case: served on a case-insensitive file system (Windows) with the same policy; absent on Linux', async () => {
+  test('upper case: served on a case-insensitive file system with the same policy; absent on a case-sensitive one', async () => {
     for (const route of ['/LOGIN', '/Login.html', '/PLAYGROUND']) {
       const response = await server.get(route);
-      if (process.platform === 'win32') {
+      if (caseInsensitive) {
         assert.equal(response.status, 200, route);
         const expected = route.toLowerCase().includes('login') ? AUTH_POLICY : pagePolicy();
         assert.equal(response.headers.get('content-security-policy'), expected, route);

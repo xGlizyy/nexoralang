@@ -7,7 +7,7 @@ Estado: existe un intérprete (versión 0.9.0) que ejecuta un subconjunto del le
 Lo que distingue a NEXORA: los requisitos de un programa se escriben en el propio código y se comprueban de forma determinista ([decisión 0006](nexora/docs/decisions/0006-requisitos-verificables.md)).
 
 - [nexora/](nexora/): núcleo del lenguaje. Intérprete, comando `nex`, documentación ([nexora/docs/index.md](nexora/docs/index.md)), ejemplos ejecutables y pruebas. Empieza por [nexora/README.md](nexora/README.md).
-- [.github/workflows/nexora-ci.yml](.github/workflows/nexora-ci.yml): integración continua del núcleo para GitHub Actions. Está preparada, pero no se ha ejecutado nunca porque el proyecto aún no tiene repositorio remoto.
+- [.github/workflows/nexora-ci.yml](.github/workflows/nexora-ci.yml): integración continua del núcleo para GitHub Actions. Se ejecuta en cada cambio a `main`, en Linux, Windows y macOS.
 - [docs/fase-1-diseno.md](docs/fase-1-diseno.md): borrador del diseño completo (sintaxis, tipos, funciones y reglas). Describe hacia dónde va el lenguaje, no lo que funciona hoy.
 - [ejemplos/tienda.nx](ejemplos/tienda.nx) y [ejemplos/soporte_ia.nx](ejemplos/soporte_ia.nx): ejemplos del borrador de diseño. Usan sintaxis que el intérprete todavía no admite, así que no se pueden ejecutar.
 - [npm/](npm/): paquete de npm (`nexora-lang`) que instala el comando `nex`. Necesita Python 3.11 o superior en la máquina. Preparado y probado en local, sin publicar.

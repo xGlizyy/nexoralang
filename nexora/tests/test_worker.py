@@ -11,6 +11,13 @@ from nexora import __version__
 
 HELLO = 'fn main() -> Void {\n    print("Hello from NEXORA")\n}\n'
 POSIX_ONLY = pytest.mark.skipif(os.name == "nt", reason="the operating-system limits use POSIX `resource` and `signal`")
+# The limit of memory is the address space of the process (RLIMIT_AS). The kernel of Linux enforces
+# it; the one of macOS accepts it and does not apply it, so there the program keeps growing until
+# the machine runs out of memory. Windows has no `resource` at all.
+MEMORY_LIMIT_ONLY = pytest.mark.skipif(
+    os.name == "nt" or sys.platform == "darwin",
+    reason="the operating system does not enforce the limit of address space (RLIMIT_AS)",
+)
 
 
 def worker(request, *, raw: bytes | None = None, timeout: float = 60) -> tuple[int, dict, str]:
@@ -98,13 +105,14 @@ def test_isolated_mode_ignores_python_environment_variables(tmp_path):
     assert json.loads(process.stdout)["output"] == "Hello from NEXORA\n"
 
 
-# Limits enforced by the operating system. They cannot run on Windows.
+# Limits enforced by the operating system. They cannot run on Windows, and the limit of memory
+# cannot run on macOS either (see MEMORY_LIMIT_ONLY).
 
 DOUBLE = 'fn grow(text: Text, times: Int) -> Text {\n    if times == 0 {\n        return text\n    }\n    return grow(text + text, times - 1)\n}\nfn main() -> Void {\n    let big = grow("ab", 40)\n    print("unreachable")\n}'
 SLOW = "fn fib(n: Int) -> Int {\n    if n < 2 {\n        return n\n    }\n    return fib(n - 1) + fib(n - 2)\n}\nfn main() -> Void {\n    print(fib(45))\n}"
 
 
-@POSIX_ONLY
+@MEMORY_LIMIT_ONLY
 def test_memory_limit_is_enforced_by_the_operating_system():
     _, response, _ = worker({"action": "run", "code": DOUBLE, "limits": {"memory_bytes": 256 * 1024 * 1024}})
     assert response["status"] == "memory_limit"

@@ -6,6 +6,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { examplesDir, fakeWorker, HELLO, inMain, SLOW, startServer, testConfig } from './helpers.js';
+import { operatingSystemVariables } from './platform.js';
 
 const RESULT_FIELDS = ['schema', 'action', 'status', 'output', 'diagnostics', 'message', 'duration_ms', 'version'];
 const DIAGNOSTIC_FIELDS = [
@@ -365,15 +366,16 @@ describe('isolation of the worker', () => {
     const server = await startServer({ workerCommand: fakeWorker('environment') });
     try {
       const seen = JSON.parse((await server.run(HELLO)).json.output);
-      // El servidor solo pasa SystemRoot y PATH. En Windows, el sistema añade por su cuenta unas
-      // pocas variables básicas del usuario a todo proceso nuevo; ninguna es del servidor.
+      // El servidor solo pasa SystemRoot y PATH. El sistema operativo añade por su cuenta unas
+      // pocas variables a todo proceso nuevo (Windows: las del usuario; macOS:
+      // __CF_USER_TEXT_ENCODING); ninguna es del servidor.
       const passed = new Set(['SYSTEMROOT', 'PATH']);
-      const addedByWindows = new Set([
-        'HOMEDRIVE', 'HOMEPATH', 'LOGONSERVER', 'SYSTEMDRIVE', 'TEMP', 'USERDOMAIN', 'USERNAME', 'USERPROFILE', 'WINDIR',
-      ]);
+      // El sistema operativo añade por su cuenta algunas variables a todo proceso hijo (Windows,
+      // macOS). No vienen del servidor: ver test/platform.js.
+      const addedByTheSystem = operatingSystemVariables();
       const unexpected = seen.variables.filter((name) => {
         const upper = name.toUpperCase();
-        return !passed.has(upper) && !(process.platform === 'win32' && addedByWindows.has(upper));
+        return !passed.has(upper) && !addedByTheSystem.includes(upper);
       });
       assert.deepEqual(unexpected, []);
       for (const name of Object.keys(process.env)) {

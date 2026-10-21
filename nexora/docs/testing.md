@@ -326,21 +326,21 @@ hecho la causa del bloqueo de mysql2. La prueba de esas versiones se reescribe c
 límite de cada rama, y una prueba nueva comprueba que todo lo que admite `engines` en
 `servidor/package.json` está dentro de esa lista. `npm test`, en Windows 11 con Node 24.21.0, una
 ejecución, el 18 de octubre de 2026: 813 superadas, 0 fallos, 0 omitidas, código de salida 0, en 26,3 s.
-La ejecución anterior, con 811 superadas, fue la de la fila a la que se refiere este párrafo. No se ha
-ejecutado con Node 22.23.2 ni con 24.18.1, ni en Linux ni en macOS.
+La ejecución anterior, con 811 superadas, fue la de la fila a la que se refiere este párrafo. Esa
+combinación de Node se ha ejecutado después en Linux, Windows y macOS por la integración continua.
 
 En la fila de 818, las listas de palabras del playground, la guía y la documentación de la web se
 ponen al día con el lenguaje 0.7 (listas y `for`): antes de `e4ec28f`, tres pruebas comparaban esas
 listas con el intérprete real y fallaban. `language_info()` incluye además `List` en `types`, y una
-prueba del coloreado comprueba que `List` se marca como tipo. Código de salida 0, 29 s. No se ha ejecutado
-con Node 22.23.2 ni con 24.18.1, ni en Linux ni en macOS.
+prueba del coloreado comprueba que `List` se marca como tipo. Código de salida 0, 29 s. Esa
+combinación de Node se ha ejecutado después en Linux, Windows y macOS por la integración continua.
 
 En la fila de 821, la web y el servidor se ponen al día con el lenguaje 0.8 (registros): el catálogo
 de ejemplos del playground ofrece `records.nex`, el coloreado del editor reconoce los tipos que
 declara el programa (un registro se marca como tipo, no como función), la hoja de ruta de la
 documentación separa lo que ya está de lo que sigue, y la guía describe los registros con un
-ejemplo que las pruebas ejecutan con el intérprete real. Código de salida 0, 32 s. No se ha ejecutado
-con Node 22.23.2 ni con 24.18.1, ni en Linux ni en macOS.
+ejemplo que las pruebas ejecutan con el intérprete real. Código de salida 0, 32 s. Esa combinación de
+Node se ha ejecutado después en Linux, Windows y macOS por la integración continua.
 
 #### Pruebas de integración con MySQL: ejecutadas una vez
 
@@ -430,7 +430,8 @@ soporte desde el 30 de abril de 2026 y las versiones anteriores de las ramas 22 
 seguridad publicados. Dentro de ese rango se han probado en local 22.23.3 y 24.21.0 (Windows 11); los
 mínimos exactos, 22.23.2 y 24.18.1, no. La integración continua prueba esos mínimos fijos, la última
 versión de las ramas 22 y 24 y, en Linux y sin bloquear, Node 26, que queda fuera de `engines` hasta
-validarlo; no se ha ejecutado nunca. Los mínimos de `engines` y los de las guardas son cosas
+validarlo; esa ejecución experimental ya se ha hecho, sin bloquear el flujo. Los mínimos de
+`engines` y los de las guardas son cosas
 distintas: `engines` dice dónde se admite el servidor, y las guardas, dónde se pueden ejecutar las
 pruebas de integración. Una prueba de `integration-guard.test.js` comprueba que todo lo que admite
 `engines` está dentro de lo que admiten las guardas. En cualquier Node que las guardas no admiten
@@ -730,15 +731,20 @@ En la raíz del repositorio, `.github/workflows/nexora-ci.yml` define las mismas
 GitHub Actions: análisis del código, pruebas con cobertura y generación del paquete, en Linux,
 Windows y macOS con Python 3.11, 3.12 y 3.13.
 
-**Ese flujo no se ha ejecutado nunca**: el proyecto no tiene todavía un repositorio en GitHub. En
-Linux, las pruebas se han ejecutado a mano ([Linux](#linux)); en macOS, y en Windows con Python 3.11
-y 3.13, no se sabe si pasan. Por eso el
-`README` no muestra ninguna insignia de estado.
+**Ese flujo se ejecuta en cada cambio a `main`.** La primera ejecución real, el 21 de octubre de
+2026, encontró tres diferencias de macOS que no se habían visto hasta entonces: el sistema operativo
+añade `__CF_USER_TEXT_ENCODING` a todo proceso hijo, el disco no distingue mayúsculas de
+minúsculas, y el kernel de macOS acepta el límite del espacio de direcciones pero no lo aplica.
+Las tres están corregidas, y en [Limitaciones](limitations.md) y en [Playground](playground.md) se
+dice qué límites no hace cumplir macOS.
+
+El `README` no muestra ninguna insignia de estado.
 
 ## Lo que las pruebas no cubren
 
 - **Otras plataformas.** Se han ejecutado en Windows 11 con Python 3.12 y en Linux (Ubuntu 24.04
-  sobre WSL 2) con Python 3.11, 3.12 y 3.13. macOS, otras distribuciones y Linux sin WSL, no.
+  sobre WSL 2) con Python 3.11, 3.12 y 3.13, y en Linux, Windows y macOS por la integración
+  continua. Otras distribuciones y Linux sin WSL, no.
 - **Rendimiento.** No hay pruebas de velocidad ni de consumo de memoria.
 - **Tiempo y memoria sin límite.** Un programa puede tardar o consumir memoria indefinidamente; no
   hay pruebas sobre ello porque el intérprete no lo impide.

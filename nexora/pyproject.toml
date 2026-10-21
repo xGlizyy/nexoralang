@@ -21,6 +21,11 @@ classifiers = [
     "Topic :: Software Development :: Interpreters",
 ]
 
+[project.urls]
+Repository = "https://github.com/xGlizyy/nexoralang"
+Issues = "https://github.com/xGlizyy/nexoralang/issues"
+Changelog = "https://github.com/xGlizyy/nexoralang/blob/main/nexora/CHANGELOG.md"
+
 [project.optional-dependencies]
 # Optional integration: the MCP server (nex-mcp) needs the official MCP Python SDK, version 2.
 mcp = ["mcp>=2,<3"]

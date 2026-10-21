@@ -124,8 +124,10 @@ comprueban que el intérprete no usa `eval` ni `exec`. Aun así:
   que el proceso consuma recursos.
 - El [playground](playground.md) sí ejecuta cada programa en un proceso aparte con límites de
   tiempo, de salida y de tamaño, pero **eso tampoco es una sandbox**: el aislamiento con contenedor
-  está configurado y **no se ha probado**, y los límites de memoria y CPU del sistema operativo solo
-  existen en Linux y macOS, donde no se han ejecutado. No está desplegado en ningún servidor.
+  está configurado y **no se ha probado**. Los límites de CPU, de archivos y de procesos del sistema
+  operativo existen en Linux y macOS, y se han comprobado en los dos; el límite de memoria del
+  sistema operativo solo se cumple en Linux: en macOS, el kernel lo acepta y no lo aplica. No está
+  desplegado en ningún servidor.
 - El servidor MCP no ejecuta programas, pero se ejecuta con los permisos de quien lo arranca.
 - No ha sido auditado.
 
@@ -134,14 +136,17 @@ recursos sea un problema. El alcance exacto está en [`SECURITY.md`](../SECURITY
 
 ## Plataformas
 
-Solo se ha comprobado en Windows 11 con Python 3.12. Linux, macOS y otras versiones de Python no se
-han probado todavía; ver [Instalación](installation.md#qué-se-ha-comprobado).
+Comprobado en Windows 11 con Python 3.12, y en Linux (Ubuntu 24.04 sobre WSL 2) con Python 3.11,
+3.12 y 3.13; ejecutado además en Linux, Windows y macOS con Python 3.11, 3.12 y 3.13 por la
+[integración continua](testing.md#integración-continua). Otras distribuciones y Linux sin WSL no se
+han probado; ver [Instalación](installation.md#qué-se-ha-comprobado).
 
 ## Proyecto
 
 - Se distribuye con la licencia MIT: sin garantía de ningún tipo.
 - No hay repositorio público, ni canal de contacto, ni proceso de publicación de versiones.
-- La integración continua está preparada pero no se ha ejecutado nunca.
+- La integración continua se ejecuta en cada cambio a `main`, en Linux, Windows y macOS, pero no hay
+  una regla escrita de qué se integra: cada cambio se revisa a mano.
 - Los ejemplos de `ejemplos/*.nx` y el documento `docs/fase-1-diseno.md`, en la raíz del
   repositorio, describen un diseño anterior y más amplio. Usan una sintaxis que el intérprete **no**
   admite. La referencia válida es la [especificación](language-spec.md).

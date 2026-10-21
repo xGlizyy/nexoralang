@@ -15,11 +15,13 @@ Request:
 
 Response: the dictionary returned by `nexora.api`, plus "duration_ms" and "version".
 
-The limits come from the host, never from the visitor. On POSIX systems the memory, CPU
-and wall-clock limits are enforced by the operating system (`resource`, `signal`). On
-Windows those three are not available and are ignored: there the only protections are
-the ones the host applies from outside (killing the process on timeout). See
-docs/playground.md for what this does and does not guarantee.
+The limits come from the host, never from the visitor. On POSIX systems the CPU and
+wall-clock limits are enforced by the operating system (`resource`, `signal`), and so are the
+limits of files and processes. The limit of memory is the address space of the process
+(RLIMIT_AS): the kernel of Linux enforces it, the one of macOS accepts it and does not apply
+it. On Windows none of those are available and are ignored: there the only protections are the
+ones the host applies from outside (killing the process on timeout). See docs/playground.md for
+what this does and does not guarantee.
 
 This process is not a sandbox by itself. It runs with the permissions of whoever starts it.
 """

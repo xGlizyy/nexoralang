@@ -16,7 +16,7 @@ ejecutarlo en local y cómo desplegarlo en un servidor propio.
 | API del servidor (`/api/playground`) | Implementada y probada |
 | Página (`web/playground.html`) | Implementada. Lógica probada de forma automática; el dibujado, comprobado a mano en Chrome |
 | Límites de tiempo, tamaño, salida, concurrencia y peticiones | Implementados y probados |
-| Límites de memoria y CPU del sistema operativo | Implementados para Linux y macOS. Probados en Linux (Ubuntu 24.04 sobre WSL 2) con `tests/test_worker.py`, que lanza el worker como proceso, sin contenedor; en macOS, no. En Windows no existen |
+| Límites de memoria y CPU del sistema operativo | Implementados para Linux y macOS, pero solo los cumple el sistema operativo donde existen: el de CPU en los dos, el de memoria solo en Linux (en macOS, el kernel acepta el límite del espacio de direcciones y no lo aplica). Probados en Linux (Ubuntu 24.04 sobre WSL 2) con `tests/test_worker.py`, que lanza el worker como proceso, sin contenedor; en macOS, solo el de CPU. En Windows no existen |
 | Aislamiento en contenedor (Docker) | Configuración preparada. **No probada**: no había Docker en el equipo de desarrollo |
 | Despliegue en un servidor público | **No realizado** |
 
@@ -190,7 +190,7 @@ el servidor.
 | Tiempo de ejecución | 2 s | `PLAYGROUND_TIMEOUT_MS` | El proceso se mata; estado `timeout` |
 | Salida | 64 KiB | `PLAYGROUND_MAX_OUTPUT_BYTES` | El programa se detiene; estado `output_limit` |
 | Longitud de un texto | 262 144 caracteres | `PLAYGROUND_MAX_TEXT_CHARS` | Error de ejecución `E3006` |
-| Memoria del worker | 512 MiB | `PLAYGROUND_MEMORY_MB` | Estado `memory_limit`. **Solo en Linux y macOS** |
+| Memoria del worker | 512 MiB | `PLAYGROUND_MEMORY_MB` | Estado `memory_limit`. **Solo en Linux**: en macOS, el sistema operativo acepta el límite pero no lo aplica |
 | Programas a la vez | 4 | `PLAYGROUND_MAX_CONCURRENT` | Los siguientes esperan en la cola |
 | Peticiones en espera | 8 | `PLAYGROUND_MAX_QUEUE` | HTTP 503 `busy` |
 | Peticiones por cliente | 30 por minuto | `PLAYGROUND_RATE_LIMIT`, `PLAYGROUND_RATE_WINDOW_MS` | HTTP 429 |
@@ -226,12 +226,16 @@ entrada estándar y con los argumentos: el protocolo no los lleva.
 - Arranca en un directorio temporal vacío, con Python en modo aislado (`-I`).
 - El servidor lo mata al superar el tiempo máximo y descarta una respuesta demasiado grande.
 - El worker limita la salida y la longitud de los textos.
-- En Linux y macOS pide al sistema operativo límites de memoria, de CPU, de creación de archivos y
-  de creación de procesos, y un temporizador que termina el proceso aunque el servidor no lo haga.
+- En Linux y macOS pide al sistema operativo límites de CPU, de creación de archivos y de creación de
+  procesos, y un temporizador que termina el proceso aunque el servidor no lo haga. El límite de
+  memoria (el espacio de direcciones del proceso) solo se pide y se cumple en Linux: en macOS, el
+  kernel lo acepta y no lo aplica.
 
 *No cubre:* **esto no es una sandbox.** El worker se ejecuta con el mismo usuario y los mismos
 permisos que el servidor web: si el intérprete tuviera un defecto explotable, ese proceso podría
-leer lo que el usuario del servidor puede leer. En Windows, además, no hay límite de memoria.
+leer lo que el usuario del servidor puede leer. En Windows, además, no hay límite de memoria; en
+macOS, el límite de memoria existe pero no lo hace cumplir el sistema operativo: solo lo frenan el
+tiempo máximo y, en un contenedor, sus límites.
 
 ### 3. El contenedor (necesario para un servicio público)
 
@@ -317,7 +321,7 @@ cd servidor && npm test
 | Archivo | Qué comprueba |
 |---------|---------------|
 | `nexora/tests/test_api.py` | `check_source` y `run_source`; límites de salida y de texto; que la API y `nex` dan el mismo resultado en todos los ejemplos |
-| `nexora/tests/test_worker.py` | El proceso worker: protocolo, peticiones malformadas, modo aislado. Los límites del sistema operativo solo se ejecutan en Linux y macOS |
+| `nexora/tests/test_worker.py` | El proceso worker: protocolo, peticiones malformadas, modo aislado. Los límites del sistema operativo se ejecutan en Linux y macOS; el de memoria, solo en Linux |
 | `servidor/test/playground-api.test.js` | La API por HTTP contra el intérprete real: validación, códigos HTTP, esquema, límites, tiempo agotado, concurrencia, fallos del worker, entorno del worker, orígenes, y paridad con la línea de comandos |
 | `servidor/test/playground-containers.test.js` | El ciclo de vida de los contenedores con un Docker falso (`test/fixtures/fake-docker.js`), sin Docker: nombre único por petición, eliminación y confirmación tras tiempo agotado, respuesta excesiva o error, hueco ocupado hasta confirmar, intentos limitados, ningún intento si la herramienta no arranca, y el [formato de la orden de contenedor](#formato-de-la-orden-de-contenedor): la orden documentada en `.env.example`, esta guía y el `Dockerfile`, opciones ausentes, repetidas, con otro valor o desconocidas, y elementos después de la imagen |
 | `servidor/test/playground-config.test.js` | La activación con la configuración real: desactivado sin `PLAYGROUND_ENABLED`, vacía o `false`; activado solo con `true`; error al arrancar con cualquier otro valor; `/status` y 503 en las demás rutas sin arrancar el worker, y un programa real con `true`; en producción, que el playground activado sin la orden de contenedor impide arrancar |
@@ -757,8 +761,8 @@ servicio.
 | Sistema de archivos de solo lectura | Añade `--read-only --entrypoint python … -c "open('/x','w')"` | Falla |
 | Usuario sin privilegios | `… --entrypoint id nexora-worker` | `uid=65534` |
 | Límite de tiempo | Ejecuta desde la página un programa lento (por ejemplo `fib(40)`) | Estado `timeout`; con `docker ps` no queda ningún contenedor pasados unos segundos |
-| Límite de memoria | Un programa que duplica un texto muchas veces | `E3006` o `memory_limit`; el servidor sigue respondiendo |
-| Las pruebas del sistema operativo | `python -m pytest tests/test_worker.py` en el servidor | Las tres pruebas marcadas como POSIX pasan |
+| Límite de memoria | Un programa que duplica un texto muchas veces | `E3006` o `memory_limit` (en Linux); el servidor sigue respondiendo |
+| Las pruebas del sistema operativo | `python -m pytest tests/test_worker.py` en el servidor | Las dos pruebas marcadas como POSIX pasan en Linux y macOS; la del límite de memoria, solo en Linux |
 | Concurrencia | Varias peticiones lentas a la vez | Las que no caben reciben 503 `busy`; nunca hay más contenedores que `PLAYGROUND_MAX_CONCURRENT` |
 | *Pendiente:* el nombre identifica un solo contenedor | Con una petición lenta en marcha, toma su nombre de `docker ps --filter name=nexora-pg-`. Ejecuta `docker ps -aq --filter name=^<nombre>$`, y lo mismo con el nombre sin su último carácter. Repite el primero cuando la petición haya terminado | El primero devuelve un identificador; el del nombre recortado, nada; el primero, repetido al final, nada |
 | *Pendiente:* `--init` está activo | Con una petición lenta en marcha, `docker inspect -f '{{.HostConfig.Init}}' <nombre>` y `docker top <nombre>` | `HostConfig.Init` es `true`, y el primer proceso que muestra `docker top` es `docker-init`. `docker top` muestra los procesos desde fuera del contenedor: indica que `docker-init` es el primero, no lo demuestra como proceso 1 dentro del contenedor. La fila «Límite de tiempo» comprueba además que el temporizador interno del worker termina el programa |

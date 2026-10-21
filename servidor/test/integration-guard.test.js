@@ -15,6 +15,7 @@ import {
   releaseRunLock, resetAppTables, resetOwnVariablesForTests, resetRunnerForTests, runVerifiedMigration, RUN_LOCK,
   undoAfter, useAppDatabase, verifyQueryable, assertRunLock, hookSupportProblem,
 } from './integration/guard.js';
+import { operatingSystemVariables } from './platform.js';
 
 // El gancho de preflight.js necesita module.registerHooks y una de las ramas medidas de HOOK_MINIMUMS:
 // Node 22.22.3 o posterior en la rama 22, o 24.14.0 o posterior en la rama 24; ninguna otra rama
@@ -922,6 +923,22 @@ describe('the migration process (migrate-child.js): its own environment and acco
     assert.equal(readMigrationChildConfig(windows, 'win32').user, 'nexora_test_migrator');
     refused(() => readMigrationChildConfig(windows, 'linux'), /unexpected variables: HOMEDRIVE, HOMEPATH, LOGONSERVER/);
     refused(() => readMigrationChildConfig({ ...windows, NODE_OPTIONS: '--import x' }, 'win32'), /unexpected variables: NODE_OPTIONS/);
+  });
+
+  test('the variable that macOS adds to every child is accepted there, and only there', () => {
+    const macos = { ...childEnv(), __CF_USER_TEXT_ENCODING: 'UTF-8' };
+    assert.equal(readMigrationChildConfig(macos, 'darwin').user, 'nexora_test_migrator');
+    refused(() => readMigrationChildConfig(macos, 'linux'), /unexpected variables: __CF_USER_TEXT_ENCODING/);
+    refused(() => readMigrationChildConfig(macos, 'win32'), /unexpected variables: __CF_USER_TEXT_ENCODING/);
+    refused(() => readMigrationChildConfig({ ...macos, NODE_OPTIONS: '--import x' }, 'darwin'), /unexpected variables: NODE_OPTIONS/);
+  });
+
+  test('the variables the operating system adds to a child are the ones of that system, and no others', () => {
+    assert.deepEqual(operatingSystemVariables('win32'), [
+      'HOMEDRIVE', 'HOMEPATH', 'LOGONSERVER', 'SYSTEMDRIVE', 'TEMP', 'USERDOMAIN', 'USERNAME', 'USERPROFILE', 'WINDIR',
+    ]);
+    assert.deepEqual(operatingSystemVariables('darwin'), ['__CF_USER_TEXT_ENCODING']);
+    assert.deepEqual(operatingSystemVariables('linux'), []);
   });
 
   test('the account is verified before migrating and again after, on its own connection, which is always closed', async () => {
