@@ -375,4 +375,5 @@ error: program.nex: check failed with 3 errors
 - No hay funciones anónimas, genéricos, métodos ni clases.
 - Un parámetro no puede llamarse `result` (ese nombre se usa en los [contratos](contracts.md)).
 - No se admite una coma final en las listas de parámetros o de argumentos.
-- `main` no recibe argumentos de la línea de comandos.
+- `main` no recibe parámetros: los argumentos de la línea de comandos se leen con `args()`
+  ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)).

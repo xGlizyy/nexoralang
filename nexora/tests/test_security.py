@@ -63,7 +63,9 @@ def test_only_the_cli_touches_the_operating_system():
     # language (lexer, parser, checker, interpreter) never import os, pathlib or subprocess.
     for path in MODULES:
         # worker.py is the other entry point: it reads its request from standard input.
-        if path.name in ("cli.py", "__main__.py", "worker.py"):
+        # host.py is the only module that gives a program its files, and it does it for the
+        # paths the user allowed (decision 0015).
+        if path.name in ("cli.py", "__main__.py", "worker.py", "host.py"):
             continue
         names = set()
         for node in python_ast.walk(python_tree(path)):
@@ -114,11 +116,14 @@ def test_the_built_in_functions_are_exactly_the_documented_ones():
         "Int.can_parse", "Int.parse", "Float.can_parse", "Float.parse",
         # The functions of List (D08): immutable, they build a new value or read one.
         "List.length", "List.get", "List.append", "List.concat", "List.contains",
+        # The input and the files (decision 0015). The arguments and the standard input
+        # need no declaration; the files do.
+        "args", "input", "read_file", "write_file",
     }
 
 
 @pytest.mark.parametrize("name", [
-    "eval", "exec", "open", "input", "__import__", "system", "getattr", "compile", "exit", "import_module",
+    "eval", "exec", "open", "__import__", "system", "getattr", "compile", "exit", "import_module",
 ])
 def test_python_functions_do_not_exist_in_nexora(name):
     assert check_codes(in_main(f'{name}("x")')) == ["E2008"]

@@ -93,6 +93,20 @@
       ],
       "description": "The record types the program declares. Null when there is no structure."
     },
+    "capabilities": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The capabilities the program declares that it needs. Null when there is no structure."
+    },
     "functions": {
       "oneOf": [
         {
@@ -605,6 +619,26 @@
             "null"
           ],
           "description": "The type of the field. Null when it could not be resolved."
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "required": [
+        "capability",
+        "path"
+      ],
+      "properties": {
+        "capability": {
+          "enum": [
+            "read",
+            "write"
+          ],
+          "description": "What the program declares that it needs."
+        },
+        "path": {
+          "type": "string",
+          "description": "The path, as it was written."
         }
       }
     }

@@ -35,6 +35,8 @@ EXPECTED = {
     "texts.nex": (0, 0),
     "lists.nex": (0, 0),
     "records.nex": (0, 0),
+    "console.nex": (0, 0),
+    "files.nex": (0, 0),
     # Rejected by the static analysis: never started.
     "invalid/syntax_error.nex": (1, 1),
     "invalid/name_errors.nex": (1, 1),
@@ -56,10 +58,35 @@ TESTED = {
     "texts.nex": 0,
 }
 
+# The standard input some examples read, and the permissions others need
+# (decision 0015). The examples that use files work on the files of the directory they
+# are started in, so that they never write anything inside the repository.
+STANDARD_INPUT = {
+    "console.nex": "Mundo\n",
+}
+ARGUMENTS = {
+    "files.nex": ("--allow-read=datos", "--allow-write=salida"),
+}
+OWN_DIRECTORY = {"files.nex"}
 
-def nex(*arguments: str) -> subprocess.CompletedProcess:
+
+@pytest.fixture
+def own_directory(tmp_path):
+    """A working directory with the files the examples that use them expect."""
+    (tmp_path / "datos").mkdir()
+    (tmp_path / "datos" / "entradas.txt").write_text("datos de ejemplo\n", encoding="utf-8")
+    (tmp_path / "salida").mkdir()
+    return tmp_path
+
+
+def example_path(name: str, directory: Path) -> str:
+    """The path of the example, relative when the program runs in the repository."""
+    return f"examples/{name}" if directory == ROOT else str(EXAMPLES / name)
+
+
+def nex(*arguments: str, cwd: Path = ROOT, stdin: str = "") -> subprocess.CompletedProcess:
     return subprocess.run(
-        [sys.executable, "-m", "nexora", *arguments], capture_output=True, encoding="utf-8", cwd=ROOT,
+        [sys.executable, "-m", "nexora", *arguments], capture_output=True, encoding="utf-8", cwd=cwd, input=stdin,
     )
 
 
@@ -90,8 +117,10 @@ def test_every_example_starts_with_a_description(name):
 
 
 @pytest.mark.parametrize("name", sorted(EXPECTED))
-def test_run(name):
-    result = nex("run", f"examples/{name}")
+def test_run(name, own_directory):
+    directory = own_directory if name in OWN_DIRECTORY else ROOT
+    result = nex("run", example_path(name, directory), *ARGUMENTS.get(name, ()),
+                 cwd=directory, stdin=STANDARD_INPUT.get(name, ""))
     slug = name.replace("/", "__").removesuffix(".nex")
     assert result.returncode == EXPECTED[name][0]
     assert "Traceback" not in result.stderr
@@ -115,6 +144,8 @@ def test_every_example_with_examples_is_tested():
 
 @pytest.mark.parametrize("name", sorted(EXPECTED))
 def test_check(name):
+    # `nex check` does not run the program: it needs no permissions and no working
+    # directory of its own.
     result = nex("check", f"examples/{name}")
     slug = name.replace("/", "__").removesuffix(".nex")
     assert result.returncode == EXPECTED[name][1]

@@ -239,6 +239,16 @@ _LOOP_CLAUSE = {
 }
 
 
+_CONTEXT_CAPABILITY = {
+    "type": "object",
+    "required": ["capability", "path"],
+    "properties": {
+        "capability": {"enum": ["read", "write"],
+                       "description": "What the program declares that it needs."},
+        "path": {"type": "string", "description": "The path, as it was written."},
+    },
+}
+
 _CONTEXT_TYPE = {
     "type": "object",
     "required": ["name", "base", "root", "condition", "message", "line"],
@@ -377,6 +387,9 @@ def all_schemas() -> dict[str, dict]:
                    "description": "The refined types the program declares. Null when there is no structure."},
          "records": {**nullable({"type": "array", "items": {"$ref": "#/$defs/record"}}),
                      "description": "The record types the program declares. Null when there is no structure."},
+         "capabilities": {**nullable({"type": "array", "items": {"$ref": "#/$defs/capability"}}),
+                          "description": "The capabilities the program declares that it needs. Null when there is "
+                                         "no structure."},
          "functions": nullable({"type": "array", "items": {"$ref": "#/$defs/function"}}),
          "features": nullable({"type": "array", "items": {"type": "string"}}),
          "reserved_words_used": {**nullable({"type": "array", "items": {"type": "string"}}),
@@ -386,7 +399,8 @@ def all_schemas() -> dict[str, dict]:
         [*_HEADER_REQUIRED, "executed", "lines", "analysed", "complete", "entry_point", "types", "records",
          "functions", "features", "reserved_words_used", "notes"],
         {**base, "param": _PARAM, "function": _CONTEXT_FUNCTION, "type": _CONTEXT_TYPE, "loop_clause": _LOOP_CLAUSE,
-         "record": _CONTEXT_RECORD, "record_field": _CONTEXT_RECORD_FIELD},
+         "record": _CONTEXT_RECORD, "record_field": _CONTEXT_RECORD_FIELD,
+         "capability": _CONTEXT_CAPABILITY},
     )
     spec = _document(
         "nexora-spec", "nexora.spec/1: the language specification, or one section of it",

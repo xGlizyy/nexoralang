@@ -32,8 +32,8 @@ Realizada el 21 de octubre de 2026, en Windows 11 con Python 3.12.10:
 | Comprobación | Resultado |
 |--------------|-----------|
 | `python -m ruff check src tests` | Sin errores |
-| `python -m pytest` | 2190 pruebas superadas, 4 omitidas, 0 fallos |
-| Cobertura de líneas y ramas (`--cov`) | 94,34 % |
+| `python -m pytest` | 2285 pruebas superadas, 9 omitidas, 0 fallos |
+| Cobertura de líneas y ramas (`--cov`) | 94,59 % |
 | Umbral configurado (`fail_under` en `pyproject.toml`) | 90 % |
 | Pruebas del servidor web (`node --test "test/*.test.js"`, en `servidor/`) | 821 superadas, 0 fallos |
 
@@ -53,6 +53,11 @@ Las cuatro pruebas omitidas necesitan funciones de POSIX que Windows no tiene: u
 archivo sin permiso de lectura (el mismo caso se cubre en Windows simulando el error), y tres
 comprueban los límites de memoria y de CPU que el proceso del playground pide al sistema operativo.
 En Windows se omiten; en Linux se ejecutan y pasan (siguiente apartado).
+
+Las otras cinco se omiten en esta medición: dos ejemplos que necesitan un *host* (la entrada
+estándar y los archivos) no se comparan con la API, y tres pruebas de los enlaces simbólicos se
+omiten porque en Windows hacen falta privilegios para crearlos (la de la unión de directorios se
+ejecuta solo cuando el sistema la permite).
 
 ### Linux
 
@@ -592,21 +597,31 @@ ejecuta en alguna prueba; no que se hayan probado todas las combinaciones de ent
 | `test_functions.py` | 56 | Parámetros, argumentos, retornos, rutas de retorno, `if` / `else`, funciones `Void`, recursividad y su límite |
 | `test_contracts.py` | 50 | `requires` y `ensures` que se cumplen y que fallan, tipos de las condiciones, `result`, contenido de los diagnósticos |
 | `test_example_clauses.py` | 43 | La cláusula `example` tal y como la ve el análisis estático: sintaxis, tipos, nombres, la regla de llamada propia y el grafo de llamadas. No evalúa ningún ejemplo ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
-| `test_text_operations.py` | 181 | Las funciones de un tipo (`Text.length`, `Int.parse`…) y el orden entre textos: cada caso de la decisión, sus requisitos y sugerencias, textos enormes, redondeo y límites de `Float`, la sintaxis del punto y sus errores, que los programas de la 0.5.1 no cambian, y `inspect`, `symbols`, `context` y las capacidades ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)) |
+| `test_text_operations.py` | 184 | Las funciones de un tipo (`Text.length`, `Int.parse`…) y el orden entre textos: cada caso de la decisión, sus requisitos y sugerencias, textos enormes, redondeo y límites de `Float`, la sintaxis del punto y sus errores, que los programas de la 0.5.1 no cambian, y `inspect`, `symbols`, `context` y las capacidades ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)) |
 | `test_loops.py` | 96 | `var`, asignaciones, bucles con su medida y sus invariantes: análisis, cada diagnóstico con su vuelta y sus valores, que ningún bucle se queda colgado (tampoco en `nex test`), y lo que muestran `inspect`, `symbols` y `context` ([decisión 0010](decisions/0010-var-y-while.md)) |
 | `test_interpreter.py` | 47 | Salida de los programas, aritmética entera y decimal, desbordamiento, división por cero |
 | `test_out_of_memory.py` | 20 | Un programa que se queda sin memoria mientras corre: el `E3007`. El `MemoryError` se provoca a propósito, así que ninguna prueba agota la memoria real ([decisión 0009](decisions/0009-memoria-agotada.md)) |
 | `test_diagnostics.py` | 16 | Formato de texto, formato JSON, y que el registro de códigos coincide con la especificación |
 | `test_inspect.py` | 9 | El esquema JSON de `nex inspect`: nodos, campos, tipos y posiciones |
 | `test_cli.py` | 74 | Comandos, opciones, códigos de salida y formatos; también con el comando real en un proceso aparte, desde otros directorios |
-| `test_examples.py` | 68 | Cada programa de `examples/`: salida, diagnósticos y código de salida, comparados con los registrados |
+| `test_examples.py` | 80 | Cada programa de `examples/`: salida, diagnósticos y código de salida, comparados con los registrados |
 | `test_nex_test.py` | 46 | La evaluación de ejemplos: el motor, `nexora.api.test_source` y el comando `nex test`, con los casos de la matriz de la decisión ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
-| `test_docs.py` | 163 | Cada programa de la documentación y su salida; enlaces; versión; que la referencia de la CLI y la lista de códigos están completas |
-| `test_security.py` | 70 | Que el intérprete no evalúa código Python, qué puede hacer un programa, qué módulos puede importar cada archivo, que las herramientas de análisis no ejecutan |
+| `test_docs.py` | 178 | Cada programa de la documentación y su salida; enlaces; versión; que la referencia de la CLI y la lista de códigos están completas |
+| `test_security.py` | 76 | Que el intérprete no evalúa código Python, qué puede hacer un programa, qué módulos puede importar cada archivo, que las herramientas de análisis no ejecutan |
+| `test_records_syntax.py` | 25 | La gramática de los registros: declaración, construcción, acceso, cadenas y la asignación a un campo ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) |
+| `test_records_types.py` | 27 | Los tipos de los registros, su identidad nominal, las referencias adelantadas y los ciclos |
+| `test_records_values.py` | 24 | Qué hace un registro al ejecutarse: construcción, lectura, igualdad por valor e inmutabilidad |
+| `test_records_diagnostics.py` | 18 | Los tres códigos de los registros: título, categoría, mensaje, posición y orden |
+| `test_records_tools.py` | 11 | Los nodos nuevos del árbol y el campo `records` del contexto |
+| `test_input_arguments.py` | 11 | Los argumentos con los que se ejecutó un programa: vacíos, múltiples, con espacios y con Unicode ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
+| `test_input_stdin.py` | 14 | La entrada estándar: varias líneas, línea vacía y el final de la entrada (`E3009`) |
+| `test_permissions_files.py` | 23 | Los archivos y los permisos: las tres reglas del modelo, el confineamiento de las rutas y los errores del sistema de archivos |
+| `test_permissions_static.py` | 12 | Lo que el análisis estático detecta de las declaraciones que faltan (`E2026`) |
+| `test_permissions_environments.py` | 8 | Que el worker del playground y el servidor MCP rechazan siempre el acceso a archivos |
 | `test_robustness.py` | 86 | Entradas truncadas, mutadas, aleatorias, binarias, enormes o muy anidadas; regresiones de defectos reales |
-| `test_api.py` | 38 | Comprobar y ejecutar código en memoria (`nexora.api`), con sus límites de salida y de texto |
+| `test_api.py` | 42 | Comprobar y ejecutar código en memoria (`nexora.api`), con sus límites de salida y de texto |
 | `test_worker.py` | 23 | El proceso de un solo uso del playground: peticiones válidas e inválidas, límites, entorno |
-| `test_tooling.py` | 81 | Los JSON Schema y que la salida real los cumple; símbolos, referencias y contexto; el análisis parcial con errores de sintaxis, incluido un programa cortado en cada carácter; que el análisis no ejecuta ni abre archivos; que la CLI y la API devuelven lo mismo |
+| `test_tooling.py` | 85 | Los JSON Schema y que la salida real los cumple; símbolos, referencias y contexto; el análisis parcial con errores de sintaxis, incluido un programa cortado en cada carácter; que el análisis no ejecuta ni abre archivos; que la CLI y la API devuelven lo mismo |
 | `test_tooling_tasks.py` | 19 | Las nueve [tareas de referencia](ai-tooling.md#tareas-de-referencia) contra las herramientas reales |
 | `test_mcp.py` | 35 | El servidor MCP por su protocolo real: inicio, descubrimiento de herramientas, llamadas, argumentos rechazados, que ninguna herramienta ejecuta código, cierre |
 

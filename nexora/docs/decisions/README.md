@@ -20,6 +20,7 @@ una decisión se revisa, se añade otra que la sustituye y se indica en ambas.
 | [0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) | Modelo de tipos, registros, patrones, enumeraciones, `Option`/`Result`, listas, `for`, entrada, módulos y evidencia verificable | Propuesta (no aceptada; la 0013 acepta solo D01, D08 y D09 en el alcance implementado) | No |
 | [0013](0013-listas-y-for.md) | Listas `List[T]`, `for` sobre listas y el modelo de tipos que los sostiene: acepta D01, D08 y D09 en el alcance implementado | Aceptada | No |
 | [0014](0014-registros-nominales-inmutables.md) | Registros nominales inmutables: declaración `type X = { ... }`, construcción con campos nombrados, acceso a campos e identidad nominal por declaración | Aceptada | No |
+| [0015](0015-entrada-argumentos-archivos-y-permisos.md) | Entrada, argumentos, archivos y permisos: `args()`, `input()`, `read_file()`, `write_file()`, declaraciones `uses` y permisos concedidos por quien ejecuta | Aceptada | No |
 
 ## Posibles cambios incompatibles en el futuro
 

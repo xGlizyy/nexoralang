@@ -41,7 +41,7 @@ fn main() -> Void {
 `nex context program.nex` escribe:
 
 ```text
-program.nex | NEXORA 0.8.0 | 14 lines
+program.nex | NEXORA 0.9.0 | 14 lines
 Static analysis: no errors.
 The program was not run to produce this summary.
 Entry point: main
@@ -129,7 +129,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.context/1",
-  "nexora_version": "0.8.0",
+  "nexora_version": "0.9.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
@@ -141,6 +141,7 @@ fn main() -> Void {
   "entry_point": "main",
   "types": [],
   "records": [],
+  "capabilities": [],
   "functions": [
     {
       "name": "double",
@@ -243,7 +244,7 @@ fn main() -> Void {
 ```
 
 ```text
-program.nex | NEXORA 0.8.0 | 5 lines
+program.nex | NEXORA 0.9.0 | 5 lines
 Static analysis: 2 errors.
 The program was not run to produce this summary.
 Partial summary: only the code that could be parsed is described.
@@ -306,7 +307,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.symbols/1",
-  "nexora_version": "0.8.0",
+  "nexora_version": "0.9.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
@@ -623,6 +624,20 @@ fn main() -> Void {
       "contracts": []
     },
     {
+      "name": "args",
+      "signature": "fn args() -> List[Text]",
+      "params": [],
+      "return_type": "List[Text]",
+      "contracts": []
+    },
+    {
+      "name": "input",
+      "signature": "fn input() -> Text",
+      "params": [],
+      "return_type": "Text",
+      "contracts": []
+    },
+    {
       "name": "print",
       "signature": "fn print(value: Int | Float | Bool | Text) -> Void",
       "params": [
@@ -632,6 +647,18 @@ fn main() -> Void {
         }
       ],
       "return_type": "Void",
+      "contracts": []
+    },
+    {
+      "name": "read_file",
+      "signature": "fn read_file(path: Text) -> Text",
+      "params": [
+        {
+          "name": "path",
+          "type": "Text"
+        }
+      ],
+      "return_type": "Text",
       "contracts": []
     },
     {
@@ -668,6 +695,22 @@ fn main() -> Void {
         }
       ],
       "return_type": "Text",
+      "contracts": []
+    },
+    {
+      "name": "write_file",
+      "signature": "fn write_file(path: Text, text: Text) -> Void",
+      "params": [
+        {
+          "name": "path",
+          "type": "Text"
+        },
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "return_type": "Void",
       "contracts": []
     }
   ]

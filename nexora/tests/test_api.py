@@ -170,6 +170,10 @@ STATUS_OF_EXIT = {0: "success", 1: "invalid", 3: "runtime_error", 5: "contract_v
 
 @pytest.mark.parametrize("path", sorted(EXAMPLES.rglob("*.nex")), ids=lambda path: path.relative_to(EXAMPLES).as_posix())
 def test_api_and_cli_agree_on_every_example(path):
+    if path.name in ("console.nex", "files.nex"):
+        # These two need a host: the standard input and the files (decision 0015). The
+        # examples that need them are run in their own directory, with their permissions.
+        pytest.skip("this example needs a host")
     source = path.read_text(encoding="utf-8")
 
     # check: same verdict and the same diagnostics, apart from the file name shown.

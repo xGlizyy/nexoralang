@@ -10,7 +10,9 @@ import sys
 from pathlib import Path
 
 from . import api, tooling
+from .capabilities import Capabilities, Grants
 from .diagnostics import CONTRACT, MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Source, render
+from .host import LocalHost
 from .interpreter import run
 from .pipeline import Analysis, analyze
 from .version import __version__
@@ -66,6 +68,20 @@ def _build_parser() -> argparse.ArgumentParser:
         default="text",
         help="how to report errors (default: text). 'json' writes one JSON document to standard error "
              "if the program is invalid or fails; the program's own output is not affected",
+    )
+    run_parser.add_argument(
+        "--allow-read", action="append", default=[], metavar="RUTA",
+        help="allow the program to read the files under this path (can be repeated). A program also "
+             "has to declare it with 'uses read'",
+    )
+    run_parser.add_argument(
+        "--allow-write", action="append", default=[], metavar="RUTA",
+        help="allow the program to write the files under this path (can be repeated). A program also "
+             "has to declare it with 'uses write'",
+    )
+    run_parser.add_argument(
+        "args", nargs="*",
+        help="the arguments of the program, written after '--'",
     )
 
     check_parser = commands.add_parser(
@@ -155,6 +171,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="how to write the report (default: text). 'json' writes one nexora.test/1 document to standard output",
     )
     test_parser.add_argument("--function", help="only the examples declared in this function")
+    test_parser.add_argument(
+        "--allow-read", action="append", default=[], metavar="RUTA",
+        help="allow the examples to read the files under this path (can be repeated)",
+    )
+    test_parser.add_argument(
+        "--allow-write", action="append", default=[], metavar="RUTA",
+        help="allow the examples to write the files under this path (can be repeated)",
+    )
     return parser
 
 
@@ -229,7 +253,8 @@ def _analysis_command(path: str, output_format: str, build, render_text=None) ->
     return EXIT_OK if analysis.ok else EXIT_INVALID_PROGRAM
 
 
-def _run(path: str, output_format: str) -> int:
+def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
+         allow_read: tuple[str, ...] = (), allow_write: tuple[str, ...] = ()) -> int:
     def fail(diagnostics, source: Source, summary: str, code: int) -> int:
         # Whatever the program printed before failing is shown first.
         sys.stdout.flush()
@@ -249,8 +274,13 @@ def _run(path: str, output_format: str) -> int:
         summary = f"not run because of {_plural(len(analysis.diagnostics))}"
         return fail(analysis.diagnostics, source, summary, EXIT_INVALID_PROGRAM)
 
+    host = LocalHost(
+        arguments=arguments,
+        grants=Grants(read=allow_read, write=allow_write),
+        declarations=analysis.checked.capabilities,
+    )
     try:
-        run(analysis.checked, sys.stdout.write)
+        run(analysis.checked, sys.stdout.write, host=host)
     except NexoraRuntimeError as error:
         if error.diagnostic.category == CONTRACT:
             return fail((error.diagnostic,), source, "the program stopped because a contract was broken",
@@ -266,7 +296,8 @@ def _count(number: int, noun: str) -> str:
     return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
 
 
-def _test(path: str, output_format: str, function: str | None) -> int:
+def _test(path: str, output_format: str, function: str | None,
+          allow_read: tuple[str, ...] = (), allow_write: tuple[str, ...] = ()) -> int:
     """`nex test` (decision 0008). Nothing is written until every selected example was evaluated,
     so an internal error or Ctrl+C never leaves a partial report behind."""
     source, failure = _load(path)
@@ -274,8 +305,12 @@ def _test(path: str, output_format: str, function: str | None) -> int:
         analysis = Analysis(Source(path, ""), (failure,))
     else:
         analysis = analyze(source, require_main=False)
+    host = LocalHost(
+        grants=Grants(read=allow_read, write=allow_write),
+        declarations=analysis.checked.capabilities if analysis.checked else Capabilities(),
+    )
     try:
-        report = api.run_examples(analysis, function)
+        report = api.run_examples(analysis, function, host=host)
     except tooling.ToolingError as error:
         # A usage error, like any other: a message, no document.
         print(f"error: {error}", file=sys.stderr)
@@ -399,14 +434,16 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if arguments.command == "run":
-            return _run(arguments.file, arguments.format)
+            return _run(arguments.file, arguments.format, tuple(arguments.args),
+                        tuple(arguments.allow_read), tuple(arguments.allow_write))
         if arguments.command == "inspect":
             return _analysis_command(arguments.file, "json", tooling.inspect_document)
         if arguments.command == "context":
             return _analysis_command(arguments.file, arguments.format, tooling.context_document,
                                      tooling.render_context)
         if arguments.command == "test":
-            return _test(arguments.file, arguments.format, arguments.function)
+            return _test(arguments.file, arguments.format, arguments.function,
+                         tuple(arguments.allow_read), tuple(arguments.allow_write))
         if arguments.command == "symbols":
             return _analysis_command(
                 arguments.file, arguments.format,

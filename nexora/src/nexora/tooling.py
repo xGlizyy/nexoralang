@@ -239,6 +239,10 @@ _FEATURES = (
         or (isinstance(node, ast.Unary) and node.operator == "not")),
     ("conversions", lambda node, types: isinstance(node, ast.Call)
         and node.callee in ("to_text", "to_float", "to_int")),
+    # The input and the files (decision 0015).
+    ("arguments", lambda node, types: isinstance(node, ast.Call) and node.callee == "args"),
+    ("input", lambda node, types: isinstance(node, ast.Call) and node.callee == "input"),
+    ("file_access", lambda node, types: isinstance(node, ast.UsesDecl)),
 )
 
 
@@ -426,6 +430,18 @@ def _record_reason(analysis: Analysis, declaration: ast.RecordDecl) -> str | Non
     return None
 
 
+def _capability_entries(analysis: Analysis) -> list[dict]:
+    """The capabilities the program declares it needs, as they were written.
+
+    Declaring a capability does not grant it: the user has to allow it too, and the
+    environment has to permit it (decision 0015, 3).
+    """
+    return [
+        {"capability": declaration.capability, "path": declaration.path}
+        for declaration in analysis.program.uses
+    ]
+
+
 def context_document(analysis: Analysis) -> dict:
     document = _header(CONTEXT_SCHEMA, analysis.source.name, analysis.diagnostics)
     document["executed"] = False
@@ -437,7 +453,7 @@ def context_document(analysis: Analysis) -> dict:
 
     if analysis.facts is None:
         document.update(analysed=False, complete=False, entry_point=None, types=None, records=None,
-                        functions=None, features=None)
+                        capabilities=None, functions=None, features=None)
         document["notes"] = _notes(analysis, [], reserved_used)
         return document
 
@@ -457,6 +473,7 @@ def context_document(analysis: Analysis) -> dict:
         entry_point="main" if "main" in facts.functions else None,
         types=_type_entries(analysis),
         records=_record_entries(analysis),
+        capabilities=_capability_entries(analysis),
         functions=functions,
         features=features,
     )
@@ -505,6 +522,11 @@ def render_context(document: dict) -> str:
                 lines.append(f"  type {record['name']} = {{ {fields} }}    [line {record['line']}]")
                 if record["reason"]:
                     lines.append(f"      reason: {record['reason']}")
+            lines.append("")
+        if document["capabilities"]:
+            lines.append(f"Capabilities ({len(document['capabilities'])}):")
+            for capability in document["capabilities"]:
+                lines.append(f"  uses {capability['capability']} \"{capability['path']}\"")
             lines.append("")
         lines.append(f"Functions ({len(document['functions'])}):")
         for function in document["functions"]:

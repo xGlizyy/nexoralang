@@ -19,6 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
 from . import ast_nodes as ast
+from .capabilities import Host, NoHost, NotAllowed
 from .checker import BUILTINS, CheckedProgram, refinement_notes
 from .diagnostics import Diagnostic, NexoraRuntimeError, Span
 from .prelude import IMPLEMENTATIONS, parse_hint, requirements
@@ -110,15 +111,19 @@ class Environment:
 
 class Interpreter:
     def __init__(self, checked: CheckedProgram, write: Callable[[str], object],
-                 text_limit: int | None = None) -> None:
+                 text_limit: int | None = None, host: Host | None = None) -> None:
         """`write` receives the text produced by `print`. `text_limit`, if given, is the longest
-        Text (in characters) a program may build; a host sets it to bound memory use."""
+        Text (in characters) a program may build; a host sets it to bound memory use. `host` is
+        what the program may do besides computing: its arguments, its input and the files it may
+        touch. Without one, the program can only compute and print (decision 0015)."""
         self._functions = checked.functions
         # Refined type -> the declarations whose conditions its values satisfy, root first.
         self._refined = {name: refined.chain for name, refined in checked.refined.items()}
         # Record type -> its declaration. The identity comes from here: the interpreter
         # never rebuilds it from the name (decision 0014, 3).
         self._records = checked.records
+        # What the program may do besides computing.
+        self._host = host if host is not None else NoHost()
         self._write = write
         self._text_limit = text_limit
         # The calls in progress: (function name, where it was called from). main has no call site.
@@ -610,9 +615,18 @@ class Interpreter:
             return implementation(*arguments)
 
         # Built-in functions.
+        if node.callee == "args":
+            return tuple(self._host.arguments())
+        if node.callee == "input":
+            return self._read_line(node)
         value = arguments[0]
         if node.callee == "print":
             self._write(format_value(value) + "\n")
+            return None
+        if node.callee == "read_file":
+            return self._read_file(node, value)
+        if node.callee == "write_file":
+            self._write_file(node, value, arguments[1])
             return None
         if node.callee == "to_text":
             return format_value(value)
@@ -631,6 +645,65 @@ class Interpreter:
             return whole
         raise TypeError(f"call to '{node.callee}' reached the interpreter")
 
+
+    def _read_line(self, node: ast.Call) -> str:
+        """`input()`: one line of the standard input, without its terminator."""
+        try:
+            return self._host.read_line()
+        except EOFError:
+            raise self._fail(
+                "E3009",
+                "There is no more input to read",
+                node.span,
+                hint="The standard input ended. Check it before reading again.",
+            ) from None
+
+    def _read_file(self, node: ast.Call, path: str) -> str:
+        """`read_file(path)`: the contents of a file the program is allowed to read."""
+        try:
+            return self._host.read_file(path)
+        except NotAllowed as error:
+            raise self._fail(
+                "E3008",
+                str(error),
+                node.arguments[0].span,
+                hint="A program reads a file when it declares it with 'uses read' and the user allows it "
+                     "with --allow-read.",
+            ) from None
+        except UnicodeDecodeError:
+            raise self._fail(
+                "E3010",
+                f"The file '{path}' is not UTF-8 text",
+                node.arguments[0].span,
+                hint="NEXORA reads text files: the file has to be saved as UTF-8.",
+            ) from None
+        except OSError as error:
+            reason = error.strerror or type(error).__name__
+            raise self._fail(
+                "E3010",
+                f"The file '{path}' could not be read: {reason}",
+                node.arguments[0].span,
+            ) from None
+
+    def _write_file(self, node: ast.Call, path: str, text: str) -> None:
+        """`write_file(path, text)`: writes a file the program is allowed to write."""
+        try:
+            self._host.write_file(path, text)
+        except NotAllowed as error:
+            raise self._fail(
+                "E3008",
+                str(error),
+                node.arguments[0].span,
+                hint="A program writes a file when it declares it with 'uses write' and the user allows it "
+                     "with --allow-write.",
+            ) from None
+        except OSError as error:
+            reason = error.strerror or type(error).__name__
+            raise self._fail(
+                "E3010",
+                f"The file '{path}' could not be written: {reason}",
+                node.arguments[0].span,
+            ) from None
 
     def _check_requirements(self, node: ast.Call, arguments: list[Value]) -> None:
         """Checks the `requires` of a function of a type, in the order they are written, and stops
@@ -720,12 +793,17 @@ def broken_rule(chain: tuple[ast.TypeDecl, ...], value: Value) -> ast.TypeDecl |
     return bare.broken_rule(chain, value)
 
 
-def run(checked: CheckedProgram, write: Callable[[str], object], *, text_limit: int | None = None) -> None:
-    """Runs a program that passed the static checks."""
-    Interpreter(checked, write, text_limit).run()
+def run(checked: CheckedProgram, write: Callable[[str], object], *, text_limit: int | None = None,
+        host: Host | None = None) -> None:
+    """Runs a program that passed the static checks.
+
+    `host` is what the program may do besides computing: its arguments, its input and the files
+    it may touch. Without one, the program can only compute and print (decision 0015)."""
+    Interpreter(checked, write, text_limit, host).run()
 
 
-def run_example(checked: CheckedProgram, example: ast.Example, own_calls: list[ast.Call]) -> ExampleRun:
+def run_example(checked: CheckedProgram, example: ast.Example, own_calls: list[ast.Call],
+                host: Host | None = None) -> ExampleRun:
     """Evaluates one example of a program that passed the static checks, in a new interpreter.
 
     A diagnostic of the program (a runtime error or a broken rule, including E3004 for running out
@@ -733,7 +811,7 @@ def run_example(checked: CheckedProgram, example: ast.Example, own_calls: list[a
     such as an exception that reveals a defect in NEXORA or KeyboardInterrupt, propagates:
     decisions 0008, 3.4, and 0009."""
     output: list[str] = []
-    interpreter = Interpreter(checked, output.append)
+    interpreter = Interpreter(checked, output.append, host=host)
     try:
         value = interpreter.evaluate_example(example, own_calls)
     except NexoraRuntimeError as error:

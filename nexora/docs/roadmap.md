@@ -91,7 +91,7 @@ primero:
 2. ~~**Un primer tipo compuesto: listas**~~: hechas en la 0.7.0, con `for` sobre listas ([decisión 0013](decisions/0013-listas-y-for.md)). El modelo de tipos y las listas están descritos en la [especificación](language-spec.md), secciones 4.5, 8.2 y 9.6.
 3. ~~**Registros**~~: hechos en la 0.8.0, con identidad nominal y campos inmutables ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)); están descritos en la [especificación](language-spec.md), sección 4.6. Quedan los **valores opcionales** (`Option`, `Result`), para representar la ausencia de un
    valor y los errores sin excepciones.
-4. **Entrada de datos**: argumentos del programa y lectura de la entrada estándar.
+4. ~~**Entrada de datos**~~: hecha en la 0.9.0, con los argumentos del programa, la entrada estándar y los archivos con permisos explícitos ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). Quedan la red y los procesos externos.
 5. **Módulos e importaciones.**
 6. **Avisos** (variables sin usar, `var` que nunca cambia) y convenciones de nombres.
 7. **Análisis más tolerante**: conservar las funciones cuya declaración tiene un error, y dar

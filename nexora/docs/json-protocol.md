@@ -120,7 +120,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.8.0",
+  "nexora_version": "0.9.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -195,6 +195,7 @@ Historial:
 | `nexora.inspect/2` | 0.3.0 | El campo `type` de una expresión puede ser el nombre de un tipo refinado (antes era una lista cerrada de cinco tipos). Nodo nuevo `TypeDecl`, campo `types` en `Program` y campo `message` en `Contract` |
 | `nexora.inspect/2` | 0.8.0 | Nodos nuevos `RecordDecl`, `FieldDecl`, `RecordConstruction`, `FieldInitializer` y `FieldAccess`, la sentencia `FieldAssign`, el campo `records` al final de `Program`, y `type` puede ser el nombre de un registro ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) |
 | `nexora.context/1` | 0.8.0 | Campo nuevo `records`: los registros que declara el programa, con `name`, `fields`, `valid`, `line` y `reason`. `types` sigue siendo solo de tipos refinados ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) |
+| `nexora.context/1` | 0.9.0 | Campo nuevo `capabilities`: las capacidades que el programa declara con `uses`, con `capability` y `path`. `types` sigue siendo solo de tipos refinados y `records` solo de registros ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
 | `nexora.result/1` | Versión actual | |
 | `nexora.test/1` | 0.4.0 | Primera versión |
 | `nexora.symbols/1`, `nexora.context/1`, `nexora.spec/1`, `nexora.capabilities/1` | Versión actual | |

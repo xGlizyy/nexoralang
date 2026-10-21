@@ -62,3 +62,24 @@ def run_failure(text: str) -> tuple[str, Diagnostic]:
     except NexoraRuntimeError as error:
         return "".join(output), error.diagnostic
     raise AssertionError("the program was expected to fail at run time")
+
+
+def run_with_host(text: str, host) -> str:
+    """Analyses and runs a program with a host, returning what it printed."""
+    analysis = analyze(Source("test.nex", text))
+    assert analysis.ok, f"program is not valid: {[(d.code, d.label) for d in analysis.diagnostics]}"
+    output: list[str] = []
+    run(analysis.checked, output.append, host=host)
+    return "".join(output)
+
+
+def run_failure_with_host(text: str, host) -> tuple[str, Diagnostic]:
+    """Runs a valid program with a host that fails at run time."""
+    analysis = analyze(Source("test.nex", text))
+    assert analysis.ok, f"program is not valid: {[(d.code, d.label) for d in analysis.diagnostics]}"
+    output: list[str] = []
+    try:
+        run(analysis.checked, output.append, host=host)
+    except NexoraRuntimeError as error:
+        return "".join(output), error.diagnostic
+    raise AssertionError("the program was expected to fail at run time")

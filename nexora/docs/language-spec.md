@@ -1,7 +1,7 @@
 # Especificación del lenguaje NEXORA
 
-- **Versión de la especificación:** 0.8
-- **Implementación de referencia:** `nexora` 0.8.0 (este repositorio, directorio `nexora/`)
+- **Versión de la especificación:** 0.9
+- **Implementación de referencia:** `nexora` 0.9.0 (este repositorio, directorio `nexora/`)
 - **Estado:** describe exactamente lo que el intérprete hace hoy.
 
 Este documento es la referencia del lenguaje: define la sintaxis y el significado de cada
@@ -70,7 +70,7 @@ Palabras clave:
 
 ```
 fn   let   var   return   if   else   while   for   in   true   false   and   or   not
-requires   ensures   example   invariant   decreases   type   where
+requires   ensures   example   invariant   decreases   type   where   uses
 ```
 
 Palabras reservadas para versiones futuras. No pueden usarse como nombres y usarlas produce el
@@ -78,13 +78,13 @@ error `E1103`:
 
 ```
 ai       assert   break    const    continue enum     import
-match    pub      test     tool     try      uses
+match    pub      test     tool     try
 ```
 
 No son palabras reservadas, sino nombres predefinidos: los tipos `Int`, `Float`, `Bool`, `Text` y
-`Void`; las funciones `print`, `to_text`, `to_float` y `to_int`; `result`, que solo tiene un
-significado especial dentro de una cláusula `ensures`; y `value`, que solo lo tiene dentro de la
-condición de un tipo refinado.
+`Void`; las funciones `print`, `to_text`, `to_float`, `to_int`, `args`, `input`, `read_file` y
+`write_file`; `result`, que solo tiene un significado especial dentro de una cláusula `ensures`; y
+`value`, que solo lo tiene dentro de la condición de un tipo refinado.
 
 ### 2.5 Literales
 
@@ -128,12 +128,13 @@ analizador nunca ignora un carácter desconocido.
 En notación EBNF. `NEWLINE` es uno o más finales de línea seguidos.
 
 ```ebnf
-program    = { NEWLINE } { ( type_decl | record_decl | function ) { NEWLINE } } ;
+program    = { NEWLINE } { ( type_decl | record_decl | uses_decl | function ) { NEWLINE } } ;
 
 type_decl  = "type" NAME "=" type "where" expression [ explanation ] end ;
 record_decl = "type" NAME "=" "{" record_fields "}" ;
 record_fields = record_field { "," record_field } ;
 record_field = NAME ":" type ;
+uses_decl  = "uses" ( "read" | "write" ) TEXT ;
 function   = "fn" NAME "(" [ params ] ")" "->" type { NEWLINE }
              "{" { NEWLINE } { contract } { statement end } "}" ;
 params     = param { "," param } ;
@@ -197,6 +198,10 @@ Notas:
 - Un registro se declara con `type` y unas llaves: `type Point = { x: Int, y: Int }`. Las llaves van
   en la misma línea que el `=`, y dentro de ellas se permite un salto de línea entre campos. Un
   registro tiene al menos un campo y no admite coma final (`E1101`).
+- Una capacidad se declara con `uses`, al nivel superior del archivo: `uses read "datos.txt"`. Declara
+  lo que el programa necesita, no lo concede: quien lo ejecuta tiene que allowirlo aparte, y el
+  entorno tiene que admitirlo (sección 8.3). La ruta es un literal de texto y no puede estar
+  vacía.
 - Un registro se construye con el nombre del tipo y los campos con nombre: `Point(x: 1, y: 2)`. El
   orden en que se escriben los campos no importa, pero cada uno se da una sola vez y todos están
   obligatorios (`E2023`).
@@ -1010,6 +1015,63 @@ Fuera de estas cinco funciones no hay `map`, `filter`, `fold`, ordenación, `sli
 total de `List.get`. Llegarán, si se deciden, con `Option`/`Result` y las demás decisiones
 pendientes.
 
+### 8.3 La entrada, los argumentos y los archivos
+
+Un programa puede recibir datos de fuera: los argumentos con los que se ejecutó, la entrada
+estándar y los archivos. Los argumentos y la entrada estándar están permitidos por defecto. Los
+archivos **no**: hay que declararlos y hay que permitirlos.
+
+| Función | Firma | Qué hace |
+|---------|-------|----------|
+| `args` | `args() -> List[Text]` | Los argumentos con los que se ejecutó el programa, en orden |
+| `input` | `input() -> Text` | Lee **una línea** de la entrada estándar, sin el final de línea |
+| `read_file` | `read_file(ruta: Text) -> Text` | Lee un archivo de texto completo |
+| `write_file` | `write_file(ruta: Text, texto: Text) -> Void` | Escribe un archivo de texto, y lo crea si no existe |
+
+**Los argumentos.** `nex run programa.nex -- uno dos` da al programa los argumentos `uno` y `dos`.
+`args()` devuelve una `List[Text]`, vacía si no hay ninguno. Los argumentos no necesitan ninguna
+declaración: no dan acceso a nada que quien ejecuta no haya dado ya.
+
+**La entrada estándar.** `input()` lee una línea y la devuelve sin el final de línea. Una línea
+vacía devuelve el texto vacío. Cuando ya no queda nada que leer, el programa se detiene con
+`E3009`: no se puede leer «hasta el final» sin parar, y no hay forma de distinguir el final de una
+línea vacía.
+
+**Los archivos.** Un programa declara lo que necesita con `uses`, al nivel superior del archivo:
+
+```nexora
+uses read "datos/entradas.txt"
+uses write "datos/salida.txt"
+```
+
+La capacidad efectiva es la **intersección** de tres cosas:
+
+1. **Lo que declara el programa**: un `uses read` (o `uses write`) que cubra la ruta.
+2. **Lo que concede quien ejecuta**: `--allow-read=RUTA` (o `--allow-write=RUTA`) en la orden de
+   `nex run`, repetible. Leer y escribir se conceden por separado.
+3. **Lo que permite el entorno**: si el entorno admite archivos.
+
+Las tres tienen que estar. Declarar no concede: un programa que declara `uses read "secreto.txt"`
+y se ejecuta sin `--allow-read` recibe `E3008`. Conceder no habilita: `--allow-read` no abre un
+archivo que el programa no declara. Y el entorno manda: en un entorno que no admite archivos
+ninguna combinación los habilita.
+
+`nex check` avisa de una declaración que falta, cuando la ruta de la llamada es un literal y
+ninguna declaración la cubre: es el error `E2026`. Es una ayuda, no la seguridad. Si la ruta se
+calcula, el análisis no puede saberlo y no avisa; la decisión la toma el intérprete, en cada
+acceso.
+
+**Las rutas.** Las rutas relativas se resuelven respecto al **directorio de trabajo** del proceso.
+El confineamiento se hace sobre la ruta **resuelta**: un `..` que sale del ámbito concedido y un
+enlace simbólico que apunta fuera de él no sirven de nada. La comparación es por segmentos, de
+modo que `datos2` no está dentro de `datos`. En Windows, una ruta con barras invertidas tiene que
+escribirse con las barras duplicadas (`"C:\\datos"`) o con barras normales (`"C:/datos"`), que
+funcionan en los dos sistemas.
+
+**Los entornos restringidos.** El playground de la web y el servidor MCP no admiten archivos: el
+worker no tiene ningún campo en su protocolo para pedirlos y el programa recibe `E3008` aunque
+declare la capacidad. El servidor MCP solo analiza: nunca ejecuta.
+
 ## 9. Contratos
 
 Un contrato expresa una condición que una función **espera** de quien la llama o una condición que
@@ -1495,6 +1557,7 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E2023` | Invalid record construction | `type` | Una construcción de un registro a la que le falta un campo, le sobra uno o se le da dos veces el mismo (sección 4.6) |
 | `E2024` | Invalid field access | `type` | Se lee un campo de un valor que no es un registro, o de un registro que no tiene ese campo (sección 4.6) |
 | `E2025` | Cannot reassign a field | `semantic` | Se asigna a un campo de un registro, que es inmutable (sección 4.6) |
+| `E2026` | Missing capability declaration | `semantic` | Se lee o se escribe un archivo sin declararlo con `uses` (sección 8.3) |
 | `E3001` | Division by zero | `runtime` | División por cero |
 | `E3002` | Integer overflow | `runtime` | Un resultado `Int` fuera del rango de 64 bits |
 | `E3003` | Float result out of range | `runtime` | Un resultado `Float` demasiado grande |
@@ -1502,6 +1565,9 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E3005` | Conversion out of range | `runtime` | `to_int` de un `Float` que no cabe en un `Int` |
 | `E3006` | Text too long | `runtime` | Un `Text` construido con `+` supera el límite fijado por el entorno. `nex run` no fija ninguno; el playground sí |
 | `E3007` | Out of memory | `runtime` | El programa agota la memoria mientras se ejecuta. Sin posición ([decisión 0009](decisions/0009-memoria-agotada.md)) |
+| `E3008` | Permission denied | `runtime` | El programa intenta usar un archivo que no puede usar: no lo declara, no está permitido por quien lo ejecuta, o el entorno no admite archivos (sección 8.3) |
+| `E3009` | No more input | `runtime` | `input()` se llama cuando la entrada estándar ya se ha terminado (sección 8.3) |
+| `E3010` | File error | `runtime` | El archivo se podía usar, pero no se ha podido leer o escribir: no existe, no es un texto UTF-8, o el sistema operativo lo ha impedido |
 | `E4001` | Precondition violated | `contract` | Una condición `requires` es falsa en una llamada |
 | `E4002` | Postcondition violated | `contract` | Una condición `ensures` es falsa al terminar una función |
 | `E4003` | Refinement violated | `contract` | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado |
@@ -1534,7 +1600,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.8.0",
+  "nexora_version": "0.9.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -1692,6 +1758,8 @@ En [`examples/`](../examples/README.md) hay más programas, todos ejecutados por
 | `let x: String = "a"` | `E2012` | El tipo se llama `Text` |
 | `let xs: List = []` | `E2012` | `List` necesita un argumento de tipo |
 | `type NonEmpty = List[Int] where value == value` | `E2016` | Un tipo refinado no puede tener una lista como base |
+| `print(read_file("datos.txt"))` sin `uses read` | `E2026` | El programa no declara que necesita ese archivo |
+| `print(input())` sin entrada que leer | `E3009` | La entrada estándar se ha terminado |
 | `type Point = { x: Int, y: Int }` y `Point(x: 1)` | `E2023` | Falta el campo `y` |
 | `type Point = { x: Int }` y `Point(x: 1, y: 2)` | `E2023` | El registro no tiene ningún campo `y` |
 | `type Point = { x: Int }` y `Point(x: 1, x: 2)` | `E2023` | El campo `x` está dado dos veces |
@@ -1730,9 +1798,7 @@ Son limitaciones reales de esta versión, no fallos:
 - `if` es una sentencia, no una expresión: no puede usarse como valor.
 - No hay mapas, enumeraciones, `Option`, `Result` ni `for` sobre rangos o `Text`. Los registros
   (sección 4.6) tienen campos inmutables y no admiten métodos, refinamientos ni recursión. Las
-  listas `List[T]` son inmutables y finitas. Los registros tienen una
-  [decisión 0014](decisions/0014-registros-nominales-inmutables.md) aceptada que todavía no está
-  implementada.
+  listas `List[T]` son inmutables y finitas.
 - Las operaciones sobre textos son las de la sección 8.1: no hay `trim`, mayúsculas, `split`,
   `replace` ni búsqueda de posiciones. Un carácter es un punto de código: no se cuentan grafemas.
 - No hay operador de resto (`%`).
@@ -1745,7 +1811,9 @@ Son limitaciones reales de esta versión, no fallos:
 - Una variable o un parámetro declarados y nunca usados no producen ningún aviso.
 - No existen avisos (*warnings*): todo diagnóstico es un error.
 - `print` recibe un solo argumento y siempre añade un salto de línea.
-- El programa no puede leer datos de entrada (teclado, argumentos o archivos).
+- La entrada y los archivos son los de la sección 8.3. No se puede leer «hasta el final» de la
+  entrada estándar sin parar (`input()` falla con `E3009`), no hay directorios ni archivos que no
+  sean de texto, y no hay red, procesos ni variables de entorno.
 - Un programa es un único archivo: no hay módulos ni importaciones.
 - Los contratos no se verifican estáticamente (sección 9.3). De los tipos refinados, solo se
   comprueban sin ejecutar las constantes.
@@ -1771,7 +1839,9 @@ Nada de lo que sigue funciona hoy. Es la dirección del diseño, tomada del borr
   ya existen, pero no los genéricos de usuario (`fn f[T]`), las funciones de orden superior ni las
   funciones como valores.
 - Verificación estática de contratos, y bloques de prueba (`test`) fuera de las funciones.
-- Efectos declarados (`uses`), módulos e importaciones.
+- Módulos e importaciones. Los efectos declarados (`uses`) ya existen para los archivos
+  (sección 8.3), pero no hay un sistema de efectos para el resto.
+- La red, los procesos externos y las variables de entorno.
 - Características relacionadas con IA (`ai fn`, `tool fn`). No existe ninguna integración con
   modelos de IA: lo que hay son las representaciones estructuradas (`nex inspect`, diagnósticos en
   JSON) que una herramienta externa podría consumir.
@@ -1795,3 +1865,5 @@ Esta especificación manda sobre el borrador en lo que ya está implementado:
 | Variables sin usar | Son un error | No se comprueba todavía |
 | Bucles | `while` y `for`, sin requisitos | `while` con medida obligatoria (`decreases`) y `for` sobre `List[T]`; ambos con invariantes opcionales, comprobados en cada vuelta |
 | Convenciones de nombres | Obligatorias (`snake_case`…) | No se comprueban todavía |
+| Entrada | Un registro `Input` con `main(input)` | `args()` e `input()`, sin cambiar la forma de `main` (sección 8.3) |
+| Archivos | Sin regla: el programa puede leerlos | Hay que declararlos con `uses` y hay que permitirlos con `--allow-read` (sección 8.3) |

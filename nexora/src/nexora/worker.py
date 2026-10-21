@@ -31,6 +31,7 @@ import sys
 import time
 
 from . import api
+from .host import LocalHost
 from .version import __version__
 
 # Hard cap on the request this process is willing to read, whatever the host says.
@@ -92,10 +93,13 @@ def handle(request: dict) -> dict:
     if action == "check":
         result = api.check_source(code, filename)
     elif action == "run":
+        # The worker never allows files, and its protocol has no field to ask for them: a
+        # program that reads or writes a file stops with E3008 (decision 0015, 6).
+        host = LocalHost(files_allowed=False)
         result = api.run_source(code, filename, limits=api.Limits(
             output_bytes=limits.get("output_bytes"),
             text_chars=limits.get("text_chars"),
-        ))
+        ), host=host)
     else:
         raise ValueError("unknown action")
     result["duration_ms"] = round((time.perf_counter() - started) * 1000)

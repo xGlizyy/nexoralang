@@ -91,10 +91,11 @@ Los campos de cada nodo aparecen siempre, en el orden indicado. Un campo opciona
 
 | `kind` | Campos | Significado |
 |--------|--------|-------------|
-| `Program` | `types`: lista de `TypeDecl` · `functions`: lista de `Function` · `records`: lista de `RecordDecl` | El archivo completo, con los tipos y las funciones en el orden en que aparecen. `records` es el último campo |
+| `Program` | `types`: lista de `TypeDecl` · `functions`: lista de `Function` · `records`: lista de `RecordDecl` · `uses`: lista de `UsesDecl` | El archivo completo, con los tipos y las funciones en el orden en que aparecen. `records` y `uses` van al final |
 | `TypeDecl` | `name`: texto · `name_span`: posición · `base`: `TypeRef` · `condition`: expresión · `message`: texto o `null` | Un tipo refinado. `message` es la explicación escrita tras la coma |
 | `RecordDecl` | `name`: texto · `name_span`: posición · `fields`: lista de `FieldDecl` | Un registro: `type Point = { x: Int, y: Int }` |
 | `FieldDecl` | `name`: texto · `name_span`: posición · `type`: `TypeRef` | Un campo de un registro |
+| `UsesDecl` | `capability`: `"read"` o `"write"` · `path`: texto · `path_span`: posición | La capacidad que el programa declara que necesita ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
 | `Function` | `name`: texto · `name_span`: posición · `params`: lista de `Param` · `return_type`: `TypeRef` · `contracts`: lista de `Contract` · `body`: `Block` · `examples`: lista de `Example` | Una función. `examples` es el último campo |
 | `Example` | `condition`: expresión · `message`: texto o `null` | Una cláusula `example`. `nex inspect` nunca la evalúa |
 | `Param` | `name`: texto · `name_span`: posición · `type`: `TypeRef` | Un parámetro |
@@ -206,6 +207,7 @@ versión 2, y otra comprueba que este documento los menciona todos.
 
 | Versión | Publicada en | Cambios |
 |---------|--------------|---------|
+| `nexora.inspect/2` | `nexora` 0.9.0 | Añadidos, sin cambiar la versión: el nodo `UsesDecl` (`capability`, `path`, `path_span`) para la declaración `uses read "ruta"`, y el campo `uses` al final de `Program` ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
 | `nexora.inspect/2` | `nexora` 0.8.0 | Añadidos, sin cambiar la versión: los nodos `RecordDecl` (`name`, `name_span`, `fields`), `FieldDecl` (`name`, `name_span`, `type`), `RecordConstruction` (`name`, `name_span`, `fields`), `FieldInitializer` (`name`, `name_span`, `value`) y `FieldAccess` (`target`, `name`, `name_span`); la sentencia `FieldAssign` (`target`, `name`, `name_span`, `value`); el campo `records` al final de `Program`; y `type` puede ser el nombre de un registro ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) |
 | `nexora.inspect/1` | `nexora` 0.2.0 | Primera versión |
 | `nexora.inspect/2` | `nexora` 0.7.0 | Añadidos, sin cambiar la versión: `arguments` (lista de `TypeRef`) en `TypeRef`, que es `[]` cuando el tipo no lleva corchetes y tiene un argumento cuando el tipo es `List[Int]`; el nodo `ListLiteral` (`elements`: lista de expresiones) para `[a, b]` y `[]`; el nodo `For` (`name`, `name_span`, `iterable`, `clauses`, `body`) para `for x in xs`; y `type` puede ser `List[...]` ([decisión 0013](decisions/0013-listas-y-for.md)) |

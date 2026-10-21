@@ -1040,6 +1040,33 @@
         }
       }
     },
+    "UsesDecl": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "capability",
+        "path",
+        "path_span"
+      ],
+      "properties": {
+        "kind": {
+          "const": "UsesDecl"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "capability": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "path_span": {
+          "$ref": "#/$defs/span"
+        }
+      }
+    },
     "Let": {
       "type": "object",
       "required": [
@@ -2038,7 +2065,8 @@
         "span",
         "types",
         "functions",
-        "records"
+        "records",
+        "uses"
       ],
       "properties": {
         "kind": {
@@ -2063,6 +2091,12 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/RecordDecl"
+          }
+        },
+        "uses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/UsesDecl"
           }
         }
       }

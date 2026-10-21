@@ -116,7 +116,7 @@ tenga o no errores el programa.
   "diagnostics": [],
   "message": null,
   "duration_ms": 104,
-  "version": "0.8.0"
+  "version": "0.9.0"
 }
 ```
 
@@ -206,9 +206,15 @@ cada capa **no** cubre.
 
 ### 1. El lenguaje
 
-Un programa NEXORA solo puede calcular y escribir texto. No existe ninguna construcción para leer
-archivos, usar la red, ejecutar otros programas ni acceder a variables de entorno, y el intérprete
-no usa `eval` ni `exec`. Está comprobado por `tests/test_security.py`.
+Un programa NEXORA solo puede calcular y escribir texto. No existe ninguna construcción para usar
+la red, ejecutar otros programas ni acceder a variables de entorno, y el intérprete no usa `eval`
+ni `exec`. Está comprobado por `tests/test_security.py`.
+
+Los archivos existen en el lenguaje, pero **el playground no los admite**: el worker no tiene
+ningún campo en su protocolo para concederlos y el entorno del worker no los permite, así que un
+programa que los use se detiene con `E3008` aunque declare la capacidad
+([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). Lo mismo pasa con la
+entrada estándar y con los argumentos: el protocolo no los lleva.
 
 *No cubre:* un defecto del intérprete, ni el consumo de tiempo y memoria.
 
@@ -390,8 +396,8 @@ docker image inspect nexora-worker --format '{{.Id}} {{.Created}}'   # existe, y
 - Constrúyela antes de activar el playground y vuelve a construirla en cada actualización (paso 8):
   contiene su propia copia del intérprete. Cada petición crea un contenedor nuevo, así que la
   siguiente petición ya usa la imagen reconstruida.
-- Para fijar una versión, constrúyela también con etiqueta (`-t nexora-worker:0.8.0`) y escribe esa
-  etiqueta al final de la orden (`"nexora-worker:0.8.0"`). Para volver a una versión anterior que
+- Para fijar una versión, constrúyela también con etiqueta (`-t nexora-worker:0.9.0`) y escribe esa
+  etiqueta al final de la orden (`"nexora-worker:0.9.0"`). Para volver a una versión anterior que
   conserves, cambia la etiqueta de la orden y reinicia el servicio. La etiqueta es lo único de la
   orden que se puede cambiar.
 - Si la imagen no está en el equipo (no se construyó, o se borró con `docker image rm` o
@@ -772,7 +778,7 @@ curl -s https://tu-dominio.example/api/playground/info     # activado: la versi�
 ```
 
 La imagen del worker hay que reconstruirla en cada actualización del lenguaje: contiene su propia
-copia del intérprete. Si la orden usa una etiqueta (`nexora-worker:0.8.0`), construye la imagen con
+copia del intérprete. Si la orden usa una etiqueta (`nexora-worker:0.9.0`), construye la imagen con
 la etiqueta nueva, cámbiala en `PLAYGROUND_WORKER_COMMAND` y reinicia el servicio; ver
 [Imagen del worker](#3-imagen-del-worker).
 

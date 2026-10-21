@@ -19,6 +19,56 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
+## 0.9.0 — Entrada, argumentos, archivos y permisos
+
+Estado del repositorio, no una versión publicada: no hay tag ni paquete en ningún repositorio. Esta
+versión implementa la [decisión 0015](docs/decisions/0015-entrada-argumentos-archivos-y-permisos.md),
+que describe la entrada de un programa, sus argumentos y el acceso a los archivos con permisos
+explícitos. La [0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) no se
+reescribe: su parte de entrada (D11) y su sistema de efectos siguen siendo propuesta, y esta
+versión decide otra forma de hacer lo mismo.
+
+### Añadido
+
+- **Los argumentos del programa**: `args() -> List[Text]` devuelve los argumentos con los que se
+  ejecutó, escritos tras `--`: `nex run programa.nex -- uno dos`. No necesitan ninguna declaración.
+- **La entrada estándar**: `input() -> Text` lee una línea, sin el final de línea. Cuando ya no
+  queda nada que leer, el programa se detiene con `E3009`. No necesita ninguna declaración.
+- **Los archivos**: `read_file(ruta)` y `write_file(ruta, texto)`. Un programa declara lo que
+  necesita con `uses read "ruta"` o `uses write "ruta"`, y quien lo ejecuta tiene que permitirlo
+  con `--allow-read=RUTA` o `--allow-write=RUTA`.
+- **El modelo de permisos**: la capacidad efectiva es la intersección de lo que declara el
+  programa, lo que concede quien lo ejecuta y lo que permite el entorno. Declarar no concede,
+  conceder no habilita, y el entorno manda. Las rutas se confinan sobre la ruta resuelta: un `..` o
+  un enlace simbólico que salen del ámbito concedido no sirven de nada.
+- **Herramientas**: `nexora.context/1` añade el campo `capabilities`, con lo que el programa
+  declara; `nexora.inspect/2` añade el nodo `UsesDecl` y el campo `uses` en `Program`. Los números
+  de los formatos no cambian.
+
+### Cambiado
+
+- Solo en programas que ya eran inválidos: `uses` pasa de palabra reservada a palabra clave, y
+  `read`, `write`, `args`, `input`, `read_file` y `write_file` pasan a ser nombres predefinidos.
+- La versión del repositorio pasa a `0.9.0` y la especificación a `0.9`. Los esquemas JSON no
+  cambian de versión: los campos y nodos nuevos son aditivos.
+
+### Documentación
+
+- La [especificación](docs/language-spec.md) pasa a la versión 0.9 y documenta la entrada, los
+  argumentos y los archivos (sección 8.3), con la gramática, los permisos y las rutas.
+- Nuevo [ADR 0015](docs/decisions/0015-entrada-argumentos-archivos-y-permisos.md).
+- Actualizados `diagnostics.md`, `limitations.md`, `cli-reference.md`, `playground.md`,
+  `architecture.md`, `roadmap.md`, `types.md`, `json-protocol.md`, `inspect-schema.md` y `README.md`.
+
+### Limitaciones
+
+- No se puede leer «hasta el final» de la entrada estándar sin parar: `input()` falla con `E3009`.
+- Solo se leen y escriben archivos de texto: no hay directorios, ni binarios, ni renombrar, ni
+  borrar.
+- No hay red, ni procesos externos, ni variables de entorno.
+- El playground y el servidor MCP no admiten archivos: el worker no tiene ningún campo en su
+  protocolo para concederlos.
+
 ## 0.8.0 — Registros nominales inmutables
 
 Estado del repositorio, no una versión publicada: no hay tag ni paquete en ningún repositorio. Esta

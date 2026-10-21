@@ -111,6 +111,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E2023": ("Invalid record construction", TYPE),
     "E2024": ("Invalid field access", TYPE),
     "E2025": ("Cannot reassign a field", SEMANTIC),
+    "E2026": ("Missing capability declaration", SEMANTIC),
 
     "E3001": ("Division by zero", RUNTIME),
     "E3002": ("Integer overflow", RUNTIME),
@@ -119,6 +120,9 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E3005": ("Conversion out of range", RUNTIME),
     "E3006": ("Text too long", RUNTIME),
     "E3007": ("Out of memory", RUNTIME),
+    "E3008": ("Permission denied", RUNTIME),
+    "E3009": ("No more input", RUNTIME),
+    "E3010": ("File error", RUNTIME),
 
     "E4001": ("Precondition violated", CONTRACT),
     "E4002": ("Postcondition violated", CONTRACT),

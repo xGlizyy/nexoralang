@@ -58,14 +58,14 @@ sin conexión. Lo que hay y lo que no, con precisión: [Herramientas automática
 
 ## Estado
 
-**Versión 0.8.0. Proyecto en fase temprana**, anterior a la 1.0: el lenguaje puede cambiar de forma
+**Versión 0.9.0. Proyecto en fase temprana**, anterior a la 1.0: el lenguaje puede cambiar de forma
 incompatible y no es apto para uso en producción.
 
 | Estado | Qué incluye |
 |--------|-------------|
-| **Implementado y probado** | Tipos estáticos `Int`, `Float`, `Bool`, `Text` y `Void`, con inferencia y anotaciones · **listas** `List[T]` inmutables, con `List.length`, `List.get`, `List.append`, `List.concat`, `List.contains` y `for` sobre listas · **tipos refinados** (`type Percent = Int where ...`): las constantes se comprueban sin ejecutar y el resto con `Percent(x)` al ejecutar · **contratos** (`requires`, `ensures`), estables desde la 0.3, comprobados al ejecutar · **ejemplos** en las funciones (`example`), evaluados con `nex test` · explicación de cada regla en los diagnósticos · variables inmutables (`let`) y reasignables (`var`), y ámbitos · **bucles** `while` con su medida (`decreases`) e invariantes (`invariant`), comprobados en cada vuelta · **operaciones sobre textos** (`Text.length`, `Text.slice`, orden, `Int.parse`), cada función con sus requisitos · aritmética, comparaciones y lógica · conversiones explícitas · funciones con parámetros y `return` · `if` / `else` · recursividad · análisis estático de nombres, tipos y rutas de retorno · comandos `run`, `check`, `inspect`, `context`, `symbols` y `test` · diagnósticos con código y categoría, en texto y en JSON · formatos JSON versionados con JSON Schema |
+| **Implementado y probado** | Tipos estáticos `Int`, `Float`, `Bool`, `Text` y `Void`, con inferencia y anotaciones · **listas** `List[T]` inmutables, con `List.length`, `List.get`, `List.append`, `List.concat`, `List.contains` y `for` sobre listas · **registros** inmutables (`type Point = { x: Int, y: Int }`), con identidad nominal · **tipos refinados** (`type Percent = Int where ...`): las constantes se comprueban sin ejecutar y el resto con `Percent(x)` al ejecutar · **argumentos** (`args()`) y **entrada estándar** (`input()`) · **archivos** con permisos explícitos (`uses read "ruta"` y `--allow-read=ruta`) · **contratos** (`requires`, `ensures`), estables desde la 0.3, comprobados al ejecutar · **ejemplos** en las funciones (`example`), evaluados con `nex test` · explicación de cada regla en los diagnósticos · variables inmutables (`let`) y reasignables (`var`), y ámbitos · **bucles** `while` con su medida (`decreases`) e invariantes (`invariant`), comprobados en cada vuelta · **operaciones sobre textos** (`Text.length`, `Text.slice`, orden, `Int.parse`), cada función con sus requisitos · aritmética, comparaciones y lógica · conversiones explícitas · funciones con parámetros y `return` · `if` / `else` · recursividad · análisis estático de nombres, tipos y rutas de retorno · comandos `run`, `check`, `inspect`, `context`, `symbols` y `test` · diagnósticos con código y categoría, en texto y en JSON · formatos JSON versionados con JSON Schema |
 | **Experimental** | API de Python `nexora.tooling` · servidor MCP opcional (probado con el cliente del SDK y, a mano, en Claude Code; en ningún otro asistente) · [playground](docs/playground.md) web, solo en local |
-| **Previsto** (no existe) | `break` y `continue`, `for` sobre rangos o `Text`, registros, mapas, valores opcionales (`Option`, `Result`), genéricos de usuario, entrada de datos, módulos, servidor de lenguaje (LSP) |
+| **Previsto** (no existe) | `break` y `continue`, `for` sobre rangos o `Text`, mapas, valores opcionales (`Option`, `Result`), genéricos de usuario, red y procesos externos, módulos, servidor de lenguaje (LSP) |
 | **En investigación** (no existe) | Verificación estática de contratos, características de IA dentro del lenguaje, y la evaluación de la hipótesis del proyecto |
 
 Detalle: [hoja de ruta](docs/roadmap.md) y [limitaciones](docs/limitations.md).
@@ -99,7 +99,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.8.0
+NEXORA 0.9.0
 ```
 
 El comando `nex` queda instalado dentro del entorno virtual, no en todo el sistema: solo está

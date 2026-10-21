@@ -93,6 +93,7 @@
       <li><a href="#loops">Loops</a></li>
       <li><a href="#lists">Lists</a></li>
       <li><a href="#records">Records</a></li>
+      <li><a href="#input">Input</a></li>
       <li><a href="#texts">Texts</a></li>
       <li><a href="#diagnostics">Diagnostics</a></li>
       <li><a href="#limitations">Limitations</a></li>
@@ -103,7 +104,7 @@
     <p class="eyebrow">Language guide</p>
     <h1>NEXORA, as it works today</h1>
     <p class="lead">
-      A short tour of what the current interpreter (version 0.8) accepts. Every program on this page is
+      A short tour of what the current interpreter (version 0.9) accepts. Every program on this page is
       run by the project's tests, and every one can be tried in the <a href="playground.html">playground</a>.
     </p>
 
@@ -475,6 +476,39 @@ fn main() -&gt; Void {
 Segment(from: Point(x: 0, y: 0), to: Point(x: 3, y: 4))
 true</pre></div>
       </figure>
+    </section>
+
+    <section id="input">
+      <h2>Input and files</h2>
+      <p>
+        A program can receive its arguments with <code>args()</code>, and read the standard input with
+        <code>input()</code>, one line at a time. Both are allowed by default: they are what the
+        program was given, not something it reaches out for.
+      </p>
+      <p>
+        Files are different. A program says what it needs with <code>uses</code>, and whoever runs it
+        has to allow it: <code>uses read "datos/entradas.txt"</code> needs
+        <code>--allow-read=datos</code>. The three have to be there at the same time, and the paths
+        are checked where they really are, so a <code>..</code> or a symbolic link cannot leave the
+        folder that was allowed.
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="run"><code>fn main() -&gt; Void {
+    let names = args()
+    var total = 0
+    for name in names {
+        invariant total &gt;= 0, "The count never goes down"
+        total = total + Text.length(name)
+    }
+    print(total)
+}</code></pre>
+        <div class="guide-output"><pre data-expected>0</pre></div>
+      </figure>
+      <p>
+        <code>input()</code> reads one line of the standard input, and stops the program when there is
+        nothing left to read. In the playground there is no standard input, so a program that reads it
+        stops with an error.
+      </p>
     </section>
 
     <section id="texts">

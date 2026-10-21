@@ -9,6 +9,7 @@ independent mistakes, and what did parse is kept as a partial tree.
 from __future__ import annotations
 
 from . import ast_nodes as ast
+from .capabilities import CAPABILITIES
 from .diagnostics import MAX_DIAGNOSTICS, Diagnostic, Span
 from .tokens import Token, TokenType
 from .values import VOID
@@ -39,7 +40,7 @@ _NAME_KEYWORDS = (
     TokenType.FN, TokenType.LET, TokenType.RETURN, TokenType.IF, TokenType.ELSE, TokenType.TRUE,
     TokenType.FALSE, TokenType.AND, TokenType.OR, TokenType.NOT, TokenType.REQUIRES, TokenType.ENSURES,
     TokenType.TYPE, TokenType.WHERE, TokenType.EXAMPLE, TokenType.VAR, TokenType.WHILE, TokenType.FOR,
-    TokenType.IN, TokenType.INVARIANT, TokenType.DECREASES,
+    TokenType.IN, TokenType.INVARIANT, TokenType.DECREASES, TokenType.USES,
 )
 _DECLARATION_KEYWORDS = (TokenType.FN, TokenType.TYPE)
 # The clauses that open a function body: the contracts and the examples.
@@ -88,6 +89,7 @@ class Parser:
         functions whose declaration has one. It is for tools; it is never run."""
         types: list[ast.TypeDecl] = []
         records: list[ast.RecordDecl] = []
+        uses: list[ast.UsesDecl] = []
         functions: list[ast.Function] = []
         self._skip_newlines()
         try:
@@ -99,6 +101,8 @@ class Parser:
                             records.append(declaration)
                         else:
                             types.append(declaration)
+                    elif self._check(TokenType.USES):
+                        uses.append(self._uses_declaration())
                     elif self._check(TokenType.FN):
                         functions.append(self._function())
                     else:
@@ -113,7 +117,8 @@ class Parser:
 
         end = self._peek().span
         start = self._tokens[0].span
-        return ast.Program(start.to(end), tuple(types), tuple(functions), tuple(records)), self._diagnostics
+        return ast.Program(start.to(end), tuple(types), tuple(functions), tuple(records), tuple(uses)), \
+            self._diagnostics
 
     def _record(self, error: ParseError) -> None:
         """Keeps a syntax error. Stops the whole parse once the limit is reached."""
@@ -266,7 +271,7 @@ class Parser:
         return self._error(
             "E1101",
             f"Expected a function declaration, found {token.describe()}",
-            hint="At the top level there are only functions and types. "
+            hint="At the top level there are only functions, types and capabilities. "
                  "All other code goes inside a function: fn main() -> Void { ... }",
         )
 
@@ -343,6 +348,40 @@ class Parser:
                                notes=(self._opened_at(opening),))
         self._nesting -= 1
         return ast.RecordDecl(keyword.span.to(closing.span), name.lexeme, name.span, tuple(fields))
+
+    def _uses_declaration(self) -> ast.UsesDecl:
+        """`uses read "ruta"`: the capability a program declares that it needs.
+
+        The path is a text literal: a capability is written down, not computed, so that
+        it can be read, reviewed and checked (decision 0015, 2).
+        """
+        keyword = self._advance()
+        capability = self._peek()
+        if capability.type is not TokenType.IDENT or capability.lexeme not in CAPABILITIES:
+            raise self._error(
+                "E1101",
+                f"Expected 'read' or 'write' after 'uses', found {capability.describe()}",
+                capability,
+                hint='A program declares what it needs with: uses read "datos/entradas.txt"',
+            )
+        self._advance()
+        path = self._peek()
+        if path.type is not TokenType.STRING:
+            raise self._error(
+                "E1101",
+                f"Expected the path of the capability after 'uses {capability.lexeme}'",
+                path,
+                hint='Write the path as a text: uses read "datos/entradas.txt"',
+            )
+        self._advance()
+        if not path.value:
+            raise self._error(
+                "E1101",
+                "The path of a capability cannot be empty",
+                path,
+                hint='Write the path of the file: uses read "datos/entradas.txt"',
+            )
+        return ast.UsesDecl(keyword.span.to(path.span), capability.lexeme, path.value, path.span)
 
     def _explanation(self, clause: str, end: Span) -> tuple[str | None, Span]:
         """The optional `, "explanation"` after a condition. Returns it and where the clause ends."""
@@ -543,6 +582,12 @@ class Parser:
             raise self._error(
                 "E1101",
                 "A type cannot be declared inside a function",
+                hint="Declare it at the top level of the file, outside any function.",
+            )
+        if token.type is TokenType.USES:
+            raise self._error(
+                "E1101",
+                "A capability cannot be declared inside a function",
                 hint="Declare it at the top level of the file, outside any function.",
             )
         if token.type is TokenType.WHERE:

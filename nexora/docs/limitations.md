@@ -1,6 +1,6 @@
 # Limitaciones
 
-Lo que NEXORA **no** hace en la versión 0.8.0, y los riesgos que conviene conocer antes de usarlo.
+Lo que NEXORA **no** hace en la versión 0.9.0, y los riesgos que conviene conocer antes de usarlo.
 Nada de lo que aparece aquí como "no existe" funciona hoy, aunque se mencione en el borrador de
 diseño, en la hoja de ruta o en una decisión aceptada y pendiente de implementar.
 
@@ -37,7 +37,7 @@ NEXORA es un proyecto en una fase temprana (anterior a la versión 1.0):
 | Leer números con espacios, `+`, separadores o en otras bases | `Int.parse` y `Float.parse` solo leen una forma (`"-42"`, `"2.5e3"`) |
 | Operador de resto (`%`) y potencias | |
 | Funciones matemáticas (raíz, redondeo, valor absoluto…) | Hay que escribirlas |
-| Entrada de datos: teclado, argumentos, archivos, red | Un programa solo puede escribir con `print` |
+| Entrada de datos: la red y los procesos externos | Un programa puede imprimir, leer sus argumentos y la entrada estándar, y usar los archivos que declara con `uses` y que se le permiten con `--allow-read` o `--allow-write` ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). No hay red ni procesos externos |
 | Módulos e importaciones | Un programa es un único archivo |
 | Funciones como valores, funciones anónimas, sobrecarga, valores por defecto | |
 | Avisos (*warnings*) | Todo diagnóstico es un error. Una variable sin usar no produce ningún aviso |
@@ -113,9 +113,10 @@ Estables desde la 0.3.0. Sus límites, en detalle, en [contratos](contracts.md#l
 
 ## Seguridad
 
-Un programa NEXORA solo puede calcular y escribir texto: el lenguaje no tiene ninguna construcción
-para leer archivos, usar la red o ejecutar otros programas, y las pruebas comprueban que el
-intérprete no usa `eval` ni `exec`. Aun así:
+Un programa NEXORA puede calcular, escribir texto, leer sus argumentos y la entrada estándar, y
+usar los archivos que declara con `uses` y que se le permiten con `--allow-read` o `--allow-write`.
+No tiene ninguna construcción para usar la red o ejecutar otros programas, y las pruebas
+comprueban que el intérprete no usa `eval` ni `exec`. Aun así:
 
 - **NEXORA no es un entorno aislado (*sandbox*).** Se ejecuta dentro de un proceso de Python normal,
   con los permisos de quien lo lanza.

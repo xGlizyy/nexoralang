@@ -121,6 +121,7 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E2020` | Example without its function | Un ejemplo no contiene ninguna llamada a su propia función: su expresión no la nombra en ningún punto. Una llamada que solo ocurre dentro de otra función no cuenta | Escribe la llamada con sus entradas: `example f(2) == 4` |
 | `E2021` | Missing loop measure | Un `while` no declara su medida (`decreases`), o declara más de una. Sin medida, nada dice por qué el bucle termina | Añade `decreases` con un `Int` que baje en cada vuelta y no pase de 0, por ejemplo `decreases n - i` |
 | `E2022` | Unsupported loop clause | Un `for` declara `decreases`, pero recorre una lista finita y no lleva medida | Quita el `decreases`; si necesitas invariantes, escríbelos con `invariant` |
+| `E2026` | Missing capability declaration | Se lee o se escribe un archivo sin declararlo con `uses` ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Decláralo al principio del archivo: `uses read "datos/entradas.txt"` |
 | `E2025` | Cannot reassign a field | Se asigna a un campo de un registro, que es inmutable ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) | Construye otro registro con el valor que quieres |
 
 ### De tipos
@@ -146,6 +147,9 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E3005` | Conversion out of range | `to_int` de un `Float` que no cabe en un `Int` | Comprueba el valor antes de convertir |
 | `E3006` | Text too long | Un texto construido con `+` supera el límite del entorno donde se ejecuta. Solo ocurre donde se fija un límite, como el playground | Construye textos más cortos |
 | `E3007` | Out of memory | El programa necesitó más memoria de la disponible mientras se ejecutaba. No señala ninguna posición; las notas muestran la cadena de llamadas | Reduce el tamaño de los valores que crea el programa, sobre todo los que crecen en cada llamada |
+| `E3008` | Permission denied | El programa intenta usar un archivo que no puede usar: no lo declara con `uses`, quien lo ejecuta no lo ha permitido con `--allow-read` o `--allow-write`, o el entorno no admite archivos ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Declara la capacidad y pide el permiso: `uses read "datos.txt"` y `nex run programa.nex --allow-read=datos` |
+| `E3009` | No more input | `input()` se ha llamado cuando la entrada estándar ya se ha terminado | Comprueba que hay más entrada antes de leer, o termina el programa |
+| `E3010` | File error | El archivo se podía usar, pero no se ha podido leer o escribir: no existe, no es un texto UTF-8, o el sistema operativo lo ha impedido | Comprueba la ruta y que el archivo sea un texto UTF-8 |
 
 ### De contrato
 
@@ -231,7 +235,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.8.0",
+  "nexora_version": "0.9.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

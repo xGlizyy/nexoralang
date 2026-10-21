@@ -1,7 +1,7 @@
 # Referencia de la CLI
 
 `nex` es la herramienta de línea de comandos de NEXORA. Esta página describe la versión
-`nexora` 0.8.0. Una prueba automatizada comprueba que todos los comandos, opciones y códigos de
+`nexora` 0.9.0. Una prueba automatizada comprueba que todos los comandos, opciones y códigos de
 salida que acepta el programa están documentados aquí.
 
 `python -m nexora` es equivalente a `nex` y acepta exactamente los mismos argumentos.
@@ -9,12 +9,12 @@ salida que acepta el programa están documentados aquí.
 ## Resumen
 
 ```text
-nex run <archivo> [--format text|json]
+nex run <archivo> [--format text|json] [--allow-read RUTA] [--allow-write RUTA] [-- argumentos...]
 nex check <archivo> [--format text|json]
 nex inspect <archivo> [--format json]
 nex context <archivo> [--format text|json]
 nex symbols <archivo> [--format text|json] [--name NOMBRE] [--function FUNCION]
-nex test <archivo> [--format text|json] [--function FUNCION]
+nex test <archivo> [--format text|json] [--function FUNCION] [--allow-read RUTA] [--allow-write RUTA]
 nex --version
 nex --help
 ```
@@ -65,6 +65,14 @@ Hello from NEXORA
 |--------|--------|
 | `--format text` | Por defecto. Los errores se escriben como texto para personas |
 | `--format json` | Si el programa es inválido o falla, escribe un documento JSON en la **salida de error**. Si termina bien, no escribe nada adicional. La salida del programa no cambia |
+| `--allow-read RUTA` | Permite al programa leer los archivos de esa ruta. Se puede repetir. Un programa además tiene que declararlo con `uses read` |
+| `--allow-write RUTA` | Permite al programa escribir los archivos de esa ruta. Se puede repetir. Un programa además tiene que declararlo con `uses write` |
+| `-- uno dos` | Los argumentos del programa. Se escriben después de `--` y el programa los lee con `args()` |
+
+Los permisos son explícitos y reproducibles: los archivos que un programa puede usar son la
+intersección de lo que declara (`uses`), lo que permite la orden (`--allow-read`,
+`--allow-write`) y lo que admite el entorno. Declarar no concede, y conceder no habilita
+([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)).
 
 ## `nex check`
 
@@ -198,7 +206,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.8.0
+NEXORA 0.9.0
 ```
 
 ## `nex --help`

@@ -174,6 +174,18 @@ class RecordDecl(Node):
     fields: tuple[FieldDecl, ...]
 
 
+@dataclass(frozen=True)
+class UsesDecl(Node):
+    """`uses read "ruta"`: the capability a program declares that it needs.
+
+    Declaring a capability does not grant it: the user has to allow it too, and the
+    environment has to permit it (decision 0015, 2 and 3).
+    """
+    capability: str
+    path: str
+    path_span: Span
+
+
 # Statements
 
 @dataclass(frozen=True)
@@ -320,6 +332,8 @@ class Program(Node):
     # The record types the program declares, after the functions: a new field goes at
     # the end, so the order of the existing ones does not change (docs/inspect-schema.md).
     records: tuple[RecordDecl, ...] = ()
+    # The capabilities the program declares it needs, after the records (decision 0015).
+    uses: tuple[UsesDecl, ...] = ()
 
 
 def to_dict(node, types: dict[int, str] | None = None):

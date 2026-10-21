@@ -30,10 +30,11 @@ PROGRAM = (
 # Every node kind and its fields, in order. This is the contract of schema version 2:
 # removing or renaming anything here requires a new schema version.
 EXPECTED_FIELDS = {
-    "Program": ["kind", "span", "types", "functions", "records"],
+    "Program": ["kind", "span", "types", "functions", "records", "uses"],
     "TypeDecl": ["kind", "span", "name", "name_span", "base", "condition", "message"],
     "RecordDecl": ["kind", "span", "name", "name_span", "fields"],
     "FieldDecl": ["kind", "span", "name", "name_span", "type"],
+    "UsesDecl": ["kind", "span", "capability", "path", "path_span"],
     "Function": ["kind", "span", "name", "name_span", "params", "return_type", "contracts", "body", "examples"],
     "Example": ["kind", "span", "condition", "message"],
     "Param": ["kind", "span", "name", "name_span", "type"],
@@ -125,11 +126,12 @@ def test_every_node_has_exactly_the_documented_fields():
         "    return Point(x: p.x, y: p.y)\n"
         "}\n"
     )
+    uses = 'uses read "datos/entradas.txt"\n'
     extra = (
         'fn extra(n: Small) -> Int {\n    example extra(1) == 2, "One more"\n'
         "    let xs: List[Int] = [1, 2]\n    return (n) + 1\n}\n"
     )
-    for node in walk(inspect(refined + records + PROGRAM + "\n" + extra)):
+    for node in walk(inspect(refined + records + uses + PROGRAM + "\n" + extra)):
         seen.setdefault(node["kind"], list(node))
     assert_fields(seen)
     assert set(seen) == set(EXPECTED_FIELDS) - {"Assign", "FieldAssign"}

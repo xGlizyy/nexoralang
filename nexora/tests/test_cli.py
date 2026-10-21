@@ -64,7 +64,7 @@ def test_no_command_is_a_usage_error(capsys):
     assert captured.out == "" and "usage: nex" in captured.err
 
 
-@pytest.mark.parametrize("arguments", [["bogus"], ["run"], ["check"], ["run", "a.nex", "b.nex"], ["--nope"]])
+@pytest.mark.parametrize("arguments", [["bogus"], ["run"], ["check"], ["run", "a.nex", "--nope"], ["--nope"]])
 def test_wrong_usage(arguments, capsys):
     assert cli.main(arguments) == 2
     assert "usage: nex" in capsys.readouterr().err
@@ -375,7 +375,7 @@ def test_internal_error_can_be_investigated(program, monkeypatch):
 
 
 def test_interrupting_a_run_is_reported_without_a_traceback(program, monkeypatch, capsys):
-    def interrupted(*arguments):
+    def interrupted(*arguments, **keywords):
         raise KeyboardInterrupt
     monkeypatch.setattr(cli, "run", interrupted)
     assert cli.main(["run", program(HELLO)]) == 130
@@ -385,7 +385,7 @@ def test_interrupting_a_run_is_reported_without_a_traceback(program, monkeypatch
 
 @pytest.mark.parametrize("failure", [BrokenPipeError(), OSError(22, "Invalid argument")])
 def test_a_reader_that_goes_away_is_not_an_internal_error(failure, program, monkeypatch, capsys):
-    def closed(*arguments):
+    def closed(*arguments, **keywords):
         raise failure
     monkeypatch.setattr(cli, "run", closed)
     assert cli.main(["run", program(HELLO)]) == 0

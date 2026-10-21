@@ -22,6 +22,7 @@ from dataclasses import dataclass, field, fields
 
 from . import ast_nodes as ast
 from . import types as type_model
+from .capabilities import READ, WRITE, Capabilities
 from .diagnostics import MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Span
 from .type_adapter import TypeAdapter
 from .values import BOOL, FLOAT, INT, TEXT, VALUE_TYPES, VOID
@@ -36,6 +37,9 @@ ANY_VALUE = "Int | Float | Bool | Text"
 # its type's chain, so without a bound the work would grow with types x conditions x constants.
 # Ordinary programs stay far below it; a program above it is rejected (E2019), never half-checked.
 MAX_REFINEMENT_STEPS = 100_000
+
+# The functions that touch a file, and the capability each one needs (decision 0015).
+FILE_FUNCTIONS = {"read_file": READ, "write_file": WRITE}
 
 ARITHMETIC = ("+", "-", "*", "/")
 EQUALITY = ("==", "!=")
@@ -108,6 +112,12 @@ BUILTINS: dict[str, Signature] = {
         Signature("to_text", (("value", ANY_VALUE),), TEXT, builtin=True),
         Signature("to_float", (("value", INT),), FLOAT, builtin=True),
         Signature("to_int", (("value", FLOAT),), INT, builtin=True),
+        # The input and the files (decision 0015). The arguments and the standard
+        # input need no declaration; the files do.
+        Signature("args", (), "List[Text]", builtin=True),
+        Signature("input", (), TEXT, builtin=True),
+        Signature("read_file", (("path", TEXT),), TEXT, builtin=True),
+        Signature("write_file", (("path", TEXT), ("text", TEXT)), VOID, builtin=True),
         Signature("Text.length", (("text", TEXT),), INT, builtin=True),
         Signature("Text.slice", (("text", TEXT), ("start", INT), ("end", INT)), TEXT, builtin=True),
         Signature("Text.contains", (("text", TEXT), ("part", TEXT)), BOOL, builtin=True),
@@ -228,6 +238,8 @@ class CheckedProgram:
     # The record types whose declaration is valid, by name. The interpreter reads the
     # identity from here: it never rebuilds it from the name (decision 0014, 3).
     records: dict[str, RecordType] = field(default_factory=dict)
+    # The capabilities the program declares it needs (decision 0015, 2).
+    capabilities: Capabilities = field(default_factory=Capabilities)
 
 
 @dataclass(frozen=True)
@@ -385,6 +397,8 @@ class Checker:
         # The record types the program declares, and the ones that are valid.
         self._record_names: dict[str, ast.RecordDecl] = {}
         self._records: dict[str, RecordType] = {}
+        # The capabilities the program declares that it needs (decision 0015, 2).
+        self._capabilities = Capabilities()
         # The fields of each record, by name, once their types are resolved.
         self._record_fields: dict[str, tuple[tuple[str, str], ...]] = {}
         # The type each field was written with, to know what it depends on.
@@ -419,7 +433,7 @@ class Checker:
             pass
         checked = CheckedProgram(
             program, declared, self._types, tuple(self._symbols), tuple(self._calls), dict(self._refined),
-            dict(self._records),
+            dict(self._records), self._capabilities,
         )
         return checked, self._diagnostics
 
@@ -429,6 +443,7 @@ class Checker:
         # already unusable when a signature names it: its error is reported once, not at every use.
         self._declare_names(program.types, program.records)
         self._declare_types(program.types)
+        self._declare_uses(program.uses)
         self._function_names = {function.name for function in program.functions}
         for declaration in program.types:
             self._type_condition(declaration)
@@ -605,6 +620,48 @@ class Checker:
             self._type_adapter.drop_refined(other)
 
     # Record types
+
+    def _declare_uses(self, declarations: tuple[ast.UsesDecl, ...]) -> None:
+        """The capabilities the program declares that it needs (decision 0015, 2).
+
+        Declaring is not granting: the user has to allow the capability too, and the
+        environment has to permit it. The interpreter checks the three when the program
+        touches a file.
+        """
+        read: list[str] = []
+        write: list[str] = []
+        for declaration in declarations:
+            paths = read if declaration.capability == READ else write
+            if declaration.path not in paths:
+                paths.append(declaration.path)
+        self._capabilities = Capabilities(read=tuple(read), write=tuple(write))
+
+    def _check_capability(self, node: ast.Call) -> None:
+        """A call that touches a file needs a declaration that covers its path.
+
+        This is a help, not the security: the interpreter checks the permissions again
+        when the program runs (decision 0015, 5).
+        """
+        capability = FILE_FUNCTIONS[node.callee]
+        if not node.arguments:
+            return
+        path = node.arguments[0]
+        if not isinstance(path, ast.TextLiteral):
+            # The path is computed: only the interpreter can tell whether it is allowed.
+            return
+        if self._capabilities.covers(capability, path.value):
+            return
+        if not self._capabilities.comparable(capability, path.value):
+            # The declared path and this one cannot be compared (one is relative and the
+            # other absolute): only the interpreter can tell, and it has the working
+            # directory.
+            return
+        self._report(
+            "E2026",
+            f"This program does not declare that it needs to {capability} '{path.value}'",
+            path.span,
+            hint=f"Declare it at the top level of the file: uses {capability} \"{path.value}\"",
+        )
 
     def _declare_records(self, declarations: tuple[ast.RecordDecl, ...]) -> None:
         """Resolves the record types the program declares, and decides which ones are valid.
@@ -1778,6 +1835,9 @@ class Checker:
             # A parametric result such as 'T' is not a type until a call binds it, so
             # there is nothing safe to report as the type of this failed call.
             return None if signature.parametric is not None else signature.return_type
+
+        if node.callee in FILE_FUNCTIONS:
+            self._check_capability(node)
 
         if signature.parametric is not None:
             return self._parametric_call(node, argument_types, signature)

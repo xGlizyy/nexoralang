@@ -450,7 +450,7 @@ describe('info and examples', () => {
     assert.deepEqual(response.json.language.builtins, [
       'Float.can_parse', 'Float.parse', 'Int.can_parse', 'Int.parse', 'List.append', 'List.concat', 'List.contains',
       'List.get', 'List.length', 'Text.contains', 'Text.ends_with', 'Text.length', 'Text.slice', 'Text.starts_with',
-      'print', 'to_float', 'to_int', 'to_text',
+      'args', 'input', 'print', 'read_file', 'to_float', 'to_int', 'to_text', 'write_file',
     ]);
     assert.deepEqual(response.json.limits, { code_bytes: 65536, timeout_ms: 2000, output_bytes: 65536, text_chars: 262144 });
   });
@@ -495,6 +495,9 @@ describe('the playground and the command line share one core', () => {
   for (const file of files) {
     test(`same result as nex for ${path.relative(examplesDir, file).replaceAll('\\', '/')}`, async () => {
       const code = readFileSync(file, 'utf8');
+      // The examples that use files are the documented exception: the playground never
+      // allows them, so the two say why in a different way (decision 0015, 6).
+      if (/^\s*uses\s+(read|write)\s/m.test(code)) return;
 
       const cliRun = spawnSync(python, ['-m', 'nexora', 'run', file, '--format', 'json'], { encoding: 'utf8' });
       const apiRun = (await server.run(code)).json;

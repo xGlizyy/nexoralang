@@ -310,7 +310,7 @@ def test_binary_result_is_differentially_equivalent_on_examples(monkeypatch):
         "context": tooling.get_context,
     }
     paths = sorted(EXAMPLE_DIR.rglob("*.nex"))
-    assert len(paths) == 21
+    assert len(paths) == 23
     skipped: list[Path] = []
     for path in paths:
         text = path.read_text(encoding="utf-8")

@@ -66,15 +66,17 @@ Reglas del flujo:
 | `ast_nodes.py` | Los nodos del árbol y su conversión a JSON | `diagnostics` |
 | `parser.py` | Tokens → AST, con recuperación de errores | `ast_nodes`, `tokens`, `diagnostics` |
 | `checker.py` | Análisis estático. **Único lugar que decide qué regla de tipos se aplica a cada expresión**; el modelo de `types.py` define identidad y compatibilidad | `ast_nodes`, `diagnostics`, `values`, `types`, `type_adapter` |
-| `interpreter.py` | Ejecución, contratos y errores de ejecución | `ast_nodes`, `checker`, `diagnostics`, `prelude`, `values` |
+| `interpreter.py` | Ejecución, contratos y errores de ejecución | `ast_nodes`, `checker`, `diagnostics`, `prelude`, `values`, `capabilities` |
 | `prelude.py` | Las funciones de un tipo (`Text.length`, `Int.parse`, `List.get`…): sus contratos, escritos en NEXORA, sus implementaciones y la gramática de los números escritos en un texto | `ast_nodes`, `diagnostics`, `lexer`, `parser`, `values` |
+| `capabilities.py` | El modelo de permisos: lo que declara un programa, lo que concede quien lo ejecuta y la comparación de dos rutas. **No toca el sistema operativo** | — |
+| `host.py` | Lo que un programa puede hacer además de calcular: sus argumentos, su entrada y los archivos que puede usar, con la comprobación de los tres permisos. **Único módulo que abre archivos** | `capabilities` |
 | `pipeline.py` | Encadena lexer, parser y checker | Los tres |
 | `api.py` | Comprobar o ejecutar código en memoria, con límites opcionales. La interfaz para quien integra NEXORA en otro programa | `pipeline`, `interpreter`, `checker`, `tokens`, `diagnostics` |
 | `worker.py` | Proceso de un solo uso que atiende una petición JSON; lo usa el [playground](playground.md) | `api` |
 | `tooling.py` | Las herramientas de análisis: documentos JSON de diagnósticos, árbol, símbolos, contexto, especificación y capacidades. **Nunca ejecuta un programa**: del intérprete solo toma la constante del límite de llamadas | `pipeline`, `checker`, `parser`, `ast_nodes`, `tokens`, `values`, `diagnostics` |
 | `schemas.py` | Los JSON Schema de todos los formatos; la parte del árbol se deriva de las clases de `ast_nodes` | `ast_nodes`, `diagnostics` |
 | `mcp_server.py` | Servidor MCP **opcional**. Único módulo que importa el SDK de MCP; valida los argumentos y delega en `tooling` | `tooling` |
-| `cli.py` | Argumentos, lectura del archivo, formatos de salida, códigos de salida | `pipeline`, `interpreter`, `tooling`, `diagnostics` |
+| `cli.py` | Argumentos, lectura del archivo, formatos de salida, códigos de salida, y los permisos que se conceden al programa | `pipeline`, `interpreter`, `tooling`, `diagnostics`, `capabilities`, `host` |
 | `__main__.py` | Permite `python -m nexora` | `cli` |
 
 Solo los puntos de entrada tocan el sistema operativo: `cli.py` lee el archivo y escribe en la
@@ -84,6 +86,11 @@ que ningún argumento influya en la ruta. El lexer, el
 parser, el comprobador y el intérprete trabajan con texto y estructuras en memoria; el intérprete
 recibe una función `write` para la salida, lo que permite probarlo sin terminal. Una prueba
 (`tests/test_security.py`) comprueba que esos módulos no importan `os`, `pathlib` ni `subprocess`.
+
+La única excepción es `host.py`: es el módulo que le da a un programa sus argumentos, su entrada
+y los archivos que puede usar, y por eso es el único que abre archivos. El intérprete no lo importa:
+recibe un *host* y le pregunta ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)).
+El modelo de permisos, en `capabilities.py`, no toca el sistema operativo: solo compara rutas.
 
 ## Las piezas, una a una
 

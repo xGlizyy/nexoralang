@@ -31,6 +31,7 @@ from dataclasses import dataclass, replace
 
 from . import ast_nodes as ast
 from . import tooling
+from .capabilities import Host
 from .checker import BUILTINS, KNOWN_TYPES, own_calls
 from .diagnostics import CONTRACT, MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Source
 from .interpreter import MAX_CALL_DEPTH, ExampleRun, run, run_example
@@ -113,11 +114,15 @@ NO_LIMITS = Limits()
 _MEMORY_MESSAGE = "The program needed more memory than this environment allows and was stopped."
 
 
-def run_source(source: str, filename: str = DEFAULT_FILENAME, *, limits: Limits = NO_LIMITS) -> dict:
+def run_source(source: str, filename: str = DEFAULT_FILENAME, *, limits: Limits = NO_LIMITS,
+               host: Host | None = None) -> dict:
     """Analyses a program and, if it has no static errors, runs it and collects its output.
 
     A program with static errors is never started: the status is "invalid" and the output empty.
     If the program fails while running, "output" holds what it had printed until then.
+
+    `host` is what the program may do besides computing: its arguments, its input and the
+    files it may touch. Without one, the program can only compute and print (decision 0015).
     """
     analysis = analyze(Source(filename, source))
     if analysis.checked is None:
@@ -125,7 +130,7 @@ def run_source(source: str, filename: str = DEFAULT_FILENAME, *, limits: Limits 
 
     output = _Output(limits.output_bytes)
     try:
-        run(analysis.checked, output.write, text_limit=limits.text_chars)
+        run(analysis.checked, output.write, text_limit=limits.text_chars, host=host)
     except NexoraRuntimeError as error:
         if error.diagnostic.code == "E3007":
             # Out of memory while running: the same status as below, now with its diagnostic (decision 0009).
@@ -179,7 +184,7 @@ class TestReport:
     __test__ = False                 # not a pytest test class, despite its name
 
 
-def run_examples(analysis: Analysis, function: str | None = None) -> TestReport:
+def run_examples(analysis: Analysis, function: str | None = None, host: Host | None = None) -> TestReport:
     """Evaluates the examples of an analysed program, each in a new interpreter, in the order of
     the file. `analysis` should come from `analyze(source, require_main=False)`.
 
@@ -205,7 +210,7 @@ def run_examples(analysis: Analysis, function: str | None = None) -> TestReport:
         for index, example in enumerate(declared.examples, start=1):
             calls = own_calls(example, declared.name)
             results.append(_example_result(analysis, declared.name, index, example, calls,
-                                            run_example(checked, example, calls)))
+                                            run_example(checked, example, calls, host)))
 
     if not results:
         status = NO_EXAMPLES
