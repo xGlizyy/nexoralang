@@ -16,6 +16,7 @@ const CATALOGUE = [
   { id: 'loops', file: 'loops.nex', title: 'Loops that say why they end', expect: 'success' },
   { id: 'texts', file: 'texts.nex', title: 'Texts', expect: 'success' },
   { id: 'lists', file: 'lists.nex', title: 'Lists and for', expect: 'success' },
+  { id: 'records', file: 'records.nex', title: 'Records', expect: 'success' },
   { id: 'type-errors', file: 'invalid/type_errors.nex', title: 'Type errors, on purpose', expect: 'invalid' },
   { id: 'runtime-error', file: 'failing/runtime_error.nex', title: 'A runtime error, on purpose', expect: 'runtime_error' },
   { id: 'contract-violation', file: 'failing/contract_violation.nex', title: 'A broken contract, on purpose', expect: 'contract_violation' },

@@ -28,12 +28,13 @@ export const roadmap = [
     summary: 'The rules are written down before they are built, and the specification follows the interpreter exactly. The syntax can still change.',
     status: 'in-progress',
     available: [
-      'A language specification, version 0.7, that describes exactly what the interpreter does.',
-      'Twelve accepted design records, each with its reasons, the alternatives it rejected and what it does not guarantee.',
+      'A language specification, version 0.8, that describes exactly what the interpreter does.',
+      'Thirteen accepted design records, each with its reasons, the alternatives it rejected and what it does not guarantee.',
       'A broader design draft of where the language is going.',
+      'Lists and `for` (0.7.0), and records (0.8.0): the first compound types of the language.',
     ],
     next: [
-      'Lists and `for`, then records and `Option` / `Result`.',
+      'Optional values (`Option`, `Result`), for the absence of a value and for errors without exceptions.',
       'Reading input, and modules.',
     ],
   },

@@ -75,7 +75,8 @@ describe('links between the pages of the site', () => {
 
   test('the playground links to every topic of the guide it promises', () => {
     const playground = read('playground.html');
-    for (const topic of ['introduction', 'syntax', 'types', 'operators', 'functions', 'lists', 'diagnostics', 'limitations']) {
+    for (const topic of ['introduction', 'syntax', 'types', 'operators', 'functions', 'lists', 'records',
+      'diagnostics', 'limitations']) {
       assert.ok(playground.includes(`guide.html#${topic}`), topic);
     }
   });

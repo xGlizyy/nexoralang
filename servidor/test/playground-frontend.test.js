@@ -428,6 +428,20 @@ describe('highlighting and positions', () => {
     assert.deepEqual(classes('Int.parse(t) + length(t)'), [['type', 'Int'], ['builtin', 'parse'], ['op', '+'], ['fn', 'length']]);
   });
 
+  test('the types the program declares are types, not functions', () => {
+    assert.deepEqual(classes('type Point = { x: Int }'), [
+      ['kw', 'type'], ['type', 'Point'], ['op', '='], ['type', 'Int'],
+    ]);
+    // A declared type keeps being a type where it is used, even with parentheses.
+    assert.deepEqual(classes('type Point = { x: Int }\nlet p = Point(x: 1)'), [
+      ['kw', 'type'], ['type', 'Point'], ['op', '='], ['type', 'Int'],
+      ['kw', 'let'], ['op', '='], ['type', 'Point'], ['num', '1'],
+    ]);
+    assert.deepEqual(classes('type Percent = Int where value > 0'), [
+      ['kw', 'type'], ['type', 'Percent'], ['op', '='], ['type', 'Int'], ['kw', 'where'], ['op', '&gt;'], ['num', '0'],
+    ]);
+  });
+
   test('text is never coloured as code, and unfinished text does not break', () => {
     assert.deepEqual(classes('"fn let // not a comment"'), [['str', '"fn let // not a comment"']]);
     assert.deepEqual(classes('let a = "open'), [['kw', 'let'], ['op', '='], ['str', '"open']]);

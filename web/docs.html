@@ -150,7 +150,7 @@
         </div>
         <div>
           <dt>Version</dt>
-          <dd>0.7, an experimental release before 1.0. The language can still change in incompatible ways.</dd>
+          <dd>0.8, an experimental release before 1.0. The language can still change in incompatible ways.</dd>
         </div>
         <div>
           <dt>Implementation</dt>
@@ -363,10 +363,11 @@ fn main() -&gt; Void {
           <dt><span class="chip chip--in-progress">Available</span></dt>
           <dd>
             <ul>
-              <li>A reference interpreter, version 0.7, that runs a subset of the language from the command line.</li>
+              <li>A reference interpreter, version 0.8, that runs a subset of the language from the command line.</li>
               <li>Rules written in the code and checked by the interpreter: contracts (<code>requires</code>, <code>ensures</code>) and refined types (<code>type Percent = Int where ...</code>), loops that declare why they end (<code>decreases</code>) and what they keep (<code>invariant</code>), each with an optional explanation, and examples in functions (<code>example</code>) checked with <code>nex test</code>.</li>
               <li>Operations on text (<code>Text.length</code>, <code>Text.slice</code>, ordering) and reading numbers with <code>Int.parse</code> and <code>Float.parse</code>, each function stating the requirements it checks.</li>
               <li>Immutable lists (<code>List[Int]</code>, <code>[1, 2, 3]</code>) with <code>List.length</code>, <code>List.get</code>, <code>List.append</code>, <code>List.concat</code> and <code>List.contains</code>, and <code>for</code> loops over them.</li>
+              <li>Records: types the program declares, with immutable fields (<code>type Point = { x: Int, y: Int }</code>), built by name and compared by value. Their identity is the identity of their declaration, so two records with the same fields are still different types.</li>
               <li>A language specification for that subset, and a broader design draft.</li>
               <li>A <a href="playground.html">playground</a> that runs code in the browser with that interpreter. It is off unless the server enables it explicitly, and it must stay off on a public site until the isolation of its containers has been checked.</li>
               <li>A short <a href="guide.html">language guide</a>.</li>
@@ -409,9 +410,9 @@ fn main() -&gt; Void {
           <dt><span class="chip chip--in-progress">Passed</span></dt>
           <dd>
             <ul>
-              <li>Interpreter, version 0.7: 2,074 tests passed, 4 skipped and 0 failed, with 94.63% coverage, on Windows 11 with Python 3.12.10 (21 October 2026). Version 0.6: 1,600 passed, 4 skipped and 0 failed, on the same system (15 October 2026).</li>
+              <li>Interpreter, version 0.8: 2,190 tests passed, 4 skipped and 0 failed, with 94.34% coverage, on Windows 11 with Python 3.12.10 (21 October 2026). Version 0.7: 2,074 passed, 4 skipped and 0 failed, with 94.63% coverage, on the same system (21 October 2026). Version 0.6: 1,600 passed, 4 skipped and 0 failed, on the same system (15 October 2026).</li>
               <li>Interpreter on Linux (Ubuntu 24.04 under WSL 2): 1,604 tests passed, none skipped and 0 failed with Python 3.12.3, and the same with 3.11.17 and 3.13.16 (17 October 2026). That includes the 4 POSIX tests that Windows skips: a file without read permission, and the memory, CPU and time limits of the playground process.</li>
-              <li>Web server, in the development version: 818 automated tests passed, none skipped and 0 failed in one run on Windows 11 with Node 24.21.0 (21 October 2026), after the site and the playground were brought up to language 0.7. Before that, 811 passed, none skipped and 0 failed in one run with the same system and Node (18 October 2026), and before the change that preceded it, 810 passed, none skipped and 0 failed in each of three runs on Windows 11 with Node 24.21.0, and in one run each with Node 24.14.0, 22.23.3 and 22.22.3; with Node 20.6.1 and 22.15.0, 796 passed, 14 were skipped (they need Node 22.22.3 or later in the 22 line, or 24.14.0 or later in the 24 line, the versions accepted by the guards of the integration tests) and 0 failed in one run each (18 October 2026). The server itself requires Node 22.23.2 or later in the 22 line, or 24.18.1 or later in the 24 line; it has not been tested with those exact versions. None of these runs was on Linux. An earlier state of that version, with 567 tests, passed in each of three runs on Windows 11 and on Linux (Ubuntu 24.04 under WSL 2) with Node 24.11.1, the same day. The tests of the container command only analyse its arguments, and the container lifecycle tests use a fake Docker: no real container was run. The database, Google reCAPTCHA and the browser are simulated too.</li>
+              <li>Web server, in the development version: 821 automated tests passed, none skipped and 0 failed in one run on Windows 11 with Node 24.21.0 (21 October 2026), after the site and the playground were brought up to language 0.8. Before that, 818 passed, none skipped and 0 failed in one run with the same system and Node (21 October 2026), after the site and the playground were brought up to language 0.7. Before that, 811 passed, none skipped and 0 failed in one run with the same system and Node (18 October 2026), and before the change that preceded it, 810 passed, none skipped and 0 failed in each of three runs on Windows 11 with Node 24.21.0, and in one run each with Node 24.14.0, 22.23.3 and 22.22.3; with Node 20.6.1 and 22.15.0, 796 passed, 14 were skipped (they need Node 22.22.3 or later in the 22 line, or 24.14.0 or later in the 24 line, the versions accepted by the guards of the integration tests) and 0 failed in one run each (18 October 2026). The server itself requires Node 22.23.2 or later in the 22 line, or 24.18.1 or later in the 24 line; it has not been tested with those exact versions. None of these runs was on Linux. An earlier state of that version, with 567 tests, passed in each of three runs on Windows 11 and on Linux (Ubuntu 24.04 under WSL 2) with Node 24.11.1, the same day. The tests of the container command only analyse its arguments, and the container lifecycle tests use a fake Docker: no real container was run. The database, Google reCAPTCHA and the browser are simulated too.</li>
             </ul>
           </dd>
         </div>
@@ -439,6 +440,17 @@ fn main() -&gt; Void {
       <h3>Recent changes</h3>
 
       <dl class="status-list">
+        <div>
+          <dt><span class="chip chip--in-progress">0.8.0</span></dt>
+          <dd>
+            <ul>
+              <li>Records: types the program declares, with immutable fields (<code>type Point = { x: Int, y: Int }</code>). They are built by name (<code>Point(x: 1, y: 2)</code>), their fields are read with a dot (<code>p.x</code>), and two values of the same record are compared by value.</li>
+              <li>A record is nominal: its identity is the identity of its declaration, not its name nor its fields. Two records with the same fields are still different types.</li>
+              <li>A record never changes: there is no way to assign to one of its fields.</li>
+              <li>Every program that was valid in 0.7.0 is still valid and gives the same result. Not tagged or published yet.</li>
+            </ul>
+          </dd>
+        </div>
         <div>
           <dt><span class="chip chip--in-progress">0.7.0</span></dt>
           <dd>
@@ -566,7 +578,7 @@ fn main() -&gt; Void {
           <summary>Is NEXORA ready for production?</summary>
           <div class="faq__answer">
             <p>
-              <strong>Not yet.</strong> Version 0.7 is an experimental development release. It can be
+              <strong>Not yet.</strong> Version 0.8 is an experimental development release. It can be
               explored and tested, but production suitability has not been established.
             </p>
           </div>

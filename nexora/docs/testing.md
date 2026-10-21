@@ -27,17 +27,18 @@ La batería completa tarda unos tres minutos. Las pruebas no necesitan conexión
 
 ## Última medición
 
-Realizada el 15 de octubre de 2026, en Windows 11 con Python 3.12.10:
+Realizada el 21 de octubre de 2026, en Windows 11 con Python 3.12.10:
 
 | Comprobación | Resultado |
 |--------------|-----------|
 | `python -m ruff check src tests` | Sin errores |
-| `python -m pytest` | 1600 pruebas superadas, 4 omitidas, 0 fallos |
-| Cobertura de líneas y ramas (`--cov`) | 94,48 % |
+| `python -m pytest` | 2190 pruebas superadas, 4 omitidas, 0 fallos |
+| Cobertura de líneas y ramas (`--cov`) | 94,34 % |
 | Umbral configurado (`fail_under` en `pyproject.toml`) | 90 % |
-| Pruebas del servidor web (`node --test "test/*.test.js"`, en `servidor/`) | 112 superadas, 0 fallos |
+| Pruebas del servidor web (`node --test "test/*.test.js"`, en `servidor/`) | 821 superadas, 0 fallos |
 
-Las 112 pruebas del servidor son las de esta medición y las de `v0.6.0`. Después del tag, el commit
+Las 821 pruebas del servidor son las de esta medición. Antes, la tabla traía 112, las mismas de
+`v0.6.0`. Después del tag, el commit
 `cb709ff` añadió `servidor/test/playground-config.test.js`: en `main`, en el commit `7c87027`,
 `npm test` en `servidor/` da 130 superadas y 0 fallos (15 de octubre de 2026, Windows 11, Node
 24.21.0). Esa ejecución solo repitió las pruebas del servidor; el resto de la tabla no se volvió a
@@ -111,6 +112,7 @@ anterior de ese mismo día, 522 superadas, solo en Windows, corresponde a un est
 | El mismo árbol con el bloqueo de las pruebas de integración, los mínimos de Node medidos y `captcha.test.js` sin dependencia de orden | **810 superadas**, 0 fallos, 0 omitidas, en cada una de tres ejecuciones | No se ejecutó |
 | `5eae954` con la lista cerrada de ramas de Node en las guardas de integración, sin commit | **811 superadas**, 0 fallos, 0 omitidas, en una ejecución | No se ejecutó |
 | `e4ec28f` (web y playground al día con el lenguaje 0.7) con `List` en los tipos de `language_info`, sin commit | **818 superadas**, 0 fallos, 0 omitidas, en una ejecución, el 21 de octubre de 2026 | No se ejecutó |
+| `6d61ea9` (registros nominales, la 0.8.0) con la web y el servidor al día con el lenguaje 0.8, sin commit | **821 superadas**, 0 fallos, 0 omitidas, en una ejecución, el 21 de octubre de 2026 | No se ejecutó |
 
 En Linux se usó una copia nueva del árbol de trabajo, comprobada archivo por archivo con SHA-256, con
 las dependencias instaladas con `npm ci` y el intérprete de `nexora/.venv` (Python 3.12.3). La fila
@@ -326,6 +328,13 @@ En la fila de 818, las listas de palabras del playground, la guía y la document
 ponen al día con el lenguaje 0.7 (listas y `for`): antes de `e4ec28f`, tres pruebas comparaban esas
 listas con el intérprete real y fallaban. `language_info()` incluye además `List` en `types`, y una
 prueba del coloreado comprueba que `List` se marca como tipo. Código de salida 0, 29 s. No se ha ejecutado
+con Node 22.23.2 ni con 24.18.1, ni en Linux ni en macOS.
+
+En la fila de 821, la web y el servidor se ponen al día con el lenguaje 0.8 (registros): el catálogo
+de ejemplos del playground ofrece `records.nex`, el coloreado del editor reconoce los tipos que
+declara el programa (un registro se marca como tipo, no como función), la hoja de ruta de la
+documentación separa lo que ya está de lo que sigue, y la guía describe los registros con un
+ejemplo que las pruebas ejecutan con el intérprete real. Código de salida 0, 32 s. No se ha ejecutado
 con Node 22.23.2 ni con 24.18.1, ni en Linux ni en macOS.
 
 #### Pruebas de integración con MySQL: ejecutadas una vez

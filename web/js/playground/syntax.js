@@ -28,6 +28,17 @@ function qualified(source, index, word) {
   return before ? `${before[1]}.${word}` : word;
 }
 
+// The types the program declares: 'type Point = { ... }' and 'type Percent = Int where ...'.
+// A declaration starts a line, so a word inside a text or a comment does not count. These
+// names are types, not functions, even when they are written with parentheses.
+function declaredTypes(source) {
+  const names = new Set();
+  for (const match of source.matchAll(/^[ \t]*type[ \t]+([A-Z][A-Za-z0-9_]*)[ \t]*=/gm)) {
+    names.add(match[1]);
+  }
+  return names;
+}
+
 function escapeHtml(text) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -44,6 +55,7 @@ export function highlight(source, language = FALLBACK_LANGUAGE) {
   const types = new Set(language.types);
   const builtins = new Set(language.builtins);
   const reserved = new Set(language.reserved_words);
+  const declared = declaredTypes(source);
 
   let html = '';
   let last = 0;
@@ -55,7 +67,7 @@ export function highlight(source, language = FALLBACK_LANGUAGE) {
     else if (number !== undefined) kind = 'num';
     else if (operator !== undefined) kind = 'op';
     else if (keywords.has(word)) kind = 'kw';
-    else if (types.has(word)) kind = 'type';
+    else if (types.has(word) || declared.has(word)) kind = 'type';
     else if (builtins.has(word) || builtins.has(qualified(source, match.index, word))) kind = 'builtin';
     else if (reserved.has(word)) kind = 'reserved';
     else if (source[match.index + text.length] === '(') kind = 'fn';
