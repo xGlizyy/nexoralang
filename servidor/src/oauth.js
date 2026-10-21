@@ -133,7 +133,7 @@ export function createOAuthRouter({
     try {
       await connection.beginTransaction();
       const [existing] = await connection.execute(
-        'SELECT id, password_hash FROM users WHERE email = ? FOR UPDATE',
+        'SELECT id, password_hash FROM users WHERE email = ? LOCK IN SHARE MODE',
         [email],
       );
       // El registro con contraseña no verifica el email, así que esa cuenta podría no ser de esta

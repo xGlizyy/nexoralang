@@ -43,13 +43,36 @@ describe('before any choice', () => {
     }
   });
 
-  test('with no optional service configured there is no banner and nothing is loaded', () => {
+  test('with no optional service configured the banner still asks to accept the notice', () => {
     const consent = page(NONE);
     consent.finishLoading();
-    assert.equal(banner(consent), null);
+    assert.ok(banner(consent));
     assert.deepEqual(consent.scripts(), []);
     assert.equal(consent.window.NexoraConsent.get(), null);
     assert.equal(consent.document.querySelector('[data-consent-open]').hidden, false, 'the link to the preferences is shown');
+    assert.deepEqual(banner(consent).querySelectorAll('button').map((b) => b.textContent), ['Configurar', 'Aceptar']);
+    assert.doesNotMatch(banner(consent).textContent, /también usaremos/);
+  });
+
+  test('accepting the notice with no optional service stores the choice and loads nothing', () => {
+    const consent = page(NONE);
+    consent.finishLoading();
+    consent.click(button(banner(consent), 'accept'));
+    assert.equal(banner(consent), null);
+    assert.deepEqual(consent.scripts(), []);
+    assert.deepEqual(JSON.parse(consent.store.get('nexora.consent')).choices, { analytics: false, advertising: false, antispam: false });
+    const [, update] = consent.consentCalls().at(-1);
+    assert.deepEqual(update, { analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
+  });
+
+  test('without a stored choice, the banner asks again on the next page', () => {
+    const first = page(NONE);
+    first.finishLoading();
+    assert.ok(banner(first));
+    assert.equal(first.store.get('nexora.consent'), undefined, 'nothing was stored');
+    const second = page(NONE, { stored: first.store.get('nexora.consent') });
+    second.finishLoading();
+    assert.ok(banner(second));
   });
 
   test('with no optional service the preferences only say so, and offer to close', () => {
@@ -72,13 +95,14 @@ describe('before any choice', () => {
     assert.deepEqual(new Set(actions.map((b) => b.getAttribute('class'))).size, 1, 'the three choices look the same');
   });
 
-  test('an ID with the wrong format is ignored and never loaded', () => {
+  test('an ID with the wrong format is ignored and never loaded, but the notice still appears', () => {
     const consent = page({ ...NONE, google: { analyticsId: 'UA-1234-1', tagManagerId: 'GTM-<x>', adsId: null }, recaptchaSiteKey: 'abc' }, { form: true });
     consent.finishLoading();
-    assert.equal(banner(consent), null, 'nothing valid to ask about');
+    assert.ok(banner(consent), 'the notice still asks to acknowledge the necessary cookies');
     assert.equal(consent.warnings.length, 3);
     consent.window.NexoraConsent.acceptAll();
     assert.deepEqual(consent.scripts(), []);
+    assert.equal(banner(consent), null);
   });
 });
 
@@ -103,7 +127,10 @@ describe('the words of the banner and the panel', () => {
   test('reCAPTCHA is only offered on pages with a protected form', () => {
     const consent = page({ ...NONE, recaptchaSiteKey: SITE_KEY }, { form: false });
     consent.finishLoading();
-    assert.equal(banner(consent), null);
+    assert.ok(banner(consent), 'the notice still appears');
+    assert.doesNotMatch(banner(consent).textContent, /reCAPTCHA/);
+    consent.window.NexoraConsent.open();
+    assert.equal(consent.document.querySelectorAll('.consent-switch').length, 0);
   });
 
   test('without policyUrl, neither the banner nor the panel links anywhere', () => {

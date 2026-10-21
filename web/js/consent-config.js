@@ -2,8 +2,8 @@
 // the configuration: it is loaded before consent.js on every page.
 //
 // Google IDs are public (they appear in the page anyway), so they are not secrets. Leave a service as
-// null to keep it off: nothing is loaded for it, and no banner is shown while no optional service is
-// configured, because there is nothing to ask consent for.
+// null to keep it off: nothing is loaded for it. The banner still asks the visitor to acknowledge the
+// necessary cookies; the optional categories only appear when a service is configured.
 window.NEXORA_CONSENT_CONFIG = {
   // Change it whenever the cookie policy changes in a way that matters (a new service, a new purpose):
   // every visitor is then asked again. Keep it equal to the version shown in cookies.html.

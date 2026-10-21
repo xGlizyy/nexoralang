@@ -53,6 +53,8 @@ export function createApp({
   // Las páginas con política propia se reconocen por el archivo servido (security-headers.js).
   app.use(express.static(root('web'), { extensions: ['html'], setHeaders: pageFileHeaders({ recaptcha }) }));
   app.use('/docs', express.static(root('docs')));
+  // La carpeta guarda borradores de diseño, no una página: /ejemplos lleva a la sección conceptual.
+  app.get('/ejemplos', (req, res) => res.redirect(301, '/docs#example'));
   app.use('/ejemplos', express.static(root('ejemplos')));
 
   app.use((error, req, res, next) => {

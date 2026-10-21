@@ -4,7 +4,9 @@
 // A classic script loaded in <head>, right after js/consent-config.js and before any other script,
 // so the consent defaults exist before any tag can run. Optional tags are never loaded before
 // consent (Consent Mode "basic" implementation): until the visitor accepts a category, nothing of
-// that category is requested. The texts are in Spanish, like the legal pages they link to.
+// that category is requested. The banner appears on every visit until a valid choice is stored,
+// even when no optional service is configured: then it only asks to acknowledge the necessary
+// cookies. The texts are in Spanish, like the legal pages they link to.
 (function () {
   'use strict';
 
@@ -322,6 +324,11 @@
     renderStatus();
   }
 
+  // With no optional category there is nothing to grant: accepting only acknowledges the notice.
+  function acceptAll() {
+    decide(inUse().length ? ALL : NONE);
+  }
+
   // A stored choice is applied at once, before the page goes on loading.
   var stored = readStored();
   if (stored) apply(stored, null);
@@ -414,15 +421,22 @@
 
   function buildBanner(categories) {
     var title = element('h2', { class: 'consent-banner__title', id: 'consent-banner-title', text: 'Cookies en NEXORA' });
+    var hasOptional = categories.length > 0;
     var text = element('p', {}, [
-      'Usamos cookies necesarias para que la web funcione. Con tu permiso, también usaremos '
-        + describeUse(categories) + '. Puedes aceptarlo todo, rechazarlo todo o elegir; no se activará nada opcional hasta que decidas. '
-        + 'Podrás cambiar tu elección cuando quieras desde «Configurar cookies», al pie de la página.',
+      hasOptional
+        ? 'Usamos cookies necesarias para que la web funcione. Con tu permiso, también usaremos '
+          + describeUse(categories) + '. Puedes aceptarlo todo, rechazarlo todo o elegir; no se activará nada opcional hasta que decidas. '
+          + 'Podrás cambiar tu elección cuando quieras desde «Configurar cookies», al pie de la página.'
+        : 'Usamos cookies necesarias para que la web funcione, como la sesión y la protección del inicio de sesión. No usamos cookies analíticas, publicitarias ni de personalización. Puedes aceptar este aviso o configurar tus preferencias. '
+          + 'Podrás cambiar tu elección cuando quieras desde «Configurar cookies», al pie de la página.',
     ].concat(policyMention()));
-    var actions = element('div', { class: 'consent-banner__actions' }, [
+    var actions = element('div', { class: 'consent-banner__actions' }, hasOptional ? [
       element('button', { class: 'btn btn--sm', type: 'button', 'data-consent-action': 'reject', text: 'Rechazar todas' }),
       element('button', { class: 'btn btn--sm', type: 'button', 'data-consent-action': 'configure', text: 'Configurar' }),
       element('button', { class: 'btn btn--sm', type: 'button', 'data-consent-action': 'accept', text: 'Aceptar todas' }),
+    ] : [
+      element('button', { class: 'btn btn--sm', type: 'button', 'data-consent-action': 'configure', text: 'Configurar' }),
+      element('button', { class: 'btn btn--sm', type: 'button', 'data-consent-action': 'accept', text: 'Aceptar' }),
     ]);
     banner = element('section', { class: 'consent-banner', lang: 'es', 'aria-labelledby': 'consent-banner-title' }, [
       element('div', { class: 'consent-banner__body' }, [title, text]),
@@ -561,7 +575,7 @@
   }
 
   function onAction(action) {
-    if (action === 'accept') decide(ALL);
+    if (action === 'accept') acceptAll();
     else if (action === 'reject') decide(NONE);
     else if (action === 'save') {
       var chosen = {};
@@ -595,8 +609,9 @@
       activateBlockedScripts(current.choices);
       loadRecaptcha(current.choices);
     }
-    var categories = inUse();
-    if (categories.length && !current) buildBanner(categories);
+    // The banner asks again on every visit until a valid choice is stored, even when no optional
+    // service is configured (then it only asks to acknowledge the necessary cookies).
+    if (!current) buildBanner(inUse());
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
@@ -606,7 +621,7 @@
     /** The current choice, or null while the visitor has not decided. */
     get: function () { return current ? JSON.parse(JSON.stringify(current)) : null; },
     open: function () { openPanel(null); },
-    acceptAll: function () { decide(ALL); },
+    acceptAll: acceptAll,
     rejectAll: function () { decide(NONE); },
     policyVersion: POLICY_VERSION,
     /** The reCAPTCHA site key when this page uses reCAPTCHA, or null. */

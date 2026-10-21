@@ -70,8 +70,12 @@ const EXPECTED = {
 const normalType = (type) => type.toLowerCase().replace(/\b(bigint|int)\(\d+\)/, '$1');
 const normalDefault = (value) => (value === null || value === 'NULL' ? null : String(value).toLowerCase().replace(/\(\)$/, ''));
 
-/** El esquema real de las tablas de la aplicación, en la misma forma que EXPECTED. */
-async function schema(connection) {
+/**
+ * El esquema real de las tablas de la aplicación, en la misma forma que EXPECTED. `foreignConnection`
+ * lee las claves ajenas: en MariaDB, REFERENTIAL_CONSTRAINTS no devuelve filas a la cuenta de
+ * migraciones, con permisos solo de tabla (medido en 10.11.19); la de la aplicación sí las ve.
+ */
+async function schema(connection, foreignConnection = connection) {
   const [tables] = await connection.query(
     "SELECT TABLE_NAME AS t, ENGINE AS engine, TABLE_COLLATION AS collation FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'nexora_test' AND TABLE_NAME IN ('users', 'sessions', 'oauth_accounts') ORDER BY TABLE_NAME",
   );
@@ -81,7 +85,7 @@ async function schema(connection) {
   const [indexes] = await connection.query(
     "SELECT TABLE_NAME AS t, INDEX_NAME AS i, NON_UNIQUE AS nonUnique, COLUMN_NAME AS c FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = 'nexora_test' AND TABLE_NAME IN ('users', 'sessions', 'oauth_accounts') ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
   );
-  const [foreign] = await connection.query(
+  const [foreign] = await foreignConnection.query(
     "SELECT k.TABLE_NAME AS t, k.CONSTRAINT_NAME AS name, k.COLUMN_NAME AS c, k.REFERENCED_TABLE_NAME AS rt, k.REFERENCED_COLUMN_NAME AS rc, r.DELETE_RULE AS onDelete FROM information_schema.KEY_COLUMN_USAGE k JOIN information_schema.REFERENTIAL_CONSTRAINTS r ON r.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA AND r.CONSTRAINT_NAME = k.CONSTRAINT_NAME WHERE k.TABLE_SCHEMA = 'nexora_test' AND k.REFERENCED_TABLE_NAME IS NOT NULL ORDER BY k.TABLE_NAME, k.CONSTRAINT_NAME",
   );
   const grouped = new Map();
@@ -91,11 +95,23 @@ async function schema(connection) {
     entry.columns.push(row.c);
     grouped.set(key, entry);
   }
+  // La vista REFERENTIAL_CONSTRAINTS (la única con DELETE_RULE) no devolvió filas a la cuenta de
+  // migraciones en MariaDB 10.11.19 (solo tiene permisos de tabla): sin esta comprobación, el fallo se
+  // leería como dos claves ajenas «missing», sin decir por qué.
+  if (foreign.length === 0) {
+    throw new Error('nexora_test: the foreign-key query returned no rows: check whether the account reading the schema can see information_schema.REFERENTIAL_CONSTRAINTS');
+  }
+  const foreignKeys = foreign.map((row) => {
+    if (typeof row.onDelete !== 'string' || row.onDelete === '') {
+      throw new Error(`nexora_test: ${row.t}.${row.name} came back without a DELETE_RULE: the connection that read REFERENTIAL_CONSTRAINTS cannot see it`);
+    }
+    return `${row.t}.${row.name} (${row.c}) -> ${row.rt} (${row.rc}) ON DELETE ${row.onDelete}`;
+  });
   return {
     tables: Object.fromEntries(tables.map((row) => [row.t, { engine: row.engine, collation: row.collation }])),
     columns: columns.map((row) => `${row.t}.${row.c} ${normalType(row.type)} ${row.nullable === 'YES' ? 'NULL' : 'NOT NULL'}${normalDefault(row.def) ? ` default ${normalDefault(row.def)}` : ''}`),
     indexes: [...grouped].map(([key, { unique, columns: cols }]) => `${key}${unique ? ' unique' : ''} (${cols.join(', ')})`).sort(),
-    foreignKeys: foreign.map((row) => `${row.t}.${row.name} (${row.c}) -> ${row.rt} (${row.rc}) ON DELETE ${row.onDelete}`),
+    foreignKeys,
   };
 }
 
@@ -140,7 +156,7 @@ describe('migrations on nexora_test', () => {
     const result = await migrate();
     assert.equal(result.code, 0, result.stderr);
     assert.match(result.stdout, /migrate-child: migrator verified before migrating\nAplicada: 001_usuarios\.sql\nAplicada: 002_oauth\.sql\nmigrate-child: migrator verified after migrating/);
-    assert.deepEqual(drift(await schema(migrator)), []);
+    assert.deepEqual(drift(await schema(migrator, app)), []);
     // La marca sigue ahí, intacta.
     const [guard] = await migrator.query(GUARD_SQL);
     checkGuardRows(guard);
@@ -152,14 +168,14 @@ describe('migrations on nexora_test', () => {
     const [[user]] = await app.query("SELECT id FROM `nexora_test`.`users` WHERE email = 'ana@example.test'");
     await app.query("INSERT INTO `nexora_test`.`sessions` (token_hash, user_id, expires_at) VALUES (UNHEX(SHA2('t', 256)), ?, NOW() + INTERVAL 1 DAY)", [user.id]);
     await app.query("INSERT INTO `nexora_test`.`oauth_accounts` (provider, provider_user_id, user_id) VALUES ('github', '1', ?)", [user.id]);
-    const before = await schema(migrator);
+    const before = await schema(migrator, app);
     // Si se omitió la prueba de esquema nuevo, esta es la que comprueba el esquema que ya había.
     assert.deepEqual(drift(before), []);
     for (let i = 0; i < 2; i++) {
       const result = await migrate();
       assert.equal(result.code, 0, result.stderr);
     }
-    assert.deepEqual(await schema(migrator), before);
+    assert.deepEqual(await schema(migrator, app), before);
     for (const table of ['users', 'sessions', 'oauth_accounts']) {
       const [[row]] = await app.query(`SELECT COUNT(*) AS n FROM \`nexora_test\`.\`${table}\``);
       assert.equal(Number(row.n), 1, table);
@@ -177,12 +193,12 @@ describe('migrations on nexora_test', () => {
       async () => {
         const result = await migrate();
         assert.equal(result.code, 0, result.stderr);
-        assert.deepEqual(drift(await schema(migrator)), ['missing users.name varchar(80) NOT NULL', 'unexpected users.name varchar(40) NOT NULL']);
+        assert.deepEqual(drift(await schema(migrator, app)), ['missing users.name varchar(80) NOT NULL', 'unexpected users.name varchar(40) NOT NULL']);
       },
       () => migrator.query(UNDO_DRIFT_SQL),
       (error) => t.diagnostic(`users.name could not be restored (${error.code ?? error.name}): an administrator must run prepare-fresh-schema-admin.sql`),
     );
-    assert.deepEqual(drift(await schema(migrator)), []);
+    assert.deepEqual(drift(await schema(migrator, app)), []);
   });
 
   test('the migration account cannot read or delete rows, create other tables or reach other databases', async () => {

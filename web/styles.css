@@ -2199,16 +2199,18 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
 
 .consent-banner {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
   left: 16px;
+  right: auto;
+  bottom: 16px;
   z-index: 60;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 16px 28px;
-  max-width: 1040px;
-  margin-inline: auto;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  margin: 0;
   padding: 20px 24px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
@@ -2445,7 +2447,7 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
   .compare { grid-template-columns: minmax(0, 1fr); }
   .actions .btn { flex: 1 1 auto; }
   .platforms { position: static; width: fit-content; margin: -56px auto 40px; }
-  .consent-banner { right: 10px; bottom: 10px; left: 10px; padding: 18px; }
+  .consent-banner { left: 10px; right: auto; bottom: 10px; width: calc(100vw - 20px); max-height: calc(100dvh - 20px); padding: 18px; }
   .consent-banner__actions,
   .consent-panel__actions { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
   .consent-panel { padding: 22px 18px; }
