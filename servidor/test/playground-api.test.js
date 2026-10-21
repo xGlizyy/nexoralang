@@ -448,8 +448,9 @@ describe('info and examples', () => {
       assert.ok(response.json.language.keywords.includes(keyword), keyword);
     }
     assert.deepEqual(response.json.language.builtins, [
-      'Float.can_parse', 'Float.parse', 'Int.can_parse', 'Int.parse', 'Text.contains', 'Text.ends_with',
-      'Text.length', 'Text.slice', 'Text.starts_with', 'print', 'to_float', 'to_int', 'to_text',
+      'Float.can_parse', 'Float.parse', 'Int.can_parse', 'Int.parse', 'List.append', 'List.concat', 'List.contains',
+      'List.get', 'List.length', 'Text.contains', 'Text.ends_with', 'Text.length', 'Text.slice', 'Text.starts_with',
+      'print', 'to_float', 'to_int', 'to_text',
     ]);
     assert.deepEqual(response.json.limits, { code_bytes: 65536, timeout_ms: 2000, output_bytes: 65536, text_chars: 262144 });
   });

@@ -150,7 +150,7 @@
         </div>
         <div>
           <dt>Version</dt>
-          <dd>0.6, an experimental release before 1.0. The language can still change in incompatible ways.</dd>
+          <dd>0.7, an experimental release before 1.0. The language can still change in incompatible ways.</dd>
         </div>
         <div>
           <dt>Implementation</dt>
@@ -363,9 +363,10 @@ fn main() -&gt; Void {
           <dt><span class="chip chip--in-progress">Available</span></dt>
           <dd>
             <ul>
-              <li>A reference interpreter, version 0.6, that runs a subset of the language from the command line.</li>
+              <li>A reference interpreter, version 0.7, that runs a subset of the language from the command line.</li>
               <li>Rules written in the code and checked by the interpreter: contracts (<code>requires</code>, <code>ensures</code>) and refined types (<code>type Percent = Int where ...</code>), loops that declare why they end (<code>decreases</code>) and what they keep (<code>invariant</code>), each with an optional explanation, and examples in functions (<code>example</code>) checked with <code>nex test</code>.</li>
               <li>Operations on text (<code>Text.length</code>, <code>Text.slice</code>, ordering) and reading numbers with <code>Int.parse</code> and <code>Float.parse</code>, each function stating the requirements it checks.</li>
+              <li>Immutable lists (<code>List[Int]</code>, <code>[1, 2, 3]</code>) with <code>List.length</code>, <code>List.get</code>, <code>List.append</code>, <code>List.concat</code> and <code>List.contains</code>, and <code>for</code> loops over them.</li>
               <li>A language specification for that subset, and a broader design draft.</li>
               <li>A <a href="playground.html">playground</a> that runs code in the browser with that interpreter. It is off unless the server enables it explicitly, and it must stay off on a public site until the isolation of its containers has been checked.</li>
               <li>A short <a href="guide.html">language guide</a>.</li>
@@ -438,6 +439,17 @@ fn main() -&gt; Void {
       <h3>Recent changes</h3>
 
       <dl class="status-list">
+        <div>
+          <dt><span class="chip chip--in-progress">0.7.0</span></dt>
+          <dd>
+            <ul>
+              <li>Immutable lists <code>List[T]</code>: literals such as <code>[1, 2, 3]</code>, nested lists and structural equality. Every element has the same type.</li>
+              <li>Functions on lists: <code>List.length</code>, <code>List.get</code>, <code>List.append</code>, <code>List.concat</code> and <code>List.contains</code>. <code>List.get</code> declares the indexes it accepts, and an index out of range stops the program.</li>
+              <li><code>for x in xs</code> walks a list. It can declare invariants, and it needs no measure: it ends with the list.</li>
+              <li>Every program that was valid in 0.6.0 is still valid and gives the same result. Not tagged or published yet.</li>
+            </ul>
+          </dd>
+        </div>
         <div>
           <dt><span class="chip chip--in-progress">0.6.0</span></dt>
           <dd>
@@ -554,7 +566,7 @@ fn main() -&gt; Void {
           <summary>Is NEXORA ready for production?</summary>
           <div class="faq__answer">
             <p>
-              <strong>Not yet.</strong> Version 0.6 is an experimental development release. It can be
+              <strong>Not yet.</strong> Version 0.7 is an experimental development release. It can be
               explored and tested, but production suitability has not been established.
             </p>
           </div>

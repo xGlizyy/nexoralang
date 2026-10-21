@@ -91,6 +91,7 @@
       <li><a href="#contracts">Contracts</a></li>
       <li><a href="#refined-types">Refined types</a></li>
       <li><a href="#loops">Loops</a></li>
+      <li><a href="#lists">Lists</a></li>
       <li><a href="#texts">Texts</a></li>
       <li><a href="#diagnostics">Diagnostics</a></li>
       <li><a href="#limitations">Limitations</a></li>
@@ -101,7 +102,7 @@
     <p class="eyebrow">Language guide</p>
     <h1>NEXORA, as it works today</h1>
     <p class="lead">
-      A short tour of what the current interpreter (version 0.6) accepts. Every program on this page is
+      A short tour of what the current interpreter (version 0.7) accepts. Every program on this page is
       run by the project's tests, and every one can be tried in the <a href="playground.html">playground</a>.
     </p>
 
@@ -168,6 +169,7 @@ fn main() -&gt; Void {
           <tr><td><code>Float</code></td><td>Numbers with decimals</td><td><code>3.14</code>, <code>10.0</code></td></tr>
           <tr><td><code>Bool</code></td><td>True or false</td><td><code>true</code>, <code>false</code></td></tr>
           <tr><td><code>Text</code></td><td>Text</td><td><code>"Hello"</code></td></tr>
+          <tr><td><code>List[T]</code></td><td>An immutable <a href="#lists">list</a> of values of type <code>T</code></td><td><code>[1, 2, 3]</code></td></tr>
           <tr><td><code>Void</code></td><td>No value: only as a return type</td><td></td></tr>
         </tbody>
       </table>
@@ -383,6 +385,60 @@ fn main() -&gt; Void {
       </figure>
     </section>
 
+    <section id="lists">
+      <h2>Lists</h2>
+      <p>
+        A list is written between brackets, and all its elements have the same type: <code>List[Int]</code>,
+        <code>List[Text]</code>, or even <code>List[List[Int]]</code>. A list never changes.
+        <code>List.append</code> and <code>List.concat</code> build a new list and leave the old one as it was.
+        <code>List.length</code>, <code>List.get</code> and <code>List.contains</code> read it.
+      </p>
+      <p>
+        A <code>for</code> loop walks a list, one element per turn. It can declare invariants like a
+        <code>while</code>, but it needs no <code>decreases</code>: it ends when the list does.
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="run"><code>fn total(prices: List[Int]) -&gt; Int {
+    var sum = 0
+    for price in prices {
+        invariant sum &gt;= 0, "Prices are never negative"
+        sum = sum + price
+    }
+    return sum
+}
+
+fn main() -&gt; Void {
+    let prices = [120, 45, 300]
+    let more = List.append(prices, 35)
+    print(prices)
+    print(more)
+    print(List.length(more))
+    print(List.get(more, 0))
+    print(List.contains(more, 45))
+    print(total(more))
+}</code></pre>
+        <div class="guide-output"><pre data-expected>[120, 45, 300]
+[120, 45, 300, 35]
+4
+120
+true
+500</pre></div>
+      </figure>
+      <p>
+        <code>List.get</code> declares which indexes it accepts, from 0 to the length minus one: any other index
+        stops the program and says which rule was broken. An empty list says nothing about the type of its
+        elements, so it needs one written:
+      </p>
+      <figure class="window">
+        <pre class="code" data-example="check-fails" data-code="E2011" data-line="2"><code>fn main() -&gt; Void {
+    let empty = []
+    print(empty)
+}</code></pre>
+        <div class="guide-output guide-output--error"><pre>type error[E2011]: Type mismatch
+  line 2, column 17: Cannot infer the type of an empty list without an expected type</pre></div>
+      </figure>
+    </section>
+
     <section id="texts">
       <h2>Texts</h2>
       <p>
@@ -451,8 +507,9 @@ true
       <h2>Limitations</h2>
       <p>These do not exist yet. Using them is an error, not something the playground pretends to support:</p>
       <ul class="bullets">
-        <li><code>for</code>, <code>break</code> and <code>continue</code>: every loop is a <code>while</code> with its measure.</li>
-        <li>Lists, records and any other compound type.</li>
+        <li><code>break</code> and <code>continue</code>, and <code>for</code> over anything that is not a list, such as a range of numbers or a text.</li>
+        <li>Writing <code>xs[i]</code>, changing an element, or <code>map</code>, <code>filter</code> and sorting on lists.</li>
+        <li>Records and any other compound type besides lists.</li>
         <li>Operations on text beyond the ones in <a href="#texts">Texts</a>: no <code>trim</code>, upper case, <code>split</code> or <code>replace</code>.</li>
         <li>Reading input, files or the network: a program can only print.</li>
         <li>Modules: a program is a single file.</li>

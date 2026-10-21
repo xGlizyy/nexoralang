@@ -7,16 +7,17 @@
 
 export const FALLBACK_LANGUAGE = Object.freeze({
   keywords: [
-    'and', 'decreases', 'else', 'ensures', 'example', 'false', 'fn', 'if', 'invariant', 'let', 'not', 'or',
-    'requires', 'return', 'true', 'type', 'var', 'where', 'while',
+    'and', 'decreases', 'else', 'ensures', 'example', 'false', 'fn', 'for', 'if', 'in', 'invariant', 'let',
+    'not', 'or', 'requires', 'return', 'true', 'type', 'var', 'where', 'while',
   ],
   types: ['Void', 'Int', 'Float', 'Bool', 'Text'],
   builtins: [
-    'Float.can_parse', 'Float.parse', 'Int.can_parse', 'Int.parse', 'Text.contains', 'Text.ends_with',
-    'Text.length', 'Text.slice', 'Text.starts_with', 'print', 'to_float', 'to_int', 'to_text',
+    'Float.can_parse', 'Float.parse', 'Int.can_parse', 'Int.parse', 'List.append', 'List.concat',
+    'List.contains', 'List.get', 'List.length', 'Text.contains', 'Text.ends_with', 'Text.length',
+    'Text.slice', 'Text.starts_with', 'print', 'to_float', 'to_int', 'to_text',
   ],
   reserved_words: [
-    'ai', 'assert', 'break', 'const', 'continue', 'enum', 'for', 'import', 'in', 'match', 'pub',
+    'ai', 'assert', 'break', 'const', 'continue', 'enum', 'import', 'match', 'pub',
     'test', 'tool', 'try', 'uses',
   ],
 });

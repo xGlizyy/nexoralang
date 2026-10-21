@@ -418,7 +418,8 @@ describe('highlighting and positions', () => {
     assert.deepEqual(classes('print(to_text(2.5)) // done'), [['builtin', 'print'], ['builtin', 'to_text'], ['num', '2.5'], ['com', '// done']]);
     assert.deepEqual(classes('requires n >= 0 and not ok'), [['kw', 'requires'], ['op', '&gt;='], ['num', '0'], ['kw', 'and'], ['kw', 'not']]);
     assert.deepEqual(classes('while x'), [['kw', 'while']]);
-    assert.deepEqual(classes('for x'), [['reserved', 'for']]);
+    assert.deepEqual(classes('for x in xs'), [['kw', 'for'], ['kw', 'in']]);
+    assert.deepEqual(classes('break'), [['reserved', 'break']]);
     // The function of a type is a built-in function; the type before the '.' stays a type.
     assert.deepEqual(classes('Text.length(name)'), [['type', 'Text'], ['builtin', 'length']]);
     assert.deepEqual(classes('Int.parse(t) + length(t)'), [['type', 'Int'], ['builtin', 'parse'], ['op', '+'], ['fn', 'length']]);
