@@ -19,10 +19,68 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
-## Sin publicar
+## 0.7.0 — Listas y `for` sobre listas
 
-Cambios posteriores al tag `v0.6.0`, todavía sin versión. Afectan al servidor web (`servidor/`) y
-a la web (`web/`), no al intérprete: el lenguaje y el paquete `nexora-lang` no cambian.
+Estado del repositorio, no una versión publicada: no hay tag ni paquete en ningún repositorio. Esta
+versión implementa la [decisión 0013](docs/decisions/0013-listas-y-for.md), que acepta, en el alcance
+realmente implementado, las partes D01 (modelo de tipos), D08 (listas) y D09 (`for`) de la propuesta
+[0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md). El resto de la
+0012 sigue siendo una propuesta y no forma parte de esta versión.
+
+### Añadido
+
+- **Listas inmutables `List[T]`**: literales `[1, 2, 3]` y `[]`, inferencia por el primer elemento,
+  homogeneidad, listas anidadas, igualdad estructural e impresión `[1, 2, 3]`. Una lista vacía
+  necesita un tipo esperado (`E2011`). Los argumentos de `List` son invariantes y `Void` no puede
+  ser elemento.
+- **Funciones de `List`**: `List.length`, `List.get`, `List.append`, `List.concat` y
+  `List.contains`. `List.get` es parcial y declara `requires 0 <= i and i < List.length(xs)`; un
+  índice fuera de rango detiene el programa con `E4001`. `append` y `concat` construyen listas nuevas.
+- **`for` sobre listas**: `for x in xs { ... }`, con iterador inmutable y de tipo `T`, un entorno
+  nuevo por vuelta, `invariant` comprobados antes de cada vuelta y una vez después de la última, y
+  sin `decreases` (`E2022`). El iterable se evalúa una vez y debe ser una `List[T]`. Siguen sin
+  existir `break` y `continue`.
+- **Modelo de tipos interno** (`types.py` y `type_adapter.py`): representación estructurada de
+  primitivos, `List[T]`, tipos refinados y variables de tipo; identidad, compatibilidad, sustitución
+  y unificación. La forma canónica de los tipos sigue siendo el texto; la migración del comprobador
+  es parcial y las reglas no migradas conservan sus cadenas.
+- **Herramientas**: `nex inspect` añade `arguments` a `TypeRef`, el nodo `ListLiteral` y el nodo
+  `For`; `type` puede ser `List[...]`. `nex context` distingue `while` y `for` en `loops.kind`.
+- **Ejemplo** [`examples/lists.nex`](examples/lists.nex), con su salida registrada en las pruebas.
+
+### Cambiado
+
+- Solo en programas que ya eran inválidos: `for` e `in` pasan de palabras reservadas a palabras
+  clave, y `[` y `]` pasan a ser símbolos. `List` y los nombres de sus funciones no se reservan: las
+  funciones se llaman cualificadas (`List.length`).
+- La versión del repositorio pasa a `0.7.0`. Los esquemas JSON no cambian de versión: los campos y
+  nodos nuevos son aditivos.
+
+### Documentación
+
+- La [especificación](docs/language-spec.md) pasa a la versión 0.7 y documenta las listas (4.5), las
+  funciones de `List` (8.2), `for` (9.6), la compatibilidad, las conversiones, los diagnósticos y las
+  limitaciones.
+- Nuevo [ADR 0013](docs/decisions/0013-listas-y-for.md). La [0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md)
+  no se reescribe y sigue siendo una propuesta para lo no implementado.
+- Actualizados `types.md`, `limitations.md`, `roadmap.md`, `architecture.md`, `index.md`,
+  `diagnostics.md`, `inspect-schema.md` y `README.md`.
+
+### Limitaciones
+
+- No hay indexación sintáctica (`xs[i]`), mutación de elementos, `List.set`, `map`, `filter`,
+  ordenación ni una variante total de `List.get`.
+- Todos los elementos de una lista tienen el mismo tipo; `[]` y `for x in []` necesitan un tipo
+  esperado. No se puede refinar una lista (`E2016`).
+- Un `for` no cuenta como una ruta que siempre devuelve: si es la última sentencia de una función
+  que devuelve un valor, hace falta un `return` después.
+- No hay `for` sobre rangos o `Text`, ni genéricos de usuario.
+
+## Sin publicar — servidor y web
+
+Cambios del servidor web (`servidor/`) y de la web (`web/`) posteriores al tag `v0.6.0`, todavía sin
+versión. No forman parte de la 0.7.0 y no cambian el intérprete: el lenguaje y el paquete
+`nexora-lang` de esta versión están documentados arriba.
 
 ### Añadido
 

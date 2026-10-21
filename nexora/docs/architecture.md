@@ -59,13 +59,15 @@ Reglas del flujo:
 | `version.py` | El número de versión. Único lugar donde se define | — |
 | `diagnostics.py` | `Span`, `Source`, `Diagnostic`, el registro de códigos y categorías, y el formato de texto | — |
 | `values.py` | Nombres de los tipos, límites de `Int` y cómo se escribe un valor | — |
+| `types.py` | Modelo de tipos estructurado: primitivos, `List[T]`, tipos refinados y variables de tipo; identidad, compatibilidad, sustitución y unificación | — |
+| `type_adapter.py` | Puente entre los nombres de tipo del comprobador y el modelo; resuelve solo los tipos habilitados | `types`, `values` |
 | `tokens.py` | Tipos de token, palabras clave y palabras reservadas | `diagnostics` |
 | `lexer.py` | Texto → tokens | `tokens`, `diagnostics`, `values` |
 | `ast_nodes.py` | Los nodos del árbol y su conversión a JSON | `diagnostics` |
 | `parser.py` | Tokens → AST, con recuperación de errores | `ast_nodes`, `tokens`, `diagnostics` |
-| `checker.py` | Análisis estático. **Único lugar con las reglas de tipos** | `ast_nodes`, `diagnostics`, `values` |
+| `checker.py` | Análisis estático. **Único lugar que decide qué regla de tipos se aplica a cada expresión**; el modelo de `types.py` define identidad y compatibilidad | `ast_nodes`, `diagnostics`, `values`, `types`, `type_adapter` |
 | `interpreter.py` | Ejecución, contratos y errores de ejecución | `ast_nodes`, `checker`, `diagnostics`, `prelude`, `values` |
-| `prelude.py` | Las funciones de un tipo (`Text.length`, `Int.parse`…): sus contratos, escritos en NEXORA, sus implementaciones y la gramática de los números escritos en un texto | `ast_nodes`, `diagnostics`, `lexer`, `parser`, `values` |
+| `prelude.py` | Las funciones de un tipo (`Text.length`, `Int.parse`, `List.get`…): sus contratos, escritos en NEXORA, sus implementaciones y la gramática de los números escritos en un texto | `ast_nodes`, `diagnostics`, `lexer`, `parser`, `values` |
 | `pipeline.py` | Encadena lexer, parser y checker | Los tres |
 | `api.py` | Comprobar o ejecutar código en memoria, con límites opcionales. La interfaz para quien integra NEXORA en otro programa | `pipeline`, `interpreter`, `checker`, `tokens`, `diagnostics` |
 | `worker.py` | Proceso de un solo uso que atiende una petición JSON; lo usa el [playground](playground.md) | `api` |
@@ -181,7 +183,7 @@ usuario: si se alcanzan, el comprobador ha dejado pasar algo que no debía, y es
 | Una palabra clave o un símbolo | `tokens.py` (y `lexer.py` si es un símbolo nuevo) |
 | Una sentencia | Nodo en `ast_nodes.py` → `_statement` en `parser.py` → `_statement` en `checker.py` (tipos y si "siempre devuelve") → `_statement` en `interpreter.py` |
 | Un operador | `tokens.py`, `lexer.py`, la tabla `_PRECEDENCE` de `parser.py`, `binary_result` en `checker.py` y `_binary` en `interpreter.py` |
-| Un tipo | `values.py` (nombre y formato), `KNOWN_TYPES` y las reglas en `checker.py`, y su representación en `interpreter.py` |
+| Un tipo | `values.py` (nombre y formato), `types.py` y `type_adapter.py` si tiene estructura, `KNOWN_TYPES` y las reglas en `checker.py`, y su representación en `interpreter.py` |
 | Una función integrada | La tabla `BUILTINS` de `checker.py` y `_call` en `interpreter.py`. Si pertenece a un tipo (`Text.length`), su nombre lleva el tipo delante en `BUILTINS`, y su implementación y sus contratos van en `prelude.py` |
 | Un error | Una entrada en `_REGISTRY` (`diagnostics.py`) y una fila en las tablas de `language-spec.md` y `diagnostics.md` |
 | Una opción o un comando | `_build_parser` en `cli.py` y `cli-reference.md` |
@@ -194,9 +196,12 @@ si alguna de las listas anteriores queda sin sincronizar.
 
 - **Intérprete que recorre el árbol.** Es la forma más simple de tener una semántica correcta y
   comprobable. No es rápida, y limita la profundidad de recursión. No se ha medido su rendimiento.
-- **Los tipos son textos.** Suficiente para cinco tipos sin estructura. Los tipos compuestos
-  (listas, registros) exigirán una representación propia: es el cambio más profundo que tiene por
-  delante el comprobador.
+- **El tipo canónico es un texto; la semántica vive en un modelo estructurado.** El texto sigue
+  siendo la forma estable de la especificación, del AST y de los documentos JSON. Para razonar
+  sobre identidad, compatibilidad, unificación y tipos compuestos, el comprobador construye objetos
+  de `types.py` a través de `type_adapter.py`. La migración es incremental: las reglas que aún no
+  usan el modelo conservan su representación de cadena. `List[T]` es el primer tipo compuesto que
+  usa esta vía; los registros y el resto de la propuesta 0012 no están implementados.
 - **El análisis estático es obligatorio.** Permite que el intérprete sea pequeño y que la lista de
   errores de ejecución sea corta y cerrada.
 - **El AST es la interfaz pública de `nex inspect`.** Acopla el esquema JSON a las clases internas;

@@ -20,7 +20,7 @@ asistentes de IA). NEXORA no incluye ninguna de esas herramientas: solo proporci
 ```json
 {
   "schema": "nexora.inspect/2",
-  "nexora_version": "0.4.0",
+  "nexora_version": "0.7.0",
   "file": "hello.nex",
   "ok": true,
   "diagnostics": [],
@@ -117,10 +117,10 @@ Los campos de cada nodo aparecen siempre, en el orden indicado. Un campo opciona
 ### Expresiones
 
 Además de sus campos, toda expresión termina con el campo `type`: el tipo que el análisis estático
-le asigna (`"Int"`, `"Float"`, `"Bool"`, `"Text"`, `"Void"` o el nombre de un tipo refinado que
-declara el programa, como `"Percent"`), o `null` si no pudo determinarlo porque la expresión
-contiene un error. Una llamada a una función que no devuelve nada tiene tipo
-`"Void"`.
+le asigna (`"Int"`, `"Float"`, `"Bool"`, `"Text"`, `"Void"`, un tipo de lista como `"List[Int]"`
+o el nombre de un tipo refinado que declara el programa, como `"Percent"`), o `null` si no pudo
+determinarlo porque la expresión contiene un error. Una llamada a una función que no devuelve
+nada tiene tipo `"Void"`.
 
 | `kind` | Campos (antes de `type`) | Significado |
 |--------|--------------------------|-------------|
@@ -156,9 +156,9 @@ el nodo de la función es (se omiten las posiciones interiores para abreviar):
   "name_span": {"line": 1, "column": 4, "end_line": 1, "end_column": 10},
   "params": [
     {"kind": "Param", "span": "...", "name": "n", "name_span": "...",
-     "type": {"kind": "TypeRef", "span": "...", "name": "Int"}}
+     "type": {"kind": "TypeRef", "span": "...", "name": "Int", "arguments": []}}
   ],
-  "return_type": {"kind": "TypeRef", "span": "...", "name": "Int"},
+  "return_type": {"kind": "TypeRef", "span": "...", "name": "Int", "arguments": []},
   "contracts": [
     {"kind": "Contract", "span": "...", "clause": "requires",
      "condition": {"kind": "Binary", "span": "...", "operator": ">=", "operator_span": "...",
@@ -200,6 +200,7 @@ versión 2, y otra comprueba que este documento los menciona todos.
 | Versión | Publicada en | Cambios |
 |---------|--------------|---------|
 | `nexora.inspect/1` | `nexora` 0.2.0 | Primera versión |
+| `nexora.inspect/2` | `nexora` 0.7.0 | Añadidos, sin cambiar la versión: `arguments` (lista de `TypeRef`) en `TypeRef`, que es `[]` cuando el tipo no lleva corchetes y tiene un argumento cuando el tipo es `List[Int]`; el nodo `ListLiteral` (`elements`: lista de expresiones) para `[a, b]` y `[]`; el nodo `For` (`name`, `name_span`, `iterable`, `clauses`, `body`) para `for x in xs`; y `type` puede ser `List[...]` ([decisión 0013](decisions/0013-listas-y-for.md)) |
 | `nexora.inspect/2` | `nexora` 0.6.0 | Añadido, sin cambiar la versión: campo `qualifier` en `Call`, en todas las llamadas (`null` si no hay cualificador), después de `arguments` y antes de `type` ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)). `callee` puede contener un punto (`"Text.length"`) en las llamadas cualificadas. Un programa sin ellas produce el mismo documento que en la 0.5.1, más `"qualifier": null` en cada `Call`; el documento valida también con el esquema de la 0.5.1 |
 | `nexora.inspect/2` | `nexora` 0.5.0 | Añadidos, sin cambiar la versión: nodos `Var`, `While` y `LoopClause` ([decisión 0010](decisions/0010-var-y-while.md)). `Assign` aparece también en programas válidos. Un programa sin `var` ni bucles produce el mismo documento que en la 0.4.0 |
 | `nexora.inspect/2` | `nexora` 0.4.0 | Añadidos, sin cambiar la versión: nodo `Example` y campo `examples` al final de `Function` ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |

@@ -7,7 +7,7 @@ aparecer mientras el programa se ejecuta.
 La definición formal está en la [especificación](language-spec.md#4-tipos-de-datos). Esta guía la
 explica con ejemplos; todos se comprueban en las pruebas del proyecto.
 
-## Los cinco tipos
+## Los tipos
 
 | Tipo | Valores | Literales |
 |------|---------|-----------|
@@ -15,12 +15,12 @@ explica con ejemplos; todos se comprueban en las pruebas del proyecto.
 | `Float` | Coma flotante IEEE 754 de 64 bits | `3.14`, `0.5`, `10.0` |
 | `Bool` | Verdadero o falso | `true`, `false` |
 | `Text` | Texto Unicode, inmutable | `"Hello"` |
+| `List[T]` | Secuencia inmutable y finita de valores de tipo `T` | `[1, 2, 3]`, `[]` (con un tipo esperado) |
 | `Void` | Ningún valor | No tiene literales |
 
-`Int`, `Float`, `Bool` y `Text` son los **tipos de valor**: los que puede tener una variable, un
-parámetro o una expresión. `Void` solo puede usarse como tipo de retorno de una función que no
-devuelve nada. Un programa puede declarar sus propios tipos de valor a partir de estos: los
-[tipos refinados](#tipos-refinados).
+`Int`, `Float`, `Bool` y `Text` son los **tipos de valor** integrados. `List[T]` es un tipo de valor
+compuesto, y un programa puede declarar tipos refinados sobre los integrados. `Void` solo puede
+usarse como tipo de retorno de una función que no devuelve nada.
 
 Detalles de cada uno:
 
@@ -80,8 +80,15 @@ ninguna conversión entre los dos tipos, no se sugiere nada.
 
 ## La regla de compatibilidad
 
-**Dos tipos son compatibles solo si son el mismo tipo.** No hay excepciones: no hay tipos
-"más amplios" ni conversiones automáticas.
+**Dos tipos son compatibles solo si son el mismo tipo, o si el valor es de un tipo refinado y se
+espera su base.** No hay tipos numéricos "más anchos" ni conversiones automáticas:
+
+- Un `Int` no se acepta donde se espera un `Float`, ni al revés.
+- Ningún tipo se convierte a `Bool` ni a `Text` por sí solo.
+- Un `Percent` (refinado sobre `Int`) se acepta donde se espera un `Int`; la dirección contraria
+  exige construir el refinado.
+- Los argumentos de `List` son invariantes: `List[Percent]` no se acepta donde se espera
+  `List[Int]`, aunque cada `Percent` sea un `Int`.
 
 La regla se aplica en los cuatro lugares donde un valor tiene que tener un tipo concreto:
 
@@ -91,6 +98,64 @@ La regla se aplica en los cuatro lugares donde un valor tiene que tener un tipo 
 | Un argumento de una llamada | `half(4)` si `half` espera un `Float` |
 | El valor de un `return` | `return "x"` en una función `-> Int` |
 | Los operandos de un operador | `1 + 1.5` |
+
+## Listas
+
+Una lista es una secuencia **inmutable y finita** de valores del mismo tipo. Se escribe `List[T]`,
+donde `T` es el tipo de sus elementos:
+
+```nex
+let numbers: List[Int] = [1, 2, 3]
+let empty: List[Int] = []
+let nested: List[List[Int]] = [[1], [2, 3]]
+let words: List[Text] = ["a", "b"]
+```
+
+`T` puede ser `Int`, `Float`, `Bool`, `Text`, un tipo refinado u otra `List[...]`; no puede ser
+`Void`. Los argumentos de `List` son **invariantes**: `List[Int]` y `List[Text]` son tipos
+distintos, y `List[Percent]` no se acepta donde se espera `List[Int]`. Un elemento refinado sí
+puede ensancharse a su base al construir la lista con un tipo esperado:
+`let xs: List[Int] = [Percent(10), 20]`.
+
+Sin un tipo esperado, el primer elemento fija el tipo de los demás. Una lista vacía necesita un
+tipo esperado (una anotación, un parámetro, un retorno, una asignación o el lado izquierdo de una
+igualdad, como `a == []`); `let xs = []` es `E2011`. El tipo no se propaga del lado derecho al
+izquierdo de una igualdad: `[] == a` es `E2011`. Todos los elementos tienen que ser del mismo tipo:
+`let xs = [1, "a"]` es `E2011`.
+
+<!-- nex:run -->
+```nex
+fn main() -> Void {
+    let xs = [1, 2, 3]
+    print(xs)
+    print(List.length(xs))
+    print(List.get(xs, 1))
+    print(List.append(xs, 4))
+    print(List.contains(xs, 2))
+    var total = 0
+    for x in xs {
+        total = total + x
+    }
+    print(total)
+}
+```
+
+```text
+[1, 2, 3]
+3
+2
+[1, 2, 3, 4]
+true
+6
+```
+
+Una lista no cambia: `List.append` y `List.concat` construyen listas nuevas. `print` y `to_text`
+escriben `[1, 2, 3]`, y `==`/`!=` comparan listas del mismo tipo de forma estructural. No hay
+sintaxis de índice (`xs[i]`), mutación de elementos ni orden entre listas. Para leer una posición se
+usa `List.get`, que exige un índice válido y detiene el programa con `E4001` si no lo es. Las cinco
+funciones y el `for` están en la [especificación](language-spec.md), secciones 8.2 y 9.6.
+
+No se puede refinar una lista en esta versión (`type NonEmpty = List[Int] ...` es `E2016`).
 
 ## Operadores
 
@@ -155,7 +220,7 @@ let b = 1 == 1.0           // tampoco al comparar
 let c = true + 1           // un Bool no admite aritmética
 let d = true < false       // ni orden
 let e = "a" + 1            // '+' une Text con Text
-let f = "a" < "b"          // los textos no se ordenan
+let f = [1] == ["a"]       // las listas comparan elementos del mismo tipo
 let g = 1 and 2            // 'and' necesita dos Bool
 let h = not 0              // 'not' necesita un Bool
 let i = -"text"            // '-' necesita un número
@@ -200,7 +265,7 @@ Las únicas conversiones son llamadas a estas tres funciones:
 |---------|----|---|-------|
 | `to_float(value)` | `Int` | `Float` | Siempre posible. Los enteros de más de 53 bits se redondean al `Float` más cercano |
 | `to_int(value)` | `Float` | `Int` | Descarta los decimales (redondea hacia cero). Si el resultado no cabe en un `Int`, error de ejecución `E3005` |
-| `to_text(value)` | `Int`, `Float`, `Bool` o `Text` | `Text` | El mismo texto que escribiría `print` |
+| `to_text(value)` | `Int`, `Float`, `Bool`, `Text` o `List[T]` | `Text` | El mismo texto que escribiría `print` |
 
 <!-- nex:run -->
 ```nex
@@ -256,6 +321,7 @@ garantizar nada que dependa del **valor** concreto. Estas situaciones se detecta
 | Resultado `Int` fuera de rango | `E3002` |
 | Resultado `Float` demasiado grande | `E3003` |
 | `to_int` de un `Float` que no cabe en un `Int` | `E3005` |
+| `List.get` con un índice fuera de la lista | `E4001` |
 | `Percent(x)` con un valor que no cumple la condición de `Percent` | `E4003` |
 
 <!-- nex:fails exit=3 -->
@@ -405,5 +471,7 @@ una relación entre argumentos y se escribe como [contrato](contracts.md).
 
 ## Lo que no existe
 
-Listas, registros, valores opcionales, alias de tipos sin condición, genéricos y cualquier otro
-tipo compuesto. Están en la [hoja de ruta](roadmap.md) como trabajo previsto, y no funcionan hoy.
+Registros, mapas, enumeraciones, valores opcionales (`Option`, `Result`), alias de tipos sin
+condición, genéricos de usuario y cualquier otro tipo compuesto que no sea `List[T]`. Las listas no
+tienen sintaxis de índice ni mutación, y no se pueden refinar. Están en la
+[hoja de ruta](roadmap.md) como trabajo previsto, y no funcionan hoy.

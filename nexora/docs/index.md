@@ -18,7 +18,7 @@ resultado real del intérprete.
 
 | Guía | Contenido |
 |------|-----------|
-| [Tipos](types.md) | Los cinco tipos, inferencia, anotaciones, operadores, conversiones y tipos refinados (`where`) |
+| [Tipos](types.md) | Los tipos, listas `List[T]`, inferencia, anotaciones, operadores, conversiones y tipos refinados (`where`) |
 | [Funciones](functions.md) | Parámetros, `return`, rutas de retorno, `if` / `else`, recursividad |
 | [Contratos](contracts.md) | `requires` y `ensures`, con la explicación de cada regla |
 

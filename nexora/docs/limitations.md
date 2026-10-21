@@ -1,6 +1,6 @@
 # Limitaciones
 
-Lo que NEXORA **no** hace en la versión 0.6.0, y los riesgos que conviene conocer antes de usarlo.
+Lo que NEXORA **no** hace en la versión 0.7.0, y los riesgos que conviene conocer antes de usarlo.
 Nada de lo que aparece aquí como "no existe" funciona hoy, aunque se mencione en el borrador de
 diseño o en la hoja de ruta.
 
@@ -17,13 +17,19 @@ NEXORA es un proyecto en una fase temprana (anterior a la versión 1.0):
 
 | Falta | Consecuencia |
 |-------|--------------|
-| `for`, `break` y `continue` | Se escribe un `while` con un contador; para salir antes, la condición o `return` |
+| `break` y `continue`, y `for` sobre rangos o `Text` | Se escribe un `while` con un contador; para salir antes, la condición o `return`. Un `for` solo recorre una `List[T]` |
+| Que el análisis de rutas reconozca que un `for` siempre devuelve | No lo considera una ruta de retorno completa, aunque todas sus vueltas contengan un `return`; si el bucle es la última sentencia, hay que añadir un `return` después |
 | Asignaciones compuestas (`+=`, `++`) | Se escribe `x = x + 1` |
-| Reasignar un parámetro | Se copia antes en una `var` |
-| Un bucle sin medida (`decreases`) | Todo bucle declara por qué termina; si no puede escribirse una medida, se pone un máximo de vueltas explícito (`decreases limit - turns`) |
+| Reasignar un parámetro o el iterador de un `for` | Se copia antes en una `var` |
+| Un `while` sin medida (`decreases`) | Todo `while` declara por qué termina; si no puede escribirse una medida, se pone un máximo de vueltas explícito (`decreases limit - turns`). Un `for` sobre una lista finita no la necesita |
 | `if` como expresión | `if` no puede usarse para dar valor a una variable |
-| Tipos compuestos: listas, mapas, registros, enumeraciones, opcionales | Solo existen `Int`, `Float`, `Bool` y `Text` |
-| Tipos definidos por el usuario y genéricos | |
+| Indexar una lista (`xs[i]`) o modificar sus elementos | Se usa `List.get(xs, i)` para leer; `List.append` y `List.concat` crean otra lista. No hay `List.set` ni mutación |
+| Una variante total de `List.get` | `List.get` exige `0 <= i and i < List.length(xs)` y falla con `E4001`; no hay `Option` para representar la ausencia |
+| Listas con elementos de tipos distintos, o vacías sin tipo esperado | Todos los elementos tienen el mismo tipo. `[]` y `for x in []` necesitan un tipo esperado (`E2011`) |
+| Refinar una lista (`type NonEmpty = List[Int] where ...`) | Un tipo refinado solo puede construirse sobre `Int`, `Float`, `Bool`, `Text` u otro refinado (`E2016`) |
+| Funciones de `List` más allá de `length`, `get`, `append`, `concat` y `contains` | No hay `map`, `filter`, `fold`, ordenación, `slice` ni búsqueda de posiciones |
+| Mapas, registros, enumeraciones y opcionales | Las listas `List[T]` son inmutables y finitas; no hay otras estructuras de datos |
+| Tipos definidos por el usuario y genéricos | Las listas usan `List[T]`, pero el programa no puede declarar tipos genéricos ni funciones genéricas |
 | `trim`, mayúsculas, `split`, `replace`, búsqueda de posiciones | Existen `Text.length`, `Text.slice`, `Text.contains`, `Text.starts_with`, `Text.ends_with` y el orden entre textos ([especificación](language-spec.md), 8.1) |
 | Grafemas y normalización Unicode | Un carácter es un punto de código: una `e` con el acento combinado cuenta 2, y dos textos que se ven iguales pueden ser distintos para `==` |
 | Orden alfabético según el idioma | El orden entre textos es el de los puntos de código: `"Z" < "a"` |
@@ -47,7 +53,7 @@ lenguaje. No sirve todavía para escribir aplicaciones.
 |--------|-------|-------------------------|
 | Llamadas anidadas | 1000 (contando `main`) | Error de ejecución `E3004` |
 | Llamadas anidadas con expresiones muy profundas | Menos de 1000 | El mismo error `E3004`; el mensaje indica cuántas había |
-| Anidamiento de paréntesis, bloques, `else if` u operadores unarios | 64 niveles | Error `E1105` |
+| Anidamiento de paréntesis, bloques, `else if`, operadores unarios o tipos (`List[...]`) | 64 niveles | Error `E1105` |
 | Profundidad de una expresión (por ejemplo, términos de una suma) | 256 | Error `E1105` |
 | Trabajo de `nex check` comprobando constantes contra tipos refinados | 100 000 nodos de condición evaluados | Error `E2019`; el programa no se ejecuta |
 | Errores comunicados por etapa y archivo | 100 | El análisis se detiene; el resumen lo indica |

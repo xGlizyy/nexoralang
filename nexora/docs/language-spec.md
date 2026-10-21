@@ -1,7 +1,7 @@
 # Especificación del lenguaje NEXORA
 
-- **Versión de la especificación:** 0.6
-- **Implementación de referencia:** `nexora` 0.6.0 (este repositorio, directorio `nexora/`)
+- **Versión de la especificación:** 0.7
+- **Implementación de referencia:** `nexora` 0.7.0 (este repositorio, directorio `nexora/`)
 - **Estado:** describe exactamente lo que el intérprete hace hoy.
 
 Este documento es la referencia del lenguaje: define la sintaxis y el significado de cada
@@ -12,7 +12,7 @@ Cómo leer el estado de cada parte:
 | Marca | Significado |
 |-------|-------------|
 | *(sin marca)* | **Implementado** y cubierto por pruebas |
-| **Experimental** | Implementado y probado, pero su sintaxis o sus reglas pueden cambiar. En la versión 0.6 ninguna parte del lenguaje lo es |
+| **Experimental** | Implementado y probado, pero su sintaxis o sus reglas pueden cambiar. En la versión 0.7 ninguna parte del lenguaje lo es |
 | **Previsto** | No existe. Reunido en la sección 14; no forma parte del lenguaje |
 
 Los cambios respecto a la versión 0.1 están en [`CHANGELOG.md`](../CHANGELOG.md) y sus motivos
@@ -69,16 +69,16 @@ Solo se admiten letras ASCII. Se distinguen mayúsculas de minúsculas.
 Palabras clave:
 
 ```
-fn   let   var   return   if   else   while   true   false   and   or   not   requires   ensures
-example   invariant   decreases   type   where
+fn   let   var   return   if   else   while   for   in   true   false   and   or   not
+requires   ensures   example   invariant   decreases   type   where
 ```
 
 Palabras reservadas para versiones futuras. No pueden usarse como nombres y usarlas produce el
 error `E1103`:
 
 ```
-ai       assert   break    const    continue enum     for      import
-in       match    pub      test     tool     try      uses
+ai       assert   break    const    continue enum     import
+match    pub      test     tool     try      uses
 ```
 
 No son palabras reservadas, sino nombres predefinidos: los tipos `Int`, `Float`, `Bool`, `Text` y
@@ -113,7 +113,7 @@ de un texto es un error (`E1005`): está reservada para la futura interpolación
 ### 2.6 Símbolos
 
 ```
-(  )  {  }  ,  :  .  =  ->  +  -  *  /  ==  !=  <  <=  >  >=
+(  )  {  }  [  ]  ,  :  .  =  ->  +  -  *  /  ==  !=  <  <=  >  >=
 ```
 
 Un `.` seguido de un dígito, dentro de un número, forma parte del número decimal (`1.5`). Cualquier
@@ -135,19 +135,20 @@ function   = "fn" NAME "(" [ params ] ")" "->" type { NEWLINE }
              "{" { NEWLINE } { contract } { statement end } "}" ;
 params     = param { "," param } ;
 param      = NAME ":" type ;
-type       = NAME ;
+type       = NAME [ "[" type "]" ] ;
 contract   = ( "requires" | "ensures" | "example" ) expression [ explanation ] end ;
 explanation = "," TEXT ;
 
 block      = "{" { NEWLINE } { statement end } "}" ;
 end        = NEWLINE | (* nada, si lo siguiente es "}" *) ;
 
-statement  = let | var | return | if | while | block | assignment | expression ;
+statement  = let | var | return | if | while | for | block | assignment | expression ;
 let        = "let" NAME [ ":" type ] "=" expression ;
 var        = "var" NAME [ ":" type ] "=" expression ;
 return     = "return" [ expression ] ;
 if         = "if" expression block [ "else" ( if | block ) ] ;
 while      = "while" expression "{" { NEWLINE } { loop_clause } { statement end } "}" ;
+for        = "for" NAME "in" expression "{" { NEWLINE } { loop_clause } { statement end } "}" ;
 loop_clause = ( "invariant" | "decreases" ) expression [ explanation ] end ;
 assignment = NAME "=" expression ;
 
@@ -162,6 +163,7 @@ primary        = INT | FLOAT | TEXT | "true" | "false"
                | NAME
                | NAME "(" [ expression { "," expression } ] ")"
                | NAME "." NAME "(" [ expression { "," expression } ] ")"
+               | "[" [ expression { "," expression } ] "]"
                | "(" expression ")" ;
 ```
 
@@ -172,7 +174,7 @@ Notas:
 - Una explicación (`explanation`) es un único texto literal no vacío, de una sola línea. Un texto
   vacío, formado solo por espacios o con un salto de línea (`\n`) es el error `E1101`.
 - Las cláusulas `requires`, `ensures` y `example` van **al principio del cuerpo** de una función,
-  antes de cualquier sentencia; `invariant` y `decreases`, al principio del cuerpo de un `while`. En
+  antes de cualquier sentencia; `invariant` y `decreases`, al principio del cuerpo de un bucle. En
   cualquier otro lugar son el error `E1106`.
 - `else` se escribe en la misma línea que la `}` que cierra el bloque anterior: `} else {`.
 - Las comparaciones no se encadenan: `a < b < c` es un error de sintaxis (`E1101`). Se escribe
@@ -184,9 +186,13 @@ Notas:
   ni saltos de línea a sus lados (`E1101`). Entre el segundo nombre y el `(` puede haber espacios,
   como en cualquier llamada. Que el primer nombre sea un tipo con esa función lo comprueba el análisis
   estático (`E2008`, sección 8.1).
-- Límites de tamaño: los paréntesis, los operadores unarios, los bloques y las cadenas `else if`
-  pueden anidarse hasta 64 niveles, y un árbol de expresión puede tener hasta 256 niveles (por
+- Límites de tamaño: los paréntesis, los operadores unarios, los bloques, las cadenas `else if` y los
+  tipos pueden anidarse hasta 64 niveles, y un árbol de expresión puede tener hasta 256 niveles (por
   ejemplo, una suma de 256 términos). Superarlos es el error `E1105`.
+- Un tipo se escribe `NAME` o `NAME[T]`. En esta versión solo `List` admite argumentos de tipo, y
+  exactamente uno. `List` sin argumento no es un tipo (`E2012`); `List[]`, `List[Int, Text]`,
+  `List[Void]`, `Option[...]`, `Result[...]`, `Foo[...]` e `Int[...]` son errores de sintaxis
+  (`E1101`). El anidamiento cuenta para el límite de 64 niveles.
 
 ## 4. Tipos de datos
 
@@ -196,10 +202,12 @@ Notas:
 | `Float` | Coma flotante IEEE 754 de 64 bits | No existen infinito ni NaN: una operación cuyo resultado no cabe es un error de ejecución (`E3003`). Existe el cero negativo (`-0.0`), que es igual a `0.0` y se escribe `-0.0` |
 | `Bool` | `true`, `false` | |
 | `Text` | Texto Unicode | Inmutable |
+| `List[T]` | Secuencia inmutable y finita de valores de tipo `T` | `T` no puede ser `Void`; no hay covarianza (sección 4.5) |
 | `Void` | Ningún valor | Solo puede ser el tipo de retorno de una función |
 
-`Int`, `Float`, `Bool` y `Text` son los **tipos de valor** integrados. Un programa puede declarar
-otros a partir de ellos: los **tipos refinados** (sección 4.4). Los tipos de valor son los que puede
+`Int`, `Float`, `Bool` y `Text` son los **tipos de valor** integrados. `List[T]` es un tipo de valor
+compuesto (sección 4.5); un programa también puede declarar tipos refinados sobre los integrados
+(sección 4.4). Los tipos de valor son los que puede
 tener una variable, un parámetro o una expresión. `Void` no es un tipo de valor: una variable o un parámetro de tipo
 `Void` es el error `E2012`, y usar una llamada a una función `Void` donde hace falta un valor es
 el error `E2011`.
@@ -221,6 +229,10 @@ construido sobre él** (sección 4.4). No hay tipos numéricos "más anchos" ni 
 - Ningún tipo se convierte a `Bool` ni a `Text` por sí solo.
 - Un `Percent` (refinado sobre `Int`) se acepta donde se espera un `Int`. Un `Int` **no** se acepta
   donde se espera un `Percent`, salvo que sea una constante que cumple su condición.
+- Los argumentos de `List` son **invariantes**: `List[Int]` no se acepta donde se espera
+  `List[Text]`, y `List[Percent]` no se acepta donde se espera `List[Int]`, aunque cada `Percent`
+  sea un `Int`. Un elemento refinado sí puede ensancharse a la base cuando la lista se construye
+  con un tipo esperado (`let xs: List[Int] = [Percent(10), 20]`).
 
 Esta regla se aplica por igual a la anotación de una variable, a los argumentos de una llamada, al
 valor de un `return` y a los operandos de un operador.
@@ -233,7 +245,7 @@ Las únicas conversiones que existen son llamadas explícitas a funciones integr
 |---------|-----------|-------|
 | `to_float(value)` | `Int` → `Float` | Siempre posible. Los enteros de más de 53 bits se redondean al `Float` más cercano |
 | `to_int(value)` | `Float` → `Int` | Descarta la parte decimal (redondea hacia cero): `to_int(3.9)` es `3`, `to_int(-3.9)` es `-3`. Si el resultado no cabe en un `Int`, error de ejecución `E3005` |
-| `to_text(value)` | `Int`, `Float`, `Bool` o `Text` → `Text` | El mismo texto que escribiría `print` (sección 8) |
+| `to_text(value)` | `Int`, `Float`, `Bool`, `Text` o `List[T]` → `Text` | El mismo texto que escribiría `print` (sección 8) |
 | `Int.parse(text)` | `Text` → `Int` | Solo si `Int.can_parse(text)`; si no, `E4001` (sección 8.1) |
 | `Float.parse(text)` | `Text` → `Float` | Solo si `Float.can_parse(text)`; si no, `E4001` (sección 8.1) |
 
@@ -284,8 +296,9 @@ Reglas de la declaración:
 
 - El nombre empieza por mayúscula (`E2016`) y no puede ser el de un tipo integrado (`E2016`), el de
   otro tipo (`E2016`), ni usarse para una función, un parámetro o una variable (`E2006`).
-- La base es `Int`, `Float`, `Bool`, `Text` u otro tipo refinado. Una cadena de tipos que no llega
-  a un tipo integrado (`type A = B ...` y `type B = A ...`) es el error `E2016`.
+- La base es `Int`, `Float`, `Bool`, `Text` u otro tipo refinado. No puede ser una lista
+  (`E2016`). Una cadena de tipos que no llega a un tipo integrado (`type A = B ...` y
+  `type B = A ...`) es el error `E2016`.
 - La condición es una expresión `Bool` (`E2011`). En ella solo existe el nombre `value`, que es el
   valor que se comprueba y tiene el tipo de la base (`E2005` para cualquier otro nombre).
 - La condición no puede llamar a funciones del programa ni comprobar otros tipos refinados
@@ -379,6 +392,101 @@ contract error[E4003]: Refinement violated
 
 error: program.nex: the program stopped because a contract was broken
 ```
+
+### 4.5 Listas
+
+Una lista es una secuencia **inmutable y finita** de valores del mismo tipo. Su tipo se escribe
+`List[T]`, donde `T` es el tipo de los elementos:
+
+```nex
+let numbers: List[Int] = [1, 2, 3]
+let empty: List[Int] = []
+let nested: List[List[Int]] = [[1], [2, 3]]
+let words: List[Text] = ["a", "b"]
+```
+
+`T` puede ser `Int`, `Float`, `Bool`, `Text`, un tipo refinado u otra `List[...]`. No puede ser
+`Void`: `List[Void]` es un error de sintaxis (`E1101`). El tipo es **invariante** en `T`:
+
+- `List[Int]` y `List[Text]` son tipos distintos; no hay conversión de uno a otro.
+- `List[Percent]` no se acepta donde se espera `List[Int]`, aunque `Percent` sea un `Int` refinado.
+  La razón es que una operación que acepta `List[Int]` podría tratar sus elementos como `Int`
+  cualesquiera, y una `List[Percent]` promete más que eso.
+- Un elemento refinado sí puede ensancharse a su base al construir una lista con un tipo esperado:
+  `let xs: List[Int] = [Percent(10), 20]`.
+
+#### Literales e inferencia
+
+`[a, b, c]` y `[]` son expresiones. Sin un tipo esperado, el **primer elemento** fija el tipo de
+los demás; todos tienen que ser aceptables como ese tipo. Con un tipo esperado `List[T]`, todos los
+elementos se comprueban contra `T`.
+
+```nex
+let numbers = [1, 2, 3]                 // List[Int]
+let texts = ["a", "b"]                  // List[Text]
+let nested = [[1], [2, 3]]              // List[List[Int]]
+let empty: List[Int] = []               // el tipo esperado fija Int
+```
+
+Una lista vacía **necesita un tipo esperado**. No se inventa el tipo del elemento:
+
+<!-- nex:body-fails codes=E2011 -->
+```nex
+let xs = []                             // no se sabe de qué tipo son los elementos
+print([])                               // tampoco
+```
+
+El tipo esperado puede venir de una anotación, de un parámetro, del tipo de retorno, de una
+asignación o del lado izquierdo de una igualdad (`a == []`). No se propaga del lado derecho al
+izquierdo: `[] == a` es `E2011` aunque `a` tenga tipo. También se propaga a listas anidadas:
+`let xs: List[List[Int]] = [[]]` es válido.
+
+Todos los elementos de una lista tienen el mismo tipo. No se mezclan, por ejemplo, `Int` y `Text`:
+
+<!-- nex:body-fails codes=E2011 -->
+```nex
+let mixed = [1, "a"]                    // Expected Int, found Text
+```
+
+#### Inmutabilidad, igualdad e impresión
+
+Una lista no cambia. Una variable `var` puede pasar a apuntar a otra lista, pero la lista anterior
+conserva sus elementos. `List.append` y `List.concat` construyen listas nuevas (sección 8.2).
+
+`==` y `!=` comparan listas del **mismo tipo** de forma estructural: mismos elementos, en el mismo
+orden, comparados recursivamente. El resultado es `Bool`. No hay orden (`<`, `<=`, `>`, `>=`) entre
+listas.
+
+`print` y `to_text` escriben la forma canónica con corchetes y sin comillas alrededor de los textos:
+`[1, 2, 3]`, `[[1], [2, 3]]`, `[a, b]`, `[]`. Los diagnósticos pueden entrecomillar los textos para
+distinguirlos; esa no es la salida de `print`. La impresión no escapa los textos: no es un formato de
+serialización, y un texto que contenga `,` o `]` puede verse ambiguo.
+
+<!-- nex:run -->
+```nex
+fn main() -> Void {
+    let numbers = [1, 2, 3]
+    let empty: List[Int] = []
+    let nested = [[1], [2, 3]]
+    print(numbers)
+    print(empty)
+    print(nested)
+    print(numbers == [1, 2, 3])
+    print(empty == [])
+}
+```
+
+```text
+[1, 2, 3]
+[]
+[[1], [2, 3]]
+true
+true
+```
+
+No hay sintaxis de índice (`xs[i]`) ni forma de modificar un elemento. Para leer una posición se
+usa `List.get`; para añadir o unir listas, `List.append` y `List.concat` (sección 8.2). Un tipo
+refinado no puede construirse sobre una lista en esta versión (`E2016`).
 
 ## 5. Variables y ámbitos
 
@@ -593,10 +701,11 @@ Cómo se decide si un bloque "siempre devuelve":
 | `if` … `else` … | Todas sus ramas siempre devuelven |
 | Bloque `{ }` | Alguna de sus sentencias siempre devuelve |
 | `while` | Nunca (su condición puede ser falsa desde el principio) |
+| `for` | Nunca (la lista puede estar vacía) |
 | Cualquier otra | Nunca |
 
 El análisis no evalúa las condiciones: `if true { return 1 }` sin `else` se considera incompleto, y
-una función cuyo único `return` está dentro de un `while` necesita otro después del bucle.
+una función cuyo único `return` está dentro de un bucle necesita otro después del bucle.
 
 ```nex
 fn sign(n: Int) -> Int {          // correcto: las tres ramas devuelven
@@ -672,6 +781,7 @@ Texto que producen `print` y `to_text`:
 | `Int` | En decimal | `42`, `-7` |
 | `Bool` | `true` o `false` | |
 | `Float` | La representación decimal más corta que identifica el valor; siempre lleva punto decimal o exponente | `3.5`, `2.0`, `0.30000000000000004`, `1e+16` |
+| `List[T]` | Corchetes, elementos separados por `, `, sin comillas alrededor de los textos | `[1, 2, 3]`, `[[1], [2]]`, `[]` |
 
 `print` es la única forma que tiene un programa de producir un efecto. Un programa NEXORA no puede
 leer archivos, abrir conexiones, ejecutar otros programas ni leer datos de entrada.
@@ -763,6 +873,64 @@ contract error[E4001]: Precondition violated
 
 error: program.nex: the program stopped because a contract was broken
 ```
+
+### 8.2 Funciones de `List`
+
+Las listas tienen cinco funciones integradas. Son funciones de un tipo, como las de la sección
+8.1, y se llaman con `List.` delante. Su firma usa una variable de tipo `T` que no se escribe en el
+programa: cada llamada la liga con el tipo de sus argumentos. No son genéricos de usuario y no se
+puede declarar una función así.
+
+| Función | Firma | Qué hace | Requisitos |
+|---------|-------|----------|------------|
+| `List.length` | `List.length(xs: List[T]) -> Int` | Número de elementos | |
+| `List.get` | `List.get(xs: List[T], i: Int) -> T` | Elemento en la posición `i`, empezando en 0 | `0 <= i and i < List.length(xs)` |
+| `List.append` | `List.append(xs: List[T], x: T) -> List[T]` | Lista nueva con `x` al final | |
+| `List.concat` | `List.concat(xs: List[T], ys: List[T]) -> List[T]` | Lista nueva con los elementos de `xs` y después los de `ys` | |
+| `List.contains` | `List.contains(xs: List[T], x: T) -> Bool` | Si algún elemento es estructuralmente igual a `x` | |
+
+- **`List.length`** es total. `List.length([])` no compila si la lista vacía no tiene un tipo
+  esperado (`E2011`); `let xs: List[Int] = []` y `List.length(xs)` sí.
+- **`List.get`** es parcial. El índice empieza en 0 y tiene que estar dentro de la lista. Un índice
+  negativo, igual a la longitud o mayor detiene el programa con `E4001`, también si es una constante:
+  `nex check` no demuestra el contrato. No hay índices negativos desde el final ni recortes
+  silenciosos. La comprobación lleva la explicación «An index must be inside the list».
+- **`List.append` y `List.concat`** no modifican sus argumentos: construyen una lista nueva. El tipo
+  del resultado conserva el elemento de las listas de entrada. Una lista vacía literal en un
+  argumento necesita un tipo esperado, porque la firma paramétrica no lo fija antes de leer los
+  argumentos: `List.append([], 1)` y `List.concat([1], [])` son `E2011`.
+- **`List.contains`** usa igualdad estructural, no búsqueda de subtextos: `List.contains(["ab"], "b")`
+  es `false`. La lista y el valor tienen que tener el mismo tipo de elemento; un `Int` no se busca
+  en una `List[Text]`.
+- Los argumentos se comprueban como en cualquier llamada: número (`E2009`), tipo (`E2011`) y, si
+  procede, el contrato al ejecutar (`E4001`). Una función de `List` desconocida es `E2008`, con
+  sugerencia si se parece a una de las cinco.
+
+<!-- nex:run -->
+```nex
+fn main() -> Void {
+    let xs = [10, 20, 30]
+    print(List.length(xs))
+    print(List.get(xs, 1))
+    print(List.append(xs, 40))
+    print(List.concat(xs, [40, 50]))
+    print(List.contains(xs, 20))
+    print(List.contains(xs, 25))
+}
+```
+
+```text
+3
+20
+[10, 20, 30, 40]
+[10, 20, 30, 40, 50]
+true
+false
+```
+
+Fuera de estas cinco funciones no hay `map`, `filter`, `fold`, ordenación, `slice` ni una variante
+total de `List.get`. Llegarán, si se deciden, con `Option`/`Result` y las demás decisiones
+pendientes.
 
 ## 9. Contratos
 
@@ -958,15 +1126,16 @@ fn main() -> Void {
 
 Reglas:
 
-- **Todo bucle declara su medida.** Sin `decreases`, o con más de una, es el error `E2021`.
+- **Todo `while` declara su medida.** Sin `decreases`, o con más de una, es el error `E2021`.
 - La condición del bucle es `Bool` (`E2011`), y la medida, `Int` (`E2011`).
 - Las cláusulas ven lo que es visible donde está el bucle (parámetros, `let`, `var`), no lo que
   declara su cuerpo. Llevan una explicación opcional tras una coma, como los contratos.
 - Cada vuelta abre un ámbito nuevo: lo declarado en el cuerpo existe solo durante esa vuelta. Lo que
   tiene que sobrevivir entre vueltas se declara con `var` antes del bucle.
 - Un `return` dentro del cuerpo termina la función.
-- Las vueltas no son llamadas: no cuentan para el límite de 1000 llamadas anidadas.
-- No existen `break`, `continue` ni `for` (siguen reservadas).
+- Las vueltas no son llamadas: el bucle no añade una llamada y no consume el límite de 1000, aunque
+  las llamadas dentro del cuerpo sí cuentan.
+- No existen `break` ni `continue` (siguen reservadas).
 
 Cada vez que se ejecuta un bucle:
 
@@ -1022,6 +1191,66 @@ bucle que lo contiene, del más interior al más exterior: `In turn 3 of the loo
 millones de vueltas. Que la medida y los invariantes sean los adecuados: se comprueba lo escrito, en
 las vueltas que se ejecutan. Nada de esto se demuestra sin ejecutar.
 
+### 9.6 Bucles `for` sobre listas
+
+Un `for` recorre una lista inmutable y declara el nombre que toma cada elemento. La parte
+implementada la acepta la [decisión 0013](decisions/0013-listas-y-for.md); la
+[0012](decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) sigue siendo la
+propuesta para el resto:
+
+<!-- nex:run -->
+```nex
+fn total(xs: List[Int]) -> Int {
+    var sum = 0
+    for x in xs {
+        invariant sum >= 0, "The total is never negative"
+        sum = sum + x
+    }
+    return sum
+}
+
+fn main() -> Void {
+    print(total([1, 2, 3, 4]))
+}
+```
+
+```text
+10
+```
+
+La lista se escribe con corchetes y su tipo dice el tipo de los elementos: `[1, 2, 3]` es
+`List[Int]`. Una lista no cambia: `List.append(xs, x)` y `List.concat(xs, ys)` construyen una lista
+nueva. La sintaxis y los literales están en la sección 4.5, y las funciones en la 8.2.
+
+Reglas:
+
+- **El iterable se evalúa una vez**, antes de la primera comprobación de invariantes y de cualquier
+  vuelta, y debe ser `List[T]` (`E2011`). No se recorre un `Text` ni un `Int`, y no hay `for` sobre
+  rangos. Una lista vacía literal como iterable (`for x in []`) no tiene tipo esperado y es `E2011`;
+  para recorrer una lista vacía se usa una variable anotada:
+  `let xs: List[Int] = []` y `for x in xs`.
+- **El iterador es inmutable y de tipo `T`.** Se declara en el mismo `for`, no antes, y no puede
+  recibir un valor nuevo (`E2007`). Tampoco puede ocultar un nombre visible (`E2006`). No es visible
+  después del bucle. Cada vuelta abre un entorno nuevo: lo que el cuerpo declara existe solo durante
+  esa vuelta, y las asignaciones a una `var` exterior sí se conservan.
+- **No lleva `decreases`.** La lista es finita por construcción; un `decreases` en un `for` es el
+  error `E2022`. Un `for` puede declarar cero o más `invariant`, con la misma semántica que en un
+  `while`: se comprueban antes de cada vuelta y una vez después de la última. En una lista vacía se
+  comprueba una vez, antes de la primera vuelta que no llega a ejecutarse; no hay una comprobación
+  adicional separada. Un invariante debe ser `Bool` (`E2011`) y, si es falso, el programa se detiene
+  con `E4005`.
+- Las cláusulas ven lo que es visible donde está el `for`, nunca el iterador.
+- Un `return` dentro del cuerpo termina la función. El análisis de rutas no considera que un `for`
+  siempre devuelve, aunque todas sus vueltas contengan un `return`: si el bucle es la última
+  sentencia, la función necesita un `return` después.
+- No hay `break` ni `continue`: siguen reservadas (`E1103`).
+- Las vueltas no son llamadas: el bucle no añade una llamada y no consume el límite de 1000, aunque
+  las llamadas dentro del cuerpo sí cuentan.
+
+**Lo que no garantiza.** Que el cuerpo termine pronto: una lista enorme tarda lo que tarda. El
+playground impone un tiempo máximo; `nex run` no. Que los invariantes sean los adecuados: se
+comprueban al ejecutar las vueltas que ocurren, no se demuestran.
+
 ## 10. Errores: antes de ejecutar y durante la ejecución
 
 ### 10.1 Etapas
@@ -1052,12 +1281,12 @@ Todo lo siguiente lo comunica `nex check`, sin ejecutar una sola sentencia:
 - Caracteres, números, textos y escapes mal escritos.
 - Código que no sigue la gramática.
 - Ausencia de `main`, funciones duplicadas, parámetros o declaraciones no válidas.
-- Nombres que no existen, nombres declarados dos veces, asignaciones a variables `let` o a
-  parámetros.
+- Nombres que no existen, nombres declarados dos veces, asignaciones a variables `let`, a
+  parámetros o al iterador de un `for`.
 - Llamadas a funciones inexistentes o con un número de argumentos incorrecto.
 - **Todos los errores de tipos**: anotaciones, asignaciones, operadores, argumentos, valores de
   retorno, condiciones, condiciones de contratos y de bucles, medidas y uso de `Void` como valor.
-- Bucles sin medida, o con más de una.
+- Bucles `while` sin medida, o con más de una, y un `decreases` en un `for`.
 - Declaraciones de tipos refinados mal formadas, y **toda constante que no cumple la condición del
   tipo refinado donde se usa** (`E2017`).
 - Funciones que pueden terminar sin `return`, y código inalcanzable tras un `return`.
@@ -1077,7 +1306,7 @@ análisis estático no afirma nada sobre ellas:
 | `to_int` de un valor que no cabe en un `Int` | `E3005` |
 | Un `Text` más largo que el límite del entorno, si este fija uno | `E3006` |
 | El programa agota la memoria disponible | `E3007` |
-| Condición `requires` falsa, también la de una función de un tipo (`Text.slice`, `Int.parse`…, sección 8.1) | `E4001` |
+| Condición `requires` falsa, también la de una función de un tipo (`Text.slice`, `Int.parse`, `List.get`…, sección 8) | `E4001` |
 | Condición `ensures` falsa | `E4002` |
 | Un valor comprobado con `Percent(x)` que no cumple la condición de su tipo | `E4003` |
 | Un `invariant` falso | `E4005` |
@@ -1163,22 +1392,22 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E1102` | Unclosed block | `syntax` | Falta una `}` al llegar al final del archivo |
 | `E1103` | Reserved word | `syntax` | Se usa una palabra reservada para una versión futura |
 | `E1105` | Expression too deeply nested | `syntax` | Se superan los límites de anidamiento de la sección 3 |
-| `E1106` | Misplaced contract clause | `syntax` | `requires`, `ensures` o `example` fuera del principio del cuerpo de una función, o `invariant` o `decreases` fuera del principio del cuerpo de un `while` |
+| `E1106` | Misplaced contract clause | `syntax` | `requires`, `ensures` o `example` fuera del principio del cuerpo de una función, o `invariant` o `decreases` fuera del principio del cuerpo de un bucle |
 | `E2001` | Missing main function | `semantic` | El programa no declara `main` |
 | `E2002` | Duplicate function | `semantic` | Dos funciones con el mismo nombre, o con el de una integrada |
 | `E2004` | Invalid return type | `type` | `main` declara un tipo de retorno distinto de `Void` |
 | `E2005` | Unknown variable | `semantic` | Se usa un nombre que no está declarado o no es visible |
 | `E2006` | Name already declared | `semantic` | Se declara un nombre que ya es visible, o el de una función |
-| `E2007` | Cannot reassign variable | `semantic` | Se intenta dar un valor nuevo a una variable declarada con `let` o a un parámetro |
+| `E2007` | Cannot reassign variable | `semantic` | Se intenta dar un valor nuevo a una variable declarada con `let`, a un parámetro o al iterador de un `for` |
 | `E2008` | Unknown function | `semantic` | Se llama a una función que no existe |
 | `E2009` | Wrong number of arguments | `type` | Una llamada no pasa tantos argumentos como parámetros hay |
 | `E2010` | Unused value | `semantic` | Un valor calculado que se pierde |
 | `E2011` | Type mismatch | `type` | Un tipo no es el que exige la regla correspondiente |
-| `E2012` | Invalid type | `type` | Un nombre que no es un tipo, o `Void` donde hace falta un tipo de valor |
+| `E2012` | Invalid type | `type` | Un nombre que no es un tipo, `List` sin argumento, `Void` donde hace falta un tipo de valor, o un argumento de tipo que no existe |
 | `E2013` | Invalid parameter | `semantic` | `main` con parámetros, o un parámetro llamado `result` |
 | `E2014` | Missing return | `semantic` | Una función que devuelve un valor puede terminar sin `return` |
 | `E2015` | Unreachable code | `semantic` | Código situado después de un `return` |
-| `E2016` | Invalid type declaration | `semantic` | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, o una cadena de tipos sin fin |
+| `E2016` | Invalid type declaration | `semantic` | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, una cadena de tipos sin fin, o una base que es una lista |
 | `E2017` | Value outside refined type | `type` | Una constante usada como valor de un tipo refinado no cumple su condición |
 | `E2018` | Invalid refinement condition | `semantic` | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado |
 | `E2019` | Too many refinement checks | `semantic` | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (sección 4.4) |
@@ -1195,7 +1424,7 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E4001` | Precondition violated | `contract` | Una condición `requires` es falsa en una llamada |
 | `E4002` | Postcondition violated | `contract` | Una condición `ensures` es falsa al terminar una función |
 | `E4003` | Refinement violated | `contract` | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado |
-| `E4005` | Loop invariant violated | `contract` | Un `invariant` es falso antes de evaluar la condición de su bucle (sección 9.5) |
+| `E4005` | Loop invariant violated | `contract` | Un `invariant` es falso antes de una vuelta o después de la última de su bucle (sección 9.5 y 9.6) |
 | `E4006` | Loop measure did not decrease | `contract` | La medida de un bucle es negativa o no es menor que en la vuelta anterior (sección 9.5) |
 | `E4004` | Example failed | `test` | Un ejemplo evaluado por `nex test` vale `false` (sección 9.4) |
 
@@ -1224,7 +1453,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.6.0",
+  "nexora_version": "0.7.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -1347,6 +1576,7 @@ En [`examples/`](../examples/README.md) hay más programas, todos ejecutados por
 | `functions.nex` | Funciones, `if`/`else`, recursividad | `0` |
 | `contracts.nex` | Contratos que se cumplen | `0` |
 | `loops.nex` | Variables `var` y bucles con su medida y sus invariantes | `0` |
+| `lists.nex` | Listas inmutables `List[T]`, sus funciones y un `for` con invariantes | `0` |
 | `invalid/syntax_error.nex` | Errores de sintaxis (incorrecto a propósito) | `1` |
 | `invalid/name_errors.nex` | Errores de nombres y estructura (incorrecto a propósito) | `1` |
 | `invalid/type_errors.nex` | Errores de tipos (incorrecto a propósito) | `1` |
@@ -1362,7 +1592,10 @@ En [`examples/`](../examples/README.md) hay más programas, todos ejecutados por
 | `let x = (1 + 2` | `E1101` | Falta `)` |
 | `let x = 1; let y = 2` | `E1001` | `;` no existe en el lenguaje |
 | `let x = 1 < 2 < 3` | `E1101` | Las comparaciones no se encadenan |
-| `for i in items { }` | `E1103` | `for` es una palabra reservada |
+| `break` | `E1103` | `break` es una palabra reservada |
+| `for x in 3 { }` | `E2011` | Un `for` solo recorre una `List[T]` |
+| `for x in xs { decreases 1 }` | `E2022` | Un `for` no lleva medida |
+| `for x in xs { x = 1 }` | `E2007` | El iterador de un `for` es inmutable |
 | `print(total)` sin declarar `total` | `E2005` | Variable desconocida |
 | `let x = 1` y después `let x = 2` | `E2006` | El nombre ya está declarado |
 | `let x = 1` y después `x = 2` | `E2007` | Una variable `let` no cambia; se declara con `var` |
@@ -1371,8 +1604,13 @@ En [`examples/`](../examples/README.md) hay más programas, todos ejecutados por
 | `let total = 10 + 2.5` | `E2011` | `Int` y `Float` no se mezclan |
 | `let ok = true + 1` | `E2011` | Un `Bool` no admite aritmética |
 | `let same = 1 == 1.0` | `E2011` | Solo se comparan valores del mismo tipo |
+| `let xs = []` | `E2011` | Una lista vacía necesita un tipo esperado |
+| `let xs = [1, "a"]` | `E2011` | Todos los elementos de una lista tienen el mismo tipo |
+| `let xs: List[Int] = [1]` y `let ys: List[Text] = xs` | `E2011` | Los argumentos de `List` son invariantes |
 | `if count { }` con `count` de tipo `Int` | `E2011` | La condición debe ser `Bool` |
 | `let x: String = "a"` | `E2012` | El tipo se llama `Text` |
+| `let xs: List = []` | `E2012` | `List` necesita un argumento de tipo |
+| `type NonEmpty = List[Int] where value == value` | `E2016` | Un tipo refinado no puede tener una lista como base |
 | `add(1)` con `add(a: Int, b: Int)` | `E2009` | Falta un argumento |
 | `add(1, "2")` | `E2011` | El segundo argumento debe ser `Int` |
 | `add(1, 2)` como sentencia | `E2010` | El valor devuelto no se usa |
@@ -1382,18 +1620,28 @@ En [`examples/`](../examples/README.md) hay más programas, todos ejecutados por
 | `requires n` con `n` de tipo `Int` | `E2011` | La condición de un contrato debe ser `Bool` |
 | `print(10 / 0)` | `E3001` | División por cero (se detecta al ejecutar) |
 | `divide(1.0, 0.0)` con `requires b != 0.0` | `E4001` | Contrato incumplido (se detecta al ejecutar) |
+| `List.get([1, 2], 2)` | `E4001` | Índice fuera de la lista (se detecta al ejecutar) |
 | Un archivo sin `fn main` | `E2001` | Falta el punto de entrada |
 
 ## 13. Limitaciones conocidas
 
 Son limitaciones reales de esta versión, no fallos:
 
-- El único bucle es `while`, y siempre declara su medida (`decreases`). No hay `for`, `break` ni
-  `continue`, ni asignaciones compuestas (`+=`).
-- La medida de un bucle es un `Int`: no hay medidas compuestas (pares, textos).
+- Hay dos formas de bucle: `while`, que siempre declara su medida (`decreases`), y `for` sobre una
+  `List[T]`, que no la necesita. No hay `break` ni `continue`, ni asignaciones compuestas (`+=`).
+- Las listas `List[T]` son inmutables y finitas. No hay sintaxis de índice (`xs[i]`), mutación de
+  elementos, `List.set`, `map`, `filter`, ordenación ni una variante total de `List.get`: para leer
+  una posición se usa `List.get`, que exige un índice válido y detiene el programa con `E4001` si no
+  lo es.
+- Todos los elementos de una lista tienen el mismo tipo. `[]` y `for x in []` necesitan un tipo
+  esperado (`E2011`). No se puede refinar una lista (`type NonEmpty = List[Int] ...` es `E2016`).
+- El análisis de rutas no considera que un `for` siempre devuelve, aunque todas sus vueltas
+  contengan un `return`: si el `for` es la última sentencia, la función necesita un `return` después.
+- La medida de un `while` es un `Int`: no hay medidas compuestas (pares, textos).
 - Los parámetros no pueden reasignarse.
 - `if` es una sentencia, no una expresión: no puede usarse como valor.
-- No hay tipos compuestos: ni listas, ni registros, ni valores opcionales.
+- No hay registros, mapas, enumeraciones, `Option`, `Result` ni `for` sobre rangos o `Text`. Las
+  listas `List[T]` son inmutables y finitas.
 - Las operaciones sobre textos son las de la sección 8.1: no hay `trim`, mayúsculas, `split`,
   `replace` ni búsqueda de posiciones. Un carácter es un punto de código: no se cuentan grafemas.
 - No hay operador de resto (`%`).
@@ -1424,10 +1672,12 @@ La lista completa, con los límites de la implementación y los riesgos conocido
 Nada de lo que sigue funciona hoy. Es la dirección del diseño, tomada del borrador
 `docs/fase-1-diseno.md` de la raíz del repositorio, y puede cambiar:
 
-- `for` sobre rangos y listas, `break` y `continue`.
+- `for` sobre rangos, `break` y `continue`.
 - `if` y `match` como expresiones.
 - Interpolación de textos (`"Hello {name}"`), para la que ya está reservada la `{`.
-- Tipos compuestos: listas, mapas, registros, enumeraciones, `Option` y `Result`.
+- Registros, mapas, enumeraciones, `Option` y `Result`. Las listas `List[T]` ya existen, pero no
+  los genéricos de usuario (`fn f[T]`), las funciones de orden superior ni las funciones como
+  valores.
 - Verificación estática de contratos, y bloques de prueba (`test`) fuera de las funciones.
 - Efectos declarados (`uses`), módulos e importaciones.
 - Características relacionadas con IA (`ai fn`, `tool fn`). No existe ninguna integración con
@@ -1451,5 +1701,5 @@ Esta especificación manda sobre el borrador en lo que ya está implementado:
 | Alias sin condición | `type UserId = Int` | No existen |
 | Conversión entre números | `Int.to_float(x)` | `to_float(x)`, `to_int(x)` |
 | Variables sin usar | Son un error | No se comprueba todavía |
-| Bucles | `while` y `for`, sin requisitos | Solo `while`, con medida obligatoria (`decreases`) e invariantes opcionales, comprobados en cada vuelta |
+| Bucles | `while` y `for`, sin requisitos | `while` con medida obligatoria (`decreases`) y `for` sobre `List[T]`; ambos con invariantes opcionales, comprobados en cada vuelta |
 | Convenciones de nombres | Obligatorias (`snake_case`…) | No se comprueban todavía |

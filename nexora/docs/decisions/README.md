@@ -17,6 +17,8 @@ una decisión se revisa, se añade otra que la sustituye y se indica en ambas.
 | [0009](0009-memoria-agotada.md) | Un programa que agota la memoria al ejecutarse: diagnóstico `E3007` | Aceptada | Sí |
 | [0010](0010-var-y-while.md) | Variables reasignables (`var`) y bucles con requisitos (`while`, `invariant`, `decreases`) | Aceptada | Sí |
 | [0011](0011-operaciones-sobre-textos.md) | Operaciones sobre textos: funciones asociadas a un tipo (`Text.length`, `Int.parse`) que declaran sus requisitos | Aceptada | No |
+| [0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) | Modelo de tipos, registros, patrones, enumeraciones, `Option`/`Result`, listas, `for`, entrada, módulos y evidencia verificable | Propuesta (no aceptada; la 0013 acepta solo D01, D08 y D09 en el alcance implementado) | No |
+| [0013](0013-listas-y-for.md) | Listas `List[T]`, `for` sobre listas y el modelo de tipos que los sostiene: acepta D01, D08 y D09 en el alcance implementado | Aceptada | No |
 
 ## Posibles cambios incompatibles en el futuro
 

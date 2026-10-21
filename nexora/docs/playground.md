@@ -116,7 +116,7 @@ tenga o no errores el programa.
   "diagnostics": [],
   "message": null,
   "duration_ms": 104,
-  "version": "0.6.0"
+  "version": "0.7.0"
 }
 ```
 
@@ -390,8 +390,8 @@ docker image inspect nexora-worker --format '{{.Id}} {{.Created}}'   # existe, y
 - Constrúyela antes de activar el playground y vuelve a construirla en cada actualización (paso 8):
   contiene su propia copia del intérprete. Cada petición crea un contenedor nuevo, así que la
   siguiente petición ya usa la imagen reconstruida.
-- Para fijar una versión, constrúyela también con etiqueta (`-t nexora-worker:0.6.0`) y escribe esa
-  etiqueta al final de la orden (`"nexora-worker:0.6.0"`). Para volver a una versión anterior que
+- Para fijar una versión, constrúyela también con etiqueta (`-t nexora-worker:0.7.0`) y escribe esa
+  etiqueta al final de la orden (`"nexora-worker:0.7.0"`). Para volver a una versión anterior que
   conserves, cambia la etiqueta de la orden y reinicia el servicio. La etiqueta es lo único de la
   orden que se puede cambiar.
 - Si la imagen no está en el equipo (no se construyó, o se borró con `docker image rm` o
@@ -772,7 +772,7 @@ curl -s https://tu-dominio.example/api/playground/info     # activado: la versi�
 ```
 
 La imagen del worker hay que reconstruirla en cada actualización del lenguaje: contiene su propia
-copia del intérprete. Si la orden usa una etiqueta (`nexora-worker:0.6.0`), construye la imagen con
+copia del intérprete. Si la orden usa una etiqueta (`nexora-worker:0.7.0`), construye la imagen con
 la etiqueta nueva, cámbiala en `PLAYGROUND_WORKER_COMMAND` y reinicia el servicio; ver
 [Imagen del worker](#3-imagen-del-worker).
 

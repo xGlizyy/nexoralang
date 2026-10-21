@@ -21,10 +21,12 @@ hay una prueba que falla si deja de funcionar.
 |----------|------------------|
 | Analizador léxico y sintáctico, con recuperación de errores | `tests/test_lexer.py`, `tests/test_parser.py` |
 | Tipos `Int`, `Float`, `Bool`, `Text`, `Void`; inferencia y anotaciones | `tests/test_types.py` |
+| **Listas** `List[T]` inmutables, con literales, igualdad y `List.length`, `List.get`, `List.append`, `List.concat` y `List.contains` | `tests/test_type_lists_syntax.py`, `tests/test_type_lists_values.py`, `tests/test_type_lists_functions.py` |
 | Aritmética, comparaciones y operadores lógicos | `tests/test_types.py`, `tests/test_interpreter.py` |
 | Conversiones explícitas (`to_float`, `to_int`, `to_text`) | `tests/test_types.py` |
 | Variables inmutables (`let`) y reasignables (`var`), bloques y ámbitos | `tests/test_checker.py`, `tests/test_loops.py` |
 | **Bucles** `while` con su medida (`decreases`) e invariantes (`invariant`), comprobados en cada vuelta | `tests/test_loops.py` |
+| **`for` sobre listas**, con iterador inmutable, invariantes y ámbitos por vuelta | `tests/test_for.py` |
 | **Operaciones sobre textos**: `Text.length`, `Text.slice`, búsqueda, orden entre textos y lectura de números (`Int.parse`, `Float.parse`), con sus requisitos comprobados en cada llamada | `tests/test_text_operations.py` |
 | Funciones con parámetros, `return`, rutas de retorno, recursividad | `tests/test_functions.py` |
 | `if` / `else if` / `else` | `tests/test_functions.py` |
@@ -86,8 +88,7 @@ principal; cuando un punto de esta lista es necesario para un paso de la línea 
 primero:
 
 1. ~~**Operaciones sobre textos**~~: hechas en la 0.6.0 ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)).
-2. **Un primer tipo compuesto: listas.** Exige cambiar la forma en que el comprobador representa
-   los tipos. Con ellas, `for` sobre una lista (su medida es lo que queda por recorrer).
+2. ~~**Un primer tipo compuesto: listas**~~: hechas en la 0.7.0, con `for` sobre listas ([decisión 0013](decisions/0013-listas-y-for.md)). El modelo de tipos y las listas están descritos en la [especificación](language-spec.md), secciones 4.5, 8.2 y 9.6.
 3. **Registros y valores opcionales** (`Option`, `Result`), para representar la ausencia de un
    valor y los errores sin excepciones.
 4. **Entrada de datos**: argumentos del programa y lectura de la entrada estándar.

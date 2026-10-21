@@ -41,7 +41,7 @@ fn main() -> Void {
 `nex context program.nex` escribe:
 
 ```text
-program.nex | NEXORA 0.6.0 | 14 lines
+program.nex | NEXORA 0.7.0 | 14 lines
 Static analysis: no errors.
 The program was not run to produce this summary.
 Entry point: main
@@ -73,7 +73,7 @@ Notes:
 | Funciones, parámetros, tipos de retorno | El árbol de sintaxis |
 | Contratos, con su condición **tal como está escrita** | El texto del archivo, recortado por la posición del nodo |
 | Variables de cada función, su tipo y si pueden cambiar (`mutable`, `true` en las `var`) | Los símbolos que registra el comprobador. Si la variable no tiene anotación, es el tipo que el comprobador infirió |
-| `loops`: los bucles de cada función, con su condición, sus invariantes y su medida **tal como están escritos** | El árbol de sintaxis y el texto del archivo. `measure` es `null` solo si falta (`E2021`) |
+| `loops`: los bucles de cada función (`while` y `for`), con su condición o su iterable, sus invariantes y su medida **tal como están escritos** | El árbol de sintaxis y el texto del archivo. `kind` dice `while` o `for`; para un `for`, `condition` es `x in xs`. `measure` es `null` en todo `for` y cuando falta en un `while` (`E2021`) |
 | `calls`, `called_by` | Las llamadas que el comprobador resolvió. No se busca texto: una llamada cuenta cuando el comprobador la asoció a una función |
 | `builtins_called` | Las funciones integradas a las que llama cada función, con su nombre completo (`print`, `Text.length`). En la salida de texto, debajo van los `requires` de cada una, con su explicación |
 | `recursive` | Si la función puede alcanzarse a sí misma siguiendo esas llamadas, directa o indirectamente |
@@ -100,15 +100,15 @@ Características que puede enumerar `features`:
 | `refined_types` | declara algún tipo refinado |
 | `examples` | tiene alguna cláusula `example` |
 | `mutable_variables` | declara alguna variable con `var` |
-| `loops` | usa `while` |
+| `loops` | usa `while` o `for` |
 | `loop_invariants` | algún bucle declara un `invariant` |
 | `text_operations` | llama a una función de un tipo (`Text.length`, `Int.parse`…) u ordena textos con `< <= > >=` |
 
 Las **notas** no son opiniones sobre el código. Cada una es una regla del lenguaje que se añade
 solo si el programa contiene aquello a lo que se refiere: que los contratos se comprueban al
-ejecutar y no se han demostrado, que cada bucle comprueba su medida y sus invariantes en cada
-vuelta si hay bucles, el límite de llamadas anidadas si hay recursividad, que `Int / Int`
-descarta los decimales si hay una división entera, o qué palabras reservadas se han usado.
+ejecutar y no se han demostrado, que cada `while` comprueba su medida y que los bucles comprueban
+sus invariantes en cada vuelta si hay bucles, el límite de llamadas anidadas si hay recursividad, que
+`Int / Int` descarta los decimales si hay una división entera, o qué palabras reservadas se han usado.
 
 ### Formato JSON
 
@@ -129,7 +129,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.context/1",
-  "nexora_version": "0.6.0",
+  "nexora_version": "0.7.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
@@ -242,7 +242,7 @@ fn main() -> Void {
 ```
 
 ```text
-program.nex | NEXORA 0.6.0 | 5 lines
+program.nex | NEXORA 0.7.0 | 5 lines
 Static analysis: 2 errors.
 The program was not run to produce this summary.
 Partial summary: only the code that could be parsed is described.
@@ -305,7 +305,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.symbols/1",
-  "nexora_version": "0.6.0",
+  "nexora_version": "0.7.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
