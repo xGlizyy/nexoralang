@@ -59,7 +59,7 @@ hay una prueba que falla si deja de funcionar.
 | **Playground** (web) | Editor, API y ejecución en un proceso aparte con límites; probado en local ([Playground](playground.md)) | Desplegarlo. Verificar el aislamiento con contenedor y los límites POSIX, que no se han podido probar en Windows |
 | **Integración continua** | Flujo de GitHub Actions en marcha: se ejecuta en cada cambio a `main`, en Linux, Windows y macOS | Ampliar la matriz a más versiones de Node |
 | **Verificación en otras plataformas** | Comprobado en Windows 11 con Python 3.12; ejecutado en Linux, Windows y macOS con Python 3.11, 3.12 y 3.13 por la integración continua | Comprobarlo en macOS y en Linux con un equipo, no solo en los ejecutores |
-| **Preparación para colaboradores** | Licencia MIT, guía de contribución, política de seguridad, código de conducta | Publicar el repositorio y definir un canal de contacto |
+| **Preparación para colaboradores** | Licencia MIT, guía de contribución, política de seguridad, código de conducta, repositorio público con su rastreador de incidencias | Definir un canal de contacto privado |
 
 ## Línea principal: requisitos verificables
 

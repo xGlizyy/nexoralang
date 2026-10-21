@@ -274,8 +274,8 @@ mostrada se compara con la real.
 
 ## Contribuir
 
-El proyecto está preparado para recibir colaboración. Todavía no tiene un repositorio público ni
-un canal de contacto.
+El proyecto es público: <https://github.com/xGlizyy/nexoralang>. Las incidencias y las colaboraciones
+se tratan en su [rastreador de incidencias](https://github.com/xGlizyy/nexoralang/issues).
 
 - [Cómo contribuir](CONTRIBUTING.md): entorno de desarrollo, cómo añadir una funcionalidad y qué
   comprobaciones deben pasar.

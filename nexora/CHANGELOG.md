@@ -252,8 +252,8 @@ versión. No forman parte de la 0.7.0 y no cambian el intérprete: el lenguaje y
   posteriores) y las versiones que no son exactamente X.Y.Z se rechazan hasta medirlas. En las
   versiones medidas por debajo de esos mínimos, el gancho bloqueó mysql2 también en el orden legítimo;
   la causa no está confirmada. En un Node que las guardas no admiten, `npm test` omite con su motivo las 14 pruebas que lanzan
-  `preflight.js`: así ocurrirá en la ejecución experimental de Node 26 de la integración continua
-  cuando se ejecute, porque todavía no se ha ejecutado. **Nada de esto se ha ejecutado contra un MySQL
+  `preflight.js`: así ocurrió en la ejecución experimental de Node 26 de la integración continua
+  del 21 de octubre de 2026. **Nada de esto se ha ejecutado contra un MySQL
   real**: ni el SQL de administración, ni las migraciones con permisos reducidos, ni el bloqueo.
 
 ### Cambios incompatibles
@@ -264,7 +264,8 @@ versión. No forman parte de la 0.7.0 y no cambian el intérprete: el lenguaje y
   de cada rama en octubre de 2026. Las ramas 23, 25 y 26 quedan fuera. npm solo avisa (`EBADENGINE`)
   con otra versión, no impide instalar. Dentro del rango se han probado en local, en Windows, 22.23.3
   y 24.21.0; los mínimos exactos no. La integración continua del servidor pasa a probar 22.23.2,
-  24.18.1, la última de las ramas 22 y 24 y, sin bloquear, Node 26; todavía no se ha ejecutado.
+  24.18.1, la última de las ramas 22 y 24 y, sin bloquear, Node 26; se ejecutó por primera vez el
+  21 de octubre de 2026.
 - **Con `NODE_ENV=production`, `PLAYGROUND_ENABLED=true` exige la orden de contenedor** en
   `PLAYGROUND_WORKER_COMMAND`. Sin ella (o con una orden de proceso), el servidor no arranca: el modo
   de proceso ejecuta el código de los visitantes con los permisos del servidor. Fuera de producción,

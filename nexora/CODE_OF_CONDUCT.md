@@ -35,10 +35,11 @@ Se aplica en todos los espacios del proyecto y cuando alguien representa al proy
 
 ## Aplicación
 
-> **Pendiente de configurar por quien mantiene el proyecto.** El proyecto todavía no tiene
-> repositorio público ni canal de contacto, de modo que **hoy no existe un procedimiento para
-> recibir y resolver avisos**. Antes de abrir el proyecto a colaboradores hay que indicar aquí una
-> forma de contacto privada y quién atiende los avisos.
+> **Pendiente de configurar por quien mantiene el proyecto.** El repositorio es público, pero
+> **todavía no hay una forma de contacto privada**: los avisos se pueden abrir en el
+> [rastreador de incidencias](https://github.com/xGlizyy/nexoralang/issues), que es público, y los
+> atiende quien mantiene el proyecto. Antes de abrir el proyecto a colaboradores hay que indicar
+> aquí una forma de contacto privada y quién atiende los avisos.
 
 Cuando ese canal exista, los avisos se tratarán con confidencialidad y se aplicarán las pautas de
 actuación del Contributor Covenant (corrección, advertencia, expulsión temporal o permanente).

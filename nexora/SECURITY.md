@@ -12,14 +12,16 @@ anteriores.
 
 ## Cómo avisar de una vulnerabilidad
 
-**Todavía no existe un canal de contacto privado.** El proyecto no tiene repositorio público ni
-dirección de correo para este fin.
+**Todavía no existe un canal de contacto privado.** El repositorio es público, pero no hay una
+dirección de correo para este fin, y *Private vulnerability reporting* no está activado (se
+comprueba en `GET /repos/{propietario}/{repositorio}/private-vulnerability-reporting`).
 
-> **Pendiente de configurar por quien mantiene el proyecto.** Cuando el repositorio se publique,
-> sustituir este bloque por el canal elegido. Opciones sin coste:
+> **Pendiente de configurar por quien mantiene el proyecto.** El repositorio ya está publicado; queda
+> elegir el canal y sustituir este bloque por el elegido. Opciones sin coste:
 >
-> - En GitHub: activar *Private vulnerability reporting* (Settings → Code security) e indicar aquí
->   "Usa el botón *Report a vulnerability* de la pestaña *Security*".
+> - En GitHub: activar *Private vulnerability reporting* (Settings → Code security, o
+>   `PATCH /repos/{propietario}/{repositorio}/private-vulnerability-reporting` con `{"enabled": true}`)
+>   e indicar aquí "Usa el botón *Report a vulnerability* de la pestaña *Security*".
 > - Una dirección de correo dedicada.
 >
 > Indicar también un plazo de respuesta que realmente pueda cumplirse.

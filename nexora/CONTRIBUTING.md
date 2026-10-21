@@ -7,8 +7,9 @@ pasar un cambio y cómo mantener sincronizados el código, la especificación y 
 
 - **El proyecto se distribuye con la licencia MIT** ([`LICENSE`](LICENSE)). Al proponer un cambio
   aceptas que tu contribución se publique con esa misma licencia.
-- **No hay todavía un repositorio público ni un canal de contacto oficial.** Cuando existan, se
-  indicarán aquí. Los pasos de esta guía que mencionan *pull requests* describen el flujo previsto.
+- **El repositorio es público** (<https://github.com/xGlizyy/nexoralang>) y su [rastreador de
+  incidencias](https://github.com/xGlizyy/nexoralang/issues) es el canal de contacto. Los pasos de
+  esta guía que mencionan *pull requests* describen el flujo previsto.
 - El proyecto está en una fase temprana: la sintaxis puede cambiar. Antes de dedicar tiempo a una
   funcionalidad nueva, consulta la [hoja de ruta](docs/roadmap.md) y las
   [decisiones técnicas](docs/decisions/README.md).
@@ -187,7 +188,7 @@ Criterios para el mensaje:
 
 ## Proponer el cambio
 
-Cuando exista el repositorio público:
+En el repositorio público:
 
 1. Crea una rama a partir de la principal.
 2. Haz cambios pequeños y relacionados entre sí.

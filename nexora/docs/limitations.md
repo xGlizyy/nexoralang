@@ -144,7 +144,9 @@ han probado; ver [Instalación](installation.md#qué-se-ha-comprobado).
 ## Proyecto
 
 - Se distribuye con la licencia MIT: sin garantía de ningún tipo.
-- No hay repositorio público, ni canal de contacto, ni proceso de publicación de versiones.
+- El repositorio es público: <https://github.com/xGlizyy/nexoralang>. No hay canal de contacto
+  privado, ni un proceso de publicación de versiones más allá del que se documenta en
+  [Instalación](installation.md#publicar).
 - La integración continua se ejecuta en cada cambio a `main`, en Linux, Windows y macOS, pero no hay
   una regla escrita de qué se integra: cada cambio se revisa a mano.
 - Los ejemplos de `ejemplos/*.nx` y el documento `docs/fase-1-diseno.md`, en la raíz del

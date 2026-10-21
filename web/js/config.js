@@ -9,11 +9,10 @@
 export const site = {
   name: 'NEXORA',
   /**
-   * Public repository URL. While it is null every GitHub link on the site stays hidden,
-   * so the site never points to a repository that does not exist.
+   * Public repository URL. Every GitHub link on the site points here.
    * @type {string | null}
    */
-  githubUrl: null,
+  githubUrl: 'https://github.com/xGlizyy/nexoralang',
 };
 
 /**
@@ -65,23 +64,23 @@ export const roadmap = [
       '`nex inspect`, `nex symbols` and `nex context`: the program as versioned JSON, with a schema for each format.',
       'A language guide, a full reference and this documentation.',
       'An optional MCP server for AI assistants. It is experimental.',
+      'Continuous integration: every change to `main` runs the tests on Linux, Windows and macOS, with Python 3.11 to 3.13, and the tests of the npm package and of the server.',
     ],
     next: [
       'Editor integration through a language server.',
       'A formatter.',
-      'Continuous integration, once the repository is public.',
     ],
   },
   {
     title: 'Playground and ecosystem',
-    summary: 'The playground can run real programs but is off by default; a public repository and published packages are still to come.',
+    summary: 'The playground can run real programs but is off by default; the repository is public and the packages are still to come.',
     status: 'in-progress',
     available: [
       'A playground that runs each program with the real interpreter, in a separate process with time and output limits. It is off unless the server enables it explicitly.',
       'Accounts with an email address, and optionally Google or GitHub.',
+      'A public repository, with its history and its issue tracker.',
     ],
     next: [
-      'A public repository.',
       'Publishing the packages for npm and Python. The npm package is prepared but not published.',
       'Checking the isolation of the playground containers with real Docker. Until then it stays off on a public site.',
     ],

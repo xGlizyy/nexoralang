@@ -361,4 +361,4 @@ Result: passed
   (lo que una función espera y promete) y [tipos refinados](types.md#tipos-refinados) (los valores
   que admite un tipo).
 - La referencia completa del lenguaje: [especificación](language-spec.md).
-- Lo que NEXORA todavía no puede hacer (leer datos, mapas, enumeraciones…): [limitaciones](limitations.md).
+- Lo que NEXORA todavía no puede hacer (mapas, enumeraciones, módulos…): [limitaciones](limitations.md).
