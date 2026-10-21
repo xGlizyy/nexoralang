@@ -1225,7 +1225,7 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
 .legal-links button:hover { color: var(--text); }
 .legal-links [aria-current="page"] { color: var(--text); }
 
-.pg-foot .pg-foot__legal { flex: 1 1 100%; }
+.pg-foot .pg-foot__legal { flex: 1 1 100%; justify-content: center; }
 .pg-foot .pg-foot__legal a { text-decoration: none; }
 
 .auth-page .legal-foot { padding-top: 18px; text-align: center; }
@@ -1764,12 +1764,21 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
   display: grid;
   flex: 1;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  gap: 20px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px 20px;
   min-height: 0;
   margin-top: 16px;
 }
 
 .pg-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+/* The topics of the guide go in a row of their own, under the results window and as wide as it, so
+   the editor and the results keep the same height. */
+.pg-topics { grid-column: 2; align-self: start; }
+/* Under the editor, at the height of the topics: the first line of text lines up with the pills. */
+.pg-note { grid-column: 1; align-self: start; max-width: 52rem; margin: 0; padding-top: 5px; color: var(--faint); font-size: 0.76rem; line-height: 1.5; }
+.pg-note a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.pg-note a:hover { color: var(--text); }
 .pg-bar { flex: none; min-height: 50px; padding-left: 6px; }
 .pg-bar .window__tab { font-size: 0.86rem; }
 
@@ -2126,12 +2135,13 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
   line-height: 1.5;
 }
 
-.pg-foot__note { flex: 1 1 28rem; max-width: 52rem; }
 .pg-foot a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
 .pg-foot a:hover { color: var(--text); }
-.pg-foot__links { display: flex; flex-wrap: wrap; gap: 6px; }
-.pg-foot__links a { padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; transition: border-color 0.15s, color 0.15s; }
-.pg-foot__links a:hover { border-color: rgba(139, 117, 255, 0.6); }
+/* Inline pills in a balanced block: when they do not fit in one line, the lines get the same number
+   of pills (4 and 4) instead of leaving one alone on the second line. */
+.pg-topics { font-size: 0.76rem; line-height: 1.5; text-align: center; text-wrap: balance; }
+.pg-topics a { display: inline-block; margin: 2px 0; padding: 3px 10px; white-space: nowrap; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); text-decoration: none; transition: border-color 0.15s, color 0.15s; }
+.pg-topics a:hover { border-color: rgba(139, 117, 255, 0.6); color: var(--text); }
 .pg-noscript { padding: 16px 18px; color: #f0dcb0; }
 
 @media (max-width: 1100px) {
@@ -2142,7 +2152,9 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
   /* Windows stack; the page scrolls instead of the panels. */
   .pg-page { height: auto; overflow: visible; }
   .pg { padding: 4px 16px 12px; }
-  .pg-grid { grid-template-columns: minmax(0, 1fr); }
+  .pg-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; row-gap: 20px; }
+  .pg-topics { grid-column: auto; margin-top: -10px; }
+  .pg-note { grid-column: auto; order: 1; margin-top: -8px; padding-top: 0; }
   .pg-editor { flex: none; height: 52vh; min-height: 300px; }
   .pg-panel { flex: none; min-height: 220px; max-height: 60vh; }
   .pg-actions { width: 100%; margin-left: 0; }
