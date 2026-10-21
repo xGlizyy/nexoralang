@@ -1,11 +1,10 @@
 # Integración continua de NEXORA: el núcleo (nexora/), el paquete de npm (npm/) y el servidor del
 # playground con la web (servidor/, web/).
 #
-# ESTADO: preparado, nunca ejecutado. El proyecto todavía no tiene repositorio en GitHub.
-# Se activará solo al publicar el repositorio con este archivo en .github/workflows/.
+# ESTADO: activo. Se ejecuta en cada cambio de `main` que toque los caminos de abajo.
 #
 # - No usa secretos ni servicios de pago: solo ejecutores gratuitos de GitHub.
-# - Si la rama principal no se llama "main", cambia la lista de "branches".
+# - La rama principal se llama "main".
 # - Si nexora/ pasa a ser la raíz de su propio repositorio, elimina las dos líneas
 #   "working-directory" y los filtros "paths".
 
