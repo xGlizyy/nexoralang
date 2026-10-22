@@ -48,10 +48,25 @@ lo que dice `nex check`, con los mismos códigos y los mismos textos.
 2. Instalarlo:
 
    ```bash
-   code --install-extension nexora-0.10.0.vsix
+   code --install-extension vscode-nexora/nexora-0.10.0.vsix
    ```
 
-   O desde el editor: *Extensions* → *⋯* → *Install from VSIX…*.
+   Ese camino es **relativo**: el comando tiene que ejecutarse desde la raíz del repositorio, que
+   es donde está la carpeta `vscode-nexora/`. Si el paquete está en otro sitio, con la ruta
+   completa:
+
+   ```bash
+   code --install-extension C:\ruta\completa\nexora-0.10.0.vsix
+   ```
+
+   O desde el editor: *Extensions* → *⋯* → *Install from VSIX…*, y elegir el fichero.
+
+   Y cuando la extensión esté publicada en el marketplace, la forma corta, que funciona desde
+   cualquier sitio, es:
+
+   ```bash
+   code --install-extension nexoralang.nexora
+   ```
 
 ## Configurar
 
@@ -91,10 +106,11 @@ La primera publicación tiene que hacer la cuenta de publisher, que pide verific
 través de una cuenta de Microsoft. Nada de esto lo puede hacer el repositorio: es una
 decisión de quien publica.
 
-Antes de publicar, una comprobación rápida de que el paquete sirve:
+Antes de publicar, una comprobación rápida de que el paquete sirve (desde la raíz del
+repositorio):
 
 ```bash
-code --install-extension nexora-0.10.0.vsix
+code --install-extension vscode-nexora/nexora-0.10.0.vsix
 ```
 
 ## Comandos

@@ -82,14 +82,15 @@ describe('the extension in the landing', () => {
 });
 
 describe('the command that installs the extension', () => {
-  test('it names the extension and its version, as the manifest has them', () => {
-    const command = `code --install-extension vscode-nexora/${manifest.name}-${manifest.version}.vsix`;
+  test('it is the one of the marketplace, which works from any directory', () => {
+    // `code --install-extension <publisher>.<name>`: it does not depend on where the person is.
+    const command = `code --install-extension ${manifest.publisher}.${manifest.name}`;
     assert.ok(index.includes(command), command);
   });
 
   test('the logo carries that command', () => {
     const contenedor = index.slice(index.indexOf('class="hero__vscode"'), index.indexOf('class="hero__vscode"') + 300);
-    const command = `code --install-extension vscode-nexora/${manifest.name}-${manifest.version}.vsix`;
+    const command = `code --install-extension ${manifest.publisher}.${manifest.name}`;
     assert.match(contenedor, new RegExp(`data-command="${command}"`));
   });
 });
