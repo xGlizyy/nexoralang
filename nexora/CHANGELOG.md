@@ -5,8 +5,10 @@ Registro de los cambios de NEXORA, con la versión más reciente primero.
 Todas las versiones son anteriores a la 1.0: el lenguaje puede cambiar de forma incompatible
 entre versiones. Cada cambio incompatible se indica aquí y se explica en `docs/decisions/`.
 
-Este registro empieza con la versión 0.1.0, la primera que pudo ejecutarse. No hay versiones
-publicadas en ningún repositorio de paquetes: los números identifican estados del código.
+Este registro empieza con la versión 0.1.0, la primera que pudo ejecutarse. La 0.9.0 es la primera
+versión publicada: está etiquetada (`v0.9.0`) y el paquete `nexora-lang` está en PyPI y en npm. La
+0.10.0, con `Option` y `Result`, también está etiquetada (`v0.10.0`) y publicada en los dos
+registros. Las anteriores solo identifican estados del código: nunca se etiquetaron ni se publicaron.
 
 Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 
@@ -21,8 +23,8 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 
 ## 0.10.0 — Option y Result
 
-Estado del repositorio, no una versión publicada: todavía no hay tag ni paquete de esta versión en
-ningún registro. Esta versión implementa la
+Esta versión está etiquetada (`v0.10.0`) y publicada: el paquete `nexora-lang` está en PyPI y en
+npm. Implementa la
 [decisión 0016](docs/decisions/0016-option-y-result.md), que da al lenguaje los dos tipos que
 permiten decir que **no hay valor** y que **algo falló**, sin excepciones.
 
@@ -67,8 +69,8 @@ permiten decir que **no hay valor** y que **algo falló**, sin excepciones.
 
 ## 0.9.0 — Entrada, argumentos, archivos y permisos
 
-Estado del repositorio, no una versión publicada: no hay tag ni paquete en ningún repositorio. Esta
-versión implementa la [decisión 0015](docs/decisions/0015-entrada-argumentos-archivos-y-permisos.md),
+Esta versión está etiquetada (`v0.9.0`) y publicada: el paquete `nexora-lang` está en PyPI y en npm.
+Implementa la [decisión 0015](docs/decisions/0015-entrada-argumentos-archivos-y-permisos.md),
 que describe la entrada de un programa, sus argumentos y el acceso a los archivos con permisos
 explícitos. La [0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) no se
 reescribe: su parte de entrada (D11) y su sistema de efectos siguen siendo propuesta, y esta
@@ -233,8 +235,8 @@ realmente implementado, las partes D01 (modelo de tipos), D08 (listas) y D09 (`f
 ## Sin publicar — servidor y web
 
 Cambios del servidor web (`servidor/`) y de la web (`web/`) posteriores al tag `v0.6.0`, todavía sin
-versión. No forman parte de la 0.7.0 y no cambian el intérprete: el lenguaje y el paquete
-`nexora-lang` de esta versión están documentados arriba.
+versión. No forman parte de la 0.9.0 ni de la 0.10.0, ni de sus paquetes: el lenguaje está documentado
+arriba, y el servidor y la web se despliegan aparte.
 
 ### Añadido
 

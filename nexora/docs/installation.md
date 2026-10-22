@@ -1,8 +1,7 @@
 # Instalación
 
-NEXORA se instala desde el código fuente. **Todavía no está publicado** en PyPI ni en npm: los
-paquetes para ambos están preparados y probados en local, pero no subidos
-([paquetes para pip y npm](#paquetes-para-pip-y-npm)).
+NEXORA se instala desde el código fuente o desde el registro: el paquete `nexora-lang` está
+publicado en PyPI y en npm ([paquetes para pip y npm](#paquetes-para-pip-y-npm)).
 
 ## Requisitos
 
@@ -20,9 +19,9 @@ NEXORA funciona sin conexión.
 | Entorno | Estado |
 |---------|--------|
 | Windows 11, Python 3.12 | **Comprobado**: instalación en modo desarrollo en un entorno limpio, instalación desde el paquete generado, y batería de pruebas completa |
-| Windows 11, Node.js 24, paquete de npm | **Comprobado**: generado con `npm pack`, instalado desde el archivo y usado. No publicado |
+| Windows 11, Node.js 24, paquete de npm | **Comprobado**: generado con `npm pack`, instalado desde el archivo y usado. Publicado en npm como `nexora-lang` 0.9.0 y 0.10.0 |
 | Linux (Ubuntu 24.04 en WSL 2), Python 3.12 | **Comprobado** el 17 de octubre de 2026: batería de pruebas completa, sin ninguna omitida, con un usuario que no es root; paquete generado e instalado desde el archivo en un entorno limpio, y `nex run` usado. Otras distribuciones y Linux sin WSL, no comprobados |
-| Linux, Node.js 24, paquete de npm | **Comprobado**: generado con `npm pack`, instalado desde el archivo y usado con `npx nex`. No publicado |
+| Linux, Node.js 24, paquete de npm | **Comprobado**: generado con `npm pack`, instalado desde el archivo y usado con `npx nex`. Publicado en npm como `nexora-lang` 0.9.0 y 0.10.0 |
 | macOS | **Ejecutado** en `macos-latest` por la [integración continua](testing.md#integración-continua): batería de pruebas con Python 3.11, 3.12 y 3.13, el paquete de npm y el servidor. En un Mac local, no comprobado |
 | Python 3.11 y 3.13 | **Ejecutados** en Linux, Windows y macOS por la integración continua, y **comprobados** a mano en Linux (3.11.17 y 3.13.16): batería de pruebas completa, sin instalar el paquete generado |
 
@@ -98,8 +97,8 @@ Sin activar el entorno hay dos alternativas:
 
 ## Instalar desde un paquete generado
 
-El proyecto puede empaquetarse en un archivo instalable (*wheel*). No se publica en ningún sitio:
-se genera y se instala en local.
+El proyecto puede empaquetarse en un archivo instalable (*wheel*). El que se publica en PyPI es
+este mismo: `python -m build` genera los dos archivos que se suben al registro.
 
 ```bash
 python -m pip install build
@@ -122,17 +121,16 @@ El comando `nex` puede distribuirse por dos vías. El paquete se llama **`nexora
 porque el nombre `nexora` ya pertenece a otros proyectos en PyPI y en npm. El comando sigue siendo
 `nex`.
 
-**Ninguno de los dos está publicado.** Las órdenes `pip install nexora-lang` y
-`npm install -g nexora-lang` no funcionarán hasta que alguien con cuenta en esos registros los suba.
-Lo que sí se ha comprobado, en Windows 11, es que los dos paquetes se generan, se instalan desde el
-archivo local y dejan un comando `nex` que funciona.
+**Los dos están publicados** (0.9.0 y 0.10.0): `pip install nexora-lang` y
+`npm install -g nexora-lang` los instalan. Antes de publicarlos se comprobó, en Windows 11, que los dos paquetes se generan, se instalan
+desde el archivo local y dejan un comando `nex` que funciona.
 
 | | pip | npm |
 |-|-----|-----|
 | Paquete | `nexora-lang` (directorio `nexora/`) | `nexora-lang` (directorio `npm/`, en la raíz del repositorio) |
 | Qué contiene | El intérprete y los comandos `nex` y `nex-mcp` | Una copia del intérprete y un lanzador en JavaScript |
 | Qué necesita | Python 3.11 o superior | Node.js 18 o superior **y Python 3.11 o superior** |
-| Una vez publicado | `pipx install nexora-lang` | `npm install -g nexora-lang` |
+| Instalar | `pipx install nexora-lang` | `npm install -g nexora-lang` |
 
 El paquete de npm **no elimina la dependencia de Python**: el intérprete está escrito en Python. El
 lanzador busca un Python 3.11+ en la máquina (`py -3` en Windows, `python3`, `python` y, en Windows,
@@ -168,7 +166,9 @@ npm login
 npm publish
 ```
 
-Las credenciales se introducen al ejecutar esas órdenes; no se guardan en el repositorio.
+Las credenciales se introducen al ejecutar esas órdenes; no se guardan en el repositorio. Las
+versiones 0.9.0 y 0.10.0 se publicaron así, con la batería de pruebas y la integración continua
+en verde.
 
 ## Problemas frecuentes
 

@@ -10,7 +10,7 @@ Lo que distingue a NEXORA: los requisitos de un programa se escriben en el propi
 - [.github/workflows/nexora-ci.yml](.github/workflows/nexora-ci.yml): integración continua del núcleo para GitHub Actions. Se ejecuta en cada cambio a `main`, en Linux, Windows y macOS.
 - [docs/fase-1-diseno.md](docs/fase-1-diseno.md): borrador del diseño completo (sintaxis, tipos, funciones y reglas). Describe hacia dónde va el lenguaje, no lo que funciona hoy.
 - [ejemplos/tienda.nx](ejemplos/tienda.nx) y [ejemplos/soporte_ia.nx](ejemplos/soporte_ia.nx): ejemplos del borrador de diseño. Usan sintaxis que el intérprete todavía no admite, así que no se pueden ejecutar.
-- [npm/](npm/): paquete de npm (`nexora-lang`) que instala el comando `nex`. Necesita Python 3.11 o superior en la máquina. Preparado y probado en local, sin publicar.
+- [npm/](npm/): paquete de npm (`nexora-lang`) que instala el comando `nex`. Necesita Python 3.11 o superior en la máquina. Publicado en PyPI y en npm.
 - [web/](web/): página web del lenguaje, con el playground (`/playground`) y una guía (`/guide`).
 - [servidor/](servidor/): servidor Node.js que sirve la web, las cuentas de usuario (MySQL) y la API del playground, que ejecuta cada programa con el intérprete real en un proceso aparte. Solo se ha probado en local: [nexora/docs/playground.md](nexora/docs/playground.md).
 
