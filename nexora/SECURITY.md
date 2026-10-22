@@ -12,19 +12,13 @@ anteriores.
 
 ## Cómo avisar de una vulnerabilidad
 
-**Todavía no existe un canal de contacto privado.** El repositorio es público, pero no hay una
-dirección de correo para este fin, y *Private vulnerability reporting* no está activado (se
-comprueba en `GET /repos/{propietario}/{repositorio}/private-vulnerability-reporting`).
+**El canal de contacto privado es el botón *Report a vulnerability* de la pestaña *Security* del
+repositorio** (<https://github.com/xGlizyy/nexoralang/security/advisories/new>): el aviso llega en
+privado a quien mantiene el proyecto, y solo se hace público cuando hay una corrección. La función
+*Private vulnerability reporting* está activada en el repositorio (*Settings → Code security*).
 
-> **Pendiente de configurar por quien mantiene el proyecto.** El repositorio ya está publicado; queda
-> elegir el canal y sustituir este bloque por el elegido. Opciones sin coste:
->
-> - En GitHub: activar *Private vulnerability reporting* (Settings → Code security, o
->   `PATCH /repos/{propietario}/{repositorio}/private-vulnerability-reporting` con `{"enabled": true}`)
->   e indicar aquí "Usa el botón *Report a vulnerability* de la pestaña *Security*".
-> - Una dirección de correo dedicada.
->
-> Indicar también un plazo de respuesta que realmente pueda cumplirse.
+> **Pendiente por quien mantiene el proyecto:** indicar aquí un plazo de respuesta que realmente
+> pueda cumplirse, y sustituir este bloque por el canal nuevo si algún día se decide cambiarlo.
 
 Hasta entonces, si tienes acceso directo a quien mantiene el proyecto, comunícaselo en privado.
 **No describas una vulnerabilidad en un canal público** antes de que haya una corrección.
