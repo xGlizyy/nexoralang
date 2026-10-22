@@ -1,45 +1,49 @@
 # NEXORA
 
-Lenguaje de programación orientado a la web y diseñado para el desarrollo con inteligencia artificial.
+A web-oriented programming language designed for AI-powered development.
 
-Estado: existe un intérprete (versión 0.10.0) que ejecuta un subconjunto del lenguaje: tipos estáticos, variables inmutables (`let`) y reasignables (`var`), funciones con parámetros y retorno, `if`/`else`, recursividad, bucles `while` que declaran por qué terminan (`decreases`) y qué mantienen (`invariant`), listas inmutables `List[T]` con `List.length`, `List.get`, `List.append`, `List.concat` y `List.contains`, `for` sobre listas, registros inmutables (`type Point = { x: Int, y: Int }`) con identidad nominal, los argumentos del programa (`args()`), la entrada estándar (`input()`) y los archivos con permisos explícitos (`uses read "ruta"` y `--allow-read=ruta`), operaciones sobre textos (`Text.length`, `Text.slice`, `Int.parse`) que declaran sus requisitos, contratos (`requires`, `ensures`) y tipos refinados (`type Percent = Int where ...`), cada regla con su explicación, y ejemplos en las funciones (`example`) que evalúa `nex test`. El resto del diseño aún no está implementado.
+State: There is an interpreter (version 0.10.0) that executes a subset of the language: static types, immutable (`let`) and reassignable (`var`) variables, functions with parameters and return values, `if`/`else`, recursion, `while` loops that declare why they terminate (`decreases`) and what they maintain (`invariant`), immutable lists `List[T]` with `List.length`, `List.get`, `List.append`, `List.concat` and `List.contains`, `for` loops on lists, immutable registers (`type Point = { x: Int, y: Int }`) with nominal identity, program arguments (`args()`), standard input (`input()`) and files with explicit permissions (`uses read "path"` and `--allow-read=path`), operations on text (`Text.length`, `Text.slice`, `Int.parse`) which declares its requirements, contracts (`requires`, `ensures`), and refined types (`type Percent = Int where ...`), each rule with its explanation, and examples in the functions (`example`) that `nex test` evaluates. The rest of the design is not yet implemented.
 
-Lo que distingue a NEXORA: los requisitos de un programa se escriben en el propio código y se comprueban de forma determinista ([decisión 0006](nexora/docs/decisions/0006-requisitos-verificables.md)).
+What distinguishes NEXORA: a program's requirements are written in the code itself and checked deterministically ([decision 0006](nexora/docs/decisions/0006-verifiable-requirements.md)).
 
-- [nexora/](nexora/): núcleo del lenguaje. Intérprete, comando `nex`, documentación ([nexora/docs/index.md](nexora/docs/index.md)), ejemplos ejecutables y pruebas. Empieza por [nexora/README.md](nexora/README.md).
-- [.github/workflows/nexora-ci.yml](.github/workflows/nexora-ci.yml): integración continua del núcleo para GitHub Actions. Se ejecuta en cada cambio a `main`, en Linux, Windows y macOS.
-- [docs/fase-1-diseno.md](docs/fase-1-diseno.md): borrador del diseño completo (sintaxis, tipos, funciones y reglas). Describe hacia dónde va el lenguaje, no lo que funciona hoy.
-- [ejemplos/tienda.nx](ejemplos/tienda.nx) y [ejemplos/soporte_ia.nx](ejemplos/soporte_ia.nx): ejemplos del borrador de diseño. Usan sintaxis que el intérprete todavía no admite, así que no se pueden ejecutar.
-- [npm/](npm/): paquete de npm (`nexora-lang`) que instala el comando `nex`. Necesita Python 3.11 o superior en la máquina. Publicado en PyPI y en npm.
-- [web/](web/): página web del lenguaje, con el playground (`/playground`) y una guía (`/guide`).
-- [servidor/](servidor/): servidor Node.js que sirve la web, las cuentas de usuario (MySQL) y la API del playground, que ejecuta cada programa con el intérprete real en un proceso aparte. Solo se ha probado en local: [nexora/docs/playground.md](nexora/docs/playground.md).
-- [vscode-nexora/](vscode-nexora/): extensión de Visual Studio Code del lenguaje: resaltado, diagnósticos, navegación y formateador. Su servidor de lenguaje y su formateador son los del propio núcleo ([decisión 0017](nexora/docs/decisions/0017-un-editor-la-extension-de-vs-code.md)).
+- [nexora/](nexora/): the core of the language. Interpreter, `nex` command, documentation ([nexora/docs/index.md](nexora/docs/index.md)), executable examples, and tests. It starts with [nexora/README.md](nexora/README.md).
 
-Herramientas para editores y agentes de IA (análisis en JSON, `nex context`, `nex symbols`, API de Python y servidor MCP opcional): [nexora/docs/ai-tooling.md](nexora/docs/ai-tooling.md). NEXORA no llama a ningún modelo de IA.
+- [.github/workflows/nexora-ci.yml]: Continuous integration of the core for GitHub Actions. It runs on every change to `main`, on Linux, Windows, and macOS.
 
-Licencia: [MIT](LICENSE).
+- [docs/fase-1-diseno.md]: Draft of the complete design (syntax, types, functions, and rules). It describes where the language is headed, not what works today.
 
-## Arrancar el servidor
+- [ejemplos/tienda.nx] and [ejemplos/soporte_ia.nx]: Examples from the draft design. They use syntax that the interpreter doesn't yet support, so they can't be executed.
 
-Requiere Node.js 22.23.2 o posterior en la rama 22, o 24.18.1 o posterior en la rama 24, y una base
-de datos MySQL o MariaDB. Usa la última versión de tu rama.
+- [npm/]: npm package (`nexora-lang`) that installs the `nex` command. Requires Python 3.11 or higher on the machine. Published on PyPI and npm.
+
+- [web/](web/): Language webpage, with the playground (`/playground`) and a guide (`/guide`).
+
+- [server/](server/): Node.js server that hosts the webpage, user accounts (MySQL), and the playground API, which runs each program with the actual interpreter in a separate process. It has only been tested locally: [nexora/docs/playground.md](nexora/docs/playground.md).
+
+- [vscode-nexora/](vscode-nexora/): Visual Studio Code extension for the language: highlighting, diagnostics, navigation, and formatting. Its language server and formatter are those of the core ([decision 0017](nexora/docs/decisions/0017-un-editor-la-extension-de-vs-code.md)).
+
+Tools for AI editors and agents (JSON parsing, `nex context`, `nex symbols`, Python API, and optional MCP server): [nexora/docs/ai-tooling.md]. NEXORA does not call any AI models.
+
+License: [MIT].
+
+## Starting the server
+
+Requires Node.js 22.23.2 or later on branch 22, or 24.18.1 or later on branch 24, and a MySQL or MariaDB database. Use the latest version of your branch.
 
 ```
-cd servidor
-npm install
-cp .env.example .env     # rellena los datos de la base de datos
-npm run migrate          # crea las tablas users, sessions y oauth_accounts
-npm start
+cd server
+`npm install`
+`cp .env.example .env` # populates the database data
+`npm run migrate` # creates the users, sessions, and oauth_accounts tables
+`npm start`
 ```
 
-Con la configuración copiada de `.env.example`, el playground queda desactivado (`PLAYGROUND_ENABLED=false`) y su API responde 503. Para probarlo en tu equipo, establece `PLAYGROUND_ENABLED=true` en `servidor/.env` y reinicia el servidor.
+... ## Login with Google and GitHub
 
-Úsalo solo para pruebas locales controladas. Como el servidor escucha en todas las interfaces de red, mantén el playground desactivado en servidores accesibles desde Internet hasta completar la [comprobación del aislamiento](nexora/docs/playground.md#comprobar-el-aislamiento).
+This is optional: without credentials, the buttons lead to a warning, and email registration still works.
 
-## Inicio de sesión con Google y GitHub
+1. Create an OAuth application for each provider (the links are in `server/.env.example`).
 
-Es opcional: sin credenciales, los botones llevan a un aviso y el registro con email sigue funcionando.
+2. Register `{PUBLIC_URL}/api/auth/google/callback` and `{PUBLIC_URL}/api/auth/github/callback` as the return URLs.
 
-1. Crea una aplicación OAuth en cada proveedor (los enlaces están en `servidor/.env.example`).
-2. Registra como URL de retorno `{PUBLIC_URL}/api/auth/google/callback` y `{PUBLIC_URL}/api/auth/github/callback`.
-3. Copia el ID y el secreto de cada una en `servidor/.env` y reinicia el servidor.
+3. Copy the ID and secret of each application to `server/.env` and restart the server.
