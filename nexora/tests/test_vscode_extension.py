@@ -96,3 +96,18 @@ def test_the_extension_asks_for_the_language_it_serves():
     manifest = _manifest()
     assert "onLanguage:nexora" in manifest["activationEvents"]
     assert manifest["contributes"]["grammars"][0]["language"] == "nexora"
+
+
+def test_the_extension_has_what_the_marketplace_asks_for():
+    manifest = _manifest()
+    # The icon, the licence and the banner.
+    icon = manifest.get("icon")
+    assert icon, "the marketplace needs an icon"
+    assert (EXTENSION / icon).is_file()
+    assert (EXTENSION / "LICENSE").is_file()
+    assert manifest.get("galleryBanner")
+    # And the rest of what a published extension carries.
+    for field in ("publisher", "name", "displayName", "description", "version", "engines", "categories"):
+        assert manifest.get(field), field
+    assert manifest["engines"]["vscode"]
+    assert manifest["repository"]["url"]

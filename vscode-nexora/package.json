@@ -5,6 +5,11 @@
   "version": "0.10.0",
   "publisher": "nexora",
   "license": "MIT",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#0A0A0D",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -103,7 +108,9 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package --no-dependencies"
+    "package": "vsce package --no-dependencies",
+    "publish:marketplace": "vsce publish --no-dependencies --pat",
+    "verify": "npm run compile && npm run package"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"

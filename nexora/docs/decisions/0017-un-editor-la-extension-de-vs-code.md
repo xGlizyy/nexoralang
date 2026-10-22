@@ -129,7 +129,8 @@ léxico que mantener.
 - `nexora/src/nexora/lsp.py`: el servidor de lenguaje.
 - `nexora/src/nexora/formatter.py`: el formateador.
 - `nexora/pyproject.toml`: la orden `nexora-lsp`.
-- `vscode-nexora/`: la extensión.
+- `vscode-nexora/`: la extensión, con su icono (la misma marca del sitio) y lo que el marketplace
+  pide: licencia, bandeja, descripción, categorías y palabras clave.
 - `nexora/tests/test_lsp.py`, `test_formatter.py`, `test_vscode_extension.py`: las pruebas.
 
 ## Pruebas de regresión previstas

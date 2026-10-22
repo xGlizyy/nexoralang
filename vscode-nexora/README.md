@@ -1,5 +1,7 @@
 # NEXORA para Visual Studio Code
 
+![El icono de la extensión](images/icon.png)
+
 Extensión del lenguaje de programación NEXORA: resaltado, diagnósticos, navegación y
 formateador.
 
@@ -62,6 +64,37 @@ lo que dice `nex check`, con los mismos códigos y los mismos textos.
 
 Si el Python del PATH no tiene el paquete instalado, la extensión busca el entorno del propio
 repositorio (`nexora/.venv`), que es lo habitual cuando se desarrolla dentro del proyecto.
+
+## Publicar en el marketplace de Visual Studio Code
+
+La extensión está preparada para el marketplace: lleva el icono (128×128), la licencia, la
+bandeja, la descripción, las categorías, las palabras clave y el aviso para reportar un
+problema.
+
+```bash
+cd vscode-nexora
+npm run compile
+npm run package          # comprueba que el paquete está bien
+npm run publish:marketplace -- --pat <EL_TOKEN>
+```
+
+Hacen falta dos cosas que solo puede hacer quien publica:
+
+1. **Ser dueño del publicador** `nexora` en el marketplace (o cambiar `"publisher"` en
+   `package.json` por el que ya tengas).
+2. **Un token de acceso** del marketplace: en <https://marketplace.visualstudio.com/manage/publishers>
+   se crea, con el alcance *Manage extensions*. Se pasa con `--pat` para que no quede en el
+   historial del shell; `vsce publish` lo pide de forma interactiva si no se le da.
+
+La primera publicación tiene que hacer la cuenta de publisher, que pide verificarla a
+través de una cuenta de Microsoft. Nada de esto lo puede hacer el repositorio: es una
+decisión de quien publica.
+
+Antes de publicar, una comprobación rápida de que el paquete sirve:
+
+```bash
+code --install-extension nexora-0.10.0.vsix
+```
 
 ## Comandos
 

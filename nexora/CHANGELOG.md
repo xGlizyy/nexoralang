@@ -242,7 +242,8 @@ no cambia.
 ### Añadido
 
 - **La extensión de VS Code** (`vscode-nexora/`): resaltado de sintaxis para los archivos `.nex`, con
-  una gramática escrita sobre el léxico real, y el reconocimiento automático de esos archivos.
+  una gramática escrita sobre el léxico real, y el reconocimiento automático de esos archivos. Lleva
+  su icono (la misma marca del sitio) y lo que el marketplace pide, así que se puede publicar allí.
 - **El servidor de lenguaje** (`nexora/src/nexora/lsp.py`): habla LSP por la entrada y la salida
   estándar y responde con el mismo análisis que usa la línea de órdenes. Ofrece diagnósticos (los
   de `nex check`, con su código y su sugerencia), autocompletado, hover con el tipo de un valor y la
