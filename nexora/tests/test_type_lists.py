@@ -81,10 +81,10 @@ def test_an_unregistered_refined_type_is_not_an_element() -> None:
         "List[Missing]",
         "List[missing]",
         "List[List[Missing]]",
-        "List[Option[Int]]",
-        "List[Result[Int, Text]]",
-        "Option[Int]",
-        "Result[Int, Text]",
+        "List[Map[Int]]",
+        "List[Map[Int, Text]]",
+        "Map[Int]",
+        "Map[Int, Text]",
         "List",
         "Option",
         "Result",
@@ -130,8 +130,8 @@ def test_malformed_or_non_canonical_forms_do_not_resolve(name: str) -> None:
 
 def test_commas_inside_a_nested_argument_are_not_argument_separators() -> None:
     # A naive split on commas would read two arguments here; the recursive parser
-    # reads one argument (an unsupported `Result`), so the name is not a type.
-    assert TypeAdapter().resolve("List[Result[Int, Text]]") is None
+    # reads one argument (an unsupported `Map`), so the name is not a type.
+    assert TypeAdapter().resolve("List[Map[Int, Text]]") is None
     assert TypeAdapter().resolve("List[List[Int], List[Text]]") is None
     # The same shape with an admitted inner constructor is one valid argument.
     kind = TypeAdapter().resolve("List[List[Int]]")

@@ -1,7 +1,7 @@
 # Especificación del lenguaje NEXORA
 
-- **Versión de la especificación:** 0.9
-- **Implementación de referencia:** `nexora` 0.9.0 (este repositorio, directorio `nexora/`)
+- **Versión de la especificación:** 0.10
+- **Implementación de referencia:** `nexora` 0.10.0 (este repositorio, directorio `nexora/`)
 - **Estado:** describe exactamente lo que el intérprete hace hoy.
 
 Este documento es la referencia del lenguaje: define la sintaxis y el significado de cada
@@ -571,6 +571,66 @@ escribe el ciclo (`A -> B -> A`).
 genéricos y no puede ser recursivo. Un tipo refinado no puede construirse sobre un registro
 (`E2016`).
 
+### 4.7 Option y Result
+
+Dos tipos del lenguaje dicen lo que un valor no puede decir por sí solo: que **no hay** valor
+(`Option[T]`) o que **algo falló** (`Result[T, E]`). Los dos tienen dos variantes, y **la variante es
+parte del valor**: `None` nunca es `Some(x)` y `Ok(x)` nunca es `Err(x)`, aunque los dos载荷 sean
+iguales.
+
+Los dos existen para que un programa diga «no hay nada» o «esto falló» **sin excepciones**: un
+`Option` o un `Result` es un valor que se devuelve, se guarda, se compara y se imprime.
+
+**`Option[T]`.** `T` es el tipo del valor que hay cuando lo hay.
+
+- `Some(valor)` construye la variante con valor. Su tipo es `Option[T]`, donde `T` es el tipo de
+  `valor`.
+- `None` es la variante sin valor. Su tipo es `Option[T]`, y `T` lo dice **el contexto que espera el
+  valor**: la anotación de una variable, el tipo de un parámetro, el tipo de resultado de una
+  función o el otro lado de una comparación. Sin ese contexto, `None` no tiene tipo, y es el error
+  `E2011` («Cannot infer the type of None without an expected type»).
+
+**`Result[T, E]`.** `T` es el tipo del valor que se consigue y `E` el del error que se recibe.
+
+- `Ok(valor)` construye la variante correcta. Su tipo es `Result[T, E]`: `T` es el tipo de `valor`
+  y `E` lo dice el contexto que espera el resultado.
+- `Err(error)` construye la variante con error. Su tipo es `Result[T, E]`: `E` es el tipo de
+  `error` y `T` lo dice el contexto que espera el resultado.
+
+El error se guarda **tal cual**: `Err("falta el archivo")` lleva ese texto, y al leerlo sigue siendo
+ese texto.
+
+**Inspección.** Cada variante se reconoce sin excepciones:
+
+| Función | Devuelve |
+|---------|----------|
+| `Option.is_some(x)` | `true` si `x` es un `Some` |
+| `Option.is_none(x)` | `true` si `x` es un `None` |
+| `Result.is_ok(x)` | `true` si `x` es un `Ok` |
+| `Result.is_err(x)` | `true` si `x` es un `Err` |
+
+**Lectura del valor.** `Option.unwrap_or(x, defecto)` devuelve el valor de `x` si es un `Some`, y
+`defecto` si es un `None`; el defecto tiene el mismo tipo que el valor. `Result.unwrap_or(x, defecto)`
+hace lo mismo con un `Ok` y un `Err`.
+
+`Option.unwrap(x)`, `Result.unwrap(x)` y `Result.error(x)` leen el valor **sin** defecto: si la
+variante no lleva ese valor, el programa se detiene con un diagnóstico (`E3011`, `E3012` o `E3013`).
+No hay una lectura que devuelva un valor inventado, ni una que haga fallar el programa sin decir por
+qué.
+
+**Igualdad.** Dos valores de estos tipos se comparan por variante y por valor: `Some(1) == Some(1)`
+es `true` y `None == None` es `true`; `None == Some(1)`, `Ok(1) == Err(1)` y `Some(1) == Some(2)`
+son `false`.
+
+**Cómo se imprimen.** `Some(1)`, `None`, `Ok(1)` y `Err(boom)`, con el texto sin comillas, como los
+campos de un registro. En los diagnósticos el texto va entrecomillado: `Err("boom")`.
+
+**Qué no hay.** No hay `match`, ni `if let`, ni `?`, ni enums del usuario: un `Option` o un
+`Result` se reconoce con las funciones de arriba y se lee con `unwrap_or` cuando se sabe qué
+variante tiene. El tipo de un `None` o de una lista vacía que es **argumento** de una función con
+variables de tipo no se deduce de los otros argumentos: el lenguaje no infiere un tipo a través de
+los argumentos de una llamada. Se da el tipo en una variable antes.
+
 ## 5. Variables y ámbitos
 
 ### 5.1 Declaración
@@ -1072,6 +1132,35 @@ funcionan en los dos sistemas.
 worker no tiene ningún campo en su protocolo para pedirlos y el programa recibe `E3008` aunque
 declare la capacidad. El servidor MCP solo analiza: nunca ejecuta.
 
+### 8.4 Las funciones de `Option` y de `Result`
+
+Las dos variantes de cada tipo (sección 4.7) se construyen con `Some`, `None`, `Ok` y `Err`, y se
+reconocen y se leen con estas funciones:
+
+| Función | Firma | Qué hace |
+|---------|-------|----------|
+| `Some` | `Some(valor: T) -> Option[T]` | La variante de `Option` que tiene valor |
+| `None` | `None -> Option[T]` | La variante de `Option` sin valor; `T` lo dice el contexto |
+| `Ok` | `Ok(valor: T) -> Result[T, E]` | La variante de `Result` que se conseguiu |
+| `Err` | `Err(error: E) -> Result[T, E]` | La variante de `Result` que falló; `T` lo dice el contexto |
+| `Option.is_some` | `Option.is_some(x: Option[T]) -> Bool` | Si `x` tiene valor |
+| `Option.is_none` | `Option.is_none(x: Option[T]) -> Bool` | Si `x` no tiene valor |
+| `Option.unwrap_or` | `Option.unwrap_or(x: Option[T], defecto: T) -> T` | El valor de `x`, o `defecto` si no lo tiene |
+| `Option.unwrap` | `Option.unwrap(x: Option[T]) -> T` | El valor de `x`; si no lo tiene, `E3011` |
+| `Result.is_ok` | `Result.is_ok(x: Result[T, E]) -> Bool` | Si `x` se consiguió |
+| `Result.is_err` | `Result.is_err(x: Result[T, E]) -> Bool` | Si `x` falló |
+| `Result.unwrap_or` | `Result.unwrap_or(x: Result[T, E], defecto: T) -> T` | El valor de `x`, o `defecto` si falló |
+| `Result.unwrap` | `Result.unwrap(x: Result[T, E]) -> T` | El valor de `x`; si falló, `E3012` |
+| `Result.error` | `Result.error(x: Result[T, E]) -> E` | El error de `x`; si se consiguió, `E3013` |
+
+Las tres últimas **leen el valor sin defecto**: si la variante no lo lleva, el programa se detiene con
+un diagnóstico que dice qué variante tenía (`E3011`, `E3012`, `E3013`). Ninguna de ellas devuelve un
+valor inventado.
+
+El tipo de `T` y de `E` lo fija el **contexto**: la anotación de una variable, el tipo de un
+parámetro, el tipo de resultado de una función o el otro lado de una comparación. Sin ese contexto,
+`None`, `Ok` y `Err` no tienen tipo completo, y es el error `E2011`.
+
 ## 9. Contratos
 
 Un contrato expresa una condición que una función **espera** de quien la llama o una condición que
@@ -1568,6 +1657,9 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E3008` | Permission denied | `runtime` | El programa intenta usar un archivo que no puede usar: no lo declara, no está permitido por quien lo ejecuta, o el entorno no admite archivos (sección 8.3) |
 | `E3009` | No more input | `runtime` | `input()` se llama cuando la entrada estándar ya se ha terminado (sección 8.3) |
 | `E3010` | File error | `runtime` | El archivo se podía usar, pero no se ha podido leer o escribir: no existe, no es un texto UTF-8, o el sistema operativo lo ha impedido |
+| `E3011` | Option has no value | `runtime` | `Option.unwrap` se llama con un `None`: la variante no lleva el valor (sección 8.4) |
+| `E3012` | Result is an error | `runtime` | `Result.unwrap` se llama con un `Err`: la variante no lleva el valor (sección 8.4) |
+| `E3013` | Result is not an error | `runtime` | `Result.error` se llama con un `Ok`: la variante no lleva el error (sección 8.4) |
 | `E4001` | Precondition violated | `contract` | Una condición `requires` es falsa en una llamada |
 | `E4002` | Postcondition violated | `contract` | Una condición `ensures` es falsa al terminar una función |
 | `E4003` | Refinement violated | `contract` | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado |
@@ -1600,7 +1692,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.9.0",
+  "nexora_version": "0.10.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -1796,9 +1888,10 @@ Son limitaciones reales de esta versión, no fallos:
 - La medida de un `while` es un `Int`: no hay medidas compuestas (pares, textos).
 - Los parámetros no pueden reasignarse.
 - `if` es una sentencia, no una expresión: no puede usarse como valor.
-- No hay mapas, enumeraciones, `Option`, `Result` ni `for` sobre rangos o `Text`. Los registros
-  (sección 4.6) tienen campos inmutables y no admiten métodos, refinamientos ni recursión. Las
-  listas `List[T]` son inmutables y finitas.
+- No hay mapas, enumeraciones ni `for` sobre rangos o `Text`. Los registros (sección 4.6) tienen
+  campos inmutables y no admiten métodos, refinamientos ni recursión. Las listas `List[T]` son
+  inmutables y finitas. De `Option` y `Result` (sección 4.7) no hay `match` ni `if let`: las
+  variantes se reconocen con funciones, y el valor se lee con `unwrap_or`.
 - Las operaciones sobre textos son las de la sección 8.1: no hay `trim`, mayúsculas, `split`,
   `replace` ni búsqueda de posiciones. Un carácter es un punto de código: no se cuentan grafemas.
 - No hay operador de resto (`%`).
@@ -1835,9 +1928,9 @@ Nada de lo que sigue funciona hoy. Es la dirección del diseño, tomada del borr
 - `for` sobre rangos, `break` y `continue`.
 - `if` y `match` como expresiones.
 - Interpolación de textos (`"Hello {name}"`), para la que ya está reservada la `{`.
-- Mapas, enumeraciones, `Option` y `Result`. Los registros (sección 4.6) y las listas `List[T]`
-  ya existen, pero no los genéricos de usuario (`fn f[T]`), las funciones de orden superior ni las
-  funciones como valores.
+  - Mapas y enumeraciones. Los registros (sección 4.6), las listas `List[T]` y los dos tipos
+    `Option[T]` y `Result[T, E]` (sección 4.7) ya existen, pero no los genéricos de usuario
+    (`fn f[T]`), las funciones de orden superior ni las funciones como valores.
 - Verificación estática de contratos, y bloques de prueba (`test`) fuera de las funciones.
 - Módulos e importaciones. Los efectos declarados (`uses`) ya existen para los archivos
   (sección 8.3), pero no hay un sistema de efectos para el resto.
@@ -1859,7 +1952,7 @@ Esta especificación manda sobre el borrador en lo que ya está implementado:
 | Valor de una función | La última expresión del bloque | Siempre con `return` |
 | Contratos | Entre la firma y el cuerpo | Al principio del cuerpo, con una explicación opcional tras una coma |
 | Ejemplos | `example` entre la firma y el cuerpo; `nexora test` | Al principio del cuerpo, con las mismas reglas que los contratos; `nex test` |
-| Valor dinámico a tipo refinado | `Percent.from(n)`, que devuelve un `Result` | `Percent(n)`, que detiene el programa con `E4003` si no se cumple la condición (no existe `Result`) |
+| Valor dinámico a tipo refinado | `Percent.from(n)`, que devuelve un `Result` | `Percent(n)`, que detiene el programa con `E4003` si no se cumple la condición |
 | Alias sin condición | `type UserId = Int` | No existen |
 | Conversión entre números | `Int.to_float(x)` | `to_float(x)`, `to_int(x)` |
 | Variables sin usar | Son un error | No se comprueba todavía |

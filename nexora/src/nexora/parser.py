@@ -56,7 +56,13 @@ _STATEMENT_END = (TokenType.NEWLINE, TokenType.RBRACE, TokenType.EOF)
 
 # The names of the built-in types. A name that is a type is never a value, so `Text.length`
 # is a call to a function of a type and never the reading of a field.
-_BUILTIN_TYPE_NAMES = frozenset({"Int", "Float", "Bool", "Text", "Void", "List"})
+_BUILTIN_TYPE_NAMES = frozenset({"Int", "Float", "Bool", "Text", "Void", "List", "Option", "Result"})
+
+# How many type arguments each built-in type with arguments takes.
+_TYPE_ARGUMENT_COUNTS = {"List": 1, "Option": 1, "Result": 2}
+
+# How those numbers are written in a diagnostic.
+_TYPE_ARGUMENT_NAMES = {1: "one", 2: "two"}
 
 
 class ParseError(Exception):
@@ -186,7 +192,7 @@ class Parser:
         return self._expect(TokenType.IDENT, expected, hint=hint)
 
     def _type(self, expected: str, *, hint: str | None = None) -> ast.TypeRef:
-        """`Name`, or `List[Type]` with nested arguments (I2)."""
+        """`Name`, or `List[Type]`, `Option[Type]` or `Result[Type, Type]` with nested arguments (I2)."""
         name = self._expect(TokenType.IDENT, expected, hint=hint)
         if not self._check(TokenType.LBRACKET):
             return ast.TypeRef(name.span, name.lexeme)
@@ -204,35 +210,39 @@ class Parser:
         )
         self._nesting -= 1
         span = name.span.to(closing.span)
-        if name.lexeme != "List":
+        arity = _TYPE_ARGUMENT_COUNTS.get(name.lexeme)
+        if arity is None:
             raise self._error(
                 "E1101",
                 f"'{name.lexeme}' cannot take type arguments",
                 span=span,
-                hint="Only 'List' takes a type argument in this version: List[Int].",
+                hint="Only 'List', 'Option' and 'Result' take type arguments: "
+                     "List[Int], Option[Text], Result[Int, Text].",
             )
         if len(arguments) == 0:
             raise self._error(
                 "E1101",
-                "'List' needs a type argument: write List[Int]",
+                f"'{name.lexeme}' needs a type argument: write {name.lexeme}[Int]",
                 span=span,
-                hint="A list type always states the type of its elements.",
+                hint="A type with arguments always states them.",
             )
-        if len(arguments) != 1:
+        if len(arguments) != arity:
             raise self._error(
                 "E1101",
-                f"'List' takes exactly one type argument, but {len(arguments)} were given",
+                f"'{name.lexeme}' takes exactly {_TYPE_ARGUMENT_NAMES[arity]} type argument"
+                f"{'' if arity == 1 else 's'}, but {len(arguments)} "
+                f"{'was' if len(arguments) == 1 else 'were'} given",
                 span=span,
-                hint="Write List[Int].",
+                hint=f"Write {name.lexeme}[Int]" + (", Text]" if arity == 2 else "]"),
             )
-        element = arguments[0]
-        if element.name == VOID:
-            raise self._error(
-                "E1101",
-                "Void cannot be an element of a list",
-                span=element.span,
-                hint="Void means 'no value'. Use a type that has values, such as Int or Text.",
-            )
+        for argument in arguments:
+            if argument.name == VOID:
+                raise self._error(
+                    "E1101",
+                    f"Void cannot be an argument of '{name.lexeme}'",
+                    span=argument.span,
+                    hint="Void means 'no value'. Use a type that has values, such as Int or Text.",
+                )
         return ast.TypeRef(span, name.lexeme, tuple(arguments))
 
     # Recovery

@@ -19,6 +19,52 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
+## 0.10.0 — Option y Result
+
+Estado del repositorio, no una versión publicada: todavía no hay tag ni paquete de esta versión en
+ningún registro. Esta versión implementa la
+[decisión 0016](docs/decisions/0016-option-y-result.md), que da al lenguaje los dos tipos que
+permiten decir que **no hay valor** y que **algo falló**, sin excepciones.
+
+### Añadido
+
+- **`Option[T]`**, con sus dos variantes: `Some(valor)` y `None`. `Option.is_some` y
+  `Option.is_none` dicen cuál es; `Option.unwrap_or` devuelve el valor o un defecto del mismo tipo, y
+  `Option.unwrap` lo lee sin defecto, con el diagnóstico `E3011` si no lo hay.
+- **`Result[T, E]`**, con `Ok(valor)` y `Err(error)`. `Result.is_ok` y `Result.is_err` dicen cuál es;
+  `Result.unwrap_or` devuelve el valor o un defecto, y `Result.unwrap` y `Result.error` lo leen sin
+  defecto, con los diagnósticos `E3012` y `E3013` cuando la variante no lo lleva. **El error se
+  guarda tal cual**: `Err("falta el archivo")` sigue siendo ese texto al leerlo.
+- **Los tipos `Option[T]` y `Result[T, E]` se pueden escribir**, y anidarse: `Option[Option[Int]]`,
+  `Result[Text, Error]`.
+- **Un ejemplo nuevo**, `examples/option_result.nex`, con una búsqueda opcional y un análisis que
+  puede fallar.
+
+### Cambios incompatibles
+
+- Los nombres `Option`, `Result`, `Some`, `Ok` y `Err` pasan a estar en el lenguaje. Un programa que
+  declarara una función con uno de esos nombres usaría la integrada, como ya pasaba con `print` o
+  `to_text`. `None` es el caso contrario: si el programa declara un nombre así, el suyo gana.
+- Los tipos con argumentos escribibles pasan de ser solo `List[T]` a ser también `Option[T]` y
+  `Result[T, E]`.
+- La especificación pasa a la versión 0.10 y la implementación de referencia a la 0.10.0. La 0.9.0 ya
+  publicada en npm no se toca.
+
+### Documentación
+
+- La especificación describe los dos tipos en la sección 4.7 y sus funciones en la 8.4.
+- `docs/types.md` tiene una sección nueva con los dos tipos, cuándo usar cada uno y lo que no hay.
+- Nueva [ADR 0016](docs/decisions/0016-option-y-result.md), que explica la decisión y por qué la
+  propagación `?` no se implementa ahora.
+
+### Limitaciones
+
+- No hay `match`, ni `if let`, ni el operador `?`: las variantes se reconocen con funciones y el
+  valor se lee con `unwrap_or` cuando se sabe cuál es. La 0012 sigue siendo propuesta en los enums
+  del usuario y el `match`.
+- El tipo de un `None`, de un `Ok` o de un `Err` escrito directamente en una comparación no se
+  deduce: hay que escribir antes el tipo del resultado en una variable.
+
 ## 0.9.0 — Entrada, argumentos, archivos y permisos
 
 Estado del repositorio, no una versión publicada: no hay tag ni paquete en ningún repositorio. Esta

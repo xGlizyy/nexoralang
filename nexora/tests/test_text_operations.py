@@ -457,7 +457,8 @@ def test_variables_named_like_the_types_stay_valid():  # [17]
 
 
 OLD_PROGRAMS = sorted(path for path in (ROOT / "examples").rglob("*.nex")
-                      if path.name not in ("texts.nex", "parse_number.nex", "lists.nex", "records.nex"))
+                      if path.name not in ("texts.nex", "parse_number.nex", "lists.nex", "records.nex",
+                                           "option_result.nex"))
 
 
 @pytest.mark.parametrize("path", OLD_PROGRAMS, ids=lambda path: path.name)
@@ -549,7 +550,13 @@ def test_the_capabilities_list_the_functions_with_their_contracts():  # [21]
 
 
 def test_the_checker_knows_every_implementation():
-    assert {name for name in BUILTINS if "." in name} == set(prelude.IMPLEMENTATIONS)
+    # Every function of a type is implemented: the pure ones in the prelude, and the three that
+    # can fail in the interpreter, which needs the position of the argument to say where the
+    # variant was wrong.
+    failing = {"Option.unwrap", "Result.unwrap", "Result.error"}
+    of_a_type = {name for name in BUILTINS if "." in name}
+    assert of_a_type - failing == set(prelude.IMPLEMENTATIONS)
+    assert failing <= of_a_type
     assert set(prelude.CONTRACTS) <= set(prelude.IMPLEMENTATIONS)
     assert analyze(Source("t.nex", in_main("print(1)"))).ok
 

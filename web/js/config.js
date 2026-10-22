@@ -9,10 +9,11 @@
 export const site = {
   name: 'NEXORA',
   /**
-   * Public repository URL. Every GitHub link on the site points here.
+   * Public repository URL. While it is null every GitHub link on the site stays hidden:
+   * the site does not send anyone to the repository.
    * @type {string | null}
    */
-  githubUrl: 'https://github.com/xGlizyy/nexoralang',
+  githubUrl: null,
 };
 
 /**
@@ -27,7 +28,7 @@ export const roadmap = [
     summary: 'The rules are written down before they are built, and the specification follows the interpreter exactly. The syntax can still change.',
     status: 'in-progress',
     available: [
-      'A language specification, version 0.9, that describes exactly what the interpreter does.',
+      'A language specification, version 0.10, that describes exactly what the interpreter does.',
       'Fourteen accepted design records, each with its reasons, the alternatives it rejected and what it does not guarantee.',
       'A broader design draft of where the language is going.',
       'Lists and `for` (0.7.0), and records (0.8.0): the first compound types of the language.',
@@ -48,11 +49,11 @@ export const roadmap = [
       'Contracts (`requires`, `ensures`), refined types and examples checked with `nex test`.',
       'Operations on text (`Text.length`, `Text.slice`, ordering) and reading numbers with `Int.parse`, each with the requirements it checks.',
       'Diagnostics with a stable code, a position and a hint, as text or JSON.',
-      '1,604 automated tests. On Linux (Ubuntu 24.04 under WSL 2) all of them pass with Python 3.11, 3.12 and 3.13; on Windows 11 with Python 3.12, 1,600 pass and the 4 that need POSIX are skipped.',
+      '2,329 automated tests. The continuous integration runs them on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13, and the ones a platform cannot run are skipped there.',
     ],
     next: [
       'Measuring its speed: it has never been benchmarked.',
-      'Checking it on macOS and on Linux outside WSL: so far it is verified on Windows 11 and on Ubuntu 24.04 under WSL 2.',
+      'Checking it on a real Mac and on Linux outside WSL: so far the continuous integration verifies it on Linux, Windows and macOS, and it has been run by hand on Windows 11 with Python 3.12 and on Ubuntu 24.04 under WSL 2.',
     ],
   },
   {
@@ -73,7 +74,7 @@ export const roadmap = [
   },
   {
     title: 'Playground and ecosystem',
-    summary: 'The playground can run real programs but is off by default; the repository is public and the packages are still to come.',
+    summary: 'The playground can run real programs but is off by default; the repository is public and the npm package is published.',
     status: 'in-progress',
     available: [
       'A playground that runs each program with the real interpreter, in a separate process with time and output limits. It is off unless the server enables it explicitly.',
@@ -81,7 +82,7 @@ export const roadmap = [
       'A public repository, with its history and its issue tracker.',
     ],
     next: [
-      'Publishing the packages for npm and Python. The npm package is prepared but not published.',
+      'Publishing the Python package on PyPI. The npm package is published.',
       'Checking the isolation of the playground containers with real Docker. Until then it stays off on a public site.',
     ],
   },

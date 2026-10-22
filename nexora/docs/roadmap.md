@@ -58,6 +58,9 @@ hay una prueba que falla si deja de funcionar.
 | **Servidor MCP** (opcional) | Siete herramientas de análisis, probadas con el cliente del SDK oficial (`tests/test_mcp.py`). Comprobado a mano una vez en Claude Code. No ejecuta código | Probarlo en otros asistentes. Incluir la especificación en el paquete instalable |
 | **Playground** (web) | Editor, API y ejecución en un proceso aparte con límites; probado en local ([Playground](playground.md)) | Desplegarlo. Verificar el aislamiento con contenedor y los límites POSIX, que no se han podido probar en Windows |
 | **Integración continua** | Flujo de GitHub Actions en marcha: se ejecuta en cada cambio a `main`, en Linux, Windows y macOS | Ampliar la matriz a más versiones de Node |
+| **Valores opcionales y resultados** | `Option[T]` y `Result[T, E]`, con `Some`, `None`, `Ok` y `Err`, y las funciones que reconocen la variante y leen el valor. Sin `match` ni `?` | `match`, `if let` y el operador `?`, cuando haya enums del usuario |
+| **Valores opcionales y resultados** | `Option[T]` y `Result[T, E]`, con `Some`, `None`, `Ok` y `Err`, y las funciones que reconocen la variante y leen el valor. Sin `match` ni `?` | `match`, `if let` y el operador `?`, cuando haya enums del usuario |
+| **Valores opcionales y resultados** | `Option[T]` y `Result[T, E]`, con `Some`, `None`, `Ok` y `Err`, y las funciones que reconocen la variante y leen el valor. Sin `match` ni `?` | `match`, `if let` y el operador `?`, cuando haya enums del usuario |
 | **Verificación en otras plataformas** | Comprobado en Windows 11 con Python 3.12; ejecutado en Linux, Windows y macOS con Python 3.11, 3.12 y 3.13 por la integración continua | Comprobarlo en macOS y en Linux con un equipo, no solo en los ejecutores |
 | **Preparación para colaboradores** | Licencia MIT, guía de contribución, política de seguridad, código de conducta, repositorio público con su rastreador de incidencias | Definir un canal de contacto privado |
 

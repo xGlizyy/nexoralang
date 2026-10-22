@@ -22,8 +22,19 @@ from . import ast_nodes as ast
 from .capabilities import Host, NoHost, NotAllowed
 from .checker import BUILTINS, CheckedProgram, refinement_notes
 from .diagnostics import Diagnostic, NexoraRuntimeError, Span
-from .prelude import IMPLEMENTATIONS, parse_hint, requirements
-from .values import INT_MAX, INT_MIN, RecordValue, Value, format_value, show_value
+from .prelude import IMPLEMENTATIONS, error, ok, parse_hint, requirements, some
+from .values import (
+    ERR,
+    INT_MAX,
+    INT_MIN,
+    NONE,
+    OK,
+    RecordValue,
+    Value,
+    VariantValue,
+    format_value,
+    show_value,
+)
 
 # The deepest chain of calls a program may have (main counts as the first).
 MAX_CALL_DEPTH = 1000
@@ -489,7 +500,14 @@ class Interpreter:
         if isinstance(node, ast.ListLiteral):
             return tuple(self._evaluate(element, environment) for element in node.elements)
         if isinstance(node, ast.Name):
-            return environment.lookup(node.name)
+            try:
+                return environment.lookup(node.name)
+            except LookupError:
+                # `None`: an Option without a value. The checker has already decided that
+                # the program does not declare a name with that one.
+                if node.name == NONE:
+                    return VariantValue(NONE)
+                raise
         if isinstance(node, ast.RecordConstruction):
             return self._record(node, environment)
         if isinstance(node, ast.FieldAccess):
@@ -614,6 +632,17 @@ class Interpreter:
             self._check_requirements(node, arguments)
             return implementation(*arguments)
 
+        # The constructors of Option and Result (decision 0016).
+        if node.callee == "Some":
+            return some(arguments[0])
+        if node.callee == "Ok":
+            return ok(arguments[0])
+        if node.callee == "Err":
+            return error(arguments[0])
+        # The extractions that read the payload. They fail with a diagnostic, never with a crash.
+        if node.callee in ("Option.unwrap", "Result.unwrap", "Result.error"):
+            return self._extract(node, arguments[0])
+
         # Built-in functions.
         if node.callee == "args":
             return tuple(self._host.arguments())
@@ -644,6 +673,45 @@ class Interpreter:
                 )
             return whole
         raise TypeError(f"call to '{node.callee}' reached the interpreter")
+
+    def _extract(self, node: ast.Call, value: Value) -> Value:
+        """The payload of an Option or a Result, when there is one.
+
+        `Option.unwrap` and `Result.unwrap` read the value of a Some or of an Ok;
+        `Result.error` reads the error of an Err. When the variant does not carry that
+        payload, the program stops with a diagnostic: the failure is explicit, never a crash.
+        """
+        if not isinstance(value, VariantValue):
+            raise TypeError(f"call to '{node.callee}' reached the interpreter")
+        span = node.arguments[0].span
+        if node.callee == "Option.unwrap":
+            if value.kind == NONE:
+                raise self._fail(
+                    "E3011",
+                    "This Option has no value",
+                    span,
+                    hint="Check it with Option.is_none(...) before reading it, or use "
+                         "Option.unwrap_or(...) to give a value for the case of no value.",
+                )
+            return value.payload
+        if node.callee == "Result.unwrap":
+            if value.kind == ERR:
+                raise self._fail(
+                    "E3012",
+                    f"This Result is an error: {show_value(value.payload)}",
+                    span,
+                    hint="Check it with Result.is_err(...) before reading it, or use "
+                         "Result.unwrap_or(...) to give a value for the case of error.",
+                )
+            return value.payload
+        if value.kind == OK:
+            raise self._fail(
+                "E3013",
+                "This Result is not an error",
+                span,
+                hint="Check it with Result.is_ok(...) before reading the error.",
+            )
+        return value.payload
 
 
     def _read_line(self, node: ast.Call) -> str:

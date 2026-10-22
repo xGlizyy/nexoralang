@@ -35,6 +35,7 @@ EXPECTED = {
     "texts.nex": (0, 0),
     "lists.nex": (0, 0),
     "records.nex": (0, 0),
+    "option_result.nex": (0, 0),
     "console.nex": (0, 0),
     "files.nex": (0, 0),
     # Rejected by the static analysis: never started.

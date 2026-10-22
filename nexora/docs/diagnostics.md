@@ -150,6 +150,9 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E3008` | Permission denied | El programa intenta usar un archivo que no puede usar: no lo declara con `uses`, quien lo ejecuta no lo ha permitido con `--allow-read` o `--allow-write`, o el entorno no admite archivos ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Declara la capacidad y pide el permiso: `uses read "datos.txt"` y `nex run programa.nex --allow-read=datos` |
 | `E3009` | No more input | `input()` se ha llamado cuando la entrada estándar ya se ha terminado | Comprueba que hay más entrada antes de leer, o termina el programa |
 | `E3010` | File error | El archivo se podía usar, pero no se ha podido leer o escribir: no existe, no es un texto UTF-8, o el sistema operativo lo ha impedido | Comprueba la ruta y que el archivo sea un texto UTF-8 |
+| `E3011` | Option has no value | `Option.unwrap` se ha llamado con un `None`: la variante no lleva el valor ([decisión 0016](decisions/0016-option-y-result.md)) | Comprueba antes con `Option.is_none(...)`, o usa `Option.unwrap_or(x, defecto)` |
+| `E3012` | Result is an error | `Result.unwrap` se ha llamado con un `Err`: la variante no lleva el valor | Comprueba antes con `Result.is_err(...)`, o usa `Result.unwrap_or(x, defecto)` |
+| `E3013` | Result is not an error | `Result.error` se ha llamado con un `Ok`: la variante no lleva el error | Comprueba antes con `Result.is_ok(...)` |
 
 ### De contrato
 
@@ -235,7 +238,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.9.0",
+  "nexora_version": "0.10.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

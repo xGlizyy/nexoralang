@@ -470,7 +470,132 @@ una relación entre argumentos y se escribe como [contrato](contracts.md).
 | Valor calculado usado sin `Percent(...)` | `E2011` | Sin ejecutar |
 | `Percent(x)` con un valor que no cumple la condición | `E4003` | Al ejecutar |
 
-## Registros
+## `Option` y `Result`: cuando no hay valor, o cuando algo falla
+
+Dos tipos del lenguaje dicen lo que un valor no puede decir por sí solo: que **no hay** valor
+(`Option[T]`) o que **algo falló** (`Result[T, E]`). Los dos tienen dos variantes, y la variante es
+parte del valor: `None` nunca es `Some(x)` y `Ok(x)` nunca es `Err(x)`, aunque los dos payloads sean
+iguales.
+
+No hacen falta excepciones: un `Option` o un `Result` es un valor que se devuelve, se guarda, se
+compara y se imprime.
+
+### `Option[T]`: puede que no haya nada
+
+<!-- nex:run -->
+```nex
+fn find(names: List[Text], wanted: Text) -> Option[Int] {
+    var index = 0
+    while index < List.length(names) {
+    decreases List.length(names) - index, "Each turn looks at one more name"
+        if List.get(names, index) == wanted {
+            return Some(index)
+        }
+        index = index + 1
+    }
+    return None
+}
+
+fn main() -> Void {
+    let names = ["ada", "grace"]
+    print(Option.unwrap_or(find(names, "grace"), -1))
+    print(Option.unwrap_or(find(names, "nobody"), -1))
+}
+```
+
+```text
+1
+-1
+```
+
+`Some(valor)` es la variante que tiene valor y `None` la que no. El tipo de lo que hay cuando lo hay
+se escribe en el tipo del `Option`:
+
+<!-- nex:body -->
+```nex
+let found: Option[Int] = Some(42)
+let missing: Option[Int] = None
+```
+
+`None` necesita que el contexto diga cuál es el `Option`: sin una anotación, un parámetro o un tipo
+de resultado, el análisis no sabe de qué `Option` se trata y lo dice (`E2011`).
+
+Para reconocer la variante y para leer el valor:
+
+<!-- nex:body -->
+```nex
+let found: Option[Int] = Some(42)
+if Option.is_some(found) {
+    print(Option.unwrap_or(found, 0))
+}
+```
+
+`Option.unwrap_or(x, defecto)` devuelve el valor de `x` si lo tiene, y `defecto` si no. `Option.unwrap(x)`
+lee el valor sin defecto: si no lo hay, el programa se detiene con `E3011` y lo dice.
+
+### `Result[T, E]`: algo puede fallar
+
+<!-- nex:run -->
+```nex
+fn parse(text: Text) -> Result[Int, Text] {
+    if Int.can_parse(text) {
+        return Ok(Int.parse(text))
+    }
+    return Err("not a whole number")
+}
+
+fn main() -> Void {
+    print(Result.unwrap_or(parse("42"), -1))
+    print(Result.error(parse("forty two")))
+}
+```
+
+```text
+42
+not a whole number
+```
+
+`Ok(valor)` es la variante que se consiguió y `Err(error)` la que falló. El error se guarda **tal
+cual**: `Err("not a whole number")` lleva ese texto.
+
+El tipo del error y el del valor los dice el contexto. El tipo de resultado de la función es el que
+los fija:
+
+<!-- nex:body -->
+```nex
+let number: Result[Int, Text] = Ok(1)
+```
+
+Y para reconocer la variante y leer lo que lleva:
+
+<!-- nex:body -->
+```nex
+let failed: Result[Int, Text] = Err("boom")
+if Result.is_err(failed) {
+    print(Result.error(failed))
+}
+```
+
+`Result.unwrap_or(x, defecto)` devuelve el valor de `x` si se consiguió, y `defecto` si falló.
+`Result.unwrap(x)` y `Result.error(x)` leen sin defecto: si la variante no lleva eso, el programa se
+detiene con `E3012` o `E3013`.
+
+### Cuál de los dos
+
+- `Option` cuando lo que falta es **lo que se buscaba**: una búsqueda, un valor opcional de un
+  registro, la primera línea de un texto.
+- `Result` cuando lo que pasó es **un fallo**: una lectura que no se pudo hacer, un texto que no es un
+  número, una división por cero.
+
+Un `Option` no lleva la razón de la ausencia; un `Result` sí. Si quien llama necesita saber por
+qué falta, es un `Result`.
+
+### Lo que no hay
+
+No hay `match`, ni `if let`, ni el operador `?`, ni enums del usuario: las variantes se reconocen
+con las funciones de arriba y el valor se lee con `unwrap_or` cuando se sabe cuál es.
+
+## Los registros
 
 Un **registro** es un tipo que declara el programa, con campos **inmutables** y **obligatorios**.
 Se declara con `type` y unas llaves:

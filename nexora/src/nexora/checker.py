@@ -25,7 +25,7 @@ from . import types as type_model
 from .capabilities import READ, WRITE, Capabilities
 from .diagnostics import MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Span
 from .type_adapter import TypeAdapter
-from .values import BOOL, FLOAT, INT, TEXT, VALUE_TYPES, VOID
+from .values import BOOL, FLOAT, INT, NONE, TEXT, VALUE_TYPES, VOID
 
 KNOWN_TYPES = (VOID, *VALUE_TYPES)
 
@@ -45,6 +45,9 @@ ARITHMETIC = ("+", "-", "*", "/")
 EQUALITY = ("==", "!=")
 ORDERING = ("<", "<=", ">", ">=")
 LOGICAL = ("and", "or")
+
+# How many type arguments each built-in type with arguments takes.
+_TYPE_ARGUMENT_COUNTS = {"List": 1, "Option": 1, "Result": 2}
 
 # The identity of every record declaration of the process: nothing but this counter
 # tells two declarations apart, not their name nor their fields (decision 0014, 3).
@@ -92,6 +95,21 @@ class Signature:
 # The item variable shared by the signatures of the functions of List. `unify` returns a
 # fresh mapping for each call, so the same variable can be reused without keeping state.
 _LIST_ITEM = type_model.TypeVariable(0, "T")
+
+# The type variables of the constructors of Option and Result. Each call gets a fresh
+# unification mapping, so the same identifier can be reused in several signatures.
+_OPTION_ITEM = type_model.TypeVariable(0, "T")
+_RESULT_ITEM = type_model.TypeVariable(0, "T")
+_RESULT_ERROR = type_model.TypeVariable(1, "E")
+
+# What a call cannot infer by itself, and how to say it. A type the context expects can always
+# give the answer; without one, the program has to write the type down.
+_UNINFERABLE = {
+    "Ok": ("Cannot infer the error type of this Result",
+           "Write the type of the result explicitly, for example: let r: Result[Int, Text] = Ok(1)."),
+    "Err": ("Cannot infer the item type of this Result",
+            "Write the type of the result explicitly, for example: let r: Result[Int, Text] = Err(\"boom\")."),
+}
 
 
 def _parametric_signature(name: str, params: tuple[tuple[str, type_model.Type], ...],
@@ -146,6 +164,51 @@ BUILTINS: dict[str, Signature] = {
         ),
         _parametric_signature(
             "List.contains", (("xs", type_model.list_of(_LIST_ITEM)), ("x", _LIST_ITEM)), type_model.BOOL,
+        ),
+        # The constructors of Option and Result. The type of the payload comes from the
+        # argument; the other one comes from the type the context expects: the error type of
+        # an Ok, the item type of an Err.
+        _parametric_signature(
+            "Some", (("value", _OPTION_ITEM),), type_model.option_of(_OPTION_ITEM),
+        ),
+        _parametric_signature(
+            "Ok", (("value", _RESULT_ITEM),), type_model.result_of(_RESULT_ITEM, _RESULT_ERROR),
+        ),
+        _parametric_signature(
+            "Err", (("error", _RESULT_ERROR),), type_model.result_of(_RESULT_ITEM, _RESULT_ERROR),
+        ),
+        # The inspection of an Option and a Result. The variants are told apart without
+        # exceptions, and the payload is only read when there is one.
+        _parametric_signature(
+            "Option.is_some", (("value", type_model.option_of(_OPTION_ITEM)),), type_model.BOOL,
+        ),
+        _parametric_signature(
+            "Option.is_none", (("value", type_model.option_of(_OPTION_ITEM)),), type_model.BOOL,
+        ),
+        _parametric_signature(
+            "Option.unwrap_or",
+            (("value", type_model.option_of(_OPTION_ITEM)), ("fallback", _OPTION_ITEM)),
+            _OPTION_ITEM,
+        ),
+        _parametric_signature(
+            "Option.unwrap", (("value", type_model.option_of(_OPTION_ITEM)),), _OPTION_ITEM,
+        ),
+        _parametric_signature(
+            "Result.is_ok", (("value", type_model.result_of(_RESULT_ITEM, _RESULT_ERROR)),), type_model.BOOL,
+        ),
+        _parametric_signature(
+            "Result.is_err", (("value", type_model.result_of(_RESULT_ITEM, _RESULT_ERROR)),), type_model.BOOL,
+        ),
+        _parametric_signature(
+            "Result.unwrap_or",
+            (("value", type_model.result_of(_RESULT_ITEM, _RESULT_ERROR)), ("fallback", _RESULT_ITEM)),
+            _RESULT_ITEM,
+        ),
+        _parametric_signature(
+            "Result.unwrap", (("value", type_model.result_of(_RESULT_ITEM, _RESULT_ERROR)),), _RESULT_ITEM,
+        ),
+        _parametric_signature(
+            "Result.error", (("value", type_model.result_of(_RESULT_ITEM, _RESULT_ERROR)),), _RESULT_ERROR,
         ),
     )
 }
@@ -988,27 +1051,37 @@ class Checker:
 
     def _known_type(self, reference: ast.TypeRef, *, declared_records: bool = False) -> str | None:
         if reference.arguments:
-            if reference.name != "List":
+            arity = _TYPE_ARGUMENT_COUNTS.get(reference.name)
+            if arity is None:
                 self._report(
                     "E2012",
                     f"'{reference.name}' cannot take type arguments",
                     reference.span,
-                    hint="Only 'List' takes a type argument in this version: List[Int].",
+                    hint="Only 'List', 'Option' and 'Result' take type arguments: "
+                         "List[Int], Option[Text], Result[Int, Text].",
                 )
                 return None
-            if len(reference.arguments) != 1:
+            if len(reference.arguments) != arity:
                 self._report(
                     "E2012",
-                    f"'List' takes exactly one type argument, but {len(reference.arguments)} were given",
+                    f"'{reference.name}' takes exactly {arity} type argument{'' if arity == 1 else 's'}, "
+                    f"but {len(reference.arguments)} were given",
                     reference.span,
-                    hint="Write List[Int].",
+                    hint=f"Write {reference.name}[Int]" + (", Text]" if arity == 2 else "]"),
                 )
                 return None
-            element = self._value_type(reference.arguments[0], "A list element",
-                                        declared_records=declared_records)
-            if element is None:
-                return None
-            return f"List[{element}]"
+            what = "A list element" if reference.name == "List" else f"An argument of '{reference.name}'"
+            arguments: list[str] = []
+            for argument in reference.arguments:
+                resolved = self._value_type(argument, what, declared_records=declared_records)
+                if resolved is None:
+                    return None
+                arguments.append(resolved)
+            if reference.name == "Option":
+                return f"Option[{arguments[0]}]"
+            if reference.name == "Result":
+                return f"Result[{arguments[0]}, {arguments[1]}]"
+            return f"List[{arguments[0]}]"
         if reference.name in KNOWN_TYPES:
             return reference.name
         if reference.name in self._type_names:
@@ -1589,14 +1662,23 @@ class Checker:
         if isinstance(node, ast.FieldAccess):
             return self._field_access(node, scope)
         if isinstance(node, ast.Name):
-            return self._name(node, scope)
+            return self._name(node, scope, expected)
         if isinstance(node, ast.Unary):
             return self._unary(node, scope)
         if isinstance(node, ast.Binary):
-            left = self._expression(node.left, scope)
-            # The left side is an expected type for an empty list on the right: `[1] == []`.
-            right_expected = left if isinstance(node.right, ast.ListLiteral) and not node.right.elements else None
-            right = self._expression(node.right, scope, right_expected)
+            if node.operator in EQUALITY and self._is_none_constant(node.right, scope):
+                # `None` is an Option with no value: in a comparison, the other side says
+                # which Option it is, so `x == None` has a type to work with.
+                left = self._expression(node.left, scope)
+                right = self._expression(node.right, scope, left)
+            elif node.operator in EQUALITY and self._is_none_constant(node.left, scope):
+                right = self._expression(node.right, scope)
+                left = self._expression(node.left, scope, right)
+            else:
+                left = self._expression(node.left, scope)
+                # The left side is an expected type for an empty list on the right: `[1] == []`.
+                right_expected = left if isinstance(node.right, ast.ListLiteral) and not node.right.elements else None
+                right = self._expression(node.right, scope, right_expected)
             if left is None or right is None:
                 return None
             # A refined value takes part in operations as a value of its base type: the result of
@@ -1610,7 +1692,7 @@ class Checker:
                     hint=_binary_hint(node.operator, self._root(left), self._root(right)),
                 )
             return result
-        return self._call(node, scope)
+        return self._call(node, scope, expected)
 
     def _list_item(self, expected: str | None) -> str | None:
         """The element type an expected list type fixes, or None if it fixes none."""
@@ -1696,7 +1778,7 @@ class Checker:
             return TEXT
         return None
 
-    def _name(self, node: ast.Name, scope: _Scope) -> str | None:
+    def _name(self, node: ast.Name, scope: _Scope, expected: str | None = None) -> str | None:
         found = scope.find(node.name)
         if found is not None:
             found.references.append(node.span)
@@ -1722,8 +1804,37 @@ class Checker:
                 node.span,
                 hint=f"Call it with parentheses: {node.name}(...)",
             )
+        elif node.name == NONE:
+            # `None` is the absence of a value: an Option without a payload. The type of its
+            # item comes from the context that expects it.
+            return self._none_type(node, expected)
         else:
             self._unknown_variable(node.name, node.span, scope)
+        return None
+
+    def _is_none_constant(self, node: ast.Expr, scope: _Scope) -> bool:
+        """Whether the expression is the `None` constant and not a variable of the program."""
+        return isinstance(node, ast.Name) and node.name == NONE and scope.find(NONE) is None
+
+    def _none_type(self, node: ast.Name, expected: str | None) -> str | None:
+        """The type of `None`: an Option with no payload, whose item type the context fixes."""
+        if expected is None:
+            self._report(
+                "E2011",
+                "Cannot infer the type of None without an expected type",
+                node.span,
+                hint="Write the type of the option explicitly, for example: let x: Option[Int] = None.",
+            )
+            return None
+        model = self._current_type_model(expected)
+        if isinstance(model, type_model.Application) and model.constructor.identity == type_model.OPTION.identity:
+            return expected
+        self._report(
+            "E2011",
+            f"Expected {expected}, found None",
+            node.span,
+            hint="None is an Option without a value: it needs a type of the form Option[Text].",
+        )
         return None
 
     def _unary(self, node: ast.Unary, scope: _Scope) -> str | None:
@@ -1785,7 +1896,7 @@ class Checker:
             for index in range(len(node.arguments))
         ]
 
-    def _call(self, node: ast.Call, scope: _Scope) -> str | None:
+    def _call(self, node: ast.Call, scope: _Scope, expected: str | None = None) -> str | None:
         expectations = self._argument_expectations(node)
         argument_types = [
             self._expression(argument, scope, expected)
@@ -1840,7 +1951,7 @@ class Checker:
             self._check_capability(node)
 
         if signature.parametric is not None:
-            return self._parametric_call(node, argument_types, signature)
+            return self._parametric_call(node, argument_types, signature, expected)
 
         checked_arguments = zip(node.arguments, argument_types, signature.params, strict=True)
         for argument, found, (param_name, expected) in checked_arguments:
@@ -1854,13 +1965,16 @@ class Checker:
         return signature.return_type
 
     def _parametric_call(self, node: ast.Call, argument_types: list[str | None],
-                         signature: Signature) -> str | None:
+                         signature: Signature, expected_result: str | None = None) -> str | None:
         """Checks a call to a built-in whose signature mentions type variables.
 
         Each argument is unified, in order, with its parameter type. Later parameters
         see what earlier ones bound, and the result is the return type after the same
         substitution. When a parameter is already concrete, the ordinary assignment
         rule applies, so a refined element can still widen to its base type.
+
+        The type the context expects is unified first: it fixes the variables that no
+        argument can, such as the error type of an `Ok` or the item type of an `Err`.
         """
         parametric = signature.parametric
         if parametric is None:
@@ -1917,13 +2031,30 @@ class Checker:
         if invalid:
             return None
         result = type_model.substitute(parametric.return_type, mapping)
+        # The type the context expects binds what the arguments could not: the error type of
+        # an `Ok`, the item type of an `Err`. It is used only for what is still free, so a
+        # call whose arguments already decide keeps deciding the same.
+        if expected_result is not None and _contains_type_variable(result):
+            expected_model = self._current_type_model(expected_result)
+            if expected_model is not None:
+                unified = type_model.unify(result, expected_model, mapping)
+                if unified is None:
+                    self._report(
+                        "E2011",
+                        f"Expected {expected_result}, found {type_model.display(result)}",
+                        node.span,
+                        hint=f"This is the result of: {signature.describe()}",
+                    )
+                    return None
+                mapping = unified
+                result = type_model.substitute(parametric.return_type, mapping)
         if _contains_type_variable(result):
-            self._report(
-                "E2011",
-                "Cannot infer the type of the elements of this list",
-                node.span,
-                hint="Write the type of the list explicitly, for example: let xs: List[Int] = [].",
+            what, hint = _UNINFERABLE.get(
+                signature.name,
+                ("Cannot infer the type of the elements of this list",
+                 "Write the type of the list explicitly, for example: let xs: List[Int] = []."),
             )
+            self._report("E2011", what, node.span, hint=hint)
             return None
         return type_model.display(result)
 

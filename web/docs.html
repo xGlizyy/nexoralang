@@ -150,7 +150,7 @@
         </div>
         <div>
           <dt>Version</dt>
-          <dd>0.9, an experimental release before 1.0. The language can still change in incompatible ways.</dd>
+          <dd>0.10, an experimental release before 1.0. The language can still change in incompatible ways.</dd>
         </div>
         <div>
           <dt>Implementation</dt>
@@ -363,7 +363,7 @@ fn main() -&gt; Void {
           <dt><span class="chip chip--in-progress">Available</span></dt>
           <dd>
             <ul>
-              <li>A reference interpreter, version 0.9, that runs a subset of the language from the command line.</li>
+              <li>A reference interpreter, version 0.10, that runs a subset of the language from the command line.</li>
               <li>Rules written in the code and checked by the interpreter: contracts (<code>requires</code>, <code>ensures</code>) and refined types (<code>type Percent = Int where ...</code>), loops that declare why they end (<code>decreases</code>) and what they keep (<code>invariant</code>), each with an optional explanation, and examples in functions (<code>example</code>) checked with <code>nex test</code>.</li>
               <li>Operations on text (<code>Text.length</code>, <code>Text.slice</code>, ordering) and reading numbers with <code>Int.parse</code> and <code>Float.parse</code>, each function stating the requirements it checks.</li>
               <li>Immutable lists (<code>List[Int]</code>, <code>[1, 2, 3]</code>) with <code>List.length</code>, <code>List.get</code>, <code>List.append</code>, <code>List.concat</code> and <code>List.contains</code>, and <code>for</code> loops over them.</li>
@@ -410,9 +410,11 @@ fn main() -&gt; Void {
           <dt><span class="chip chip--in-progress">Passed</span></dt>
           <dd>
             <ul>
-              <li>Interpreter, version 0.8: 2,190 tests passed, 4 skipped and 0 failed, with 94.34% coverage, on Windows 11 with Python 3.12.10 (21 October 2026). Version 0.7: 2,074 passed, 4 skipped and 0 failed, with 94.63% coverage, on the same system (21 October 2026). Version 0.6: 1,600 passed, 4 skipped and 0 failed, on the same system (15 October 2026).</li>
+              <li>Interpreter, version 0.9: 2,278 tests passed, 7 skipped and 0 failed, with 94.59% coverage, on Windows 11 with Python 3.12 (22 October 2026). Version 0.8: 2,190 tests passed, 4 skipped and 0 failed, with 94.34% coverage, on the same system (21 October 2026). Version 0.7: 2,074 passed, 4 skipped and 0 failed, with 94.63% coverage, on the same system (21 October 2026). Version 0.6: 1,600 passed, 4 skipped and 0 failed, on the same system (15 October 2026).</li>
+              <li>Interpreter in the continuous integration, on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13: 2,282 tests passed and 3 skipped on Linux, 2,281 passed and 4 skipped on macOS and 2,278 passed and 7 skipped on Windows, with 0 failed and 94.54% coverage on the first two platforms and 94.59% on the third (22 October 2026). On macOS the test of the limit of memory is skipped, because macOS accepts that limit and does not enforce it.</li>
               <li>Interpreter on Linux (Ubuntu 24.04 under WSL 2): 1,604 tests passed, none skipped and 0 failed with Python 3.12.3, and the same with 3.11.17 and 3.13.16 (17 October 2026). That includes the 4 POSIX tests that Windows skips: a file without read permission, and the memory, CPU and time limits of the playground process.</li>
-              <li>Web server, in the development version: 821 automated tests passed, none skipped and 0 failed in one run on Windows 11 with Node 24.21.0 (21 October 2026), after the site and the playground were brought up to language 0.8. Before that, 818 passed, none skipped and 0 failed in one run with the same system and Node (21 October 2026), after the site and the playground were brought up to language 0.7. Before that, 811 passed, none skipped and 0 failed in one run with the same system and Node (18 October 2026), and before the change that preceded it, 810 passed, none skipped and 0 failed in each of three runs on Windows 11 with Node 24.21.0, and in one run each with Node 24.14.0, 22.23.3 and 22.22.3; with Node 20.6.1 and 22.15.0, 796 passed, 14 were skipped (they need Node 22.22.3 or later in the 22 line, or 24.14.0 or later in the 24 line, the versions accepted by the guards of the integration tests) and 0 failed in one run each (18 October 2026). The server itself requires Node 22.23.2 or later in the 22 line, or 24.18.1 or later in the 24 line; it has not been tested with those exact versions. None of these runs was on Linux. An earlier state of that version, with 567 tests, passed in each of three runs on Windows 11 and on Linux (Ubuntu 24.04 under WSL 2) with Node 24.11.1, the same day. The tests of the container command only analyse its arguments, and the container lifecycle tests use a fake Docker: no real container was run. The database, Google reCAPTCHA and the browser are simulated too.</li>
+              <li>Web server: 826 automated tests passed, none skipped and 0 failed in the continuous integration, on Linux, Windows and macOS with Node 22, 22.23.2, 24 and 24.18.1, and with Node 26 in Linux without blocking the flow (22 October 2026). The package for npm passes 12 tests on the same platforms, with Node 18, 22 and 24.</li>
+              <li>Web server, in the development version: 821 automated tests passed, none skipped and 0 failed in one run on Windows 11 with Node 24.21.0 (21 October 2026), after the site and the playground were brought up to language 0.8. Before that, 818 passed, none skipped and 0 failed in one run with the same system and Node (21 October 2026), after the site and the playground were brought up to language 0.7. Before that, 811 passed, none skipped and 0 failed in one run with the same system and Node (18 October 2026), and before the change that preceded it, 810 passed, none skipped and 0 failed in each of three runs on Windows 11 with Node 24.21.0, and in one run each with Node 24.14.0, 22.23.3 and 22.22.3; with Node 20.6.1 and 22.15.0, 796 passed, 14 were skipped (they need Node 22.22.3 or later in the 22 line, or 24.14.0 or later in the 24 line, the versions accepted by the guards of the integration tests) and 0 failed in one run each (18 October 2026). The server itself requires Node 22.23.2 or later in the 22 line, or 24.18.1 or later in the 24 line: those exact versions are the ones the continuous integration tests. None of those manual runs was on Linux. An earlier state of that version, with 567 tests, passed in each of three runs on Windows 11 and on Linux (Ubuntu 24.04 under WSL 2) with Node 24.11.1, the same day. The tests of the container command only analyse its arguments, and the container lifecycle tests use a fake Docker: no real container was run. The database, Google reCAPTCHA and the browser are simulated too.</li>
             </ul>
           </dd>
         </div>
@@ -429,7 +431,7 @@ fn main() -&gt; Void {
           <dt><span class="chip">Not tested</span></dt>
           <dd>
             <ul>
-              <li>macOS, Linux outside WSL or on other distributions, and Python 3.11 and 3.13 on Windows. A continuous integration workflow for Linux, Windows and macOS with Python 3.11, 3.12 and 3.13 exists, but it has never been run.</li>
+              <li>Linux outside WSL or on other distributions, and a real Mac rather than the macOS runner of the continuous integration. The workflow for Linux, Windows and macOS with Python 3.11, 3.12 and 3.13 runs on every change to <code>main</code>: it passed all its jobs on 22 October 2026.</li>
               <li>The web server against a real MySQL database, real Google reCAPTCHA keys and the headers of the production server.</li>
               <li>Speed and memory use. There are no tests for them.</li>
             </ul>
@@ -447,7 +449,7 @@ fn main() -&gt; Void {
               <li>Arguments and standard input: <code>args()</code> returns the arguments the program was run with, and <code>input()</code> reads one line. Both are allowed by default.</li>
               <li>Files, with explicit permissions: a program declares what it needs with <code>uses read "datos/entradas.txt"</code>, and whoever runs it has to allow it with <code>--allow-read=datos</code>. The paths are checked where they really are, so a <code>..</code> or a symbolic link cannot leave the folder that was allowed.</li>
               <li>The playground and the MCP server never allow files: a program that uses one stops with an error.</li>
-              <li>Every program that was valid in 0.8.0 is still valid and gives the same result. Not tagged or published yet.</li>
+              <li>Every program that was valid in 0.8.0 is still valid and gives the same result. Tagged as <code>v0.9.0</code> and published for npm; the Python package on PyPI is still pending.</li>
             </ul>
           </dd>
         </div>
@@ -589,7 +591,7 @@ fn main() -&gt; Void {
           <summary>Is NEXORA ready for production?</summary>
           <div class="faq__answer">
             <p>
-              <strong>Not yet.</strong> Version 0.9 is an experimental development release. It can be
+              <strong>Not yet.</strong> Version 0.10 is an experimental development release. It can be
               explored and tested, but production suitability has not been established.
             </p>
           </div>

@@ -1,7 +1,8 @@
 """Runtime values of NEXORA and how they are named and printed.
 
 A NEXORA value is represented by a Python `int`, `float`, `bool`, `str`, an
-immutable tuple of values (a list) or a `RecordValue` (a record).
+immutable tuple of values (a list), a `RecordValue` (a record) or a
+`VariantValue` (an `Option` or a `Result`).
 """
 
 from __future__ import annotations
@@ -21,6 +22,13 @@ VOID = "Void"
 
 # The types a variable, a parameter or an expression can have. Void is only a return type.
 VALUE_TYPES = (INT, FLOAT, BOOL, TEXT)
+
+# The variants of Option and Result. The variant is part of the value, so None is
+# never Some(x) and Ok(x) is never Err(x), even with equal payloads.
+SOME = "Some"
+NONE = "None"
+OK = "Ok"
+ERR = "Err"
 
 
 @dataclass(frozen=True)
@@ -44,7 +52,29 @@ class RecordValue:
         raise KeyError(name)
 
 
-Value = int | float | bool | str | RecordValue | tuple["Value", ...]
+@dataclass(frozen=True)
+class VariantValue:
+    """An Option or a Result value: which variant it is, and the payload it carries.
+
+    The variant is part of the value: `None` is never `Some(x)` and `Ok(x)` is never
+    `Err(x)`, even when both payloads are the same value. Equality is by variant and
+    payload, so two equal payloads in different variants are different values.
+
+    The `None` variant carries no payload. NEXORA has no null value, so a payload of
+    `None` cannot be confused with the absence of one.
+    """
+
+    kind: str
+    payload: Value | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind not in (SOME, NONE, OK, ERR):
+            raise ValueError(f"unknown variant: {self.kind!r}")
+        if self.kind == NONE and self.payload is not None:
+            raise ValueError("the None variant cannot carry a payload")
+
+
+Value = int | float | bool | str | RecordValue | VariantValue | tuple["Value", ...]
 
 
 def format_value(value: Value) -> str:
@@ -59,6 +89,10 @@ def format_value(value: Value) -> str:
     if isinstance(value, RecordValue):
         fields = ", ".join(f"{name}: {format_value(item)}" for name, item in value.fields)
         return f"{value.type_name}({fields})"
+    if isinstance(value, VariantValue):
+        if value.kind == NONE:
+            return NONE
+        return f"{value.kind}({format_value(value.payload)})"
     return str(value)
 
 
@@ -72,4 +106,8 @@ def show_value(value: Value) -> str:
     if isinstance(value, RecordValue):
         fields = ", ".join(f"{name}: {show_value(item)}" for name, item in value.fields)
         return f"{value.type_name}({fields})"
+    if isinstance(value, VariantValue):
+        if value.kind == NONE:
+            return NONE
+        return f"{value.kind}({show_value(value.payload)})"
     return format_value(value)

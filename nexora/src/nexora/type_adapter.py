@@ -21,10 +21,9 @@ authority is `resolve`/`refined`, which are pruned by `drop_refined`.
 
 `ANY_VALUE` is a private checker sentinel and is not represented here. A composite
 type enters only through the canonical textual form of the built-in constructors
-this version admits: today `List[T]`, nested as needed. `Option` and `Result`
-stay outside until their syntax and rules exist. A record type is not composite:
-the checker registers it with `register_record`, with the identity of its
-declaration.
+this version admits: today `List[T]`, `Option[T]` and `Result[T, E]`, nested as
+needed. A record type is not composite: the checker registers it with
+`register_record`, with the identity of its declaration.
 """
 
 from __future__ import annotations
@@ -97,9 +96,10 @@ class TypeAdapter:
         callers that may have a missing type use `try_resolve` instead.
 
         A composite type is accepted only in the canonical form `display` produces,
-        today `List[T]` (nested as needed). The text is parsed, not split on commas,
-        so a comma inside a nested argument is never read as two arguments. A
-        malformed, non-canonical or unsupported name is not a type: it returns None.
+        today `List[T]`, `Option[T]` and `Result[T, E]` (nested as needed). The text is
+        parsed, not split on commas, so a comma inside a nested argument is never read
+        as two arguments. A malformed, non-canonical or unsupported name is not a type:
+        it returns None.
         """
         if name is None:
             raise TypeError("None is not a type name")
@@ -144,13 +144,34 @@ class TypeAdapter:
                 break
             if separator != ",":
                 return None, index
-        if name != "List" or len(arguments) != 1:
+            # The canonical text separates the arguments with a comma and a space, as
+            # `display` writes it: `Result[Int, Text]`.
+            index = self._skip_spaces(text, index)
+        if name != "List" and name != "Option" and name != "Result":
+            return None, index
+        expected = {"List": 1, "Option": 1, "Result": 2}[name]
+        if len(arguments) != expected:
             return None, index
         try:
-            return type_model.list_of(arguments[0]), index
+            if name == "List":
+                return type_model.list_of(arguments[0]), index
+            if name == "Option":
+                return type_model.option_of(arguments[0]), index
+            return type_model.result_of(arguments[0], arguments[1]), index
         except ValueError:
             # `List[Void]` is not a type: the model rejects Void as an argument.
             return None, index
+
+    @staticmethod
+    def _skip_spaces(text: str, index: int) -> int:
+        """The first position at or after `index` that is not a space.
+
+        The canonical text of a type separates the arguments with a comma and a space, as
+        `display` writes it, so the spaces are part of the form that is accepted.
+        """
+        while index < len(text) and text[index] == " ":
+            index += 1
+        return index
 
     @staticmethod
     def _parse_name(text: str, index: int) -> tuple[str | None, int]:

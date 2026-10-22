@@ -32,6 +32,7 @@ Superan `nex check` y `nex run` termina con código `0`.
 | [`texts.nex`](texts.nex) | Textos: `Text.length`, `Text.slice` y la búsqueda dentro de un texto, el orden entre textos y la lectura de números con `Int.parse` y `Float.parse`, cada una con sus requisitos |
 | [`lists.nex`](lists.nex) | Listas inmutables `List[T]`: longitud, acceso por índice con su requisito, listas nuevas con `List.append` y `List.concat`, `List.contains`, y un `for` que recorre la lista con su `invariant` |
 | [`records.nex`](records.nex) | Registros nominales inmutables: declaración, construcción con campos nombrados en cualquier orden, lectura de campos y cadenas de acceso, igualdad por valor, un registro dentro de otro y una lista de registros |
+| [`option_result.nex`](option_result.nex) | `Option[T]` y `Result[T, E]`: `Some`, `None`, `Ok` y `Err`, las funciones que reconocen la variante, la lectura del valor con y sin defecto, y la igualdad entre variantes |
 | [`console.nex`](console.nex) | Un programa de consola: los argumentos con los que se ejecutó y la entrada estándar, con `args()` e `input()` |
 | [`files.nex`](files.nex) | Leer y escribir un archivo, con la capacidad que el programa declara (`uses`) y el permiso que hay que conceder (`--allow-read`, `--allow-write`) |
 

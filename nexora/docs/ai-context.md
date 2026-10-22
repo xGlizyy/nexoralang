@@ -41,7 +41,7 @@ fn main() -> Void {
 `nex context program.nex` escribe:
 
 ```text
-program.nex | NEXORA 0.9.0 | 14 lines
+program.nex | NEXORA 0.10.0 | 14 lines
 Static analysis: no errors.
 The program was not run to produce this summary.
 Entry point: main
@@ -129,7 +129,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.context/1",
-  "nexora_version": "0.9.0",
+  "nexora_version": "0.10.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
@@ -244,7 +244,7 @@ fn main() -> Void {
 ```
 
 ```text
-program.nex | NEXORA 0.9.0 | 5 lines
+program.nex | NEXORA 0.10.0 | 5 lines
 Static analysis: 2 errors.
 The program was not run to produce this summary.
 Partial summary: only the code that could be parsed is described.
@@ -307,7 +307,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.symbols/1",
-  "nexora_version": "0.9.0",
+  "nexora_version": "0.10.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
@@ -366,6 +366,18 @@ fn main() -> Void {
     }
   ],
   "builtins": [
+    {
+      "name": "Err",
+      "signature": "fn Err(error: E) -> Result[T, E]",
+      "params": [
+        {
+          "name": "error",
+          "type": "E"
+        }
+      ],
+      "return_type": "Result[T, E]",
+      "contracts": []
+    },
     {
       "name": "Float.can_parse",
       "signature": "fn Float.can_parse(text: Text) -> Bool",
@@ -509,6 +521,146 @@ fn main() -> Void {
         }
       ],
       "return_type": "Int",
+      "contracts": []
+    },
+    {
+      "name": "Ok",
+      "signature": "fn Ok(value: T) -> Result[T, E]",
+      "params": [
+        {
+          "name": "value",
+          "type": "T"
+        }
+      ],
+      "return_type": "Result[T, E]",
+      "contracts": []
+    },
+    {
+      "name": "Option.is_none",
+      "signature": "fn Option.is_none(value: Option[T]) -> Bool",
+      "params": [
+        {
+          "name": "value",
+          "type": "Option[T]"
+        }
+      ],
+      "return_type": "Bool",
+      "contracts": []
+    },
+    {
+      "name": "Option.is_some",
+      "signature": "fn Option.is_some(value: Option[T]) -> Bool",
+      "params": [
+        {
+          "name": "value",
+          "type": "Option[T]"
+        }
+      ],
+      "return_type": "Bool",
+      "contracts": []
+    },
+    {
+      "name": "Option.unwrap",
+      "signature": "fn Option.unwrap(value: Option[T]) -> T",
+      "params": [
+        {
+          "name": "value",
+          "type": "Option[T]"
+        }
+      ],
+      "return_type": "T",
+      "contracts": []
+    },
+    {
+      "name": "Option.unwrap_or",
+      "signature": "fn Option.unwrap_or(value: Option[T], fallback: T) -> T",
+      "params": [
+        {
+          "name": "value",
+          "type": "Option[T]"
+        },
+        {
+          "name": "fallback",
+          "type": "T"
+        }
+      ],
+      "return_type": "T",
+      "contracts": []
+    },
+    {
+      "name": "Result.error",
+      "signature": "fn Result.error(value: Result[T, E]) -> E",
+      "params": [
+        {
+          "name": "value",
+          "type": "Result[T, E]"
+        }
+      ],
+      "return_type": "E",
+      "contracts": []
+    },
+    {
+      "name": "Result.is_err",
+      "signature": "fn Result.is_err(value: Result[T, E]) -> Bool",
+      "params": [
+        {
+          "name": "value",
+          "type": "Result[T, E]"
+        }
+      ],
+      "return_type": "Bool",
+      "contracts": []
+    },
+    {
+      "name": "Result.is_ok",
+      "signature": "fn Result.is_ok(value: Result[T, E]) -> Bool",
+      "params": [
+        {
+          "name": "value",
+          "type": "Result[T, E]"
+        }
+      ],
+      "return_type": "Bool",
+      "contracts": []
+    },
+    {
+      "name": "Result.unwrap",
+      "signature": "fn Result.unwrap(value: Result[T, E]) -> T",
+      "params": [
+        {
+          "name": "value",
+          "type": "Result[T, E]"
+        }
+      ],
+      "return_type": "T",
+      "contracts": []
+    },
+    {
+      "name": "Result.unwrap_or",
+      "signature": "fn Result.unwrap_or(value: Result[T, E], fallback: T) -> T",
+      "params": [
+        {
+          "name": "value",
+          "type": "Result[T, E]"
+        },
+        {
+          "name": "fallback",
+          "type": "T"
+        }
+      ],
+      "return_type": "T",
+      "contracts": []
+    },
+    {
+      "name": "Some",
+      "signature": "fn Some(value: T) -> Option[T]",
+      "params": [
+        {
+          "name": "value",
+          "type": "T"
+        }
+      ],
+      "return_type": "Option[T]",
       "contracts": []
     },
     {

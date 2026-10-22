@@ -106,10 +106,8 @@ def test_the_inspect_schema_defines_the_type_arguments() -> None:
     [
         ("fn f(xs: List[]) -> Void {\n}\n", "needs a type argument"),
         ("fn f(xs: List[Int, Text]) -> Void {\n}\n", "exactly one type argument"),
-        ("fn f(xs: List[Void]) -> Void {\n}\n", "Void cannot be an element"),
-        ("fn f(xs: List[Option[Int]]) -> Void {\n}\n", "cannot take type arguments"),
-        ("fn f(xs: Option[Int]) -> Void {\n}\n", "cannot take type arguments"),
-        ("fn f(xs: Result[Int, Text]) -> Void {\n}\n", "cannot take type arguments"),
+        ("fn f(xs: List[Void]) -> Void {\n}\n", "Void cannot be an argument"),
+        ("fn f(xs: Result[Int]) -> Void {\n}\n", "exactly two type arguments"),
         ("fn f(xs: Foo[Int]) -> Void {\n}\n", "cannot take type arguments"),
         ("fn f(xs: Int[Text]) -> Void {\n}\n", "cannot take type arguments"),
         ("fn f(xs: List[Int) -> Void {\n}\n", "']' to close the type arguments"),

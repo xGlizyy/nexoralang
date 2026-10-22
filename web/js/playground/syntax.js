@@ -10,12 +10,13 @@ export const FALLBACK_LANGUAGE = Object.freeze({
     'and', 'decreases', 'else', 'ensures', 'example', 'false', 'fn', 'for', 'if', 'in', 'invariant', 'let',
     'not', 'or', 'requires', 'return', 'true', 'type', 'uses', 'var', 'where', 'while',
   ],
-  types: ['Void', 'Int', 'Float', 'Bool', 'Text', 'List'],
+  types: ['Void', 'Int', 'Float', 'Bool', 'Text', 'List', 'Option', 'Result'],
   builtins: [
-    'Float.can_parse', 'Float.parse', 'Int.can_parse', 'Int.parse', 'List.append', 'List.concat',
-    'List.contains', 'List.get', 'List.length', 'Text.contains', 'Text.ends_with', 'Text.length',
-    'Text.slice', 'Text.starts_with', 'args', 'input', 'print', 'read_file', 'to_float', 'to_int', 'to_text',
-    'write_file',
+    'Err', 'Float.can_parse', 'Float.parse', 'Int.can_parse', 'Int.parse', 'List.append', 'List.concat',
+    'List.contains', 'List.get', 'List.length', 'Ok', 'Option.is_none', 'Option.is_some', 'Option.unwrap',
+    'Option.unwrap_or', 'Result.error', 'Result.is_err', 'Result.is_ok', 'Result.unwrap', 'Result.unwrap_or',
+    'Some', 'Text.contains', 'Text.ends_with', 'Text.length', 'Text.slice', 'Text.starts_with', 'args',
+    'input', 'print', 'read_file', 'to_float', 'to_int', 'to_text', 'write_file',
   ],
   reserved_words: [
     'ai', 'assert', 'break', 'const', 'continue', 'enum', 'import', 'match', 'pub',

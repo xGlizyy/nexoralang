@@ -20,7 +20,7 @@ from . import ast_nodes as ast
 from .diagnostics import Source
 from .lexer import tokenize
 from .parser import parse_expression
-from .values import INT_MAX, INT_MIN
+from .values import ERR, INT_MAX, INT_MIN, NONE, OK, SOME, Value, VariantValue
 
 # Decision 0011, 6.1. `[0-9]` is ASCII only, unlike `\d`.
 _INTEGER = re.compile(r"-?[0-9]+")
@@ -159,4 +159,27 @@ IMPLEMENTATIONS = {
     "List.append": lambda xs, x: xs + (x,),
     "List.concat": lambda xs, ys: xs + ys,
     "List.contains": lambda xs, x: x in xs,
+    # The inspection of an Option and a Result (decision 0016). The variant is part of the
+    # value, so None is never Some(x) and Ok(x) is never Err(x).
+    "Option.is_some": lambda value: value.kind == SOME,
+    "Option.is_none": lambda value: value.kind == NONE,
+    "Option.unwrap_or": lambda value, fallback: value.payload if value.kind == SOME else fallback,
+    "Result.is_ok": lambda value: value.kind == OK,
+    "Result.is_err": lambda value: value.kind == ERR,
+    "Result.unwrap_or": lambda value, fallback: value.payload if value.kind == OK else fallback,
 }
+
+
+def some(value: Value) -> VariantValue:
+    """`Some(value)`: an Option with a value."""
+    return VariantValue(SOME, value)
+
+
+def ok(value: Value) -> VariantValue:
+    """`Ok(value)`: a Result that succeeded."""
+    return VariantValue(OK, value)
+
+
+def error(value: Value) -> VariantValue:
+    """`Err(value)`: a Result that failed, with the error it failed with."""
+    return VariantValue(ERR, value)

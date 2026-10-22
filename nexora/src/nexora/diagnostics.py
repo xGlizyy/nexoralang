@@ -123,6 +123,9 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E3008": ("Permission denied", RUNTIME),
     "E3009": ("No more input", RUNTIME),
     "E3010": ("File error", RUNTIME),
+    "E3011": ("Option has no value", RUNTIME),
+    "E3012": ("Result is an error", RUNTIME),
+    "E3013": ("Result is not an error", RUNTIME),
 
     "E4001": ("Precondition violated", CONTRACT),
     "E4002": ("Postcondition violated", CONTRACT),

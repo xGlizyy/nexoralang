@@ -116,6 +116,10 @@ def test_the_built_in_functions_are_exactly_the_documented_ones():
         "Int.can_parse", "Int.parse", "Float.can_parse", "Float.parse",
         # The functions of List (D08): immutable, they build a new value or read one.
         "List.length", "List.get", "List.append", "List.concat", "List.contains",
+        # The constructors of Option and Result, and their inspection (decision 0016).
+        "Some", "Ok", "Err",
+        "Option.is_some", "Option.is_none", "Option.unwrap_or", "Option.unwrap",
+        "Result.is_ok", "Result.is_err", "Result.unwrap_or", "Result.unwrap", "Result.error",
         # The input and the files (decision 0015). The arguments and the standard input
         # need no declaration; the files do.
         "args", "input", "read_file", "write_file",
