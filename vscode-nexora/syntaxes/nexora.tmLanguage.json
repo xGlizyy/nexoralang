@@ -77,6 +77,10 @@
           "match": "\\b(fn|let|var|return|if|else|while|for|in|requires|ensures|example|invariant|decreases|uses|type|where)\\b"
         },
         {
+          "name": "keyword.other.nexora",
+          "match": "\\b(import|pub)\\b"
+        },
+        {
           "name": "keyword.operator.logical.nexora",
           "match": "\\b(and|or|not)\\b"
         },
@@ -90,7 +94,7 @@
       "patterns": [
         {
           "name": "invalid.deprecated.reserved.nexora",
-          "match": "\\b(ai|assert|break|const|continue|enum|import|match|pub|test|tool|try)\\b"
+          "match": "\\b(ai|assert|break|const|continue|enum|match|test|tool|try)\\b"
         }
       ]
     },
