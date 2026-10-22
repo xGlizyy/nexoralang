@@ -29,13 +29,13 @@ export const roadmap = [
     status: 'in-progress',
     available: [
       'A language specification, version 0.10, that describes exactly what the interpreter does.',
-      'Fourteen accepted design records, each with its reasons, the alternatives it rejected and what it does not guarantee.',
+      'Fifteen accepted design records, each with its reasons, the alternatives it rejected and what it does not guarantee.',
       'A broader design draft of where the language is going.',
       'Lists and `for` (0.7.0), and records (0.8.0): the first compound types of the language.',
       'Arguments, standard input and files with explicit permissions (0.9.0).',
+      'Optional values (`Option`, `Result`), for the absence of a value and for errors without exceptions (0.10.0).',
     ],
     next: [
-      'Optional values (`Option`, `Result`), for the absence of a value and for errors without exceptions.',
       'Modules and imports.',
     ],
   },
@@ -74,15 +74,15 @@ export const roadmap = [
   },
   {
     title: 'Playground and ecosystem',
-    summary: 'The playground can run real programs but is off by default; the repository is public and the npm package is published.',
+    summary: 'The playground can run real programs but is off by default; the repository is public and the packages are published.',
     status: 'in-progress',
     available: [
       'A playground that runs each program with the real interpreter, in a separate process with time and output limits. It is off unless the server enables it explicitly.',
       'Accounts with an email address, and optionally Google or GitHub.',
       'A public repository, with its history and its issue tracker.',
+      'The packages `nexora-lang`, published for npm and for Python.',
     ],
     next: [
-      'Publishing the Python package on PyPI. The npm package is published.',
       'Checking the isolation of the playground containers with real Docker. Until then it stays off on a public site.',
     ],
   },

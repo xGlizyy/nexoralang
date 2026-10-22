@@ -368,6 +368,7 @@ fn main() -&gt; Void {
               <li>Operations on text (<code>Text.length</code>, <code>Text.slice</code>, ordering) and reading numbers with <code>Int.parse</code> and <code>Float.parse</code>, each function stating the requirements it checks.</li>
               <li>Immutable lists (<code>List[Int]</code>, <code>[1, 2, 3]</code>) with <code>List.length</code>, <code>List.get</code>, <code>List.append</code>, <code>List.concat</code> and <code>List.contains</code>, and <code>for</code> loops over them.</li>
               <li>Records: types the program declares, with immutable fields (<code>type Point = { x: Int, y: Int }</code>), built by name and compared by value. Their identity is the identity of their declaration, so two records with the same fields are still different types.</li>
+              <li>Optional values (<code>Option[T]</code>) and results (<code>Result[T, E]</code>), to say that there is no value or that something failed, without exceptions.</li>
               <li>A language specification for that subset, and a broader design draft.</li>
               <li>A <a href="playground.html">playground</a> that runs code in the browser with that interpreter. It is off unless the server enables it explicitly, and it must stay off on a public site until the isolation of its containers has been checked.</li>
               <li>A short <a href="guide.html">language guide</a>.</li>
@@ -388,7 +389,7 @@ fn main() -&gt; Void {
           <dt><span class="chip">Planned</span></dt>
           <dd>
             <ul>
-              <li>The rest of the language: collections and <code>for</code>, reading input, modules.</li>
+              <li>The rest of the language: modules and imports.</li>
               <li>More developer tools.</li>
               <li>Optional AI integrations, currently at the research stage.</li>
             </ul>
@@ -443,13 +444,24 @@ fn main() -&gt; Void {
 
       <dl class="status-list">
         <div>
+          <dt><span class="chip chip--in-progress">0.10.0</span></dt>
+          <dd>
+            <ul>
+              <li><code>Option[T]</code>: <code>Some(value)</code> and <code>None</code>, to say that there is no value without exceptions.</li>
+              <li><code>Result[T, E]</code>: <code>Ok(value)</code> and <code>Err(error)</code>, to say that something failed, keeping the error as it was.</li>
+              <li>The variants are told apart with functions: <code>Option.is_some</code>, <code>Option.is_none</code>, <code>Result.is_ok</code> and <code>Result.is_err</code>. The value is read with <code>Option.unwrap_or</code> and <code>Result.unwrap_or</code>, or without a fallback with <code>Option.unwrap</code>, <code>Result.unwrap</code> and <code>Result.error</code>, which stop the program with a diagnostic.</li>
+              <li>Every program that was valid in 0.9.0 is still valid and gives the same result. Tagged as <code>v0.10.0</code> and published for npm and for Python.</li>
+            </ul>
+          </dd>
+        </div>
+        <div>
           <dt><span class="chip chip--in-progress">0.9.0</span></dt>
           <dd>
             <ul>
               <li>Arguments and standard input: <code>args()</code> returns the arguments the program was run with, and <code>input()</code> reads one line. Both are allowed by default.</li>
               <li>Files, with explicit permissions: a program declares what it needs with <code>uses read "datos/entradas.txt"</code>, and whoever runs it has to allow it with <code>--allow-read=datos</code>. The paths are checked where they really are, so a <code>..</code> or a symbolic link cannot leave the folder that was allowed.</li>
               <li>The playground and the MCP server never allow files: a program that uses one stops with an error.</li>
-              <li>Every program that was valid in 0.8.0 is still valid and gives the same result. Tagged as <code>v0.9.0</code> and published for npm; the Python package on PyPI is still pending.</li>
+              <li>Every program that was valid in 0.8.0 is still valid and gives the same result. Tagged as <code>v0.9.0</code> and published for npm.</li>
             </ul>
           </dd>
         </div>
@@ -460,7 +472,7 @@ fn main() -&gt; Void {
               <li>Records: types the program declares, with immutable fields (<code>type Point = { x: Int, y: Int }</code>). They are built by name (<code>Point(x: 1, y: 2)</code>), their fields are read with a dot (<code>p.x</code>), and two values of the same record are compared by value.</li>
               <li>A record is nominal: its identity is the identity of its declaration, not its name nor its fields. Two records with the same fields are still different types.</li>
               <li>A record never changes: there is no way to assign to one of its fields.</li>
-              <li>Every program that was valid in 0.7.0 is still valid and gives the same result. Not tagged or published yet.</li>
+              <li>Every program that was valid in 0.7.0 is still valid and gives the same result. It was never tagged or published.</li>
             </ul>
           </dd>
         </div>
@@ -471,7 +483,7 @@ fn main() -&gt; Void {
               <li>Immutable lists <code>List[T]</code>: literals such as <code>[1, 2, 3]</code>, nested lists and structural equality. Every element has the same type.</li>
               <li>Functions on lists: <code>List.length</code>, <code>List.get</code>, <code>List.append</code>, <code>List.concat</code> and <code>List.contains</code>. <code>List.get</code> declares the indexes it accepts, and an index out of range stops the program.</li>
               <li><code>for x in xs</code> walks a list. It can declare invariants, and it needs no measure: it ends with the list.</li>
-              <li>Every program that was valid in 0.6.0 is still valid and gives the same result. Not tagged or published yet.</li>
+              <li>Every program that was valid in 0.6.0 is still valid and gives the same result. It was never tagged or published.</li>
             </ul>
           </dd>
         </div>
@@ -572,12 +584,11 @@ fn main() -&gt; Void {
     <section id="follow">
       <h2>Following the project</h2>
       <p data-no-github>
-        A public source repository is planned but not available yet. When it opens, the link will appear
-        here and in the site navigation.
+        The source repository is public, but the links to it stay hidden in this site.
       </p>
       <p><a data-github hidden rel="noopener">Follow the development on GitHub</a></p>
       <p>
-        Until then, this page and the <a href="index.html#roadmap">roadmap</a> are updated as the project advances.
+        This page and the <a href="index.html#roadmap">roadmap</a> are updated as the project advances.
       </p>
     </section>
 
