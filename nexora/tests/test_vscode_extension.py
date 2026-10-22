@@ -111,3 +111,12 @@ def test_the_extension_has_what_the_marketplace_asks_for():
         assert manifest.get(field), field
     assert manifest["engines"]["vscode"]
     assert manifest["repository"]["url"]
+
+
+def test_the_documentation_names_the_publisher_that_the_manifest_declares():
+    """The README tells which publisher is needed; it must be the real one."""
+    manifest = _manifest()
+    readme = (EXTENSION / "README.md").read_text(encoding="utf-8")
+    assert f"`{manifest['publisher']}`" in readme
+    # The full name of the extension in the marketplace is publisher.name.
+    assert f"{manifest['publisher']}.{manifest['name']}" in readme

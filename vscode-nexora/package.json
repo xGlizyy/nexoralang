@@ -3,7 +3,7 @@
   "displayName": "NEXORA",
   "description": "The NEXORA programming language: syntax, diagnostics, navigation and formatting.",
   "version": "0.10.0",
-  "publisher": "nexora",
+  "publisher": "nexoralang",
   "license": "MIT",
   "icon": "images/icon.png",
   "galleryBanner": {

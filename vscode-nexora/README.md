@@ -80,8 +80,9 @@ npm run publish:marketplace -- --pat <EL_TOKEN>
 
 Hacen falta dos cosas que solo puede hacer quien publica:
 
-1. **Ser dueño del publicador** `nexora` en el marketplace (o cambiar `"publisher"` en
-   `package.json` por el que ya tengas).
+1. **Ser dueño del publicador** `nexoralang` en el marketplace (o cambiar `"publisher"` en
+   `package.json` por el que ya tengas). Con el publicador `nexoralang` y el nombre `nexora`, la
+   extensión es `nexoralang.nexora` en el marketplace.
 2. **Un token de acceso** del marketplace: en <https://marketplace.visualstudio.com/manage/publishers>
    se crea, con el alcance *Manage extensions*. Se pasa con `--pat` para que no quede en el
    historial del shell; `vsce publish` lo pide de forma interactiva si no se le da.
