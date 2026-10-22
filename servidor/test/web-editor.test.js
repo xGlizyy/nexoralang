@@ -82,15 +82,17 @@ describe('the extension in the landing', () => {
 });
 
 describe('the command that installs the extension', () => {
-  test('it is the one of the marketplace, which works from any directory', () => {
-    // `code --install-extension <publisher>.<name>`: it does not depend on where the person is.
-    const command = `code --install-extension ${manifest.publisher}.${manifest.name}`;
+  test('it is the one of the package, with the name and the version of the manifest', () => {
+    // `code --install-extension vscode-nexora/nexora-<version>.vsix`: it is relative, so it only
+    // works from the root of the repository. When the extension is published in the marketplace,
+    // this becomes `code --install-extension <publisher>.<name>`, which works from anywhere.
+    const command = `code --install-extension vscode-nexora/${manifest.name}-${manifest.version}.vsix`;
     assert.ok(index.includes(command), command);
   });
 
   test('the logo carries that command', () => {
     const contenedor = index.slice(index.indexOf('class="hero__vscode"'), index.indexOf('class="hero__vscode"') + 300);
-    const command = `code --install-extension ${manifest.publisher}.${manifest.name}`;
+    const command = `code --install-extension vscode-nexora/${manifest.name}-${manifest.version}.vsix`;
     assert.match(contenedor, new RegExp(`data-command="${command}"`));
   });
 });
