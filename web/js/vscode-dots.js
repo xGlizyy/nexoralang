@@ -87,33 +87,164 @@ function buildDots(svg, points) {
  * @param {{x: number, y: number}[]} points
  * @param {SVGElement[]} dots
  */
+
 function trackPointer(container, svg, points, dots) {
-  const lit = new Set();
-  container.addEventListener('pointermove', (event) => {
+  const REACH = 22;       // Radius of influence of the pointer.
+  const MAX_PUSH = 6;     // Maximum separation of the dots.
+  const SPRING = 0.16;    // Spring force returning to origin.
+  const DAMPING = 0.72;   // Damping of the movement.
+
+  const particles = points.map((point) => ({
+    x: point.x,
+    y: point.y,
+    vx: 0,
+    vy: 0
+  }));
+
+  let pointer = null;
+  let frame = 0;
+  let reduced = false;
+
+  function animate() {
+    let moving = false;
+
     const box = svg.getBoundingClientRect();
+
     if (!box.width || !box.height) return;
-    const x = ((event.clientX - box.left) / box.width) * LOGO.size;
-    const y = ((event.clientY - box.top) / box.height) * LOGO.size;
-    const near = new Set();
-    points.forEach((point, index) => {
-      const distance = Math.hypot(point.x - x, point.y - y);
-      if (distance >= REACH) return;
-      const dot = dots[index];
-      // The closer the dot is, the stronger the light on it.
-      dot.style.setProperty('--near', ((1 - distance / REACH) ** 2).toFixed(3));
-      near.add(dot);
-    });
-    for (const dot of lit) {
-      if (near.has(dot)) continue;
-      dot.style.removeProperty('--near');
-      lit.delete(dot);
+
+    for (let i = 0; i < particles.length; i++) {
+      const particle = particles[i];
+      const origin = points[i];
+
+      // The spring always pulls the particle back to its origin.
+      let ax = (origin.x - particle.x) * SPRING;
+      let ay = (origin.y - particle.y) * SPRING;
+
+      let near = 0;
+
+      if (pointer) {
+        const scaleX = LOGO.size / box.width;
+        const scaleY = LOGO.size / box.height;
+
+        const dx = particle.x - pointer.x;
+        const dy = particle.y - pointer.y;
+        const distance = Math.hypot(dx, dy);
+
+        if (distance < REACH) {
+          near = (1 - distance / REACH) ** 2;
+
+          // If the pointer coincides exactly with a dot,
+          // use a safe direction to avoid division by zero.
+          const safeDistance = Math.max(distance, 0.001);
+          const force = near * MAX_PUSH * 0.18;
+
+          ax += (dx / safeDistance) * force;
+          ay += (dy / safeDistance) * force;
+        }
+      }
+
+      particle.vx = (particle.vx + ax) * DAMPING;
+      particle.vy = (particle.vy + ay) * DAMPING;
+
+      particle.x += particle.vx;
+      particle.y += particle.vy;
+
+      // Stop the animation when motion becomes imperceptible.
+      if (
+        Math.abs(particle.x - origin.x) > 0.015 ||
+        Math.abs(particle.y - origin.y) > 0.015 ||
+        Math.abs(particle.vx) > 0.015 ||
+        Math.abs(particle.vy) > 0.015
+      ) {
+        moving = true;
+      } else {
+        particle.x = origin.x;
+        particle.y = origin.y;
+        particle.vx = 0;
+        particle.vy = 0;
+      }
+
+      dots[i].setAttribute("cx", particle.x.toFixed(3));
+      dots[i].setAttribute("cy", particle.y.toFixed(3));
+      dots[i].style.setProperty("--near", near.toFixed(3));
     }
-    for (const dot of near) lit.add(dot);
+
+    // Request another frame only while there is interaction
+    // or the dots are still returning to their positions.
+    if (pointer || moving) {
+      frame = requestAnimationFrame(animate);
+    }
+  }
+
+  function startAnimation() {
+    if (!frame) {
+      frame = requestAnimationFrame(animate);
+    }
+  }
+
+  function stopAnimation() {
+    if (frame) {
+      cancelAnimationFrame(frame);
+      frame = 0;
+    }
+  }
+
+  function setReduced(value) {
+    if (value === reduced) return;
+    reduced = value;
+    if (reduced) {
+      // Reset all particles to their origins immediately.
+      for (let i = 0; i < particles.length; i++) {
+        particles[i].x = points[i].x;
+        particles[i].y = points[i].y;
+        particles[i].vx = 0;
+        particles[i].vy = 0;
+        dots[i].setAttribute("cx", points[i].x.toFixed(3));
+        dots[i].setAttribute("cy", points[i].y.toFixed(3));
+        dots[i].style.removeProperty("--near");
+      }
+      stopAnimation();
+      pointer = null;
+    }
+  }
+
+  // Listen for prefers-reduced-motion changes at runtime.
+  const mediaQuery = matchMedia('(prefers-reduced-motion: reduce)');
+  const handleChange = (event) => setReduced(event.matches);
+  mediaQuery.addEventListener('change', handleChange);
+
+  // Initial state.
+  setReduced(mediaQuery.matches);
+
+  container.addEventListener("pointermove", (event) => {
+    if (reduced) return;
+
+    const box = svg.getBoundingClientRect();
+
+    if (!box.width || !box.height) return;
+
+    pointer = {
+      x: (event.clientX - box.left) * (LOGO.size / box.width),
+      y: (event.clientY - box.top) * (LOGO.size / box.height)
+    };
+
+    startAnimation();
   });
-  container.addEventListener('pointerleave', () => {
-    for (const dot of lit) dot.style.removeProperty('--near');
-    lit.clear();
+
+  container.addEventListener("pointerleave", () => {
+    pointer = null;
+    startAnimation();
   });
+
+  // Clean up on unmount (if the container is removed).
+  const observer = new MutationObserver(() => {
+    if (!document.body.contains(container)) {
+      mediaQuery.removeEventListener('change', handleChange);
+      stopAnimation();
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 /**
