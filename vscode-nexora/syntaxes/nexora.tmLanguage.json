@@ -1,0 +1,120 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/vscode-textmate-grammars/master/tmLanguage.schema.json",
+  "name": "NEXORA",
+  "scopeName": "source.nexora",
+  "fileTypes": ["nex"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#types" },
+    { "include": "#builtins" },
+    { "include": "#keywords" },
+    { "include": "#reserved" },
+    { "include": "#functions" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.double-slash.nexora", "match": "//.*$" }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.nexora",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "name": "constant.character.escape.nexora", "match": "\\\\." },
+            { "name": "invalid.illegal.unknown-escape.nexora", "match": "\\\\[^nt\"\\\\{]" }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.nexora",
+          "match": "\\b[0-9]+\\.[0-9]+(?:[eE][+-]?[0-9]+)?\\b|\\b[0-9]+[eE][+-]?[0-9]+\\b"
+        },
+        { "name": "constant.numeric.integer.nexora", "match": "\\b[0-9]+\\b" }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.primitive.nexora",
+          "match": "\\b(Int|Float|Bool|Text|Void)\\b"
+        },
+        {
+          "name": "support.type.compound.nexora",
+          "match": "\\b(List|Option|Result)\\b(?=\\s*\\[)"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.function.nexora",
+          "match": "\\b(Text|Int|Float|List|Option|Result)\\.[a-z_]+\\b"
+        },
+        {
+          "name": "support.function.nexora",
+          "match": "\\b(print|to_text|to_float|to_int|args|input|read_file|write_file)\\b"
+        },
+        {
+          "name": "support.class.nexora",
+          "match": "\\b(Some|None|Ok|Err)\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.nexora",
+          "match": "\\b(fn|let|var|return|if|else|while|for|in|requires|ensures|example|invariant|decreases|uses|type|where)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.nexora",
+          "match": "\\b(and|or|not)\\b"
+        },
+        {
+          "name": "constant.language.boolean.nexora",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+    "reserved": {
+      "patterns": [
+        {
+          "name": "invalid.deprecated.reserved.nexora",
+          "match": "\\b(ai|assert|break|const|continue|enum|import|match|pub|test|tool|try)\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "entity.name.function.nexora",
+          "match": "\\b[A-Z][A-Za-z0-9_]*(?=\\s*\\()"
+        },
+        {
+          "name": "variable.parameter.nexora",
+          "match": "(?<=\\(|,\\s)[a-z][A-Za-z0-9_]*(?=\\s*:)"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.nexora",
+          "match": "->|==|!=|<=|>=|[-+*/=<>]"
+        },
+        { "name": "punctuation.separator.nexora", "match": "[,:.]" },
+        { "name": "punctuation.accessor.nexora", "match": "[\\[\\](){}]" }
+      ]
+    }
+  }
+}

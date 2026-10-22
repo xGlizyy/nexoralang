@@ -13,6 +13,7 @@ Lo que distingue a NEXORA: los requisitos de un programa se escriben en el propi
 - [npm/](npm/): paquete de npm (`nexora-lang`) que instala el comando `nex`. Necesita Python 3.11 o superior en la máquina. Publicado en PyPI y en npm.
 - [web/](web/): página web del lenguaje, con el playground (`/playground`) y una guía (`/guide`).
 - [servidor/](servidor/): servidor Node.js que sirve la web, las cuentas de usuario (MySQL) y la API del playground, que ejecuta cada programa con el intérprete real en un proceso aparte. Solo se ha probado en local: [nexora/docs/playground.md](nexora/docs/playground.md).
+- [vscode-nexora/](vscode-nexora/): extensión de Visual Studio Code del lenguaje: resaltado, diagnósticos, navegación y formateador. Su servidor de lenguaje y su formateador son los del propio núcleo ([decisión 0017](nexora/docs/decisions/0017-un-editor-la-extension-de-vs-code.md)).
 
 Herramientas para editores y agentes de IA (análisis en JSON, `nex context`, `nex symbols`, API de Python y servidor MCP opcional): [nexora/docs/ai-tooling.md](nexora/docs/ai-tooling.md). NEXORA no llama a ningún modelo de IA.
 

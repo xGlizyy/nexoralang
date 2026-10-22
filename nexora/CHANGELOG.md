@@ -232,6 +232,34 @@ realmente implementado, las partes D01 (modelo de tipos), D08 (listas) y D09 (`f
   que devuelve un valor, hace falta un `return` después.
 - No hay `for` sobre rangos o `Text`, ni genéricos de usuario.
 
+## Sin publicar — editor
+
+Una extensión para Visual Studio Code, con su servidor de lenguaje y su formateador, todavía sin
+publicar en el mercado de Visual Studio Code. No cambian el lenguaje: solo le dan un editor. La
+extensión se distribuye por separado, como un `.vsix`; el paquete que se publica en PyPI y en npm
+no cambia.
+
+### Añadido
+
+- **La extensión de VS Code** (`vscode-nexora/`): resaltado de sintaxis para los archivos `.nex`, con
+  una gramática escrita sobre el léxico real, y el reconocimiento automático de esos archivos.
+- **El servidor de lenguaje** (`nexora/src/nexora/lsp.py`): habla LSP por la entrada y la salida
+  estándar y responde con el mismo análisis que usa la línea de órdenes. Ofrece diagnósticos (los
+  de `nex check`, con su código y su sugerencia), autocompletado, hover con el tipo de un valor y la
+  firma de una función, ir a definición, referencias, renombrado, los símbolos del documento y la
+  ayuda de firma. Lo ejecuta `python -m nexora.lsp`, o la orden `nexora-lsp`.
+- **El formateador del lenguaje** (`nexora/src/nexora/formatter.py`): reescribe un programa con la
+  forma canónica, sobre los tokens del léxico, así que no cambia lo que significa. El editor lo usa
+  al formatear el documento o una selección, y opcionalmente al guardar.
+- **Las pruebas** (`tests/test_lsp.py`, `tests/test_formatter.py`, `tests/test_vscode_extension.py`):
+  que los diagnósticos del servidor son los de la línea de órdenes, que el formateador no cambia el
+  significado de un programa y que el manifiesto y la gramática de la extensión siguen al léxico.
+
+### Documentación
+
+- Nueva [ADR 0017](docs/decisions/0017-un-editor-la-extension-de-vs-code.md), que explica la
+  decisión y por qué el servidor y el formateador son del propio lenguaje.
+
 ## Sin publicar — servidor y web
 
 Cambios del servidor web (`servidor/`) y de la web (`web/`) posteriores al tag `v0.6.0`, todavía sin

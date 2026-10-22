@@ -1,0 +1,117 @@
+{
+  "name": "nexora",
+  "displayName": "NEXORA",
+  "description": "The NEXORA programming language: syntax, diagnostics, navigation and formatting.",
+  "version": "0.10.0",
+  "publisher": "nexora",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "nexora",
+    "nex"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xGlizyy/nexoralang.git"
+  },
+  "homepage": "https://github.com/xGlizyy/nexoralang",
+  "bugs": {
+    "url": "https://github.com/xGlizyy/nexoralang/issues"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:nexora",
+    "workspaceContains:**/*.nex"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "nexora",
+        "aliases": [
+          "NEXORA",
+          "nexora"
+        ],
+        "extensions": [
+          ".nex"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nexora",
+        "scopeName": "source.nexora",
+        "path": "./syntaxes/nexora.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "NEXORA",
+      "properties": {
+        "nexora.python.path": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "The Python that runs the language server. Empty means the `python` of the PATH. It needs the `nexora` package: `python -m pip install -e nexora`."
+        },
+        "nexora.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "How much the language server writes to the output panel."
+        },
+        "nexora.format.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Format NEXORA documents with the formatter of the language."
+        },
+        "nexora.format.onSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Format a NEXORA document every time it is saved."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "nexora.check",
+        "title": "NEXORA: Check the current file"
+      },
+      {
+        "command": "nexora.restartServer",
+        "title": "NEXORA: Restart the language server"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "nexora.check",
+          "when": "editorLangId == nexora",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.24.0",
+    "typescript": "^5.4.0"
+  }
+}

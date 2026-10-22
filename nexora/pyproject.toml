@@ -36,6 +36,7 @@ dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6", "jsonschema>=4", "mcp>=2,<3"]
 [project.scripts]
 nex = "nexora.cli:main"
 nex-mcp = "nexora.mcp_server:main"
+nexora-lsp = "nexora.lsp:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
