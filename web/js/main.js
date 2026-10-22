@@ -3,6 +3,7 @@ import { mountCodeWindows } from './code-window.js';
 import { mountPlayground } from './playground.js';
 import { setupDocsPages } from './docs-pages.js';
 import { setupSiteHeader } from './site-header.js';
+import { mountVscodeDots } from './vscode-dots.js';
 
 document.documentElement.classList.add('js');
 
@@ -151,6 +152,7 @@ function setupHeadingEffects() {
 
 setupSiteHeader();
 mountCodeWindows();
+mountVscodeDots();
 setupHeadingEffects();
 mountPlayground(playgroundRuntime);
 renderRoadmap();

@@ -21,7 +21,12 @@ function renderCode(code) {
     .join('');
 }
 
-async function copyText(text) {
+/**
+ * Copies text to the clipboard. Returns whether it could be copied.
+ * @param {string} text
+ * @returns {Promise<boolean>}
+ */
+export async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
     return true;

@@ -29,7 +29,7 @@ export const roadmap = [
     status: 'in-progress',
     available: [
       'A language specification, version 0.10, that describes exactly what the interpreter does.',
-      'Fifteen accepted design records, each with its reasons, the alternatives it rejected and what it does not guarantee.',
+      'Seventeen accepted design records, each with its reasons, the alternatives it rejected and what it does not guarantee.',
       'A broader design draft of where the language is going.',
       'Lists and `for` (0.7.0), and records (0.8.0): the first compound types of the language.',
       'Arguments, standard input and files with explicit permissions (0.9.0).',
@@ -49,7 +49,7 @@ export const roadmap = [
       'Contracts (`requires`, `ensures`), refined types and examples checked with `nex test`.',
       'Operations on text (`Text.length`, `Text.slice`, ordering) and reading numbers with `Int.parse`, each with the requirements it checks.',
       'Diagnostics with a stable code, a position and a hint, as text or JSON.',
-      '2,329 automated tests. The continuous integration runs them on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13, and the ones a platform cannot run are skipped there.',
+      '2,361 automated tests. The continuous integration runs them on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13, and the ones a platform cannot run are skipped there.',
     ],
     next: [
       'Measuring its speed: it has never been benchmarked.',
@@ -64,12 +64,13 @@ export const roadmap = [
       '`nex run`, `nex check` and `nex test`.',
       '`nex inspect`, `nex symbols` and `nex context`: the program as versioned JSON, with a schema for each format.',
       'A language guide, a full reference and this documentation.',
+      'A Visual Studio Code extension with a language server: the diagnostics it shows are the ones `nex check` gives, with the same codes and the same hints.',
+      'A formatter for the language, which rewrites the shape of a program without changing what it means.',
       'An optional MCP server for AI assistants. It is experimental.',
       'Continuous integration: every change to `main` runs the tests on Linux, Windows and macOS, with Python 3.11 to 3.13, and the tests of the npm package and of the server.',
     ],
     next: [
-      'Editor integration through a language server.',
-      'A formatter.',
+      'Editor integration for other editors, through the same language server.',
     ],
   },
   {

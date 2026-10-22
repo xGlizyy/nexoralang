@@ -2488,3 +2488,114 @@ code[data-lang="sh"] .line::before { content: "$"; width: auto; color: var(--acc
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+/* ---------------------------------------------------------------------------
+   The extension for Visual Studio Code: the logo in the hero, drawn in dots,
+   and the command that installs it.
+
+   The Visual Studio Code logo is a trademark of Microsoft. It is used here only
+   to point at the editor the extension is for.
+   --------------------------------------------------------------------------- */
+
+/* The logo of the editor, next to the install window. */
+.hero__vscode {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: min(640px, 100%);
+  margin: 44px auto 0;
+}
+
+/* The logo: a grid of dots, and the button that copies the command. */
+.vscode-dots {
+  display: grid;
+  place-items: center;
+  width: clamp(104px, 11vw, 150px);
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.vscode-dots:hover { transform: scale(1.06); }
+
+.vscode-dots:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 12px;
+}
+
+.vscode-dots__svg { width: 100%; height: 100%; overflow: visible; }
+
+/* The dots are the logo of Visual Studio Code, in the blues of its own icon. */
+.vscode-dots__dot {
+  fill: color-mix(in srgb, #1f9cf0, #b3e5fc calc(var(--near, 0) * 100%));
+  opacity: calc(0.9 + 0.1 * var(--near, 0));
+  r: calc(1.15px + 0.6px * var(--near, 0));
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: r 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), fill 0.3s, opacity 0.3s;
+}
+
+/* Before the logo is shown, the dots are not there yet. */
+.vscode-dots--pending .vscode-dots__dot { opacity: 0; transform: scale(0.1); }
+
+/* And they come in one after another when the logo appears. */
+[data-vscode-dots].is-visible .vscode-dots__dot {
+  animation: vscode-dot-in 0.55s cubic-bezier(0.2, 0.9, 0.2, 1) backwards;
+  animation-delay: calc(var(--i) * 2ms);
+}
+
+@keyframes vscode-dot-in {
+  from { opacity: 0; transform: scale(0.1); }
+}
+
+/* The little note that says the command is already in the clipboard. It comes out above the logo
+   and is as wide as it, and it floats: it must not move the logo. */
+.vscode-dots__hint {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: rgba(10, 10, 18, 0.94);
+  color: var(--text);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  text-align: center;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+}
+
+.vscode-dots__hint.is-shown { opacity: 1; transform: translate(-50%, 0); }
+
+/* On a wide screen the logo sits beside the install window, at its height. */
+@media (min-width: 1101px) {
+  .hero__stage {
+    display: grid;
+    grid-template-columns: 1fr min(640px, 100%) 1fr;
+    column-gap: 20px;
+    align-items: center;
+  }
+  .install__window { grid-column: 2; }
+  .hero__vscode {
+    grid-column: 3;
+    justify-self: start;
+    width: auto;
+    margin: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vscode-dots--pending .vscode-dots__dot { opacity: 0.9; transform: none; }
+  [data-vscode-dots].is-visible .vscode-dots__dot { animation: none; }
+  .vscode-dots:hover { transform: none; }
+}
