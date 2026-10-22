@@ -23,6 +23,7 @@ una decisión se revisa, se añade otra que la sustituye y se indica en ambas.
 | [0015](0015-entrada-argumentos-archivos-y-permisos.md) | Entrada, argumentos, archivos y permisos: `args()`, `input()`, `read_file()`, `write_file()`, declaraciones `uses` y permisos concedidos por quien ejecuta | Aceptada | No |
 | [0016](0016-option-y-result.md) | `Option[T]` y `Result[T, E]`: `Some`, `None`, `Ok` y `Err`, con funciones que reconocen la variante y leen el valor, sin excepciones | Aceptada | No |
 | [0017](0017-un-editor-la-extension-de-vs-code.md) | Un editor: la extensión de VS Code, con su servidor de lenguaje y su formateador, sobre el analizador del propio lenguaje | Aceptada | No |
+| [0018](0018-modulos-e-importaciones.md) | Módulos e importaciones: `import "ruta/fichero.nex"`, un espacio de nombres por archivo, privacidad con `pub` e importaciones circulares prohibidas | Aceptada | No |
 
 ## Posibles cambios incompatibles en el futuro
 

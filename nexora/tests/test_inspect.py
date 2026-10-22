@@ -30,15 +30,17 @@ PROGRAM = (
 # Every node kind and its fields, in order. This is the contract of schema version 2:
 # removing or renaming anything here requires a new schema version.
 EXPECTED_FIELDS = {
-    "Program": ["kind", "span", "types", "functions", "records", "uses"],
-    "TypeDecl": ["kind", "span", "name", "name_span", "base", "condition", "message"],
-    "RecordDecl": ["kind", "span", "name", "name_span", "fields"],
+    "Program": ["kind", "span", "types", "functions", "records", "uses", "imports"],
+    "ImportDecl": ["kind", "span", "path", "path_span"],
+    "TypeDecl": ["kind", "span", "name", "name_span", "base", "condition", "message", "public"],
+    "RecordDecl": ["kind", "span", "name", "name_span", "fields", "public"],
     "FieldDecl": ["kind", "span", "name", "name_span", "type"],
     "UsesDecl": ["kind", "span", "capability", "path", "path_span"],
-    "Function": ["kind", "span", "name", "name_span", "params", "return_type", "contracts", "body", "examples"],
+    "Function": ["kind", "span", "name", "name_span", "params", "return_type", "contracts", "body",
+                 "examples", "public"],
     "Example": ["kind", "span", "condition", "message"],
     "Param": ["kind", "span", "name", "name_span", "type"],
-    "TypeRef": ["kind", "span", "name", "arguments"],
+    "TypeRef": ["kind", "span", "name", "arguments", "qualifier"],
     "Contract": ["kind", "span", "clause", "condition", "message"],
     "Block": ["kind", "span", "statements"],
     "Let": ["kind", "span", "name", "name_span", "declared_type", "value"],
@@ -57,7 +59,7 @@ EXPECTED_FIELDS = {
     "Binary": ["kind", "span", "operator", "operator_span", "left", "right", "type"],
     "Group": ["kind", "span", "expression", "type"],
     "Call": ["kind", "span", "callee", "callee_span", "arguments", "qualifier", "type"],
-    "RecordConstruction": ["kind", "span", "name", "name_span", "fields", "type"],
+    "RecordConstruction": ["kind", "span", "name", "name_span", "fields", "qualifier", "type"],
     "FieldInitializer": ["kind", "span", "name", "name_span", "value"],
     "FieldAccess": ["kind", "span", "target", "name", "name_span", "type"],
 }
@@ -127,11 +129,12 @@ def test_every_node_has_exactly_the_documented_fields():
         "}\n"
     )
     uses = 'uses read "datos/entradas.txt"\n'
+    imports = 'import "app/models.nex"\n'
     extra = (
         'fn extra(n: Small) -> Int {\n    example extra(1) == 2, "One more"\n'
         "    let xs: List[Int] = [1, 2]\n    return (n) + 1\n}\n"
     )
-    for node in walk(inspect(refined + records + uses + PROGRAM + "\n" + extra)):
+    for node in walk(inspect(imports + refined + records + uses + PROGRAM + "\n" + extra)):
         seen.setdefault(node["kind"], list(node))
     assert_fields(seen)
     assert set(seen) == set(EXPECTED_FIELDS) - {"Assign", "FieldAssign"}

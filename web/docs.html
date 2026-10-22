@@ -363,7 +363,7 @@ fn main() -&gt; Void {
           <dt><span class="chip chip--in-progress">Available</span></dt>
           <dd>
             <ul>
-              <li>A reference interpreter, version 0.10, that runs a subset of the language from the command line.</li>
+              <li>A reference interpreter, version 0.11, that runs a subset of the language from the command line.</li>
               <li>Rules written in the code and checked by the interpreter: contracts (<code>requires</code>, <code>ensures</code>) and refined types (<code>type Percent = Int where ...</code>), loops that declare why they end (<code>decreases</code>) and what they keep (<code>invariant</code>), each with an optional explanation, and examples in functions (<code>example</code>) checked with <code>nex test</code>.</li>
               <li>Operations on text (<code>Text.length</code>, <code>Text.slice</code>, ordering) and reading numbers with <code>Int.parse</code> and <code>Float.parse</code>, each function stating the requirements it checks.</li>
               <li>Immutable lists (<code>List[Int]</code>, <code>[1, 2, 3]</code>) with <code>List.length</code>, <code>List.get</code>, <code>List.append</code>, <code>List.concat</code> and <code>List.contains</code>, and <code>for</code> loops over them.</li>

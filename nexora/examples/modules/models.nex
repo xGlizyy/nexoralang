@@ -1,0 +1,30 @@
+// A module: one file of a project, imported by the program that runs.
+//
+// Everything a module declares is private, unless it is marked with `pub`: only the
+// public names are visible from another file. A module has no `main` of its own: it is
+// part of a program, not a program by itself.
+
+pub type Point = { x: Int, y: Int }
+
+// A refined type of this module, usable by whoever imports it as any other refined type.
+pub type Percent = Int where value >= 0 and value <= 100
+
+// The area of a rectangle.
+pub fn area(p: Point) -> Int {
+    return p.x * p.y
+}
+
+// The perimeter, built from the same record.
+pub fn perimeter(p: Point) -> Int {
+    return 2 * (p.x + p.y)
+}
+
+// Private: this file uses it, and no other file can. Inside the module it is called by
+// its own name, without the module in front.
+fn scale(p: Point, factor: Int) -> Point {
+    return Point(x: p.x * factor, y: p.y * factor)
+}
+
+pub fn double(p: Point) -> Point {
+    return scale(p, 2)
+}

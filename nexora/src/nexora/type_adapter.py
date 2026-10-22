@@ -175,12 +175,21 @@ class TypeAdapter:
 
     @staticmethod
     def _parse_name(text: str, index: int) -> tuple[str | None, int]:
-        """Read a NEXORA name at `index`, or return `(None, index)`."""
+        """Read a NEXORA name at `index`, or return `(None, index)`.
+
+        A name of another module is written with its module in front, as `models.Point`
+        (decision 0018, 5): one dot, and the model resolves the qualified name exactly as
+        the analysis returns it, which is also qualified.
+        """
         if index >= len(text) or text[index] not in _NAME_START:
             return None, index
         end = index + 1
         while end < len(text) and text[end] in _NAME_PART:
             end += 1
+        if end + 1 < len(text) and text[end] == "." and text[end + 1] in _NAME_START:
+            end += 2
+            while end < len(text) and text[end] in _NAME_PART:
+                end += 1
         return text[index:end], end
 
     def _resolve_name(self, name: str) -> type_model.Type | None:

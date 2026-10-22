@@ -128,6 +128,10 @@ class Interpreter:
         what the program may do besides computing: its arguments, its input and the files it may
         touch. Without one, the program can only compute and print (decision 0015)."""
         self._functions = checked.functions
+        # id(call node) -> the name of the function it calls, qualified with its module. A
+        # call written inside a module uses the bare name, and the module is what tells it
+        # apart from the same name in another module (decision 0018, 5).
+        self._targets = checked.targets
         # Refined type -> the declarations whose conditions its values satisfy, root first.
         self._refined = {name: refined.chain for name, refined in checked.refined.items()}
         # Record type -> its declaration. The identity comes from here: the interpreter
@@ -529,9 +533,13 @@ class Interpreter:
         """`Point(x: 1, y: 2)`: builds a record value.
 
         The fields are kept in the order of the declaration, not in the order they were
-        written, so two records built the same way are the same value.
+        written, so two records built the same way are the same value. A record of another
+        module is built with its module in front, and it is looked up qualified
+        (decision 0018, 5).
         """
-        record = self._records[node.name]
+        record = self._records[self._targets.get(
+            id(node), f"{node.qualifier}.{node.name}" if node.qualifier else node.name
+        )]
         values = {field.name: self._evaluate(field.value, environment) for field in node.fields}
         fields = tuple((name, values[name]) for name, _ in record.fields)
         return RecordValue(record.identity, record.name, fields)
@@ -612,7 +620,12 @@ class Interpreter:
 
     def _call(self, node: ast.Call, environment: Environment) -> Value | None:
         arguments = [self._evaluate(argument, environment) for argument in node.arguments]
-        function = self._functions.get(node.callee)
+        # A call written inside a module uses the bare name, and the module is what tells
+        # it apart from the same name in another module: the analysis already resolved it
+        # (decision 0018, 5), so the text is only a fallback for what it did not resolve.
+        # The same name tells apart a check of a refined type, `Percent(x)`, of a module.
+        target = self._targets.get(id(node), node.callee)
+        function = self._functions.get(target)
         if function is not None:
             if id(node) not in self._own_calls:
                 return self._invoke(function, arguments, node.span)
@@ -623,7 +636,7 @@ class Interpreter:
             result = self._invoke(function, arguments, node.span)
             record.status, record.value = "returned", result
             return result
-        if node.callee in self._refined:
+        if target in self._refined:
             return self._refine(node, arguments[0])
 
         # The functions of a type (decision 0011): their requires first, then the operation.
@@ -845,7 +858,7 @@ def unparse(node: ast.Expr) -> str:
         return "[" + ", ".join(unparse(element) for element in node.elements) + "]"
     if isinstance(node, ast.RecordConstruction):
         fields = ", ".join(f"{field.name}: {unparse(field.value)}" for field in node.fields)
-        return f"{node.name}({fields})"
+        return f"{node.qualifier + '.' if node.qualifier else ''}{node.name}({fields})"
     if isinstance(node, ast.FieldAccess):
         return f"{unparse(node.target)}.{node.name}"
     return f"{node.callee}({', '.join(unparse(argument) for argument in node.arguments)})"

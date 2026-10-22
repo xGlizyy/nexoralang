@@ -77,7 +77,7 @@ nex run examples/hello.nex
 Resultado esperado:
 
 ```text
-NEXORA 0.10.0
+NEXORA 0.11.0
 Hello from NEXORA
 ```
 
@@ -105,11 +105,11 @@ python -m pip install build
 python -m build
 ```
 
-Esto crea dos archivos en `dist/`: `nexora_lang-0.10.0-py3-none-any.whl` y `nexora_lang-0.10.0.tar.gz`. El
+Esto crea dos archivos en `dist/`: `nexora_lang-0.11.0-py3-none-any.whl` y `nexora_lang-0.11.0.tar.gz`. El
 primero puede instalarse en cualquier entorno con Python 3.11 o superior:
 
 ```bash
-python -m pip install dist/nexora_lang-0.10.0-py3-none-any.whl
+python -m pip install dist/nexora_lang-0.11.0-py3-none-any.whl
 ```
 
 El *wheel* contiene solo el intérprete y el comando `nex`. Los ejemplos, la documentación y las
@@ -145,8 +145,8 @@ Desde el directorio `npm/`:
 
 ```bash
 npm test                 # copia el intérprete al paquete y ejecuta las pruebas del lanzador
-npm pack                 # genera nexora-lang-0.10.0.tgz
-npm install -g ./nexora-lang-0.10.0.tgz
+npm pack                 # genera nexora-lang-0.11.0.tgz
+npm install -g ./nexora-lang-0.11.0.tgz
 nex --version
 ```
 

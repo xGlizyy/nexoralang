@@ -35,6 +35,8 @@ Superan `nex check` y `nex run` termina con código `0`.
 | [`option_result.nex`](option_result.nex) | `Option[T]` y `Result[T, E]`: `Some`, `None`, `Ok` y `Err`, las funciones que reconocen la variante, la lectura del valor con y sin defecto, y la igualdad entre variantes |
 | [`console.nex`](console.nex) | Un programa de consola: los argumentos con los que se ejecutó y la entrada estándar, con `args()` e `input()` |
 | [`files.nex`](files.nex) | Leer y escribir un archivo, con la capacidad que el programa declara (`uses`) y el permiso que hay que conceder (`--allow-read`, `--allow-write`) |
+| [`modules/main.nex`](modules/main.nex) | Módulos: un archivo que importa a otro (`import "models.nex"`), y cómo se usan sus nombres desde el programa: cualificados (`models.Point`, `models.area(p)`), con `pub` para lo que el módulo hace visible |
+| [`modules/models.nex`](modules/models.nex) | El módulo que importa el anterior: un registro, un tipo refinado, funciones públicas y una función privada. Se ejecuta solo y termina con `1`: un módulo no es un programa, no tiene `main` |
 
 ## Inválidos (`invalid/`)
 

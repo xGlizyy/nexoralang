@@ -370,8 +370,8 @@ def test_qualified_calls_in_every_position():  # [11]
 
 @pytest.mark.parametrize("call, label, hint, note", [
     ("Texto.length(t)", "There is no type named 'Texto'", "Did you mean 'Text'?", None),
-    ("geometry.area(t)", "There is no type named 'geometry'", None,
-     "Before the '.' goes the name of a type, such as Text. Modules are not part of NEXORA yet."),
+    # `geometry.area(t)`: a name in lower case before the '.' can only be a module, so it
+    # is not this error any more but E2027. It is asserted in tests/test_modules.py.
     ("Percent.parse(t)", "'Percent' has no functions of its own",
      "A value of Percent can be passed to the functions of its base type, Int.", None),
     ("Bool.parse(t)", "'Bool' has no function named 'parse'", None, "Bool has no functions yet."),
@@ -457,8 +457,9 @@ def test_variables_named_like_the_types_stay_valid():  # [17]
 
 
 OLD_PROGRAMS = sorted(path for path in (ROOT / "examples").rglob("*.nex")
-                      if path.name not in ("texts.nex", "parse_number.nex", "lists.nex", "records.nex",
-                                           "option_result.nex"))
+                       if "modules" not in path.parts
+                       and path.name not in ("texts.nex", "parse_number.nex", "lists.nex", "records.nex",
+                                             "option_result.nex"))
 
 
 @pytest.mark.parametrize("path", OLD_PROGRAMS, ids=lambda path: path.name)

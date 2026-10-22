@@ -123,6 +123,10 @@ Un código no cambia nunca de significado. Si deja de usarse se retira, no se re
 | `E2022` | Unsupported loop clause | Un `for` declara `decreases`, pero recorre una lista finita y no lleva medida | Quita el `decreases`; si necesitas invariantes, escríbelos con `invariant` |
 | `E2026` | Missing capability declaration | Se lee o se escribe un archivo sin declararlo con `uses` ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Decláralo al principio del archivo: `uses read "datos/entradas.txt"` |
 | `E2025` | Cannot reassign a field | Se asigna a un campo de un registro, que es inmutable ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) | Construye otro registro con el valor que quieres |
+| `E2027` | Unknown module | Se usa el nombre de un módulo que el programa no importa ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) | Decláralo al principio del archivo: `import "app/models.nex"` |
+| `E2028` | Private name | Se usa de otro módulo un nombre que ese módulo no declara con `pub` ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) | Escribe `pub` delante de la función o del tipo en el archivo que lo declara |
+| `E2029` | Circular import | Los módulos se importan unos a otros, de forma que ninguno puede analizarse antes que el que necesita ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) | Rompe el ciclo: mueve lo que los dos comparten a un tercer módulo que ambos importen |
+| `E2030` | Module name clash | Dos archivos distintos se importan como el mismo módulo, porque tienen el mismo nombre ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) | Renombra uno de los dos archivos: el módulo toma su nombre de su archivo |
 
 ### De tipos
 
@@ -238,7 +242,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.10.0",
+  "nexora_version": "0.11.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

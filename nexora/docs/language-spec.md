@@ -1,7 +1,7 @@
 # Especificación del lenguaje NEXORA
 
-- **Versión de la especificación:** 0.10
-- **Implementación de referencia:** `nexora` 0.10.0 (este repositorio, directorio `nexora/`)
+- **Versión de la especificación:** 0.11
+- **Implementación de referencia:** `nexora` 0.11.0 (este repositorio, directorio `nexora/`)
 - **Estado:** describe exactamente lo que el intérprete hace hoy.
 
 Este documento es la referencia del lenguaje: define la sintaxis y el significado de cada
@@ -70,15 +70,15 @@ Palabras clave:
 
 ```
 fn   let   var   return   if   else   while   for   in   true   false   and   or   not
-requires   ensures   example   invariant   decreases   type   where   uses
+requires   ensures   example   invariant   decreases   type   where   uses   import   pub
 ```
 
 Palabras reservadas para versiones futuras. No pueden usarse como nombres y usarlas produce el
 error `E1103`:
 
 ```
-ai       assert   break    const    continue enum     import
-match    pub      test     tool     try
+ai       assert   break    const    continue enum
+match    test     tool     try
 ```
 
 No son palabras reservadas, sino nombres predefinidos: los tipos `Int`, `Float`, `Bool`, `Text` y
@@ -128,18 +128,19 @@ analizador nunca ignora un carácter desconocido.
 En notación EBNF. `NEWLINE` es uno o más finales de línea seguidos.
 
 ```ebnf
-program    = { NEWLINE } { ( type_decl | record_decl | uses_decl | function ) { NEWLINE } } ;
+program    = { NEWLINE } { import_decl } { ( type_decl | record_decl | uses_decl | function ) { NEWLINE } } ;
 
-type_decl  = "type" NAME "=" type "where" expression [ explanation ] end ;
-record_decl = "type" NAME "=" "{" record_fields "}" ;
+import_decl = "import" TEXT ;
+type_decl  = [ "pub" ] "type" NAME "=" type "where" expression [ explanation ] end ;
+record_decl = [ "pub" ] "type" NAME "=" "{" record_fields "}" ;
 record_fields = record_field { "," record_field } ;
 record_field = NAME ":" type ;
 uses_decl  = "uses" ( "read" | "write" ) TEXT ;
-function   = "fn" NAME "(" [ params ] ")" "->" type { NEWLINE }
+function   = [ "pub" ] "fn" NAME "(" [ params ] ")" "->" type { NEWLINE }
              "{" { NEWLINE } { contract } { statement end } "}" ;
 params     = param { "," param } ;
 param      = NAME ":" type ;
-type       = NAME [ "[" type "]" ] ;
+type       = [ NAME "." ] NAME [ "[" type "]" ] ;
 contract   = ( "requires" | "ensures" | "example" ) expression [ explanation ] end ;
 explanation = "," TEXT ;
 
@@ -178,8 +179,13 @@ record_value = NAME ":" expression ;
 
 Notas:
 
-- En el nivel superior del archivo solo hay funciones y declaraciones de tipo, en cualquier orden.
-  Un tipo no puede declararse dentro de una función (`E1101`).
+- En el nivel superior del archivo solo hay importaciones, funciones y declaraciones de tipo. Las
+  importaciones van **antes** que cualquier otra declaración, una por línea; en cualquier otro lugar
+  son el error `E1101`. Un tipo no puede declararse dentro de una función (`E1101`).
+- Un archivo es un módulo (sección 7.6). `import "app/models.nex"` declara que el programa usa el
+  archivo `app/models.nex`, y `pub` marca lo que un módulo hace visible desde fuera: `pub fn`,
+  `pub type` (tanto los tipos refinados como los registros) y nada más. Todo lo demás es privado
+  del archivo que lo declara.
 - Una explicación (`explanation`) es un único texto literal no vacío, de una sola línea. Un texto
   vacío, formado solo por espacios o con un salto de línea (`\n`) es el error `E1101`.
 - Las cláusulas `requires`, `ensures` y `example` van **al principio del cuerpo** de una función,
@@ -193,8 +199,10 @@ Notas:
 - No se admite una coma final en las listas de parámetros ni de argumentos.
 - En una llamada cualificada (`NAME "." NAME "("`), el `.` va pegado a los dos nombres: sin espacios
   ni saltos de línea a sus lados (`E1101`). Entre el segundo nombre y el `(` puede haber espacios,
-  como en cualquier llamada. Que el primer nombre sea un tipo con esa función lo comprueba el análisis
-  estático (`E2008`, sección 8.1).
+  como en cualquier llamada. Que el primer nombre sea un tipo con esa función, o un módulo que haga
+  pública esa función, lo comprueba el análisis estático (`E2008` y `E2027`, secciones 8.1 y 7.6).
+  Si el segundo nombre va seguido de `(` y de campos con nombre, lo que se construye es un registro
+  del módulo: `models.Point(x: 1, y: 2)`.
 - Un registro se declara con `type` y unas llaves: `type Point = { x: Int, y: Int }`. Las llaves van
   en la misma línea que el `=`, y dentro de ellas se permite un salto de línea entre campos. Un
   registro tiene al menos un campo y no admite coma final (`E1101`).
@@ -214,10 +222,11 @@ Notas:
 - Límites de tamaño: los paréntesis, los operadores unarios, los bloques, las cadenas `else if` y los
   tipos pueden anidarse hasta 64 niveles, y un árbol de expresión puede tener hasta 256 niveles (por
   ejemplo, una suma de 256 términos). Superarlos es el error `E1105`.
-- Un tipo se escribe `NAME` o `NAME[T]`. En esta versión solo `List` admite argumentos de tipo, y
-  exactamente uno. `List` sin argumento no es un tipo (`E2012`); `List[]`, `List[Int, Text]`,
-  `List[Void]`, `Option[...]`, `Result[...]`, `Foo[...]` e `Int[...]` son errores de sintaxis
-  (`E1101`). El anidamiento cuenta para el límite de 64 niveles.
+- Un tipo se escribe `NAME`, `MODULO "." NAME`, o cualquiera de los dos con argumentos entre
+  corchetes. En esta versión solo `List` admite argumentos de tipo, y exactamente uno; un tipo de
+  otro módulo no admite ninguno, porque no puede ser `List` (`E2012`). `List` sin argumento no es un
+  tipo (`E2012`); `List[]`, `List[Int, Text]`, `List[Void]`, `Option[...]`, `Result[...]`, `Foo[...]`
+  e `Int[...]` son errores de sintaxis (`E1101`). El anidamiento cuenta para el límite de 64 niveles.
 
 ## 4. Tipos de datos
 
@@ -906,6 +915,87 @@ ejecución `E3004`; el caso habitual es una recursividad que nunca alcanza su ca
 expresiones muy profundamente anidadas el límite efectivo puede ser menor; el error es el mismo.
 Para repetir algo muchas veces se usa un bucle (sección 9.5): sus vueltas no son llamadas y no
 cuentan para este límite.
+
+### 7.6 Módulos e importaciones
+
+Un archivo `.nex` es un módulo (decisión 0018). El programa que se ejecuta es el archivo que se
+pasa a `nex run` (el **archivo de entrada**), y los demás archivos que importa forman parte del
+mismo programa: se analizan y se ejecutan con él.
+
+**Declarar un módulo.** La primera línea de un archivo puede ser una importación, y antes de
+cualquier otra declaración:
+
+```nexora
+import "app/models.nex"
+```
+
+- La ruta es un literal de texto y tiene que acabar en `.nex`; si no, es el error `E1101`.
+- La ruta es **relativa al archivo que la contiene**, no a la carpeta desde la que se ejecuta el
+  comando: el programa depende de dónde está, no de dónde se arranca.
+- Las importaciones van antes que cualquier otra declaración, una por línea. En otro lugar, o
+  después de una función, son el error `E1101`.
+- Un archivo se lee una sola vez, aunque lo importen varios. Las importaciones circulares son el
+  error `E2029`; dos archivos con el mismo nombre en carpetas distintas son el error `E2030`,
+  porque el módulo toma su nombre de su archivo. Un archivo que no existe o no se puede leer es el
+  error `E0001`, en la línea del `import`.
+
+**El nombre de un módulo.** Es el nombre de su archivo sin la extensión: `app/models.nex` es el
+módulo `models`. No hay alias (`as`) ni importación selectiva: se importa el archivo entero y se
+usan sus nombres cualificados con el módulo delante.
+
+**Lo que un módulo hace visible.** Todo lo que un módulo declara es **privado**, salvo lo que
+lleva `pub`: `pub fn`, `pub type` (tanto los tipos refinados como los registros). El archivo de
+entrada es la excepción: sus funciones y sus tipos son suyos y no llevan `pub`. Usar desde otro
+archivo un nombre que su módulo no hace público es el error `E2028`.
+
+**Cómo se usan los nombres de otro módulo.** Cualificados, con el módulo delante:
+
+```nexora
+import "app/models.nex"
+
+fn main() -> Void {
+    let p: models.Point = models.Point(x: 3, y: 4)
+    print(models.area(p))
+}
+```
+
+| Escritura | Significado | Error si no existe |
+|-----------|-------------|--------------------|
+| `models.area(p)` | Llama a la función `area` que el módulo `models` hace pública | `E2008`, o `E2028` si es privada |
+| `models.Point` | El tipo `Point` del módulo `models`, en una anotación o como argumento | `E2012` |
+| `models.Point(x: 1, y: 2)` | Construye un valor del registro `Point` del módulo `models` | `E2023`, o `E2028` si es privado |
+| `models` antes del `.` sin ser un módulo importado | — | `E2027` |
+
+El punto va pegado a los dos nombres, como en una llamada o en la lectura de un campo: `models.Point`
+es correcto y `models . Point` es el error `E1101`.
+
+Dentro de un módulo sus funciones se llaman por su nombre simple: una función de `models` escribe
+`area(p)`, no `models.area(p)`. Los nombres de dos módulos distintos no se confunden porque cada
+uno declara los suyos con su propio módulo delante, y un registro conserva su identidad propia
+aunque dos módulos declaren un `Point` (sección 4.6).
+
+**Cuándo se leen los módulos.** Cuando se analiza el programa, no cuando se ejecuta: los módulos
+son parte del programa (sección 10.1). Un módulo se analiza siempre después de los que importa, de
+forma que los nombres que usa ya existen cuando se comprueba su cuerpo.
+
+**Lo que el análisis y las herramientas hacen con los módulos.** `nex check`, `nex run` y `nex test`
+analizan el archivo de entrada y todos los que importa, y cada error se muestra con el archivo que
+lo tiene. `nex test` solo evalúa los ejemplos del archivo de entrada: los de un módulo no se
+ejecutan. `nex inspect`, `nex symbols` y `nex context` describen el archivo de entrada; los nombres
+que vienen de un módulo aparecen en él como cualificados.
+
+**Lo que esta versión no admite.**
+
+- Alias (`import "app/models.nex" as m`) ni importación selectiva
+  (`import { area } from ...`).
+- Importar de fuera del árbol de carpetas del programa: no hay ruta de búsqueda, ni paquetes, ni
+  versiones. Dos módulos de dos proyectos distintos no se pueden combinar.
+- Reexportar: un módulo no puede hacer públicos los nombres de otro.
+- Importar desde el playground, desde el servidor MCP o desde un editor sin ficheros: esos
+  entornos reciben el programa como texto y no tienen archivos al lado, así que un `import` es el
+  error `E0001`.
+- Las capacidades (`uses`, sección 8.3) no se heredan: cada archivo declara las suyas, y un
+  módulo que lee un archivo tiene que declararlo él mismo.
 
 ## 8. Funciones integradas
 
@@ -1647,6 +1737,10 @@ Un código nunca cambia de significado. Si deja de usarse se retira, no se reuti
 | `E2024` | Invalid field access | `type` | Se lee un campo de un valor que no es un registro, o de un registro que no tiene ese campo (sección 4.6) |
 | `E2025` | Cannot reassign a field | `semantic` | Se asigna a un campo de un registro, que es inmutable (sección 4.6) |
 | `E2026` | Missing capability declaration | `semantic` | Se lee o se escribe un archivo sin declararlo con `uses` (sección 8.3) |
+| `E2027` | Unknown module | `semantic` | Se usa el nombre de un módulo que el programa no importa (sección 7.6) |
+| `E2028` | Private name | `semantic` | Se usa de otro módulo un nombre que ese módulo no declara con `pub` (sección 7.6) |
+| `E2029` | Circular import | `semantic` | Los módulos se importan unos a otros, de forma que ninguno puede analizarse antes que el que necesita (sección 7.6) |
+| `E2030` | Module name clash | `semantic` | Dos archivos distintos se importan como el mismo módulo, porque tienen el mismo nombre (sección 7.6) |
 | `E3001` | Division by zero | `runtime` | División por cero |
 | `E3002` | Integer overflow | `runtime` | Un resultado `Int` fuera del rango de 64 bits |
 | `E3003` | Float result out of range | `runtime` | Un resultado `Float` demasiado grande |
@@ -1692,7 +1786,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.10.0",
+  "nexora_version": "0.11.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -1907,7 +2001,11 @@ Son limitaciones reales de esta versión, no fallos:
 - La entrada y los archivos son los de la sección 8.3. No se puede leer «hasta el final» de la
   entrada estándar sin parar (`input()` falla con `E3009`), no hay directorios ni archivos que no
   sean de texto, y no hay red, procesos ni variables de entorno.
-- Un programa es un único archivo: no hay módulos ni importaciones.
+- Un programa es el archivo de entrada más los archivos que importa (sección 7.6). No hay alias de
+  módulo, ni importación selectiva, ni ruta de búsqueda fuera del árbol de carpetas del programa,
+  ni paquetes, ni versiones, ni reexportación. Un módulo se ejecuta solo como parte de otro: no hay
+  un comando que arranque un módulo directamente, y `nex test` solo evalúa los ejemplos del archivo
+  de entrada.
 - Los contratos no se verifican estáticamente (sección 9.3). De los tipos refinados, solo se
   comprueban sin ejecutar las constantes.
 - La condición de un tipo refinado no puede llamar a funciones del programa.
@@ -1932,8 +2030,8 @@ Nada de lo que sigue funciona hoy. Es la dirección del diseño, tomada del borr
     `Option[T]` y `Result[T, E]` (sección 4.7) ya existen, pero no los genéricos de usuario
     (`fn f[T]`), las funciones de orden superior ni las funciones como valores.
 - Verificación estática de contratos, y bloques de prueba (`test`) fuera de las funciones.
-- Módulos e importaciones. Los efectos declarados (`uses`) ya existen para los archivos
-  (sección 8.3), pero no hay un sistema de efectos para el resto.
+- Un sistema de efectos más amplio. Los efectos declarados (`uses`) ya existen para los archivos
+  (sección 8.3), pero un módulo no declara qué necesita y el resto del lenguaje no tiene efectos.
 - La red, los procesos externos y las variables de entorno.
 - Características relacionadas con IA (`ai fn`, `tool fn`). No existe ninguna integración con
   modelos de IA: lo que hay son las representaciones estructuradas (`nex inspect`, diagnósticos en

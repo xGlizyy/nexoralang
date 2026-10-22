@@ -21,6 +21,51 @@ Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
 | Documentación | Cambios relevantes en la documentación |
 | Limitaciones | Restricciones conocidas que conviene tener presentes |
 
+## 0.11.0 — Módulos e importaciones (sin publicar)
+
+Esta versión **no está etiquetada ni publicada**: es el estado del repositorio. Implementa la
+[decisión 0018](docs/decisions/0018-modulos-e-importaciones.md): un programa puede estar hecho de
+varios archivos.
+
+### Añadido
+
+- **`import "ruta/fichero.nex"`**, al principio del archivo. La ruta se resuelve respecto al archivo
+  que importa, no respecto al directorio desde el que se ejecuta el comando.
+- **Un espacio de nombres por módulo**, con el nombre del fichero sin la extensión:
+  `models.area(p)`, `models.Point(x: 1, y: 2)`. Los registros de un módulo son nominales: un `Point`
+  de un módulo no es el `Point` de otro.
+- **`pub`**: todo lo que declara un módulo es privado salvo lo marcado con `pub`.
+- **Diagnósticos nuevos**: `E2027` (módulo desconocido), `E2028` (nombre privado), `E2029`
+  (importación circular) y `E2030` (dos módulos con el mismo nombre).
+- **`nex symbols` y `nex context`** incluyen los nombres y las funciones de los módulos importados,
+  con un campo nuevo `file` al final de cada objeto: el archivo que lo declara, relativo al programa
+  y con `/`. `nex inspect` pasa a `nexora.inspect/2`, con `imports`, `public` y `qualifier`.
+- **Un ejemplo nuevo**, `examples/modules/`, con un programa y el módulo que importa.
+
+### Corregido
+
+Antes de etiquetarse, en el desarrollo de esta misma versión:
+
+- Un módulo que importaba el programa principal no se detectaba como ciclo en el primer paso: el
+  programa se leía dos veces y el error salía como `a.nex -> b.nex -> a.nex -> b.nex`, sobre una
+  copia del programa. Ahora sale `a.nex -> b.nex -> a.nex`, en la importación de `b.nex`.
+- Los módulos se mostraban con la ruta absoluta del equipo en los errores, en el campo `file` y en
+  las sugerencias de `E2030`. Ahora se muestran relativos al programa, con `/` en todos los sistemas.
+
+### Cambios incompatibles
+
+- `import` y `pub` pasan de palabras reservadas a palabras clave. Un programa que los usara como
+  nombre ya no compilaba, y sigue sin compilar, con el mismo código (`E1103`).
+- La especificación pasa a la versión 0.11 y la implementación de referencia a la 0.11.0. La 0.10.0
+  ya publicada en npm y en PyPI no se toca.
+
+### Limitaciones
+
+- El playground no ejecuta programas con importaciones: recibe el programa como texto, sin los
+  archivos de al lado.
+- No hay alias ni importación selectiva. `nex test` solo evalúa los ejemplos del archivo que se le
+  pasa, no los de los módulos importados.
+
 ## 0.10.0 — Option y Result
 
 Esta versión está etiquetada (`v0.10.0`) y publicada: el paquete `nexora-lang` está en PyPI y en

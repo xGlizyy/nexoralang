@@ -196,15 +196,19 @@ def run_examples(analysis: Analysis, function: str | None = None, host: Host | N
     checked = analysis.checked
     if checked is None:
         return TestReport(analysis, function, NOT_RUN, None)
-    if function is not None and function not in checked.functions:
-        close = difflib.get_close_matches(function, list(checked.functions), n=1)
+    # The functions of the file that runs are the ones with examples to evaluate: an example
+    # of an imported module belongs to the text of that other file, whose spans this report
+    # cannot show (decision 0018). A module is tested by passing it instead of the program.
+    own = {declared.name for declared in checked.program.functions}
+    if function is not None and function not in own:
+        close = difflib.get_close_matches(function, sorted(own), n=1)
         suggestion = f". Did you mean '{close[0]}'?" if close else ""
         raise tooling.ToolingError(
             "unknown_function", f"{analysis.source.name} has no function named '{function}'{suggestion}",
         )
 
     results = []
-    for declared in checked.functions.values():
+    for declared in checked.program.functions:
         if function is not None and declared.name != function:
             continue
         for index, example in enumerate(declared.examples, start=1):

@@ -24,6 +24,7 @@ docs/json-protocol.md and, as JSON Schema, in docs/schemas/.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from pathlib import Path
 
 from . import ast_nodes as ast
@@ -65,19 +66,25 @@ def _span(span: Span | None) -> dict | None:
     return ast.to_dict(span) if span is not None else None
 
 
-def _header(schema: str, filename: str, diagnostics) -> dict:
+def _header(schema: str, filename: str, diagnostics: tuple, files: Sequence[str] | None = None) -> dict:
+    """The common part of every document: its schema, its version, its file and its errors.
+
+    `files` names the file each diagnostic belongs to, when a program is made of several
+    files (decision 0018). The document keeps `filename` as the file of the program itself.
+    """
     return {
         "schema": schema,
         "nexora_version": __version__,
         "file": filename,
         "ok": not diagnostics,
-        "diagnostics": [diagnostic.to_dict(filename) for diagnostic in diagnostics],
+        "diagnostics": [diagnostic.to_dict(files[index] if files else filename)
+                        for index, diagnostic in enumerate(diagnostics)],
     }
 
 
-def diagnostics_document(filename: str, diagnostics) -> dict:
+def diagnostics_document(filename: str, diagnostics, *, files: Sequence[str] | None = None) -> dict:
     """The `nexora.diagnostics/1` document for a list of diagnostics."""
-    return _header(DIAGNOSTICS_SCHEMA, filename, tuple(diagnostics))
+    return _header(DIAGNOSTICS_SCHEMA, filename, tuple(diagnostics), files)
 
 
 def _signature_text(function: ast.Function) -> str:
@@ -119,7 +126,37 @@ def inspect_source(source: str, filename: str = DEFAULT_FILENAME) -> dict:
 
 # Symbols
 
-def _symbol_entries(facts: CheckedProgram) -> list[dict]:
+def _module_files(analysis: Analysis) -> dict[str, str]:
+    """The file each module comes from: what a module declares belongs to that file.
+
+    An analysis of a single file has no modules, and every name belongs to the file it
+    was given (decision 0018).
+    """
+    if analysis.project is None:
+        return {}
+    return {module.name: module.source.name for module in analysis.project.modules}
+
+
+def _declared_function(facts: CheckedProgram, symbol) -> ast.Function | None:
+    """The declaration a function symbol names.
+
+    A function of a module is stored with its module in front (`models.area`), while its
+    symbol keeps the name as it is written inside the module, so the position of the
+    declaration is what tells the two apart (decision 0018, 5). In the file that runs no
+    name is qualified, and the position tells them apart there too.
+    """
+    for declaration in facts.functions.values():
+        if declaration.name_span == symbol.span:
+            return declaration
+    return None
+
+
+def _symbol_entries(facts: CheckedProgram, files: dict[str, str], entry_file: str) -> list[dict]:
+    """Every name the program declares, each with the file that declares it.
+
+    A name of a module belongs to the file that module comes from, and a name of the file
+    that runs belongs to `entry_file` (decision 0018).
+    """
     entries = []
     for symbol in facts.symbols:
         entry = {
@@ -134,10 +171,13 @@ def _symbol_entries(facts: CheckedProgram) -> list[dict]:
             "assignments": [_span(assignment) for assignment in symbol.assignments],
         }
         if symbol.category == "function":
-            declaration = facts.functions[symbol.name]
-            entry["signature"] = _signature_text(declaration)
-            entry["params"] = [{"name": param.name, "type": param.type.name} for param in declaration.params]
-            entry["return_type"] = declaration.return_type.name
+            declaration = _declared_function(facts, symbol)
+            if declaration is not None:
+                entry["signature"] = _signature_text(declaration)
+                entry["params"] = [{"name": param.name, "type": param.type.name} for param in declaration.params]
+                entry["return_type"] = declaration.return_type.name
+        # Last: a field added to an object goes at the end (decision 0008, section 8).
+        entry["file"] = entry_file if symbol.module is None else files.get(symbol.module, entry_file)
         entries.append(entry)
     return entries
 
@@ -166,7 +206,7 @@ def symbols_document(analysis: Analysis, *, name: str | None = None, function: s
     if analysis.facts is None:
         document["symbols"] = None
     else:
-        entries = _symbol_entries(analysis.facts)
+        entries = _symbol_entries(analysis.facts, _module_files(analysis), analysis.source.name)
         if name is not None:
             entries = [entry for entry in entries if entry["name"] == name]
         if function is not None:
@@ -313,8 +353,15 @@ def _notes(analysis: Analysis, features: list[str], reserved_used: list[str]) ->
     return notes
 
 
-def _function_context(function: ast.Function, analysis: Analysis, calls: dict[str, list[str]],
+def _module_of_key(key: str) -> str | None:
+    """The module a key belongs to: `models.area` is `models`; `main` belongs to no module."""
+    return key.rsplit(".", 1)[0] if "." in key else None
+
+
+def _function_context(key: str, function: ast.Function, analysis: Analysis, calls: dict[str, list[str]],
                       callers: dict[str, list[str]]) -> dict:
+    """The context of one function. `key` is its name qualified with its module, which is
+    what the call graph uses to tell two same-named functions apart (decision 0018, 5)."""
     facts = analysis.facts
     variables = [
         {
@@ -338,11 +385,11 @@ def _function_context(function: ast.Function, analysis: Analysis, calls: dict[st
             for contract in function.contracts
         ],
         "variables": variables,
-        "calls": sorted({callee for callee in calls.get(function.name, ()) if callee not in BUILTINS}),
-        "builtins_called": sorted({callee for callee in calls.get(function.name, ()) if callee in BUILTINS}),
-        "called_by": sorted(set(callers.get(function.name, ()))),
+        "calls": sorted({callee for callee in calls.get(key, ()) if callee not in BUILTINS}),
+        "builtins_called": sorted({callee for callee in calls.get(key, ()) if callee in BUILTINS}),
+        "called_by": sorted(set(callers.get(key, ()))),
         "recursive": _reaches({name: [c for c in callees if c not in BUILTINS] for name, callees in calls.items()},
-                              function.name, function.name),
+                              key, key),
         # Last: a field added to an object goes at the end (decision 0008, section 8). The examples
         # are listed as written; the analysis never evaluates them.
         "examples": [
@@ -465,7 +512,14 @@ def context_document(analysis: Analysis) -> dict:
         if callee not in BUILTINS:
             callers.setdefault(callee, []).append(caller)
 
-    functions = [_function_context(function, analysis, calls, callers) for function in facts.functions.values()]
+    files = _module_files(analysis)
+    functions = []
+    for key, function in facts.functions.items():
+        entry = _function_context(key, function, analysis, calls, callers)
+        # Last: a field added to an object goes at the end (decision 0008, section 8).
+        module = _module_of_key(key)
+        entry["file"] = analysis.source.name if module is None else files.get(module, analysis.source.name)
+        functions.append(entry)
     features = _features(analysis, any(function["recursive"] for function in functions))
     document.update(
         analysed=True,

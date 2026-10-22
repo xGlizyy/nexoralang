@@ -102,10 +102,13 @@ class RecordConstruction(Node):
     """`Point(x: 1, y: 2)`: building a record value.
 
     The fields are in the order they were written, which is not necessarily the order of
-    the declaration (decision 0014, 2)."""
+    the declaration (decision 0014, 2). A record of another module is written with its
+    module in front: `models.Point(x: 1)` (decision 0018, 5)."""
     name: str
     name_span: Span
     fields: tuple[FieldInitializer, ...]
+    # Last, so the order of the existing fields stays the same in the inspect schema.
+    qualifier: str | None = None
 
 
 @dataclass(frozen=True)
@@ -133,10 +136,12 @@ class TypeRef(Node):
 
     `arguments` holds the type arguments, in order. It is empty for a name written
     without brackets: `Int` has no arguments and `List[Int]` has one, which is itself
-    a `TypeRef`.
+    a `TypeRef`. `qualifier` holds the module a type of another module comes from
+    (`models.Point`), or None when the type is written without one.
     """
     name: str
     arguments: tuple[TypeRef, ...] = ()
+    qualifier: str | None = None
 
 
 @dataclass(frozen=True)
@@ -152,6 +157,9 @@ class TypeDecl(Node):
     condition: Expr
     # The explanation written after the condition, or None.
     message: str | None
+    # True when the declaration is marked with `pub` and can be used from another
+    # module (decision 0018, 3). Last, so the order of the existing fields stays.
+    public: bool = False
 
 
 @dataclass(frozen=True)
@@ -172,6 +180,9 @@ class RecordDecl(Node):
     name: str
     name_span: Span
     fields: tuple[FieldDecl, ...]
+    # True when the declaration is marked with `pub` and can be used from another
+    # module (decision 0018, 3). Last, so the order of the existing fields stays.
+    public: bool = False
 
 
 @dataclass(frozen=True)
@@ -182,6 +193,17 @@ class UsesDecl(Node):
     environment has to permit it (decision 0015, 2 and 3).
     """
     capability: str
+    path: str
+    path_span: Span
+
+
+@dataclass(frozen=True)
+class ImportDecl(Node):
+    """`import "ruta/fichero.nex"`: the module the program imports (decision 0018).
+
+    The path is relative to the file that imports it. The module is bound to a
+    namespace named after the file, without its extension.
+    """
     path: str
     path_span: Span
 
@@ -323,6 +345,9 @@ class Function(Node):
     # Last, after body: in the `nex inspect` JSON a new field is only ever added at the end, so the
     # order of the existing fields stays the same (docs/inspect-schema.md).
     examples: tuple[Example, ...] = ()
+    # True when the function is marked with `pub` and can be called from another
+    # module (decision 0018, 3). Last, for the same reason.
+    public: bool = False
 
 
 @dataclass(frozen=True)
@@ -334,6 +359,8 @@ class Program(Node):
     records: tuple[RecordDecl, ...] = ()
     # The capabilities the program declares it needs, after the records (decision 0015).
     uses: tuple[UsesDecl, ...] = ()
+    # The modules the program imports, after the capabilities (decision 0018).
+    imports: tuple[ImportDecl, ...] = ()
 
 
 def to_dict(node, types: dict[int, str] | None = None):

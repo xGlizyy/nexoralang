@@ -442,7 +442,7 @@ def test_the_measure_decision_is_differentially_equivalent_on_examples(monkeypat
         "context": tooling.get_context,
     }
     paths = sorted(EXAMPLE_DIR.rglob("*.nex"))
-    assert len(paths) == 24
+    assert len(paths) == 26
     for path in paths:
         text = path.read_text(encoding="utf-8")
         program, _ = parse_text(text)

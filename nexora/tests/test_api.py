@@ -175,6 +175,11 @@ def test_api_and_cli_agree_on_every_example(path):
         # examples that need them are run in their own directory, with their permissions.
         pytest.skip("this example needs a host")
     source = path.read_text(encoding="utf-8")
+    if 'import "' in source:
+        # The API receives the program as text and never reads the file system, so an
+        # import is E0001 there while the command reads the files (decision 0018, 2).
+        # That difference is asserted on its own in tests/test_modules.py.
+        pytest.skip("this example imports files, which the API cannot read")
 
     # check: same verdict and the same diagnostics, apart from the file name shown.
     code, _, document = cli_json("check", path)

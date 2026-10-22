@@ -356,7 +356,7 @@ def test_process_inspect_is_valid_json_for_every_example():
 # Defects in NEXORA itself are not presented as errors in the user's program.
 
 def test_internal_error_is_reported_as_a_bug(program, monkeypatch, capsys):
-    def broken(*arguments):
+    def broken(*arguments, **options):
         raise RuntimeError("boom")
     monkeypatch.setattr(cli, "analyze", broken)
     monkeypatch.delenv("NEXORA_DEBUG", raising=False)
@@ -366,7 +366,7 @@ def test_internal_error_is_reported_as_a_bug(program, monkeypatch, capsys):
 
 
 def test_internal_error_can_be_investigated(program, monkeypatch):
-    def broken(*arguments):
+    def broken(*arguments, **options):
         raise RuntimeError("boom")
     monkeypatch.setattr(cli, "analyze", broken)
     monkeypatch.setenv("NEXORA_DEBUG", "1")
@@ -626,7 +626,7 @@ def test_process_internal_error_is_distinct_from_a_user_error(tmp_path):
     # and only shows a Python traceback when NEXORA_DEBUG is set.
     script = (
         "import sys, nexora.cli as cli\n"
-        "def broken(*a):\n    raise RuntimeError('simulated defect')\n"
+        "def broken(*a, **options):\n    raise RuntimeError('simulated defect')\n"
         "cli.analyze = broken\n"
         "sys.exit(cli.main(['run', sys.argv[1]]))\n"
     )
