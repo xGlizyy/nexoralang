@@ -1,15 +1,15 @@
-# Primeros pasos
+# Getting started
 
-Esta guía te lleva desde un archivo vacío hasta un programa con variables, tipos y funciones.
-Solo usa características estables del lenguaje. Necesitas tener NEXORA [instalado](installation.md)
-y el entorno virtual activado.
+This guide takes you from an empty file to a program with variables, types and functions.
+It only uses stable features of the language. You need NEXORA [installed](installation.md)
+and the virtual environment activated.
 
-Todos los programas de esta página, y las salidas que se muestran, se comprueban en las pruebas
-automatizadas del proyecto.
+All the programs of this page, and the outputs shown, are checked by the automated tests
+of the project.
 
-## 1. Tu primer programa
+## 1. Your first program
 
-Crea un archivo de texto llamado `program.nex` con este contenido:
+Create a text file called `program.nex` with this content:
 
 <!-- nex:run -->
 ```nex
@@ -18,29 +18,29 @@ fn main() -> Void {
 }
 ```
 
-Ejecútalo:
+Run it:
 
 ```bash
 nex run program.nex
 ```
 
-Verás:
+You will see:
 
 ```text
 Hello from NEXORA
 ```
 
-Qué significa cada parte:
+What each part means:
 
-- `fn main() -> Void { ... }` declara la función `main`. Todo programa empieza a ejecutarse por
-  ella. `Void` indica que no devuelve ningún valor.
-- `print(...)` escribe un valor en pantalla, seguido de un salto de línea.
-- Las sentencias terminan al acabar la línea. No se usa punto y coma.
-- Los archivos de NEXORA tienen la extensión `.nex` y se guardan como texto UTF-8.
+- `fn main() -> Void { ... }` declares the `main` function. Every program starts running
+  there. `Void` means that it returns no value.
+- `print(...)` writes a value to the screen, followed by a line break.
+- Statements end at the end of the line. No semicolon is used.
+- NEXORA files have the `.nex` extension and are saved as UTF-8 text.
 
-## 2. Comprobar sin ejecutar
+## 2. Checking without running
 
-`nex check` analiza el programa y avisa de sus errores **sin ejecutarlo**:
+`nex check` analyzes the program and reports its errors **without running it**:
 
 ```bash
 nex check program.nex
@@ -50,12 +50,12 @@ nex check program.nex
 ✓ Check passed: program.nex
 ```
 
-`nex run` hace esa misma comprobación antes de empezar: un programa con errores nunca llega a
-ejecutarse. `nex check` es útil mientras escribes, porque no produce ningún efecto.
+`nex run` does that same check before starting: a program with errors never gets to
+run. `nex check` is useful while you write, because it produces no effect.
 
 ## 3. Variables
 
-`let` declara una variable y le da un valor:
+`let` declares a variable and gives it a value:
 
 <!-- nex:run -->
 ```nex
@@ -72,34 +72,34 @@ Ada
 1843
 ```
 
-Dos reglas importantes:
+Two important rules:
 
-- **Las variables `let` no cambian.** Una vez declarada, conserva su valor. Una variable que tiene
-  que cambiar se declara con `var` y se le da otro valor con `=` (lo verás en la sección 6).
-- **Un nombre solo se declara una vez.** No puedes declarar dos variables con el mismo nombre si
-  la primera sigue siendo visible.
+- **`let` variables do not change.** Once declared, it keeps its value. A variable that has
+  to change is declared with `var` and given another value with `=` (you will see it in section 6).
+- **A name is declared only once.** You cannot declare two variables with the same name if
+  the first one is still visible.
 
-Los comentarios empiezan con `//` y llegan hasta el final de la línea.
+Comments start with `//` and run to the end of the line.
 
-## 4. Tipos
+## 4. Types
 
-Cada valor tiene un tipo. Hay cuatro tipos de valor:
+Every value has a type. There are four value types:
 
-| Tipo | Qué contiene | Ejemplos |
-|------|--------------|----------|
-| `Int` | Números enteros | `42`, `-7`, `1_000_000` |
-| `Float` | Números con decimales | `3.14`, `0.5`, `10.0` |
-| `Bool` | Verdadero o falso | `true`, `false` |
-| `Text` | Texto | `"Hello"` |
+| Type | What it holds | Examples |
+|------|---------------|----------|
+| `Int` | Whole numbers | `42`, `-7`, `1_000_000` |
+| `Float` | Numbers with decimals | `3.14`, `0.5`, `10.0` |
+| `Bool` | True or false | `true`, `false` |
+| `Text` | Text | `"Hello"` |
 
-NEXORA deduce el tipo de una variable a partir de su valor. También puedes escribirlo tú, y
-entonces el lenguaje comprueba que el valor es de ese tipo:
+NEXORA deduces the type of a variable from its value. You can also write it yourself, and
+then the language checks that the value is of that type:
 
 <!-- nex:run -->
 ```nex
 fn main() -> Void {
-    let title = "Analytical Engine"      // Text, deducido
-    let pages: Int = 25                  // Int, escrito
+    let title = "Analytical Engine"      // Text, deduced
+    let pages: Int = 25                  // Int, written
     let price: Float = 19.99
     let available: Bool = true
 
@@ -117,9 +117,9 @@ Analytical Engine
 true
 ```
 
-NEXORA **nunca convierte un tipo en otro por su cuenta**. Un entero y un decimal no se pueden
-mezclar en una operación, y un número no se une a un texto con `+`. Cuando lo necesites, hay que
-decirlo con una función de conversión:
+NEXORA **never converts one type into another on its own**. An integer and a decimal cannot be
+mixed in an operation, and a number is not joined to a text with `+`. When you need it, you have to
+say so with a conversion function:
 
 <!-- nex:run -->
 ```nex
@@ -128,7 +128,7 @@ fn main() -> Void {
     let price = 2.5
     let total = to_float(units) * price          // Int -> Float
     print("Total: " + to_text(total))            // Float -> Text
-    print(to_int(total))                         // Float -> Int (descarta los decimales)
+    print(to_int(total))                         // Float -> Int (drops the decimals)
 }
 ```
 
@@ -137,12 +137,12 @@ Total: 7.5
 7
 ```
 
-La guía de [tipos](types.md) explica todas las reglas.
+The guide on [types](types.md) explains all the rules.
 
-## 5. Funciones
+## 5. Functions
 
-Una función recibe valores (parámetros) y puede devolver un resultado. Cada parámetro declara su
-tipo, y la función declara el tipo de lo que devuelve:
+A function receives values (parameters) and can return a result. Every parameter declares its
+type, and the function declares the type of what it returns:
 
 <!-- nex:run -->
 ```nex
@@ -166,14 +166,14 @@ fn main() -> Void {
 Hello, Ada!
 ```
 
-- `return` devuelve el resultado y termina la función.
-- Una función que no devuelve nada usa `Void`, como `greet` y `main`.
-- Las funciones pueden declararse en cualquier orden.
+- `return` returns the result and ends the function.
+- A function that returns nothing uses `Void`, like `greet` and `main`.
+- Functions can be declared in any order.
 
-## 6. Decidir con `if`
+## 6. Deciding with `if`
 
-`if` ejecuta un bloque solo si una condición es verdadera. `else` indica qué hacer en caso
-contrario:
+`if` runs a block only if a condition is true. `else` says what to do
+otherwise:
 
 <!-- nex:run -->
 ```nex
@@ -200,14 +200,14 @@ cool
 warm
 ```
 
-La condición tiene que ser un `Bool`: una comparación (`==`, `!=`, `<`, `<=`, `>`, `>=`), una
-variable de tipo `Bool`, o una combinación con `and`, `or` y `not`.
+The condition has to be a `Bool`: a comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`), a
+variable of type `Bool`, or a combination with `and`, `or` and `not`.
 
-### Repetir con `while`
+### Repeating with `while`
 
-`while` repite un bloque mientras su condición es verdadera. Lo que cambia de una vuelta a otra se
-declara con `var`. Cada bucle dice, con `decreases`, por qué termina: un número que baja en cada
-vuelta y nunca pasa de 0.
+`while` repeats a block while its condition is true. What changes from one iteration to the next is
+declared with `var`. Every loop says, with `decreases`, why it ends: a number that goes down on every
+iteration and never goes below 0.
 
 <!-- nex:run -->
 ```nex
@@ -229,15 +229,15 @@ fn main() -> Void {
 liftoff
 ```
 
-Si el número no baja (por ejemplo, porque olvidas `count = count - 1`), el programa no se queda
-colgado: se detiene en la segunda vuelta y te dice qué valores tenía. Los [contratos](contracts.md#bucles-invariant-y-decreases)
-explican también `invariant`, para decir qué se mantiene en cada vuelta.
+If the number does not go down (for example, because you forget `count = count - 1`), the program does not
+hang: it stops on the second iteration and tells you which values it had. [Contracts](contracts.md#loops-invariant-and-decreases)
+also explain `invariant`, to say what stays true on every iteration.
 
-La guía de [funciones](functions.md) explica el resto: rutas de retorno, recursividad y límites.
+The guide on [functions](functions.md) explains the rest: return paths, recursion and limits.
 
-## 7. Leer un error
+## 7. Reading an error
 
-Cuando algo no es correcto, NEXORA lo explica con un diagnóstico. Este programa tiene un error:
+When something is not correct, NEXORA explains it with a diagnostic. This program has an error:
 
 <!-- nex:check-fails -->
 ```nex
@@ -262,20 +262,20 @@ type error[E2011]: Type mismatch
 error: program.nex: check failed with 1 error
 ```
 
-Cómo leerlo:
+How to read it:
 
-| Parte | Significado |
-|-------|-------------|
-| `type error` | La clase de problema. Aquí, un error de tipos |
-| `[E2011]` | El código del error. Es siempre el mismo para el mismo problema; puedes buscarlo en la [lista de códigos](diagnostics.md#todos-los-códigos) |
-| `Type mismatch` | El título del error |
-| `program.nex:2:20` | Archivo, línea y columna donde está el problema |
-| `^^^^^^^^` | El fragmento exacto que causa el error |
-| `Expected Int, found Text` | La explicación concreta |
-| `= note:` | Información relacionada |
-| `= hint:` | Cuando aparece, una corrección sugerida |
+| Part | Meaning |
+|------|---------|
+| `type error` | The kind of problem. Here, a type error |
+| `[E2011]` | The code of the error. It is always the same for the same problem; you can look it up in the [list of codes](diagnostics.md#all-the-codes) |
+| `Type mismatch` | The title of the error |
+| `program.nex:2:20` | File, line and column where the problem is |
+| `^^^^^^^^` | The exact fragment that causes the error |
+| `Expected Int, found Text` | The concrete explanation |
+| `= note:` | Related information |
+| `= hint:` | When it appears, a suggested fix |
 
-Un error con sugerencia: el nombre está mal escrito y existe uno parecido.
+An error with a suggestion: the name is misspelled and a similar one exists.
 
 <!-- nex:check-fails -->
 ```nex
@@ -296,8 +296,8 @@ semantic error[E2005]: Unknown variable
 error: program.nex: check failed with 1 error
 ```
 
-Algunos errores no pueden conocerse hasta ejecutar el programa, porque dependen de los valores.
-Este programa supera `nex check`, pero falla al ejecutarse:
+Some errors cannot be known until the program runs, because they depend on the values.
+This program passes `nex check`, but it fails when it runs:
 
 <!-- nex:fails exit=3 -->
 ```nex
@@ -320,15 +320,15 @@ runtime error[E3001]: Division by zero
 error: program.nex: the program stopped because of a runtime error
 ```
 
-La guía de [diagnósticos](diagnostics.md) explica las categorías y todos los códigos.
+The guide on [diagnostics](diagnostics.md) explains the categories and all the codes.
 
-## 8. Un programa completo
+## 8. A complete program
 
-Con lo visto hasta aquí:
+With what you have seen so far:
 
 <!-- nex:run -->
 ```nex
-// Calcula la nota media de tres exámenes y decide si se aprueba.
+// Computes the average mark of three exams and decides whether they are passed.
 
 fn average(a: Int, b: Int, c: Int) -> Float {
     return to_float(a + b + c) / 3.0
@@ -353,12 +353,12 @@ Mean: 60.333333333333336
 Result: passed
 ```
 
-## Siguientes pasos
+## Next steps
 
-- Más programas, listos para ejecutar: [`examples/`](../examples/README.md).
-- Las reglas, una por una: [tipos](types.md) y [funciones](functions.md).
-- Escribir las reglas en el código, que es lo que distingue a NEXORA: [contratos](contracts.md)
-  (lo que una función espera y promete) y [tipos refinados](types.md#tipos-refinados) (los valores
-  que admite un tipo).
-- La referencia completa del lenguaje: [especificación](language-spec.md).
-- Lo que NEXORA todavía no puede hacer (mapas, enumeraciones, módulos…): [limitaciones](limitations.md).
+- More programs, ready to run: [`examples/`](../examples/README.md).
+- The rules, one by one: [types](types.md) and [functions](functions.md).
+- Writing the rules in the code, which is what distinguishes NEXORA: [contracts](contracts.md)
+  (what a function expects and promises) and [refined types](types.md#refined-types) (the values
+  a type accepts).
+- The complete reference of the language: [specification](language-spec.md).
+- What NEXORA cannot do yet (maps, enumerations…): [limitations](limitations.md).

@@ -1,314 +1,314 @@
-# 0013 — Listas, `for` sobre listas y el modelo de tipos que los sostiene
+# 0013 — Lists, `for` over lists and the type model that supports them
 
-- **Estado:** aceptada
-- **Versión:** 0.7.0 (estado del repositorio; no se ha publicado en ningún paquete)
-- **Fecha:** 2026-10-21
-- **Rama de trabajo:** `feature/server-hardening`
-- **Relacionada con:** la [decisión 0001](0001-tipos-estaticos-sin-conversiones-implicitas.md) (sin
-  conversiones implícitas), la [0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md)
-  (solo se ejecuta lo comprobado), la [0003](0003-funciones-retorno-e-if.md) (un único espacio de
-  nombres), la [0004](0004-contratos-en-ejecucion.md) (`requires` en ejecución), la
-  [0005](0005-diagnosticos-y-esquemas-json.md) (diagnósticos y esquemas JSON), la
-  [0007](0007-contratos-estables-y-tipos-refinados.md) (tipos refinados), la
-  [0010](0010-var-y-while.md) (`var`, `while` e invariantes) y la
-  [0011](0011-operaciones-sobre-textos.md) (funciones de un tipo). **No modifica ninguna.**
-- **Sustituye a:** ninguna. **No modifica ni sustituye la
-  [decisión 0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md)**: la 0012 sigue
-  siendo una propuesta para el resto de su contenido. Este documento acepta únicamente las partes
-  D01, D08 y D09 que ya están implementadas y probadas, en el alcance que se detalla abajo.
-- **Implementación:** las etapas I1–I5 del incremento de listas y `for`. El código está en
-  `types.py`, `type_adapter.py`, `checker.py`, `parser.py`, `interpreter.py`, `prelude.py` y las
-  herramientas; la evidencia está en las pruebas de la sección «Pruebas de regresión».
+- **Status:** accepted
+- **Version:** 0.7.0 (state of the repository; not published in any package)
+- **Date:** 2026-10-21
+- **Working branch:** `feature/server-hardening`
+- **Related to:** [decision 0001](0001-tipos-estaticos-sin-conversiones-implicitas.md) (no
+  implicit conversions), [0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md)
+  (only what has been checked runs), [0003](0003-funciones-retorno-e-if.md) (a single
+  namespace), [0004](0004-contratos-en-ejecucion.md) (`requires` at run time),
+  [0005](0005-diagnosticos-y-esquemas-json.md) (diagnostics and JSON schemas),
+  [0007](0007-contratos-estables-y-tipos-refinados.md) (refined types),
+  [0010](0010-var-y-while.md) (`var`, `while` and invariants) and
+  [0011](0011-operaciones-sobre-textos.md) (functions of a type). **It modifies none.**
+- **Replaces:** none. **It neither modifies nor replaces
+  [decision 0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md)**: 0012 is still
+  a proposal for the rest of its content. This document only accepts the parts
+  D01, D08 and D09 that are already implemented and tested, within the scope detailed below.
+- **Implementation:** stages I1–I5 of the lists and `for` increment. The code is in
+  `types.py`, `type_adapter.py`, `checker.py`, `parser.py`, `interpreter.py`, `prelude.py` and the
+  tools; the evidence is in the tests of the section "Regression tests".
 
-## Contexto
+## Context
 
-La [decisión 0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) es una propuesta
-amplia: modelo de tipos, registros, enumeraciones, patrones, `Option`/`Result`, listas, `for`,
-entrada de datos, módulos y evidencia verificable. En el momento de escribirla no había
-implementación de ninguna de esas partes y así lo declara su cabecera. Desde entonces se
-implementaron, por etapas y con pruebas, tres partes concretas:
+[Decision 0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) is a broad
+proposal: type model, records, enumerations, patterns, `Option`/`Result`, lists, `for`,
+data input, modules and verifiable evidence. When it was written there was no
+implementation of any of those parts, and its header says so. Since then
+three concrete parts have been implemented, by stages and with tests:
 
-1. un modelo de tipos estructurado, construido al lado del comprobador existente (D01);
-2. listas inmutables `List[T]`, con literales, igualdad y cinco funciones (D08);
-3. `for x in xs { ... }` sobre una `List[T]` (D09).
+1. a structured type model, built next to the existing checker (D01);
+2. immutable lists `List[T]`, with literals, equality and five functions (D08);
+3. `for x in xs { ... }` over a `List[T]` (D09).
 
-El código y la documentación no podían seguir en desacuerdo: la especificación no describía las
-listas ni las funciones de `List`, la hoja de ruta las presentaba como pendientes y la 0012 seguía
-diciendo que no había implementación. A la vez, aceptar la 0012 entera sería falso: registros,
-enumeraciones, `Option`/`Result`, `type_repr`, genéricos de usuario y el resto de la propuesta no
-existen.
+The code and the documentation could not keep disagreeing: the specification did not describe
+lists or the `List` functions, the roadmap presented them as pending and 0012 still
+said there was no implementation. At the same time, accepting the whole of 0012 would be false: records,
+enumerations, `Option`/`Result`, `type_repr`, user generics and the rest of the proposal do not
+exist.
 
-La regla del repositorio es que una decisión no se reescribe: si se revisa, se añade otra. Por eso
-este ADR no edita la 0012. La 0012 conserva su estado de propuesta y su texto histórico; la 0013
-acepta solo el subconjunto implementado y deja el resto donde está.
+The rule of the repository is that a decision is not rewritten: if it is revisited, another one is added. That is why
+this ADR does not edit 0012. 0012 keeps its proposal status and its historical text; 0013
+accepts only the implemented subset and leaves the rest where it is.
 
-## Decisión
+## Decision
 
-Se aceptan **D01, D08 y D09 en el alcance implementado que se describe a continuación**. Nada de lo
-que no aparezca aquí se considera aceptado por este ADR.
+**D01, D08 and D09 are accepted within the implemented scope described below**. Nothing that
+does not appear here is considered accepted by this ADR.
 
-### 1. D01 — Modelo de tipos, en el alcance implementado
+### 1. D01 — Type model, within the implemented scope
 
-Se acepta que la semántica de los tipos se decida sobre una representación estructurada, no sobre
-la comparación de cadenas, y que la cadena canónica siga siendo la forma de presentación pública.
+It is accepted that the semantics of types is decided on a structured representation, not on
+string comparison, and that the canonical string remains the public presentation form.
 
-**Representación.** `types.py` define un tipo base `Type` y cinco variantes inmutables:
+**Representation.** `types.py` defines a base type `Type` and five immutable variants:
 
-| Variante | Qué representa | Alcance actual |
-|----------|----------------|----------------|
-| `Primitive` | `Int`, `Float`, `Bool`, `Text`, `Void` | Los cinco nombres integrados |
-| `Constructor` | Nombre, aridad e identidad estable de un constructor | `List` (aridad 1); `Option` y `Result` solo como formas internas reservadas |
-| `Application` | Un constructor aplicado a argumentos posicionales | `List[T]`, anidado tanto como permita el parser |
-| `Refined` | Un tipo refinado nominal, con nombre, base y referencia a su declaración | Los tipos refinados que ya aceptaba la 0007 |
-| `TypeVariable` | Una variable de primer orden, identificada por un entero | Solo para las firmas internas de las funciones de `List`; el lenguaje no permite escribirla |
+| Variant | What it represents | Current scope |
+|---------|--------------------|---------------|
+| `Primitive` | `Int`, `Float`, `Bool`, `Text`, `Void` | The five built-in names |
+| `Constructor` | Name, arity and stable identity of a constructor | `List` (arity 1); `Option` and `Result` only as reserved internal forms |
+| `Application` | A constructor applied to positional arguments | `List[T]`, nested as deep as the parser allows |
+| `Refined` | A nominal refined type, with a name, a base and a reference to its declaration | The refined types that 0007 already accepted |
+| `TypeVariable` | A first-order variable, identified by an integer | Only for the internal signatures of the `List` functions; the language does not allow writing it |
 
-Las operaciones del modelo son `equal` (identidad), `assignable` (compatibilidad), `widen` y
-`root` (ensanchamiento y tipo raíz), `substitute` y `unify` (sustitución y unificación de primer
-orden), `display` (texto canónico) y `to_data` (forma interna para pruebas y seguimiento). `to_data`
-**no** es un contrato público: no aparece en ningún documento JSON ni tiene esquema. El campo `type`
-de los documentos JSON sigue siendo el texto canónico.
+The operations of the model are `equal` (identity), `assignable` (compatibility), `widen` and
+`root` (widening and root type), `substitute` and `unify` (first-order substitution and
+unification), `display` (canonical text) and `to_data` (internal form for tests and tracing). `to_data`
+is **not** a public contract: it appears in no JSON document and has no schema. The `type` field
+of the JSON documents is still the canonical text.
 
-`type_adapter.py` es el puente entre los nombres que usa el comprobador y el modelo. Resuelve
-primitivos, tipos refinados y la forma canónica `List[T]`; rechaza `None`, los objetos ajenos y toda
-forma que no sea canónica. `Option`, `Result`, los registros y cualquier otro constructor quedan
-fuera: el adaptador no los resuelve.
+`type_adapter.py` is the bridge between the names the checker uses and the model. It resolves
+primitives, refined types and the canonical form `List[T]`; it rejects `None`, foreign objects and any
+form that is not canonical. `Option`, `Result`, records and any other constructor are left
+out: the adapter does not resolve them.
 
-**Identidad y compatibilidad.** Dos tipos son el mismo si son el mismo primitivo, la misma
-aplicación con los mismos argumentos en orden, el mismo nombre de tipo refinado o la misma variable
-de tipo. Un tipo refinado se acepta donde se espera su base, o cualquier base de su cadena; la
-dirección contraria exige construir el refinado explícitamente y comprobar su condición al
-ejecutar. Los argumentos de un constructor son **invariantes**: `List[Int]` no es `List[Text]` y
-`List[Percent]` no es `List[Int]`, aunque `Percent` ensanche a `Int`.
+**Identity and compatibility.** Two types are the same if they are the same primitive, the same
+application with the same arguments in order, the same refined type name or the same type
+variable. A refined type is accepted where its base is expected, or any base in its chain; the
+opposite direction requires building the refined value explicitly and checking its condition when
+running. The arguments of a constructor are **invariant**: `List[Int]` is not `List[Text]` and
+`List[Percent]` is not `List[Int]`, even though `Percent` widens to `Int`.
 
-**Unificación.** Las firmas de las funciones de `List` usan una variable de tipo interna. Cada
-llamada la liga con los tipos de sus argumentos mediante unificación de primer orden. No hay
-genéricos de usuario, generalización automática, typeclasses ni tipos de rango superior.
+**Unification.** The signatures of the `List` functions use an internal type variable. Each
+call binds it to the types of its arguments through first-order unification. There are no
+user generics, automatic generalization, typeclasses or higher-rank types.
 
-**Refinamientos.** La semántica de la 0007 no cambia: las constantes se comprueban sin ejecutar y
-los valores calculados entran con `Tipo(x)` al ejecutar. En esta versión un tipo refinado solo puede
-construirse sobre `Int`, `Float`, `Bool`, `Text` u otro refinado; refinar una lista es `E2016`.
-Esto deja pendiente la parte de D01/D04 que permitiría refinar tipos compuestos.
+**Refinements.** The semantics of 0007 does not change: constants are checked without running and
+computed values enter with `Type(x)` when running. In this version a refined type can only
+be built over `Int`, `Float`, `Bool`, `Text` or another refined type; refining a list is `E2016`.
+This leaves pending the part of D01/D04 that would allow refining compound types.
 
-**Diagnósticos.** Las reglas ya migradas al modelo construyen sus diagnósticos a partir de los
-valores del modelo. Las reglas que aún no se han migrado conservan su representación de cadena y
-sus mensajes. No se introduce `type_repr` ni se cambia la versión de ningún esquema: la parte de
-D01.8 que proponía ese campo sigue sin aceptarse.
+**Diagnostics.** The rules already migrated to the model build their diagnostics from the
+values of the model. The rules not migrated yet keep their string representation and
+their messages. `type_repr` is not introduced and the version of no schema changes: the part of
+D01.8 that proposed that field is still not accepted.
 
-**Lo que no se acepta de D01.** No se aceptan los tipos declarados por el usuario con constructores
-propios (registros y enumeraciones), las funciones como valores, los genéricos de usuario, los alias
-de tipo ni `type_repr`. Tampoco se acepta la sustitución completa del comprobador por el modelo: el
-comprobador sigue usando sus cadenas para las reglas no migradas, y el adaptador acompaña a esas
-cadenas. Es una migración parcial y deliberada, no una reescritura total.
+**What is not accepted from D01.** User-declared types with their own constructors
+(records and enumerations), functions as values, user generics, type
+aliases and `type_repr` are not accepted. Neither is the complete replacement of the checker by the model: the
+checker still uses its strings for the non-migrated rules, and the adapter accompanies those
+strings. It is a partial and deliberate migration, not a total rewrite.
 
-### 2. D08 — Listas, en el alcance implementado
+### 2. D08 — Lists, within the implemented scope
 
-**Tipo y valores.** `List[T]` es una secuencia **inmutable y finita** de valores de tipo `T`. `T`
-puede ser `Int`, `Float`, `Bool`, `Text`, un tipo refinado u otra `List[...]`; `Void` no puede ser
-elemento (`List[Void]` es `E1101`). El tipo es invariante en `T`.
+**Type and values.** `List[T]` is an **immutable and finite** sequence of values of type `T`. `T`
+can be `Int`, `Float`, `Bool`, `Text`, a refined type or another `List[...]`; `Void` cannot be an
+element (`List[Void]` is `E1101`). The type is invariant in `T`.
 
-**Sintaxis.** `List[T]` se escribe en cualquier posición donde se escribe un tipo: anotación de
-`let`/`var`, parámetro, retorno, tipo de un tipo refinado (aunque refinarlo sea `E2016`) y
-`nex inspect`. El parser limita el anidamiento de tipos a 64 niveles (`E1105`). `List` sin
-argumento no es un tipo (`E2012`); `Option[...]`, `Result[...]`, `Foo[...]`, `Int[...]`,
-`List[...]` con más de un argumento y `List[Void]` son errores de sintaxis (`E1101`).
+**Syntax.** `List[T]` is written in any position where a type is written: annotation of
+`let`/`var`, parameter, return, type of a refined type (even though refining it is `E2016`) and
+`nex inspect`. The parser limits type nesting to 64 levels (`E1105`). `List` without an
+argument is not a type (`E2012`); `Option[...]`, `Result[...]`, `Foo[...]`, `Int[...]`,
+`List[...]` with more than one argument and `List[Void]` are syntax errors (`E1101`).
 
-**Literales e inferencia.** `[a, b, c]` y `[]` son expresiones. Sin un tipo esperado, el primer
-elemento fija el tipo de los demás; todos deben ser aceptables como ese tipo. Con un tipo esperado
-`List[T]`, todos los elementos se comprueban contra `T`. Por eso `[Percent(10), 20]` sin anotación
-falla (el primer elemento fija `Percent`), mientras que `let xs: List[Int] = [Percent(10), 20]`
-acepta el ensanchamiento de cada elemento a `Int`.
+**Literals and inference.** `[a, b, c]` and `[]` are expressions. Without an expected type, the first
+element sets the type of the rest; all of them must be acceptable as that type. With an expected type
+`List[T]`, all the elements are checked against `T`. That is why `[Percent(10), 20]` without an annotation
+fails (the first element sets `Percent`), while `let xs: List[Int] = [Percent(10), 20]`
+accepts the widening of each element to `Int`.
 
-Una lista vacía **necesita un tipo esperado**: una anotación, un parámetro, un retorno, una
-asignación, el lado izquierdo de una igualdad o una función que fije el tipo del argumento. `let xs = []`
-y `print([])` son `E2011`; `a == []` funciona, pero `[] == a` no infiere el tipo del lado derecho. El
-tipo esperado también se propaga a listas anidadas: `let xs: List[List[Int]] = [[]]` es válido.
+An empty list **needs an expected type**: an annotation, a parameter, a return, an
+assignment, the left-hand side of an equality or a function that sets the type of the argument. `let xs = []`
+and `print([])` are `E2011`; `a == []` works, but `[] == a` does not infer the type of the right-hand side. The
+expected type also propagates into nested lists: `let xs: List[List[Int]] = [[]]` is valid.
 
-**Igualdad.** `==` y `!=` comparan listas del **mismo tipo** de forma estructural: mismos elementos,
-en el mismo orden, comparados recursivamente. El resultado es `Bool`. No hay orden (`<`, `<=`, `>`,
-`>=`) entre listas. Dos listas de tipos de elemento distintos no se comparan (`E2011`).
+**Equality.** `==` and `!=` compare lists of the **same type** structurally: same elements,
+in the same order, compared recursively. The result is `Bool`. There is no ordering (`<`, `<=`, `>`,
+`>=`) between lists. Two lists of different element types are not compared (`E2011`).
 
-**Representación e impresión.** En ejecución una lista es una tupla inmutable de Python. `print` y
-`to_text` escriben la forma canónica con corchetes, sin comillas alrededor de los textos:
-`[1, 2, 3]`, `[[1], [2, 3]]`, `[a, b]`, `[]`. `show_value`, que usan los diagnósticos, sí entrecomilla
-los textos. No hay sintaxis de índice (`xs[i]`) ni mutación de elementos.
+**Representation and printing.** At run time a list is an immutable Python tuple. `print` and
+`to_text` write the canonical form with square brackets, without quotes around texts:
+`[1, 2, 3]`, `[[1], [2, 3]]`, `[a, b]`, `[]`. `show_value`, which the diagnostics use, does quote
+texts. There is no index syntax (`xs[i]`) and no mutation of elements.
 
-**Funciones.** Se aceptan exactamente estas cinco, con la variable de tipo `T` ligada en cada
-llamada:
+**Functions.** Exactly these five are accepted, with the type variable `T` bound on each
+call:
 
-| Función | Firma | Comportamiento |
-|---------|-------|----------------|
-| `List.length` | `List.length(xs: List[T]) -> Int` | Número de elementos; total |
-| `List.get` | `List.get(xs: List[T], i: Int) -> T` | Elemento en la posición `i`, empezando en 0; parcial |
-| `List.append` | `List.append(xs: List[T], x: T) -> List[T]` | Lista nueva con `x` al final; no cambia `xs` |
-| `List.concat` | `List.concat(xs: List[T], ys: List[T]) -> List[T]` | Lista nueva con los elementos de `xs` y después los de `ys`; no cambia ninguna |
-| `List.contains` | `List.contains(xs: List[T], x: T) -> Bool` | Si algún elemento es estructuralmente igual a `x` |
+| Function | Signature | Behaviour |
+|----------|-----------|-----------|
+| `List.length` | `List.length(xs: List[T]) -> Int` | Number of elements; total |
+| `List.get` | `List.get(xs: List[T], i: Int) -> T` | Element at position `i`, starting at 0; partial |
+| `List.append` | `List.append(xs: List[T], x: T) -> List[T]` | New list with `x` at the end; does not change `xs` |
+| `List.concat` | `List.concat(xs: List[T], ys: List[T]) -> List[T]` | New list with the elements of `xs` and then those of `ys`; changes neither |
+| `List.contains` | `List.contains(xs: List[T], x: T) -> Bool` | Whether some element is structurally equal to `x` |
 
-`List.get` declara `requires 0 <= i and i < List.length(xs)` con la explicación «An index must be
-inside the list». Un índice negativo, igual a la longitud o mayor detiene el programa con `E4001`;
-no hay índices negativos desde el final ni recortes silenciosos. La comprobación es en ejecución,
-también cuando el índice es una constante: `nex check` no demuestra el contrato. Una lista vacía
-literal en un argumento de `List.*` necesita un tipo esperado, porque las firmas paramétricas no
-fijan el elemento antes de leer los argumentos; por ejemplo, `List.append([], 1)` y
-`List.concat([1], [])` son `E2011`.
+`List.get` declares `requires 0 <= i and i < List.length(xs)` with the explanation "An index must be
+inside the list". A negative index, or one equal to or greater than the length, stops the program with `E4001`;
+there are no negative indices counting from the end and no silent truncation. The check is at run time,
+also when the index is a constant: `nex check` does not prove the contract. A literal empty list
+as an argument of `List.*` needs an expected type, because the parametric signatures do not
+set the element before reading the arguments; for example, `List.append([], 1)` and
+`List.concat([1], [])` are `E2011`.
 
-**Lo que no se acepta de D08.** No hay `List.set`, `map`, `filter`, `fold`, ordenación, `slice` ni
-ninguna otra función; no hay `Option` para una variante total de `List.get`; no hay listas
-mutables, perezosas ni infinitas; no hay indexación sintáctica; no se pueden refinar listas.
+**What is not accepted from D08.** There is no `List.set`, `map`, `filter`, `fold`, sorting, `slice` or
+any other function; there is no `Option` for a total variant of `List.get`; there are no
+mutable, lazy or infinite lists; there is no syntactic indexing; lists cannot be refined.
 
-### 3. D09 — `for` sobre listas, en el alcance implementado
+### 3. D09 — `for` over lists, within the implemented scope
 
-**Sintaxis.** `for x in xs { cláusulas sentencias }`. Es una sentencia, no una expresión. `x` es el
-iterador; `xs` es el iterable; las cláusulas son cero o más `invariant` y, sintácticamente,
-`decreases` (que en un `for` es siempre `E2022`).
+**Syntax.** `for x in xs { clauses statements }`. It is a statement, not an expression. `x` is the
+iterator; `xs` is the iterable; the clauses are zero or more `invariant` and, syntactically,
+`decreases` (which in a `for` is always `E2022`).
 
-**Evaluación.** El iterable se evalúa **una sola vez**, antes de la primera comprobación de
-invariantes y antes de cualquier vuelta. Debe tener tipo `List[T]`; un `Int`, `Float`, `Bool` o
-`Text` es `E2011`. Una lista vacía literal como iterable (`for x in []`) no tiene tipo esperado y es
-`E2011`; para recorrer una lista vacía hay que usar una variable anotada, por ejemplo
+**Evaluation.** The iterable is evaluated **only once**, before the first check of the
+invariants and before any iteration. It must have type `List[T]`; an `Int`, `Float`, `Bool` or
+`Text` is `E2011`. A literal empty list as the iterable (`for x in []`) has no expected type and is
+`E2011`; to go through an empty list an annotated variable has to be used, for example
 `let xs: List[Int] = []`.
 
-**Iterador y ámbitos.** El iterador es inmutable y tiene el tipo del elemento `T`. Se declara en el
-propio `for`, no antes, y no puede ocultar un nombre visible (`E2006`). Asignarle un valor es
-`E2007`. No es visible después del bucle. Cada vuelta ejecuta el cuerpo en un entorno nuevo: las
-variables declaradas en el cuerpo no conservan su valor entre vueltas; las asignaciones a una `var`
-del ámbito exterior sí se conservan. Las cláusulas ven los nombres visibles donde está el `for`,
-nunca el iterador.
+**Iterator and scopes.** The iterator is immutable and has the type of the element `T`. It is declared in the
+`for` itself, not before, and it cannot shadow a visible name (`E2006`). Assigning a value to it is
+`E2007`. It is not visible after the loop. Every iteration runs the body in a new environment: the
+variables declared in the body do not keep their value between iterations; assignments to a `var`
+of the outer scope are kept. The clauses see the names visible where the `for` is,
+never the iterator.
 
-**Invariantes.** Un `for` puede declarar cero o más `invariant`. Cada uno debe ser `Bool` (`E2011`).
-Se comprueban antes de cada vuelta y una vez después de la última, con la misma semántica que en un
-`while`. En una lista vacía se comprueba una vez, antes de la primera vuelta que no llega a
-ejecutarse; no hay una comprobación adicional separada. Un invariante falso detiene el programa con
-`E4005` y las notas indican la vuelta y los valores.
+**Invariants.** A `for` can declare zero or more `invariant` clauses. Each one must be `Bool` (`E2011`).
+They are checked before every iteration and once after the last one, with the same semantics as in a
+`while`. On an empty list they are checked once, before the first iteration, which never
+runs; there is no separate additional check. A false invariant stops the program with
+`E4005` and the notes give the iteration and the values.
 
-**Medida, salida y terminación.** No hay `decreases`: la lista es finita por construcción, y un
-`decreases` es `E2022`. No hay `break` ni `continue`; siguen siendo palabras reservadas (`E1103`).
-Un `return` dentro del cuerpo termina la función. Los bucles se pueden anidar. Las vueltas no son
-llamadas: el bucle no añade una llamada y no consume el límite de 1000, aunque las llamadas dentro del
-cuerpo sí cuentan. La terminación es estructural (la
-lista es finita), pero no se promete rapidez: una lista enorme tarda lo que tarda, y `nex run` no
-tiene límite de tiempo.
+**Measure, exit and termination.** There is no `decreases`: the list is finite by construction, and a
+`decreases` is `E2022`. There is no `break` or `continue`; they remain reserved words (`E1103`).
+A `return` inside the body ends the function. Loops can be nested. Iterations are not
+calls: the loop does not add a call and does not use up the limit of 1000, although the calls inside the
+body do count. Termination is structural (the
+list is finite), but speed is not promised: a huge list takes as long as it takes, and `nex run` has no
+time limit.
 
-**Rutas de retorno.** El análisis de rutas no considera que un `for` siempre devuelve, aunque todas
-sus vueltas contengan un `return`. Una función que devuelve un valor necesita un `return` después
-del bucle si el `for` es la última sentencia. Es el comportamiento actual y se documenta como tal;
-si se quiere cambiar, será otra decisión.
+**Return paths.** The path analysis does not consider that a `for` always returns, even if all
+its iterations contain a `return`. A function that returns a value needs a `return` after
+the loop if the `for` is the last statement. It is the current behaviour and it is documented as such;
+if it is to be changed, that will be another decision.
 
-**Lo que no se acepta de D09.** No hay `for` sobre rangos, `Text`, mapas ni iteradores perezosos;
-no hay `break`/`continue`; no hay variables de tipo de usuario ni funciones de orden superior que
-reciban el cuerpo del bucle.
+**What is not accepted from D09.** There is no `for` over ranges, `Text`, maps or lazy iterators;
+there is no `break`/`continue`; there are no user type variables and no higher-order functions that
+receive the body of the loop.
 
-### 4. Lo que este ADR no acepta de la 0012
+### 4. What this ADR does not accept from 0012
 
-Para que no haya dudas, quedan **fuera** de esta aceptación, y siguen siendo propuesta en la 0012:
+So that there is no doubt, these are **outside** this acceptance, and remain a proposal in 0012:
 
-- los registros, las enumeraciones y los patrones (D02, D05, D06, D07);
-- `Option`, `Result` y su sintaxis, sus valores y sus funciones;
-- `type_repr` y cualquier cambio de los esquemas JSON por un tipo estructurado;
-- los genéricos de usuario, las funciones genéricas y las funciones como valores (D03);
-- los refinamientos sobre listas, registros o cualquier tipo compuesto (D04 en la parte no
-  implementada);
-- la entrada de datos, los módulos, la evidencia verificable y la puerta de seguridad (E, F, H, I);
-- los criterios de 1.0 y la secuencia de decisiones que dependen de todo lo anterior (K, L).
+- records, enumerations and patterns (D02, D05, D06, D07);
+- `Option`, `Result` and their syntax, their values and their functions;
+- `type_repr` and any change of the JSON schemas towards a structured type;
+- user generics, generic functions and functions as values (D03);
+- refinements over lists, records or any compound type (D04 in the part not
+  implemented);
+- data input, modules, verifiable evidence and the security gate (E, F, H, I);
+- the 1.0 criteria and the sequence of decisions that depend on all of the above (K, L).
 
-La 0012 sigue siendo el lugar donde se discuten esas partes. La 0013 no las aprueba por omisión.
+0012 is still the place where those parts are discussed. 0013 does not approve them by omission.
 
-## Motivos
+## Reasons
 
-- **Coherencia.** El repositorio exige que código, especificación, ejemplos, esquemas y pruebas digan
-  lo mismo. Aceptar solo lo implementado y documentarlo es la única forma de cumplirlo sin fingir
-  que la propuesta entera está hecha.
-- **Trazabilidad.** Cada parte aceptada tiene pruebas que fallan si deja de funcionar. La 0013 puede
-  citarlas; la 0012, en cambio, describe cosas que no existen.
-- **Conservación de la historia.** Reescribir la 0012 borraría el registro de que fue una propuesta y
-  de que su alcance era mucho mayor. La 0013 deja ese registro intacto y explica la relación.
-- **Incrementalidad.** El modelo estructurado se introdujo al lado del comprobador, con un adaptador,
-  en vez de reescribirlo entero. Esa decisión reduce el riesgo y permite que las reglas no migradas
-  sigan funcionando con sus cadenas.
+- **Coherence.** The repository requires code, specification, examples, schemas and tests to say
+  the same thing. Accepting only what is implemented and documenting it is the only way to comply without pretending
+  that the whole proposal is done.
+- **Traceability.** Every accepted part has tests that fail if it stops working. 0013 can
+  cite them; 0012, on the other hand, describes things that do not exist.
+- **Preserving history.** Rewriting 0012 would erase the record that it was a proposal and
+  that its scope was much larger. 0013 leaves that record intact and explains the relation.
+- **Incrementality.** The structured model was introduced next to the checker, with an adapter,
+  instead of rewriting it entirely. That decision reduces the risk and lets the non-migrated rules
+  keep working with their strings.
 
-## Lo que no garantiza
+## What it does not guarantee
 
-- Que una lista sea barata: la inmutabilidad implica copias en `append` y `concat`; no se ha medido
-  el coste.
-- Que `List.get` sea total: sigue siendo parcial y exige un índice válido.
-- Que los invariantes de un `for` sean los adecuados: se comprueban al ejecutar las vueltas que
-  ocurren, no se demuestran.
-- Que un `for` termine pronto: solo se garantiza que la lista es finita.
-- Que el modelo de tipos cubra todos los tipos futuros: solo cubre los que existen hoy.
-- Que los programas aceptados estén libres de errores de ejecución: siguen existiendo división por
-  cero, desbordamiento, contratos incumplidos y `List.get` fuera de rango.
+- That a list is cheap: immutability implies copies in `append` and `concat`; the cost has not been
+  measured.
+- That `List.get` is total: it is still partial and requires a valid index.
+- That the invariants of a `for` are the right ones: they are checked on the iterations that
+  happen, they are not proven.
+- That a `for` ends soon: it is only guaranteed that the list is finite.
+- That the type model covers all future types: it only covers those that exist today.
+- That accepted programs are free of runtime errors: division by zero, overflow,
+  broken contracts and `List.get` out of range still exist.
 
-## Fuera del alcance
+## Out of scope
 
-Quedan fuera de esta decisión, además de lo enumerado en el apartado 4: las funciones de orden
-superior sobre listas, la igualdad ordenada, la covarianza, los alias de tipo, la impresión
-personalizada, la serialización estructurada de tipos y cualquier optimización del intérprete.
+Besides what is listed in section 4, these are out of this decision: higher-order
+functions over lists, ordered equality, covariance, type aliases, custom
+printing, structured serialization of types and any optimization of the interpreter.
 
-## Alternativas descartadas
+## Alternatives ruled out
 
-| Alternativa | Por qué no |
-|-------------|------------|
-| Aceptar la 0012 entera | Aceptaría registros, enums, `Option`/`Result`, `type_repr` y genéricos que no existen; convertiría una propuesta en una promesa falsa |
-| Dejar la 0012 como única referencia y no crear la 0013 | El código quedaría sin una decisión aceptada que lo respalde; la documentación seguiría diciendo que no hay implementación |
-| Reescribir la 0012 para marcar lo implementado | Viola la regla de que las decisiones no se reescriben y borra el contexto histórico |
-| Listas mutables | Introducen aliasing y complican la igualdad, los contratos y la terminación; se aplazan |
-| `List.get` total devolviendo un valor por defecto | Inventa un valor y oculta el error; la variante total llegará con `Option`, que aún no existe |
-| `for` sobre rangos o `Text` en la primera versión | Añade casos especiales y tipos que no existen; se aplaza |
-| `break`/`continue` desde el principio | Rompen el razonamiento sobre los invariantes y la terminación; se aplazan |
+| Alternative | Why not |
+|-------------|---------|
+| Accepting the whole of 0012 | It would accept records, enums, `Option`/`Result`, `type_repr` and generics that do not exist; it would turn a proposal into a false promise |
+| Leaving 0012 as the only reference and not creating 0013 | The code would be left without an accepted decision backing it; the documentation would keep saying there is no implementation |
+| Rewriting 0012 to mark what is implemented | It violates the rule that decisions are not rewritten and erases the historical context |
+| Mutable lists | They introduce aliasing and complicate equality, contracts and termination; they are postponed |
+| A total `List.get` returning a default value | It makes up a value and hides the error; the total variant will come with `Option`, which does not exist yet |
+| `for` over ranges or `Text` in the first version | It adds special cases and types that do not exist; it is postponed |
+| `break`/`continue` from the start | They break reasoning about invariants and termination; they are postponed |
 
-## Compatibilidad
+## Compatibility
 
-**Programas.** Ningún programa válido en la 0.6.0 deja de serlo ni cambia de resultado. `for` e `in`
-ya eran palabras reservadas y ahora son palabras clave; `[` y `]` eran caracteres inesperados y
-ahora son símbolos. Los usos que cambian de diagnóstico ya eran inválidos. `List`, `length`, `get`,
-`append`, `concat` y `contains` no se reservan como nombres: las funciones nuevas se llaman
-cualificadas (`List.length`), como las de `Text` en la 0011. Un programa puede seguir declarando un
-tipo refinado llamado `List`; `List[Int]` siempre significa la lista integrada.
+**Programs.** No program valid in 0.6.0 stops being so or changes its result. `for` and `in`
+were already reserved words and now they are keywords; `[` and `]` were unexpected characters and
+now they are symbols. The uses whose diagnostic changes were already invalid. `List`, `length`, `get`,
+`append`, `concat` and `contains` are not reserved as names: the new functions are called
+qualified (`List.length`), like those of `Text` in 0011. A program can still declare a
+refined type called `List`; `List[Int]` always means the built-in list.
 
-**Herramientas.** Los cambios son aditivos y no cambian la versión de los esquemas:
+**Tools.** The changes are additive and do not change the version of the schemas:
 
-- `nex inspect`: `arguments` en `TypeRef` (`[]` para un nombre sin corchetes), nodo `ListLiteral` y
-  nodo `For`; el campo `type` de una expresión puede ser `List[...]`.
-- `nex context`: `loops` incluye `for`, con `kind: "for"`, `condition` igual a `x in xs` y
+- `nex inspect`: `arguments` in `TypeRef` (`[]` for a name without square brackets), the `ListLiteral` node and
+  the `For` node; the `type` field of an expression can be `List[...]`.
+- `nex context`: `loops` includes `for`, with `kind: "for"`, `condition` equal to `x in xs` and
   `measure: null`.
-- `nex symbols`: el iterador aparece como variable inmutable, con su tipo y su ámbito.
-- `nex inspect` y `nex context` siguen sin ejecutar el programa.
+- `nex symbols`: the iterator appears as an immutable variable, with its type and its scope.
+- `nex inspect` and `nex context` still do not run the program.
 
-**Versión.** El estado del repositorio pasa a `0.7.0`. No se declara publicado: no hay tag ni paquete
-publicado. El `CHANGELOG.md` lo presenta como estado del repositorio y mantiene separados los cambios
-de `servidor/` y `web/`, que no forman parte de esta decisión.
+**Version.** The state of the repository moves to `0.7.0`. It is not declared published: there is no tag and no
+published package. `CHANGELOG.md` presents it as the state of the repository and keeps separate the changes
+of `servidor/` and `web/`, which are not part of this decision.
 
-## Cambios necesarios
+## Required changes
 
-- Especificación 0.7: sección 4.5 (listas), 8.2 (funciones de `List`), 9.6 (`for`), tablas de tipos,
-  compatibilidad, conversiones, diagnósticos y limitaciones.
-- Guías: `types.md` (listas y funciones), `limitations.md` (límites reales) y `index.md`.
-- Hoja de ruta: listas y `for` dejan de estar pendientes.
-- Arquitectura: el modelo de tipos ya no es «tipos son textos».
-- Herramientas: documentar los campos aditivos en `inspect-schema.md`, `ai-context.md` y
+- Specification 0.7: section 4.5 (lists), 8.2 (`List` functions), 9.6 (`for`), tables of types,
+  compatibility, conversions, diagnostics and limitations.
+- Guides: `types.md` (lists and functions), `limitations.md` (real limits) and `index.md`.
+- Roadmap: lists and `for` stop being pending.
+- Architecture: the type model is no longer "types are texts".
+- Tools: document the additive fields in `inspect-schema.md`, `ai-context.md` and
   `ai-tooling.md`.
-- `CHANGELOG.md` y `version.py` a `0.7.0`.
+- `CHANGELOG.md` and `version.py` to `0.7.0`.
 
-## Pruebas de regresión
+## Regression tests
 
-La implementación se apoya en estas pruebas, que se ejecutan en la batería completa:
+The implementation relies on these tests, which run in the full suite:
 
-| Archivo | Qué fija |
-|---------|----------|
-| `tests/test_type_lists_syntax.py` | Tokens `[`/`]`, gramática de `List[T]`, anidamiento, errores de sintaxis, `TypeRef.arguments` y el límite de 64 niveles |
-| `tests/test_type_lists_values.py` | Literales, inferencia, listas vacías, homogeneidad, invariancia, ensanchamiento de refinados, igualdad, impresión, inmutabilidad y `main` sin listas |
-| `tests/test_type_lists_functions.py` | Aridad y tipos de las cinco funciones, contrato de `List.get`, resultados, inmutabilidad de `append`/`concat` y búsqueda estructural |
-| `tests/test_for.py` | Sintaxis, orden, evaluación única, lista vacía, tipo del iterador, ámbitos, inmutabilidad, `return`, anidamiento, invariantes, `E2022`, palabras reservadas y herramientas |
-| `tests/test_parser.py`, `tests/test_inspect.py`, `tests/test_tooling.py` | Nodos, esquemas y documentos de las herramientas |
-| `tests/test_examples.py`, `tests/test_docs.py` | `examples/lists.nex`, sus salidas registradas y los programas de la documentación |
+| File | What it pins down |
+|------|-------------------|
+| `tests/test_type_lists_syntax.py` | Tokens `[`/`]`, grammar of `List[T]`, nesting, syntax errors, `TypeRef.arguments` and the limit of 64 levels |
+| `tests/test_type_lists_values.py` | Literals, inference, empty lists, homogeneity, invariance, widening of refined types, equality, printing, immutability and `main` without lists |
+| `tests/test_type_lists_functions.py` | Arity and types of the five functions, contract of `List.get`, results, immutability of `append`/`concat` and structural search |
+| `tests/test_for.py` | Syntax, order, single evaluation, empty list, type of the iterator, scopes, immutability, `return`, nesting, invariants, `E2022`, reserved words and tools |
+| `tests/test_parser.py`, `tests/test_inspect.py`, `tests/test_tooling.py` | Nodes, schemas and documents of the tools |
+| `tests/test_examples.py`, `tests/test_docs.py` | `examples/lists.nex`, its recorded outputs and the programs of the documentation |
 
-El ejemplo ejecutable es [`examples/lists.nex`](../../examples/lists.nex), con su salida en
-`tests/golden/examples/lists.run.stdout`. La batería completa y `ruff check .` se ejecutaron al
-cerrar este incremento; el resultado real se registra en el informe del cambio, no en este ADR.
+The runnable example is [`examples/lists.nex`](../../examples/lists.nex), with its output in
+`tests/golden/examples/lists.run.stdout`. The full suite and `ruff check .` were run when
+closing this increment; the real result is recorded in the report of the change, not in this ADR.
 
-## Relación con la 0012 y el índice
+## Relation to 0012 and the index
 
-- La 0012 **no se reescribe**. Su cabecera («no aceptada», «implementación: ninguna») describe el
-  momento en que se escribió; la 0013 explica qué partes se han implementado y aceptado desde
-  entonces.
-- La 0013 no sustituye a la 0012 ni la deroga: la complementa para el subconjunto implementado.
-- El índice [`README.md`](README.md) registra la 0012 como propuesta y la 0013 como aceptada.
+- 0012 **is not rewritten**. Its header ("not accepted", "implementation: none") describes the
+  moment when it was written; 0013 explains which parts have been implemented and accepted since
+  then.
+- 0013 neither replaces nor repeals 0012: it complements it for the implemented subset.
+- The index [`README.md`](README.md) records 0012 as a proposal and 0013 as accepted.

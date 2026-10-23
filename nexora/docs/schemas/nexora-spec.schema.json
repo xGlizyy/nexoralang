@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://nexora.invalid/schemas/nexora-spec.schema.json",
-  "title": "nexora.spec/1: the language specification, or one section of it",
+  "title": "nexora.spec/2: the language specification, or one section of it",
   "type": "object",
   "required": [
     "schema",
@@ -14,7 +14,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "nexora.spec/1"
+      "const": "nexora.spec/2"
     },
     "nexora_version": {
       "type": "string"
@@ -30,8 +30,8 @@
       ]
     },
     "language": {
-      "const": "es",
-      "description": "The specification is written in Spanish."
+      "const": "en",
+      "description": "The specification is written in English."
     },
     "sections": {
       "type": "array",

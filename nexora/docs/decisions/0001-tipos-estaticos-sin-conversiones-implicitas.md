@@ -1,57 +1,57 @@
-# 0001 — Tipos estáticos, sin conversiones implícitas; `String` pasa a llamarse `Text`
+# 0001 — Static types, without implicit conversions; `String` is renamed `Text`
 
-- **Estado:** aceptada
-- **Versión:** 0.2.0
+- **Status:** accepted
+- **Version:** 0.2.0
 
-## Contexto
+## Context
 
-La versión 0.1 ya deducía el tipo de cada expresión, pero no permitía escribir tipos, no tenía
-comparaciones ni lógica, y no ofrecía ninguna forma de pasar de un tipo a otro: `1 + 1.5` era un
-error sin solución dentro del lenguaje.
+Version 0.1 already deduced the type of every expression, but it did not allow writing types, it had no
+comparisons or logic, and it offered no way to go from one type to another: `1 + 1.5` was an
+error with no solution inside the language.
 
-## Decisión
+## Decision
 
-1. **Todo tipo se conoce sin ejecutar.** El tipo de una expresión depende solo de literales,
-   anotaciones y firmas. Ningún error de tipos puede aparecer durante la ejecución.
-2. **Dos tipos son compatibles solo si son el mismo.** No hay subtipos ni promoción numérica:
-   `Int` y `Float` no se mezclan en operaciones, comparaciones, argumentos ni retornos.
-3. **Las conversiones son llamadas explícitas**: `to_float`, `to_int` y `to_text`. No hay ninguna
-   otra.
-4. **La división entre `Int` devuelve `Int`**, redondeando hacia cero. Se mantiene el
-   comportamiento de 0.1.
-5. **Las condiciones son `Bool`.** Un número o un texto no valen como condición.
-6. **Anotaciones opcionales** en `let` (`let age: Int = 25`); sin anotación, el tipo se infiere.
-7. **El tipo de texto se llama `Text`** en lugar de `String`.
-8. Los operadores lógicos son palabras (`and`, `or`, `not`), como en el borrador de diseño.
+1. **Every type is known without running.** The type of an expression depends only on literals,
+   annotations and signatures. No type error can appear while the program runs.
+2. **Two types are compatible only if they are the same.** There are no subtypes and no numeric promotion:
+   `Int` and `Float` do not mix in operations, comparisons, arguments or returns.
+3. **Conversions are explicit calls**: `to_float`, `to_int` and `to_text`. There is no
+   other.
+4. **Division between `Int` values returns an `Int`**, rounding towards zero. The behaviour of
+   0.1 is kept.
+5. **Conditions are `Bool`.** A number or a text is not valid as a condition.
+6. **Optional annotations** on `let` (`let age: Int = 25`); without an annotation, the type is inferred.
+7. **The text type is called `Text`** instead of `String`.
+8. Logical operators are words (`and`, `or`, `not`), as in the design draft.
 
-## Motivos
+## Reasons
 
-- Una conversión implícita puede ocultar un error: `1 + 1.5` puede ser una mezcla de unidades
-  accidental. Si la conversión hay que escribirla, el código dice lo que hace y una herramienta
-  que lo lea no tiene que conocer reglas de promoción.
-- Con una única regla de compatibilidad ("el mismo tipo") los mensajes de error pueden ser exactos
-  y proponer la conversión correcta cuando existe.
-- La división entera que devuelve entero evita que el tipo del resultado dependa de los valores.
-  La alternativa (devolver siempre `Float`) habría convertido `10 / 2` en `5.0` y habría hecho
-  imposible la aritmética entera exacta sin otro operador.
-- `Text` es el nombre pedido para esta fase; describe el valor para quien no viene de otro lenguaje.
+- An implicit conversion can hide an error: `1 + 1.5` can be an accidental mix of units.
+  If the conversion has to be written, the code says what it does and a tool
+  that reads it does not have to know promotion rules.
+- With a single compatibility rule ("the same type") error messages can be exact
+  and propose the right conversion when it exists.
+- Integer division that returns an integer avoids having the type of the result depend on the values.
+  The alternative (always returning `Float`) would have turned `10 / 2` into `5.0` and would have made
+  exact integer arithmetic impossible without another operator.
+- `Text` is the name asked for in this phase; it describes the value for whoever does not come from another language.
 
-## Alternativas descartadas
+## Alternatives ruled out
 
-- **Promoción `Int` → `Float`.** Cómoda, pero es precisamente la conversión silenciosa que se
-  quiere evitar, y pierde precisión con enteros de más de 53 bits.
-- **Un operador de división entera aparte (`//`).** Añade sintaxis para algo que el tipo de los
-  operandos ya expresa.
-- **`!`, `&&`, `||`.** El borrador ya había elegido palabras; se mantiene una sola forma.
-- **Comparar textos con `<`.** Requiere definir un orden (¿por código Unicode?, ¿por idioma?). Se
-  aplaza hasta decidirlo.
+- **`Int` → `Float` promotion.** Convenient, but it is precisely the silent conversion that is
+  to be avoided, and it loses precision with integers of more than 53 bits.
+- **A separate integer division operator (`//`).** It adds syntax for something the type of the
+  operands already expresses.
+- **`!`, `&&`, `||`.** The draft had already chosen words; a single form is kept.
+- **Comparing texts with `<`.** It requires defining an order (by Unicode code? by language?). It is
+  postponed until that is decided.
 
-## Cambios incompatibles y cómo actualizar
+## Incompatible changes and how to update
 
-| Cambio | Efecto | Qué hacer |
-|--------|--------|-----------|
-| `String` → `Text` | Los mensajes de error dicen `Text`. Ningún programa de 0.1 escribía `String`, porque no había anotaciones, así que no hay código que cambiar | Nada. Escribir `String` en 0.2 produce `E2012` con la pista "The text type is called Text" |
-| `and`, `or`, `not`, `if`, `else`, `return`, `requires`, `ensures` ahora tienen significado | Ya eran palabras reservadas en 0.1, así que ningún programa válido las usaba como nombres | Nada |
-| `to_text`, `to_float`, `to_int` son funciones integradas | Un programa de 0.1 que declarase una variable con uno de esos nombres ahora da `E2006` | Renombrar la variable |
+| Change | Effect | What to do |
+|--------|--------|------------|
+| `String` → `Text` | Error messages say `Text`. No 0.1 program wrote `String`, because there were no annotations, so there is no code to change | Nothing. Writing `String` in 0.2 produces `E2012` with the hint "The text type is called Text" |
+| `and`, `or`, `not`, `if`, `else`, `return`, `requires`, `ensures` now have a meaning | They were already reserved words in 0.1, so no valid program used them as names | Nothing |
+| `to_text`, `to_float`, `to_int` are built-in functions | A 0.1 program that declared a variable with one of those names now gives `E2006` | Rename the variable |
 
-Los cuatro ejemplos de la versión 0.1 se ejecutan sin cambios y dan el mismo resultado.
+The four examples of version 0.1 run unchanged and give the same result.

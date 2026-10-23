@@ -1,25 +1,25 @@
-# Contratos
+# Contracts
 
-> **Estado: estable desde la versión 0.3.0.** La posición de las cláusulas, el nombre `result` y la
-> explicación tras una coma son definitivos ([decisión 0007](decisions/0007-contratos-estables-y-tipos-refinados.md)).
+> **Status: stable since version 0.3.0.** The position of the clauses, the name `result` and the
+> explanation after a comma are final ([decision 0007](decisions/0007-contratos-estables-y-tipos-refinados.md)).
 
-Un contrato es una condición que una función declara como parte de sí misma:
+A contract is a condition that a function declares as part of itself:
 
-- **`requires`**: lo que la función **espera** de quien la llama (condición previa).
-- **`ensures`**: lo que la función **promete** al terminar (condición posterior).
+- **`requires`**: what the function **expects** from its caller (precondition).
+- **`ensures`**: what the function **promises** when it ends (postcondition).
 
-Los contratos se evalúan con las reglas normales del lenguaje. Son deterministas y no interviene
-ningún modelo de IA.
+Contracts are evaluated with the normal rules of the language. They are deterministic and no
+AI model is involved.
 
-La definición formal está en la [especificación](language-spec.md#9-contratos). Todos los ejemplos
-de esta página se comprueban en las pruebas del proyecto.
+The formal definition is in the [specification](language-spec.md#9-contracts). All the examples
+of this page are checked by the tests of the project.
 
-Para las reglas que describen **un valor** y no una llamada ("un porcentaje va de 0 a 100"), NEXORA
-tiene [tipos refinados](types.md#tipos-refinados). Los contratos y los tipos refinados se
-complementan: un tipo dice qué valores son válidos en cualquier parte del programa, y un contrato
-dice qué relación tienen los argumentos y el resultado de una función concreta.
+For the rules that describe **a value** and not a call ("a percentage goes from 0 to 100"), NEXORA
+has [refined types](types.md#refined-types). Contracts and refined types
+complement each other: a type says which values are valid anywhere in the program, and a contract
+says what relation the arguments and the result of a concrete function have.
 
-## Un ejemplo
+## An example
 
 <!-- nex:run -->
 ```nex
@@ -47,34 +47,34 @@ fn main() -> Void {
 42
 ```
 
-## Reglas
+## Rules
 
-- Las cláusulas van **al principio del cuerpo**, una por línea, antes de cualquier sentencia.
-  Puede haber varias de cada tipo.
-- La condición tiene que ser de tipo `Bool`.
-- En `requires` solo son visibles **los parámetros** de la función.
-- En `ensures` son visibles los parámetros y **`result`**, que es el valor devuelto por la función
-  y tiene su tipo de retorno. En una función `Void` no existe `result`.
-- Los parámetros no cambian de valor, así que en `ensures` valen lo mismo que al entrar.
-- Una condición puede llamar a funciones.
-- `result` solo tiene este significado dentro de `ensures`. En el cuerpo es un nombre corriente.
-  Un parámetro no puede llamarse `result`.
-- Detrás de la condición puede ir, tras una coma, la **explicación** de la regla (sección
-  siguiente).
+- The clauses go **at the beginning of the body**, one per line, before any statement.
+  There can be several of each kind.
+- The condition has to be of type `Bool`.
+- In `requires` only **the parameters** of the function are visible.
+- In `ensures` the parameters and **`result`** are visible; `result` is the value returned by the function
+  and has its return type. In a `Void` function `result` does not exist.
+- Parameters do not change their value, so in `ensures` they are worth the same as on entry.
+- A condition can call functions.
+- `result` only has this meaning inside `ensures`. In the body it is an ordinary name.
+  A parameter cannot be named `result`.
+- After the condition there may be, after a comma, the **explanation** of the rule (next
+  section).
 
-## La explicación de una regla
+## The explanation of a rule
 
-Una condición dice *qué* se exige; su explicación dice *por qué*. Se escribe tras una coma, como un
-texto:
+A condition says *what* is required; its explanation says *why*. It is written after a comma, as a
+text:
 
 ```text
 requires amount <= balance, "An account cannot go below zero"
 ```
 
-La explicación no cambia lo que se comprueba. Cuando la condición es falsa, aparece en el
-diagnóstico como `Reason: ...`, justo después de la condición, y las herramientas la reciben como
-dato (`message` en `nex inspect` y en `nex context`). Así, quien incumple la regla, sea una persona
-o un agente, no tiene que deducir de dónde sale:
+The explanation does not change what is checked. When the condition is false, it appears in the
+diagnostic as `Reason: ...`, right after the condition, and tools receive it as
+data (`message` in `nex inspect` and in `nex context`). That way, whoever breaks the rule, whether a person
+or an agent, does not have to work out where it comes from:
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -105,19 +105,19 @@ contract error[E4001]: Precondition violated
 error: program.nex: the program stopped because a contract was broken
 ```
 
-Es opcional. Conviene escribirla cuando la condición no se explica sola: `requires b != 0.0` no la
-necesita; `requires amount <= balance` sí, porque la regla es del negocio, no de la aritmética. Es
-una sola frase: un texto vacío o con un salto de línea es un error (`E1101`).
+It is optional. It is worth writing it when the condition does not explain itself: `requires b != 0.0` does not
+need it; `requires amount <= balance` does, because the rule belongs to the business, not to arithmetic. It is
+a single sentence: an empty text or one with a line break is an error (`E1101`).
 
-## Cuándo se comprueba cada cosa
+## When each thing is checked
 
-| Momento | Qué se comprueba |
-|---------|------------------|
-| Sin ejecutar (`nex check`) | Que la condición esté bien escrita: nombres visibles, tipos correctos, resultado `Bool` |
-| Al ejecutar, en **cada** llamada | `requires`: después de recibir los argumentos y **antes** de ejecutar el cuerpo |
-| Al ejecutar, en **cada** llamada | `ensures`: **después** de calcular el valor de retorno |
+| Moment | What is checked |
+|--------|-----------------|
+| Without running (`nex check`) | That the condition is well written: visible names, correct types, `Bool` result |
+| When running, on **every** call | `requires`: after receiving the arguments and **before** running the body |
+| When running, on **every** call | `ensures`: **after** computing the return value |
 
-`nex check` rechaza una condición mal tipada sin ejecutar nada:
+`nex check` rejects a badly typed condition without running anything:
 
 <!-- nex:check-fails -->
 ```nex
@@ -150,10 +150,10 @@ type error[E2011]: Type mismatch
 error: program.nex: check failed with 2 errors
 ```
 
-## Cuando `requires` no se cumple
+## When `requires` does not hold
 
-El programa se detiene **antes** de ejecutar el cuerpo de la función. El diagnóstico señala **la
-llamada**, porque quien llama es quien incumple, y muestra la condición y los valores recibidos:
+The program stops **before** running the body of the function. The diagnostic points at **the
+call**, because the caller is the one who breaks it, and it shows the condition and the values received:
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -186,15 +186,15 @@ contract error[E4001]: Precondition violated
 error: program.nex: the program stopped because a contract was broken
 ```
 
-Sin el contrato, el mismo programa fallaría con una división por cero dentro de `divide`. Con él,
-el error dice qué regla se incumplió y desde dónde.
+Without the contract, the same program would fail with a division by zero inside `divide`. With it,
+the error says which rule was broken and from where.
 
-### Las funciones del lenguaje también tienen `requires`
+### The functions of the language also have `requires`
 
-Las funciones de un tipo que no siempre tienen respuesta (`Text.slice`, `Int.parse`,
-`Float.parse`) declaran sus `requires` en NEXORA, con su explicación, y fallan con el mismo `E4001`
-([especificación](language-spec.md), sección 8.1). Quien llama puede trasladar el requisito a su
-propia función:
+The functions of a type that do not always have an answer (`Text.slice`, `Int.parse`,
+`Float.parse`) declare their `requires` in NEXORA, with their explanation, and fail with the same `E4001`
+([specification](language-spec.md), section 8.1). The caller can move the requirement to its
+own function:
 
 <!-- nex:run -->
 ```nex
@@ -212,13 +212,13 @@ fn main() -> Void {
 24
 ```
 
-`nex symbols` muestra los requisitos de cada función integrada en su campo `contracts`, así que una
-herramienta sabe antes de ejecutar nada que `Int.parse` exige `Int.can_parse`.
+`nex symbols` shows the requirements of every built-in function in its `contracts` field, so a
+tool knows before running anything that `Int.parse` requires `Int.can_parse`.
 
-## Cuando `ensures` no se cumple
+## When `ensures` does not hold
 
-El diagnóstico señala **la cláusula**, porque es la función la que no cumple lo que promete, y
-muestra el valor devuelto:
+The diagnostic points at **the clause**, because it is the function that does not meet what it promises, and
+it shows the returned value:
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -249,13 +249,13 @@ contract error[E4002]: Postcondition violated
 error: program.nex: the program stopped because a contract was broken
 ```
 
-Aquí el contrato ha encontrado un fallo real del cuerpo: suma el porcentaje en vez de restarlo.
+Here the contract has found a real bug in the body: it adds the percentage instead of subtracting it.
 
-## Ejemplos (`example`)
+## Examples (`example`)
 
-Un contrato dice qué relación cumplen siempre la entrada y la salida. Un **ejemplo** dice qué resultado
-concreto da la función con unas entradas concretas. Se escribe junto a los contratos, con la misma
-forma, y lo evalúa `nex test` ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)):
+A contract says which relation the input and the output always meet. An **example** says what concrete
+result the function gives with some concrete inputs. It is written next to the contracts, with the same
+form, and `nex test` evaluates it ([decision 0008](decisions/0008-ejemplos-y-nex-test.md)):
 
 <!-- nex:test exit=0 -->
 ```nex
@@ -273,14 +273,14 @@ program.nex: 2 examples in 1 function
 ✓ 2 examples passed: program.nex
 ```
 
-- La expresión es `Bool` y tiene que llamar a su propia función, escrita en la propia expresión
-  (`E2020` si no lo hace). No ve los parámetros ni `result`: las entradas y el resultado se escriben
-  como valores.
-- `nex check` y las demás herramientas de análisis **nunca** evalúan un ejemplo. `nex run` los
-  ignora. `nex test` no exige `main` y no lo ejecuta.
-- Cada ejemplo se evalúa por separado, comprobando los contratos de todo lo que se ejecuta.
+- The expression is `Bool` and has to call its own function, written in the expression itself
+  (`E2020` if it does not). It does not see the parameters or `result`: the inputs and the result are written
+  as values.
+- `nex check` and the other analysis tools **never** evaluate an example. `nex run`
+  ignores them. `nex test` does not require `main` and does not run it.
+- Every example is evaluated separately, checking the contracts of everything that runs.
 
-Si un ejemplo resulta falso, `nex test` dice qué devolvió la función y termina con el código `6`:
+If an example turns out false, `nex test` says what the function returned and ends with code `6`:
 
 <!-- nex:test exit=6 -->
 ```nex
@@ -317,11 +317,11 @@ contract error[E4001]: Precondition violated
 error: program.nex: 2 of 2 examples did not pass (1 failed, 1 error)
 ```
 
-El primer ejemplo es `failed` (`E4004`): la función respondió, pero no lo esperado. El segundo es
-`error`: no llegó a responder, porque la llamada incumple el `requires`; conserva el `E4001` y gana
-una nota con el ejemplo que lo provocó.
+The first example is `failed` (`E4004`): the function answered, but not what was expected. The second one is
+`error`: it never got to answer, because the call breaks the `requires`; it keeps the `E4001` and gains
+a note with the example that caused it.
 
-Un archivo sin ejemplos no se da por probado:
+A file without examples is not taken as tested:
 
 <!-- nex:test exit=6 -->
 ```nex
@@ -335,15 +335,15 @@ program.nex: no examples to run
 error: program.nex: nothing was tested
 ```
 
-## Bucles: `invariant` y `decreases`
+## Loops: `invariant` and `decreases`
 
-Un bucle `while` declara sus requisitos al principio de su cuerpo, igual que una función
-([decisión 0010](decisions/0010-var-y-while.md)):
+A `while` loop declares its requirements at the beginning of its body, just like a function
+([decision 0010](decisions/0010-var-y-while.md)):
 
-- **`decreases`** (exactamente una): la **medida**, un `Int` que nunca baja de 0 y que disminuye en
-  cada vuelta. Es la razón por la que el bucle termina, escrita en el código.
-- **`invariant`** (las que haga falta): una condición que se cumple antes de cada evaluación de la
-  condición del bucle; es decir, al llegar, después de cada vuelta y al salir.
+- **`decreases`** (exactly one): the **measure**, an `Int` that never goes below 0 and that decreases on
+  every iteration. It is the reason why the loop ends, written in the code.
+- **`invariant`** (as many as needed): a condition that holds before every evaluation of the
+  condition of the loop; that is, on arrival, after every iteration and on exit.
 
 <!-- nex:run -->
 ```nex
@@ -371,13 +371,13 @@ fn main() -> Void {
 21
 ```
 
-Las cláusulas ven lo que es visible donde está el bucle, no lo que declara su cuerpo, y llevan su
-explicación tras una coma. Un bucle sin `decreases` no supera `nex check` (`E2021`).
+The clauses see what is visible where the loop is, not what its body declares, and they carry their
+explanation after a comma. A loop without `decreases` does not pass `nex check` (`E2021`).
 
-El intérprete las comprueba **en cada vuelta**. Un invariante falso es `E4005`; una medida negativa
-o que no es menor que en la vuelta anterior es `E4006`. Así, ningún bucle se queda repitiendo para
-siempre: o termina, o se detiene y dice en qué vuelta y con qué valores. El diagnóstico lleva la
-explicación de la regla, como el de un contrato:
+The interpreter checks them **on every iteration**. A false invariant is `E4005`; a measure that is negative
+or is not smaller than in the previous iteration is `E4006`. That way, no loop keeps repeating
+forever: either it ends, or it stops and says in which iteration and with which values. The diagnostic carries the
+explanation of the rule, like that of a contract:
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -414,55 +414,55 @@ contract error[E4005]: Loop invariant violated
 error: program.nex: the program stopped because a contract was broken
 ```
 
-## Códigos y salida
+## Codes and output
 
-| Situación | Código | Categoría | `nex run` termina con |
-|-----------|--------|-----------|-----------------------|
-| Condición `requires` falsa | `E4001` | `contract` | `5` |
-| Condición `ensures` falsa | `E4002` | `contract` | `5` |
-| `invariant` falso en un bucle | `E4005` | `contract` | `5` |
-| Medida (`decreases`) que no disminuye o es negativa | `E4006` | `contract` | `5` |
-| Bucle sin medida, o con más de una | `E2021` | `semantic` | `1` (no se ejecuta) |
-| Condición mal tipada | `E2011` | `type` | `1` (no se ejecuta) |
-| Cláusula fuera del principio del cuerpo | `E1106` | `syntax` | `1` (no se ejecuta) |
-| Explicación vacía, de más de una línea o que no es un texto | `E1101` | `syntax` | `1` (no se ejecuta) |
+| Situation | Code | Category | `nex run` ends with |
+|-----------|------|----------|---------------------|
+| False `requires` condition | `E4001` | `contract` | `5` |
+| False `ensures` condition | `E4002` | `contract` | `5` |
+| False `invariant` in a loop | `E4005` | `contract` | `5` |
+| Measure (`decreases`) that does not decrease or is negative | `E4006` | `contract` | `5` |
+| Loop without a measure, or with more than one | `E2021` | `semantic` | `1` (it does not run) |
+| Badly typed condition | `E2011` | `type` | `1` (it does not run) |
+| Clause outside the beginning of the body | `E1106` | `syntax` | `1` (it does not run) |
+| Explanation that is empty, longer than one line or not a text | `E1101` | `syntax` | `1` (it does not run) |
 
-Si evaluar la condición produce por sí mismo un error (por ejemplo, una división por cero dentro
-de la condición), el error comunicado es ese (`runtime`, código de salida `3`), no una violación
-de contrato.
+If evaluating the condition itself produces an error (for example, a division by zero inside
+the condition), the error reported is that one (`runtime`, exit code `3`), not a contract
+violation.
 
-## Limitaciones
+## Limitations
 
-Lo que los contratos **no** hacen. Es importante no atribuirles más garantías de las que tienen:
+What contracts do **not** do. It is important not to attribute to them more guarantees than they have:
 
-- **No se demuestran.** `nex check` comprueba que una condición está bien escrita, no que se
-  cumpla. Un programa que supera `nex check` puede incumplir un contrato al ejecutarse.
-- **Solo se comprueban las llamadas que se ejecutan.** Que un programa termine sin violaciones
-  significa que esa ejecución, con esos valores, cumplió los contratos. No dice nada sobre otros
-  valores.
-- **Una condición imposible de cumplir se acepta.** `requires n > 0 and n < 0` supera `nex check`;
-  la violación aparece en la primera llamada.
-- **No se comprueba que las condiciones carezcan de efectos.** Una condición puede llamar a una
-  función que use `print`.
-- **No se pueden desactivar.** Se comprueban siempre, y cada comprobación tiene un coste de
-  ejecución.
-- No hay condiciones sobre valores "antes" y "después" de una función: los parámetros no cambian,
-  así que en `ensures` tienen el valor con el que se llamó. Los invariantes existen solo en los
-  bucles. Las reglas sobre los valores de un tipo se escriben con
-  [tipos refinados](types.md#tipos-refinados).
-- **Una medida garantiza que el bucle termina, no que termine pronto.** Una medida inicial de mil
-  millones permite mil millones de vueltas.
+- **They are not proven.** `nex check` checks that a condition is well written, not that it
+  holds. A program that passes `nex check` can break a contract when it runs.
+- **Only the calls that run are checked.** A program ending without violations
+  means that that run, with those values, met the contracts. It says nothing about other
+  values.
+- **A condition that can never hold is accepted.** `requires n > 0 and n < 0` passes `nex check`;
+  the violation appears on the first call.
+- **It is not checked that conditions have no effects.** A condition can call a
+  function that uses `print`.
+- **They cannot be turned off.** They are always checked, and every check has a running
+  cost.
+- There are no conditions on values "before" and "after" a function: parameters do not change,
+  so in `ensures` they have the value the function was called with. Invariants only exist in
+  loops. The rules on the values of a type are written with
+  [refined types](types.md#refined-types).
+- **A measure guarantees that the loop ends, not that it ends soon.** An initial measure of a
+  billion allows a billion iterations.
 
-## Por qué existen
+## Why they exist
 
-Los requisitos de una función forman parte verificable del programa: esa es la característica que
-distingue a NEXORA ([decisión 0006](decisions/0006-requisitos-verificables.md)). Un requisito que
-solo está en una instrucción en lenguaje natural no lo comprueba nadie y se pierde en la siguiente
-edición; escrito como contrato, se comprueba en cada llamada y dice quién lo incumplió.
+The requirements of a function are a verifiable part of the program: that is the feature that
+distinguishes NEXORA ([decision 0006](decisions/0006-requisitos-verificables.md)). A requirement that
+is only in an instruction in natural language is checked by nobody and gets lost in the next
+edit; written as a contract, it is checked on every call and says who broke it.
 
-Que eso ayude de verdad a las personas y a las herramientas de IA, y cuánto, **no se ha medido**:
-es una hipótesis de trabajo, no un resultado.
+Whether that really helps people and AI tools, and how much, **has not been measured**:
+it is a working hypothesis, not a result.
 
-Las decisiones de diseño y sus alternativas están en
-[`decisions/0004`](decisions/0004-contratos-en-ejecucion.md) y
+The design decisions and their alternatives are in
+[`decisions/0004`](decisions/0004-contratos-en-ejecucion.md) and
 [`decisions/0007`](decisions/0007-contratos-estables-y-tipos-refinados.md).

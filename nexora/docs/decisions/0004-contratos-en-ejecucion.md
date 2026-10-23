@@ -1,56 +1,56 @@
-# 0004 — Contratos al principio del cuerpo, comprobados en ejecución
+# 0004 — Contracts at the beginning of the body, checked at run time
 
-- **Estado:** aceptada. Fue experimental en la 0.2; la [decisión 0007](0007-contratos-estables-y-tipos-refinados.md)
-  la declara estable en la 0.3.0 sin cambiar su sintaxis
-- **Versión:** 0.2.0
+- **Status:** accepted. It was experimental in 0.2; [decision 0007](0007-contratos-estables-y-tipos-refinados.md)
+  declares it stable in 0.3.0 without changing its syntax
+- **Version:** 0.2.0
 
-## Decisión
+## Decision
 
-1. Una función puede declarar condiciones previas (`requires`) y posteriores (`ensures`).
-2. **Las cláusulas se escriben al principio del cuerpo**, antes de cualquier sentencia. El borrador
-   de diseño las colocaba entre la firma y la llave de apertura.
-3. Una condición es una expresión `Bool` normal. En `requires` solo son visibles los parámetros; en
-   `ensures`, los parámetros y `result`.
-4. `result` es un nombre contextual: solo significa "el valor devuelto" dentro de `ensures`. Un
-   parámetro no puede llamarse `result`.
-5. **`nex check` comprueba los tipos de las condiciones. Su verdad se comprueba al ejecutar**, en
-   cada llamada: `requires` antes del cuerpo, `ensures` después de calcular el valor de retorno.
-6. Una condición falsa detiene el programa con un diagnóstico de categoría `contract`:
-   - `E4001` señala **la llamada** (quien llama incumple).
-   - `E4002` señala **la cláusula** (la función incumple).
-7. El proceso termina con el código de salida `5`, distinto del de un error de ejecución (`3`).
+1. A function can declare preconditions (`requires`) and postconditions (`ensures`).
+2. **The clauses are written at the beginning of the body**, before any statement. The design
+   draft placed them between the signature and the opening brace.
+3. A condition is an ordinary `Bool` expression. In `requires` only the parameters are visible; in
+   `ensures`, the parameters and `result`.
+4. `result` is a contextual name: it only means "the returned value" inside `ensures`. A
+   parameter cannot be named `result`.
+5. **`nex check` checks the types of the conditions. Whether they hold is checked when running**, on
+   every call: `requires` before the body, `ensures` after computing the return value.
+6. A false condition stops the program with a diagnostic of category `contract`:
+   - `E4001` points at **the call** (the caller breaks it).
+   - `E4002` points at **the clause** (the function breaks it).
+7. The process ends with exit code `5`, different from that of a runtime error (`3`).
 
-## Motivos
+## Reasons
 
-- Se sigue la sintaxis propuesta para esta fase. Dentro del cuerpo, las cláusulas no necesitan
-  reglas especiales de continuación de línea, y `E1106` puede detectar una cláusula mal colocada.
-- Atribuir la culpa (llamada o función) es lo que distingue un contrato de un `if` que imprime un
-  error: el diagnóstico dice quién tiene que corregir su código.
-- Los valores de los argumentos y de `result` se incluyen en el diagnóstico porque son exactamente
-  lo que hace falta para entender por qué la condición fue falsa.
-- Comprobar en ejecución es lo que puede hacerse correctamente hoy. Una verificación estática
-  parcial que a veces dijera "cumple" sin poder demostrarlo sería peor que no tenerla.
+- The syntax proposed for this phase is followed. Inside the body, the clauses need no
+  special line-continuation rules, and `E1106` can detect a misplaced clause.
+- Assigning the blame (call or function) is what tells a contract apart from an `if` that prints an
+  error: the diagnostic says who has to fix their code.
+- The values of the arguments and of `result` are included in the diagnostic because they are exactly
+  what is needed to understand why the condition was false.
+- Checking at run time is what can be done correctly today. A partial static verification
+  that sometimes said "it holds" without being able to prove it would be worse than not having it.
 
-## Lo que no garantiza
+## What it does not guarantee
 
-- No demuestra que un contrato se cumpla siempre. Solo comprueba las llamadas que se ejecutan.
-- `nex check` nunca dice que un contrato se cumple; solo que está bien formado. Hay una prueba
-  (`test_check_does_not_claim_a_contract_holds`) con una condición imposible de cumplir que supera
-  `nex check` y falla al ejecutarse.
-- No comprueba que una condición no tenga efectos: puede llamar a una función que use `print`.
-- Los contratos no pueden desactivarse.
+- It does not prove that a contract always holds. It only checks the calls that run.
+- `nex check` never says that a contract holds; only that it is well formed. There is a test
+  (`test_check_does_not_claim_a_contract_holds`) with a condition that can never hold, which passes
+  `nex check` and fails when it runs.
+- It does not check that a condition has no effects: it can call a function that uses `print`.
+- Contracts cannot be turned off.
 
-## Alternativas descartadas
+## Alternatives ruled out
 
-- **Cláusulas entre la firma y el cuerpo** (borrador). Queda como posible cambio futuro.
-- **Verificación estática.** Fuera del alcance: requeriría un demostrador o análisis de rangos.
-- **Tratar la violación como un error de ejecución corriente.** Perdería la distinción entre
-  "el programa hizo una operación imposible" y "el programa incumplió lo que él mismo declara".
+- **Clauses between the signature and the body** (draft). It remains a possible future change.
+- **Static verification.** Out of scope: it would require a prover or a range analysis.
+- **Treating the violation as an ordinary runtime error.** It would lose the distinction between
+  "the program did an impossible operation" and "the program broke what it itself declares".
 
-## Posibles cambios incompatibles
+## Possible incompatible changes
 
-Al ser experimental, pueden cambiar la posición de las cláusulas, el nombre `result` y los nodos
-correspondientes del esquema de `nex inspect` (lo que cambiaría la versión del esquema).
+Since it is experimental, the position of the clauses, the name `result` and the corresponding nodes
+of the `nex inspect` schema may change (which would change the version of the schema).
 
-> Resuelto en la [decisión 0007](0007-contratos-estables-y-tipos-refinados.md): la posición de las
-> cláusulas y el nombre `result` se mantienen y pasan a ser estables.
+> Resolved in [decision 0007](0007-contratos-estables-y-tipos-refinados.md): the position of the
+> clauses and the name `result` are kept and become stable.

@@ -1,9 +1,9 @@
-# Funciones
+# Functions
 
-La definición formal está en la [especificación](language-spec.md#7-funciones). Esta guía la
-explica con ejemplos; todos se comprueban en las pruebas del proyecto.
+The formal definition is in the [specification](language-spec.md#7-functions). This guide
+explains it with examples; all of them are checked by the tests of the project.
 
-## Declarar una función
+## Declaring a function
 
 ```nex
 fn add(a: Int, b: Int) -> Int {
@@ -11,20 +11,20 @@ fn add(a: Int, b: Int) -> Int {
 }
 ```
 
-| Parte | Regla |
-|-------|-------|
-| `fn add` | El nombre. No puede repetirse ni coincidir con el de una función integrada |
-| `(a: Int, b: Int)` | Los parámetros. Cada uno declara su tipo, que tiene que ser un tipo de valor |
-| `-> Int` | El tipo de retorno. Se escribe siempre; `Void` si la función no devuelve nada |
-| `{ ... }` | El cuerpo |
+| Part | Rule |
+|------|------|
+| `fn add` | The name. It cannot be repeated or match that of a built-in function |
+| `(a: Int, b: Int)` | The parameters. Each one declares its type, which has to be a value type |
+| `-> Int` | The return type. It is always written; `Void` if the function returns nothing |
+| `{ ... }` | The body |
 
-Las funciones se declaran en el nivel superior del archivo, en cualquier orden: una función puede
-llamar a otra declarada más abajo. No se pueden declarar funciones dentro de otras funciones.
+Functions are declared at the top level of the file, in any order: a function can
+call another one declared further down. Functions cannot be declared inside other functions.
 
-## La función `main`
+## The `main` function
 
-Todo programa tiene una función `main`, sin parámetros y con tipo de retorno `Void`. Es donde
-empieza la ejecución.
+Every program has a `main` function, with no parameters and with return type `Void`. It is where
+execution starts.
 
 <!-- nex:run -->
 ```nex
@@ -41,11 +41,11 @@ fn square(n: Int) -> Int {
 49
 ```
 
-## Llamar a una función
+## Calling a function
 
-Los argumentos se asignan a los parámetros por posición. Antes de ejecutar el programa se
-comprueba que la función existe, que el número de argumentos coincide y que cada argumento tiene
-el tipo de su parámetro.
+Arguments are assigned to the parameters by position. Before running the program it is
+checked that the function exists, that the number of arguments matches and that each argument has
+the type of its parameter.
 
 <!-- nex:check-fails -->
 ```nex
@@ -85,15 +85,15 @@ semantic error[E2008]: Unknown function
 error: program.nex: check failed with 3 errors
 ```
 
-Al ejecutarse, una llamada evalúa sus argumentos de izquierda a derecha, crea un ámbito nuevo con
-los parámetros, ejecuta el cuerpo y devuelve el valor al punto de la llamada.
+When it runs, a call evaluates its arguments from left to right, creates a new scope with
+the parameters, runs the body and returns the value to the point of the call.
 
-Una función **no ve las variables de quien la llama**: solo sus parámetros y lo que declare en su
-cuerpo. No existen variables globales. Los parámetros, como las variables, no pueden cambiar de valor.
+A function **does not see the variables of its caller**: only its parameters and what it declares in its
+body. There are no global variables. Parameters, like variables, cannot change their value.
 
-## Devolver un valor
+## Returning a value
 
-En una función que devuelve un valor, `return` va seguido de una expresión del tipo declarado:
+In a function that returns a value, `return` is followed by an expression of the declared type:
 
 <!-- nex:check-fails -->
 ```nex
@@ -118,8 +118,8 @@ type error[E2011]: Type mismatch
 error: program.nex: check failed with 1 error
 ```
 
-El valor devuelto **no puede ignorarse**. Llamar a una función que devuelve algo y no usar el
-resultado es un error (`E2010`):
+The returned value **cannot be ignored**. Calling a function that returns something and not using the
+result is an error (`E2010`):
 
 <!-- nex:check-fails -->
 ```nex
@@ -143,10 +143,10 @@ semantic error[E2010]: Unused value
 error: program.nex: check failed with 1 error
 ```
 
-## Funciones `Void`
+## `Void` functions
 
-Una función `Void` no devuelve ningún valor. Termina al llegar al final del cuerpo, o antes con un
-`return` sin valor:
+A `Void` function returns no value. It ends when it reaches the end of the body, or before with a
+`return` without a value:
 
 <!-- nex:run -->
 ```nex
@@ -169,13 +169,13 @@ invalid score
 score: 80
 ```
 
-Una llamada a una función `Void` es una sentencia: no puede guardarse en una variable, imprimirse
-ni pasarse como argumento. En una función `Void`, `return` seguido de un valor es un error (`E2011`).
+A call to a `Void` function is a statement: it cannot be stored in a variable, printed
+or passed as an argument. In a `Void` function, `return` followed by a value is an error (`E2011`).
 
-## `if` y `else`
+## `if` and `else`
 
-`if` es una sentencia. La condición tiene que ser de tipo `Bool`. `else` y `else if` se escriben en
-la misma línea que la `}` anterior.
+`if` is a statement. The condition has to be of type `Bool`. `else` and `else if` are written on
+the same line as the previous `}`.
 
 <!-- nex:run -->
 ```nex
@@ -202,13 +202,13 @@ fn main() -> Void {
 1
 ```
 
-Cada bloque (`{ }`) tiene su propio ámbito: una variable declarada dentro de un `if` deja de
-existir al cerrarse su bloque.
+Every block (`{ }`) has its own scope: a variable declared inside an `if` stops
+existing when its block closes.
 
-## Toda ruta devuelve
+## Every path returns
 
-Una función que devuelve un valor tiene que terminar con `return` por **todos** los caminos
-posibles. Si alguno puede llegar al final del cuerpo, el programa se rechaza antes de ejecutarse:
+A function that returns a value has to end with `return` on **every** possible
+path. If any of them can reach the end of the body, the program is rejected before running:
 
 <!-- nex:check-fails -->
 ```nex
@@ -236,25 +236,25 @@ semantic error[E2014]: Missing return
 error: program.nex: check failed with 1 error
 ```
 
-Cómo se decide si un bloque devuelve siempre:
+How it is decided whether a block always returns:
 
-| Sentencia | Siempre devuelve si… |
-|-----------|----------------------|
-| `return` | Siempre |
-| `if` sin `else` final | Nunca: la condición puede ser falsa |
-| `if` … `else` … | Todas sus ramas siempre devuelven |
-| Un bloque `{ }` | Alguna de sus sentencias siempre devuelve |
+| Statement | Always returns if… |
+|-----------|--------------------|
+| `return` | Always |
+| `if` without a final `else` | Never: the condition may be false |
+| `if` … `else` … | All its branches always return |
+| A block `{ }` | One of its statements always returns |
 
-El análisis mira la estructura, no los valores: `if true { return 1 }` sin `else` también se rechaza.
+The analysis looks at the structure, not at the values: `if true { return 1 }` without `else` is also rejected.
 
-El código situado después de un `return`, en el mismo bloque, no puede ejecutarse nunca y es un
+Code placed after a `return`, in the same block, can never run and is an
 error (`E2015`).
 
-## Recursividad
+## Recursion
 
-Una función puede llamarse a sí misma, y dos funciones pueden llamarse entre sí. Para repetir algo
-muchas veces es mejor un bucle `while` ([contratos](contracts.md#bucles-invariant-y-decreases)): sus
-vueltas no son llamadas y no tienen el límite de 1000.
+A function can call itself, and two functions can call each other. To repeat something
+many times a `while` loop is better ([contracts](contracts.md#loops-invariant-and-decreases)): its
+iterations are not calls and do not have the limit of 1000.
 
 <!-- nex:run -->
 ```nex
@@ -288,8 +288,8 @@ fn main() -> Void {
 liftoff
 ```
 
-**Límite:** un programa puede tener como máximo 1000 llamadas anidadas (contando `main`). Una
-recursividad que no alcanza su caso base se detiene con un error de ejecución:
+**Limit:** a program can have at most 1000 nested calls (counting `main`). A
+recursion that does not reach its base case stops with a runtime error:
 
 <!-- nex:fails exit=3 -->
 ```nex
@@ -320,14 +320,14 @@ runtime error[E3004]: Too many nested calls
 error: program.nex: the program stopped because of a runtime error
 ```
 
-Si las llamadas recursivas están dentro de expresiones muy anidadas, el programa puede quedarse
-sin espacio de pila antes de llegar a las 1000 llamadas. El error es el mismo (`E3004`) y el
-mensaje indica cuántas llamadas había.
+If the recursive calls are inside very nested expressions, the program can run out of
+stack space before reaching 1000 calls. The error is the same (`E3004`) and the
+message says how many calls there were.
 
-## Nombres
+## Names
 
-Funciones, parámetros y variables comparten un único espacio de nombres, y un nombre visible no se
-declara dos veces. En consecuencia:
+Functions, parameters and variables share a single namespace, and a visible name is not
+declared twice. Consequently:
 
 <!-- nex:check-fails -->
 ```nex
@@ -367,13 +367,13 @@ type error[E2011]: Type mismatch
 error: program.nex: check failed with 3 errors
 ```
 
-## Restricciones de esta versión
+## Restrictions of this version
 
-- No hay valores por defecto ni argumentos con nombre.
-- No hay sobrecarga: dos funciones no pueden llamarse igual.
-- Las funciones no son valores: no se pueden guardar en variables ni pasar como argumentos.
-- No hay funciones anónimas, genéricos, métodos ni clases.
-- Un parámetro no puede llamarse `result` (ese nombre se usa en los [contratos](contracts.md)).
-- No se admite una coma final en las listas de parámetros o de argumentos.
-- `main` no recibe parámetros: los argumentos de la línea de comandos se leen con `args()`
-  ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)).
+- There are no default values or named arguments.
+- There is no overloading: two functions cannot have the same name.
+- Functions are not values: they cannot be stored in variables or passed as arguments.
+- There are no anonymous functions, generics, methods or classes.
+- A parameter cannot be named `result` (that name is used in [contracts](contracts.md)).
+- A trailing comma is not allowed in parameter or argument lists.
+- `main` receives no parameters: the arguments of the command line are read with `args()`
+  ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)).

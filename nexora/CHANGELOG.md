@@ -1,995 +1,481 @@
-# Cambios
-
-Registro de los cambios de NEXORA, con la versión más reciente primero.
-
-Todas las versiones son anteriores a la 1.0: el lenguaje puede cambiar de forma incompatible
-entre versiones. Cada cambio incompatible se indica aquí y se explica en `docs/decisions/`.
-
-Este registro empieza con la versión 0.1.0, la primera que pudo ejecutarse. La 0.9.0 es la primera
-versión publicada: está etiquetada (`v0.9.0`) y el paquete `nexora-lang` está en PyPI y en npm. La
-0.10.0, con `Option` y `Result`, también está etiquetada (`v0.10.0`) y publicada en los dos
-registros. Las anteriores solo identifican estados del código: nunca se etiquetaron ni se publicaron.
-
-Cada versión agrupa sus cambios en estas secciones, cuando tienen contenido:
-
-| Sección | Qué recoge |
-|---------|------------|
-| Añadido | Funcionalidades nuevas |
-| Corregido | Defectos resueltos |
-| Cambios incompatibles | Lo que puede hacer que un programa o un script existente deje de funcionar, y cómo actualizarlo |
-| Retirado | Lo que deja de existir |
-| Documentación | Cambios relevantes en la documentación |
-| Limitaciones | Restricciones conocidas que conviene tener presentes |
-
-## 0.11.0 — Módulos e importaciones (sin publicar)
-
-Esta versión **no está etiquetada ni publicada**: es el estado del repositorio. Implementa la
-[decisión 0018](docs/decisions/0018-modulos-e-importaciones.md): un programa puede estar hecho de
-varios archivos.
-
-### Repositorio
-
-- El servidor (`servidor/`), la web (`web/`) y su despliegue salen de este repositorio, que queda
-  con el lenguaje: intérprete, paquete de npm, extensión de VS Code y documentación. Viven en un
-  repositorio privado aparte. La web está en <https://nexoralang.org>.
-
-### Añadido
-
-- **`import "ruta/fichero.nex"`**, al principio del archivo. La ruta se resuelve respecto al archivo
-  que importa, no respecto al directorio desde el que se ejecuta el comando.
-- **Un espacio de nombres por módulo**, con el nombre del fichero sin la extensión:
-  `models.area(p)`, `models.Point(x: 1, y: 2)`. Los registros de un módulo son nominales: un `Point`
-  de un módulo no es el `Point` de otro.
-- **`pub`**: todo lo que declara un módulo es privado salvo lo marcado con `pub`.
-- **Diagnósticos nuevos**: `E2027` (módulo desconocido), `E2028` (nombre privado), `E2029`
-  (importación circular) y `E2030` (dos módulos con el mismo nombre).
-- **`nex symbols` y `nex context`** incluyen los nombres y las funciones de los módulos importados,
-  con un campo nuevo `file` al final de cada objeto: el archivo que lo declara, relativo al programa
-  y con `/`. `nex inspect` pasa a `nexora.inspect/2`, con `imports`, `public` y `qualifier`.
-- **Un ejemplo nuevo**, `examples/modules/`, con un programa y el módulo que importa.
-
-### Corregido
-
-Antes de etiquetarse, en el desarrollo de esta misma versión:
-
-- Un módulo que importaba el programa principal no se detectaba como ciclo en el primer paso: el
-  programa se leía dos veces y el error salía como `a.nex -> b.nex -> a.nex -> b.nex`, sobre una
-  copia del programa. Ahora sale `a.nex -> b.nex -> a.nex`, en la importación de `b.nex`.
-- Los módulos se mostraban con la ruta absoluta del equipo en los errores, en el campo `file` y en
-  las sugerencias de `E2030`. Ahora se muestran relativos al programa, con `/` en todos los sistemas.
-
-### Cambios incompatibles
-
-- `import` y `pub` pasan de palabras reservadas a palabras clave. Un programa que los usara como
-  nombre ya no compilaba, y sigue sin compilar, con el mismo código (`E1103`).
-- La especificación pasa a la versión 0.11 y la implementación de referencia a la 0.11.0. La 0.10.0
-  ya publicada en npm y en PyPI no se toca.
-
-### Limitaciones
-
-- El playground no ejecuta programas con importaciones: recibe el programa como texto, sin los
-  archivos de al lado.
-- No hay alias ni importación selectiva. `nex test` solo evalúa los ejemplos del archivo que se le
-  pasa, no los de los módulos importados.
-
-## 0.10.0 — Option y Result
-
-Esta versión está etiquetada (`v0.10.0`) y publicada: el paquete `nexora-lang` está en PyPI y en
-npm. Implementa la
-[decisión 0016](docs/decisions/0016-option-y-result.md), que da al lenguaje los dos tipos que
-permiten decir que **no hay valor** y que **algo falló**, sin excepciones.
-
-### Añadido
-
-- **`Option[T]`**, con sus dos variantes: `Some(valor)` y `None`. `Option.is_some` y
-  `Option.is_none` dicen cuál es; `Option.unwrap_or` devuelve el valor o un defecto del mismo tipo, y
-  `Option.unwrap` lo lee sin defecto, con el diagnóstico `E3011` si no lo hay.
-- **`Result[T, E]`**, con `Ok(valor)` y `Err(error)`. `Result.is_ok` y `Result.is_err` dicen cuál es;
-  `Result.unwrap_or` devuelve el valor o un defecto, y `Result.unwrap` y `Result.error` lo leen sin
-  defecto, con los diagnósticos `E3012` y `E3013` cuando la variante no lo lleva. **El error se
-  guarda tal cual**: `Err("falta el archivo")` sigue siendo ese texto al leerlo.
-- **Los tipos `Option[T]` y `Result[T, E]` se pueden escribir**, y anidarse: `Option[Option[Int]]`,
-  `Result[Text, Error]`.
-- **Un ejemplo nuevo**, `examples/option_result.nex`, con una búsqueda opcional y un análisis que
-  puede fallar.
-
-### Cambios incompatibles
-
-- Los nombres `Option`, `Result`, `Some`, `Ok` y `Err` pasan a estar en el lenguaje. Un programa que
-  declarara una función con uno de esos nombres usaría la integrada, como ya pasaba con `print` o
-  `to_text`. `None` es el caso contrario: si el programa declara un nombre así, el suyo gana.
-- Los tipos con argumentos escribibles pasan de ser solo `List[T]` a ser también `Option[T]` y
-  `Result[T, E]`.
-- La especificación pasa a la versión 0.10 y la implementación de referencia a la 0.10.0. La 0.9.0 ya
-  publicada en npm no se toca.
-
-### Documentación
-
-- La especificación describe los dos tipos en la sección 4.7 y sus funciones en la 8.4.
-- `docs/types.md` tiene una sección nueva con los dos tipos, cuándo usar cada uno y lo que no hay.
-- Nueva [ADR 0016](docs/decisions/0016-option-y-result.md), que explica la decisión y por qué la
-  propagación `?` no se implementa ahora.
-
-### Limitaciones
-
-- No hay `match`, ni `if let`, ni el operador `?`: las variantes se reconocen con funciones y el
-  valor se lee con `unwrap_or` cuando se sabe cuál es. La 0012 sigue siendo propuesta en los enums
-  del usuario y el `match`.
-- El tipo de un `None`, de un `Ok` o de un `Err` escrito directamente en una comparación no se
-  deduce: hay que escribir antes el tipo del resultado en una variable.
-
-## 0.9.0 — Entrada, argumentos, archivos y permisos
-
-Esta versión está etiquetada (`v0.9.0`) y publicada: el paquete `nexora-lang` está en PyPI y en npm.
-Implementa la [decisión 0015](docs/decisions/0015-entrada-argumentos-archivos-y-permisos.md),
-que describe la entrada de un programa, sus argumentos y el acceso a los archivos con permisos
-explícitos. La [0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) no se
-reescribe: su parte de entrada (D11) y su sistema de efectos siguen siendo propuesta, y esta
-versión decide otra forma de hacer lo mismo.
-
-### Añadido
-
-- **Los argumentos del programa**: `args() -> List[Text]` devuelve los argumentos con los que se
-  ejecutó, escritos tras `--`: `nex run programa.nex -- uno dos`. No necesitan ninguna declaración.
-- **La entrada estándar**: `input() -> Text` lee una línea, sin el final de línea. Cuando ya no
-  queda nada que leer, el programa se detiene con `E3009`. No necesita ninguna declaración.
-- **Los archivos**: `read_file(ruta)` y `write_file(ruta, texto)`. Un programa declara lo que
-  necesita con `uses read "ruta"` o `uses write "ruta"`, y quien lo ejecuta tiene que permitirlo
-  con `--allow-read=RUTA` o `--allow-write=RUTA`.
-- **El modelo de permisos**: la capacidad efectiva es la intersección de lo que declara el
-  programa, lo que concede quien lo ejecuta y lo que permite el entorno. Declarar no concede,
-  conceder no habilita, y el entorno manda. Las rutas se confinan sobre la ruta resuelta: un `..` o
-  un enlace simbólico que salen del ámbito concedido no sirven de nada.
-- **Herramientas**: `nexora.context/1` añade el campo `capabilities`, con lo que el programa
-  declara; `nexora.inspect/2` añade el nodo `UsesDecl` y el campo `uses` en `Program`. Los números
-  de los formatos no cambian.
-
-### Cambiado
-
-- Solo en programas que ya eran inválidos: `uses` pasa de palabra reservada a palabra clave, y
-  `read`, `write`, `args`, `input`, `read_file` y `write_file` pasan a ser nombres predefinidos.
-- La versión del repositorio pasa a `0.9.0` y la especificación a `0.9`. Los esquemas JSON no
-  cambian de versión: los campos y nodos nuevos son aditivos.
-
-### Documentación
-
-- La [especificación](docs/language-spec.md) pasa a la versión 0.9 y documenta la entrada, los
-  argumentos y los archivos (sección 8.3), con la gramática, los permisos y las rutas.
-- Nuevo [ADR 0015](docs/decisions/0015-entrada-argumentos-archivos-y-permisos.md).
-- Actualizados `diagnostics.md`, `limitations.md`, `cli-reference.md`, `playground.md`,
-  `architecture.md`, `roadmap.md`, `types.md`, `json-protocol.md`, `inspect-schema.md` y `README.md`.
-
-### Limitaciones
-
-- No se puede leer «hasta el final» de la entrada estándar sin parar: `input()` falla con `E3009`.
-- Solo se leen y escriben archivos de texto: no hay directorios, ni binarios, ni renombrar, ni
-  borrar.
-- No hay red, ni procesos externos, ni variables de entorno.
-- El playground y el servidor MCP no admiten archivos: el worker no tiene ningún campo en su
-  protocolo para concederlos.
-
-## 0.8.0 — Registros nominales inmutables
-
-Estado del repositorio, no una versión publicada: no hay tag ni paquete en ningún repositorio. Esta
-versión implementa la [decisión 0014](docs/decisions/0014-registros-nominales-inmutables.md), que
-acepta la parte de D02 (registros nominales frente a estructurales) de la propuesta
-[0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) en el alcance
-realmente implementado. El resto de la 0012 sigue siendo una propuesta y no forma parte de esta
-versión.
-
-### Añadido
-
-- **Registros**: un tipo que declara el programa, con campos inmutables y obligatorios:
-  `type Point = { x: Int, y: Int }`. Se construyen con los campos por nombre
-  (`Point(x: 1, y: 2)`, en cualquier orden) y sus campos se leen con `p.x`, también en cadena
-  (`p.x.y`). Un registro es **nominal**: su identidad es la de su declaración, no la de su nombre
-  ni la de sus campos, así que dos registros con los mismos campos son tipos distintos (`E2011`) y
-  dos valores del mismo registro se comparan por valor.
-- **Identidad nominal en el modelo de tipos** (`types.py`): la variante `Nominal` y el token opaco
-  `RecordIdentity`, que el comprobador crea una vez por declaración y que viaja en el
-  `CheckedProgram` hasta el intérprete. El intérprete no la reconstruye a partir del nombre.
-- **Herramientas**: `nex inspect` añade los nodos `RecordDecl`, `FieldDecl`, `RecordConstruction`,
-  `FieldInitializer` y `FieldAccess`, la sentencia `FieldAssign` y el campo `records` al final de
-  `Program`; `type` puede ser el nombre de un registro. `nex context` añade el campo `records`
-  (con `name`, `fields`, `valid`, `line` y `reason`) y el valor `records` en `features`. `types`
-  sigue siendo solo de tipos refinados.
-- **Diagnósticos**: `E2023` (Invalid record construction, `type`), `E2024` (Invalid field access,
-  `type`) y `E2025` (Cannot reassign a field, `semantic`).
-- **Ejemplo** [`examples/records.nex`](examples/records.nex), con su salida registrada en las
-  pruebas.
-
-### Cambiado
-
-- Solo en programas que ya eran inválidos: `p.x`, donde `p` es una variable que no es un tipo,
-  pasa de ser `E1101` («Expected '(' to call 'p.x'») a ser un acceso a un campo. La forma de
-  llamada cualificada no cambia: `Text.length(s)` y `name.length()` se siguen diagnosticando igual,
-  y `Point.x` sigue siendo una llamada cualificada, no la lectura de un campo.
-- La versión del repositorio pasa a `0.8.0` y la especificación a `0.8`. Los esquemas JSON no
-  cambian de versión: los campos y nodos nuevos son aditivos.
-
-### Documentación
-
-- La [especificación](docs/language-spec.md) pasa a la versión 0.8 y documenta los registros (4.6),
-  su gramática, su igualdad nominal, su impresión, la tabla de diagnósticos y las limitaciones.
-- Actualizados `types.md`, `limitations.md`, `roadmap.md`, `architecture.md`, `index.md`,
-  `diagnostics.md`, `inspect-schema.md`, `json-protocol.md` y `README.md`.
-- La [decisión 0014](docs/decisions/0014-registros-nominales-inmutables.md) pasa a aceptada, con su
-  implementación. La [0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md)
-  no se reescribe y sigue siendo una propuesta para lo no implementado.
-
-### Limitaciones
-
-- Un registro no tiene métodos, ni funciones propias, ni refinamientos, ni recursión, ni parámetros
-  de tipo. Un tipo refinado no puede construirse sobre un registro (`E2016`).
-- Un registro no puede contenerse a sí mismo, ni directamente ni a través de otro registro ni de
-  una lista (`E2016`).
-- No hay `Option`, `Result`, enums, `match`, genéricos de usuario ni entrada de datos.
-
-## 0.7.0 — Listas y `for` sobre listas
-
-Estado del repositorio, no una versión publicada: no hay tag ni paquete en ningún repositorio. Esta
-versión implementa la [decisión 0013](docs/decisions/0013-listas-y-for.md), que acepta, en el alcance
-realmente implementado, las partes D01 (modelo de tipos), D08 (listas) y D09 (`for`) de la propuesta
-[0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md). El resto de la
-0012 sigue siendo una propuesta y no forma parte de esta versión.
-
-### Añadido
-
-- **Listas inmutables `List[T]`**: literales `[1, 2, 3]` y `[]`, inferencia por el primer elemento,
-  homogeneidad, listas anidadas, igualdad estructural e impresión `[1, 2, 3]`. Una lista vacía
-  necesita un tipo esperado (`E2011`). Los argumentos de `List` son invariantes y `Void` no puede
-  ser elemento.
-- **Funciones de `List`**: `List.length`, `List.get`, `List.append`, `List.concat` y
-  `List.contains`. `List.get` es parcial y declara `requires 0 <= i and i < List.length(xs)`; un
-  índice fuera de rango detiene el programa con `E4001`. `append` y `concat` construyen listas nuevas.
-- **`for` sobre listas**: `for x in xs { ... }`, con iterador inmutable y de tipo `T`, un entorno
-  nuevo por vuelta, `invariant` comprobados antes de cada vuelta y una vez después de la última, y
-  sin `decreases` (`E2022`). El iterable se evalúa una vez y debe ser una `List[T]`. Siguen sin
-  existir `break` y `continue`.
-- **Modelo de tipos interno** (`types.py` y `type_adapter.py`): representación estructurada de
-  primitivos, `List[T]`, tipos refinados y variables de tipo; identidad, compatibilidad, sustitución
-  y unificación. La forma canónica de los tipos sigue siendo el texto; la migración del comprobador
-  es parcial y las reglas no migradas conservan sus cadenas.
-- **Herramientas**: `nex inspect` añade `arguments` a `TypeRef`, el nodo `ListLiteral` y el nodo
-  `For`; `type` puede ser `List[...]`. `nex context` distingue `while` y `for` en `loops.kind`.
-  `language_info()` incluye `List` en `types`, para que un editor lo coloree como los demás tipos.
-- **Ejemplo** [`examples/lists.nex`](examples/lists.nex), con su salida registrada en las pruebas.
-
-### Cambiado
-
-- Solo en programas que ya eran inválidos: `for` e `in` pasan de palabras reservadas a palabras
-  clave, y `[` y `]` pasan a ser símbolos. `List` y los nombres de sus funciones no se reservan: las
-  funciones se llaman cualificadas (`List.length`).
-- La versión del repositorio pasa a `0.7.0`. Los esquemas JSON no cambian de versión: los campos y
-  nodos nuevos son aditivos.
-
-### Documentación
-
-- La [especificación](docs/language-spec.md) pasa a la versión 0.7 y documenta las listas (4.5), las
-  funciones de `List` (8.2), `for` (9.6), la compatibilidad, las conversiones, los diagnósticos y las
-  limitaciones.
-- Nuevo [ADR 0013](docs/decisions/0013-listas-y-for.md). La [0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md)
-  no se reescribe y sigue siendo una propuesta para lo no implementado.
-- Actualizados `types.md`, `limitations.md`, `roadmap.md`, `architecture.md`, `index.md`,
-  `diagnostics.md`, `inspect-schema.md` y `README.md`.
-
-### Limitaciones
-
-- No hay indexación sintáctica (`xs[i]`), mutación de elementos, `List.set`, `map`, `filter`,
-  ordenación ni una variante total de `List.get`.
-- Todos los elementos de una lista tienen el mismo tipo; `[]` y `for x in []` necesitan un tipo
-  esperado. No se puede refinar una lista (`E2016`).
-- Un `for` no cuenta como una ruta que siempre devuelve: si es la última sentencia de una función
-  que devuelve un valor, hace falta un `return` después.
-- No hay `for` sobre rangos o `Text`, ni genéricos de usuario.
-
-## Sin publicar — editor
-
-Una extensión para Visual Studio Code, con su servidor de lenguaje y su formateador, todavía sin
-publicar en el mercado de Visual Studio Code. No cambian el lenguaje: solo le dan un editor. La
-extensión se distribuye por separado, como un `.vsix`; el paquete que se publica en PyPI y en npm
-no cambia.
-
-### Añadido
-
-- **La extensión de VS Code** (`vscode-nexora/`): resaltado de sintaxis para los archivos `.nex`, con
-  una gramática escrita sobre el léxico real, y el reconocimiento automático de esos archivos. Lleva
-  su icono (la misma marca del sitio) y lo que el marketplace pide, así que se puede publicar allí.
-- **El servidor de lenguaje** (`nexora/src/nexora/lsp.py`): habla LSP por la entrada y la salida
-  estándar y responde con el mismo análisis que usa la línea de órdenes. Ofrece diagnósticos (los
-  de `nex check`, con su código y su sugerencia), autocompletado, hover con el tipo de un valor y la
-  firma de una función, ir a definición, referencias, renombrado, los símbolos del documento y la
-  ayuda de firma. Lo ejecuta `python -m nexora.lsp`, o la orden `nexora-lsp`.
-- **El formateador del lenguaje** (`nexora/src/nexora/formatter.py`): reescribe un programa con la
-  forma canónica, sobre los tokens del léxico, así que no cambia lo que significa. El editor lo usa
-  al formatear el documento o una selección, y opcionalmente al guardar.
-- **Las pruebas** (`tests/test_lsp.py`, `tests/test_formatter.py`, `tests/test_vscode_extension.py`):
-  que los diagnósticos del servidor son los de la línea de órdenes, que el formateador no cambia el
-  significado de un programa y que el manifiesto y la gramática de la extensión siguen al léxico.
-
-### Documentación
-
-- Nueva [ADR 0017](docs/decisions/0017-un-editor-la-extension-de-vs-code.md), que explica la
-  decisión y por qué el servidor y el formateador son del propio lenguaje.
-
-## Sin publicar — servidor y web
-
-Cambios del servidor web (`servidor/`) y de la web (`web/`) posteriores al tag `v0.6.0`, todavía sin
-versión. No forman parte de la 0.9.0 ni de la 0.10.0, ni de sus paquetes: el lenguaje está documentado
-arriba, y el servidor y la web se despliegan aparte.
-
-### Añadido
-
-- **Antispam en el registro y el inicio de sesión** (`servidor/src/captcha.js`): Google reCAPTCHA v3,
-  un campo trampa y un límite estricto por cliente (5 registros o 15 inicios de sesión por hora) para
-  toda petición sin un token que Google confirme. reCAPTCHA solo se carga en el navegador si la
-  persona lo acepta en el panel de cookies; sin él se puede entrar igual, con ese límite. La clave
-  secreta va en `RECAPTCHA_SECRET_KEY` y la del sitio en `web/js/consent-config.js`; al arrancar, el
-  servidor avisa si solo está una de las dos.
-- **Freno del inicio de sesión por cuenta** (`servidor/src/login-throttle.js`): tras 5 fallos desde
-  un cliente, ese cliente espera cada vez más, hasta 15 minutos; tras 20 fallos contra una cuenta
-  desde cualquier cliente, cada intento espera, como mucho un minuto. Responde igual para un email
-  con cuenta y uno sin ella, y reserva cada intento antes de consultar la base de datos.
-- **Límites por cliente con IPv6** (`servidor/src/rate-limits.js`): todos los límites cuentan una
-  dirección IPv6 por su bloque /56, y además cada red /48 con cuatro veces el cupo. Las cabeceras
-  `RateLimit-*` describen la cuenta que antes se agota, y cada rechazo lleva `Retry-After`.
-- **Borrado de las sesiones caducadas** al arrancar y cada hora, por tandas, sin que dos pasadas se
-  solapen (`servidor/src/session-cleanup.js`).
-- **Cabeceras de seguridad en todas las respuestas** (`servidor/src/security-headers.js`): la
-  política de contenido (CSP) sin código en línea que tenían el playground y la guía pasa a todas las
-  páginas, más `X-Frame-Options`, `Cross-Origin-Opener-Policy`, `Permissions-Policy`,
-  `Referrer-Policy` y, en producción y solo por HTTPS, HSTS. La API tiene una política que no carga
-  nada.
-- `LISTEN_HOST`: la dirección en la que escucha el servidor. Con nginx en el mismo equipo,
-  `LISTEN_HOST=127.0.0.1` y `TRUST_PROXY=loopback`; al arrancar, el servidor avisa si no casan.
-- Web: las tipografías se sirven desde el propio sitio (JetBrains Mono, con su licencia OFL) en vez
-  de Google Fonts, y todo el sitio usa JetBrains Mono; un gestor de consentimiento de cookies con
-  Google Consent Mode v2; las páginas legales, todavía en borrador (ver Limitaciones); y una
-  documentación web ampliada: qué es NEXORA, cómo se prueba y los cambios recientes.
-- `GET /api/playground/status` dice si el playground está activado (`{"enabled": true}` o `false`).
-  Responde también con el playground desactivado y no arranca el worker. La página lo pregunta
-  primero: desactivado, no pide `/info` ni `/examples`.
-- Las páginas legales llevan `<meta name="robots" content="noindex, nofollow">` mientras sean un
-  borrador, y una prueba lo exige. Solo pide a los buscadores que no las indexen: no impide abrirlas
-  a quien tenga el enlace.
-- `GET /api/health`: dice si el proceso está en marcha y responde peticiones
-  (`{"status":"ok","checks":{"http":"ok"}}`), y nada más: no comprueba MySQL, Google, GitHub,
-  reCAPTCHA ni el playground, ni revela la versión o la configuración. Durante el apagado responde 503.
-- **Apagado ordenado** (`servidor/src/lifecycle.js`): con `SIGTERM` o `SIGINT`, el servidor deja de
-  aceptar conexiones y responde con `Connection: close`, para que una conexión persistente no lo
-  retenga; espera hasta 10 s a las peticiones en curso y a la tanda de borrado de sesiones que esté
-  en MySQL (no envía ninguna más); cierra el pool de MySQL (otros 10 s como mucho) y sale con 0, o
-  con 1 si tuvo que cortar algo. Si durante el apagado llega la otra
-  señal, no se repite; si llega otra vez la misma, Node termina el proceso en el acto, sin esperar.
-  El límite de cada espera mantiene vivo el proceso hasta que vence: si lo único pendiente no tiene
-  ningún recurso detrás (un cierre del pool que no termina), el proceso ya no sale con 0 antes de
-  tiempo sin registrarlo, sino que espera el límite, lo registra y sale con 1. Probado con pruebas
-  automatizadas en Windows (Node 20.6.1, 22.23.3 y 24.21.0), sin señales reales: con systemd, sin
-  probar.
-- **Pruebas de integración con MySQL, preparadas y nunca ejecutadas** (`servidor/test/integration/`).
-  `npm run test:integration` ejecutaría las consultas reales de la aplicación contra una base de pruebas
-  aislada (`nexora_test`), con una cuenta para las migraciones y otra para la aplicación, que un
-  administrador tendría que crear a mano con `setup-admin.sql` (una propuesta pendiente de revisión).
-  No forman parte de `npm test` ni de la integración continua. Antes de cargar nada, unas guardas
-  rechazan cualquier otro entorno (variables `DB_*`, otro servidor, el playground activable o permisos
-  distintos de los previstos), y un bloqueo con nombre (`GET_LOCK`) impide dos ejecuciones a la vez.
-  Las guardas solo admiten Node 22 desde 22.22.3 y Node 24 desde 24.14.0 (`HOOK_MINIMUMS` en
-  `servidor/test/integration/guard.js`): son los mínimos medidos en Windows para el gancho de módulos de
-  `preflight.js`, no los de `engines` en `servidor/package.json` (`^22.23.2 || ^24.18.1`), y una prueba
-  de `npm test` comprueba que todo lo que admite `engines` está dentro. Las demás ramas (23, 25, 26 y
-  posteriores) y las versiones que no son exactamente X.Y.Z se rechazan hasta medirlas. En las
-  versiones medidas por debajo de esos mínimos, el gancho bloqueó mysql2 también en el orden legítimo;
-  la causa no está confirmada. En un Node que las guardas no admiten, `npm test` omite con su motivo las 14 pruebas que lanzan
-  `preflight.js`: así ocurrió en la ejecución experimental de Node 26 de la integración continua
-  del 21 de octubre de 2026. **Nada de esto se ha ejecutado contra un MySQL
-  real**: ni el SQL de administración, ni las migraciones con permisos reducidos, ni el bloqueo.
-
-### Cambios incompatibles
-
-- **El servidor requiere Node.js 22.23.2 o posterior en la rama 22, o 24.18.1 o posterior en la rama
-  24** (`engines` en `servidor/package.json`: `^22.23.2 || ^24.18.1`; antes, 20.6 o posterior). Node 20
-  no tiene soporte desde el 30 de abril de 2026, y las mínimas son las últimas versiones de seguridad
-  de cada rama en octubre de 2026. Las ramas 23, 25 y 26 quedan fuera. npm solo avisa (`EBADENGINE`)
-  con otra versión, no impide instalar. Dentro del rango se han probado en local, en Windows, 22.23.3
-  y 24.21.0; los mínimos exactos no. La integración continua del servidor pasa a probar 22.23.2,
-  24.18.1, la última de las ramas 22 y 24 y, sin bloquear, Node 26; se ejecutó por primera vez el
-  21 de octubre de 2026.
-- **Con `NODE_ENV=production`, `PLAYGROUND_ENABLED=true` exige la orden de contenedor** en
-  `PLAYGROUND_WORKER_COMMAND`. Sin ella (o con una orden de proceso), el servidor no arranca: el modo
-  de proceso ejecuta el código de los visitantes con los permisos del servidor. Fuera de producción,
-  el modo de proceso sigue disponible para probar en un equipo propio. Configurar la orden de
-  contenedor no demuestra que el aislamiento funcione: sigue sin comprobarse con Docker real.
-
-- **`NODE_ENV` solo admite `development`, `test` o `production`, en minúsculas.** Antes cualquier
-  valor distinto de `production` (`Production`, `prod`, vacío) dejaba el servidor en desarrollo, sin
-  cookies solo por HTTPS. Ahora esos valores impiden arrancar. Sin definir sigue funcionando como
-  desarrollo, y el servidor lo avisa al arrancar.
-- **`TRUST_PROXY` solo admite `0`, `loopback` o un entero de 1 a 10 sin ceros a la izquierda.**
-  Antes se leía con `Number()`: `true` o `nginx` daban `NaN` sin ningún aviso. Ahora cualquier otro
-  valor impide arrancar. Con nginx en el mismo equipo, se recomienda `loopback` en vez de `1`.
-- `LISTEN_HOST` solo admite una dirección IP o quedar vacía; un nombre, también `localhost`, impide
-  arrancar.
-- Con `NODE_ENV=production` y `RECAPTCHA_SECRET_KEY`, falta `RECAPTCHA_HOSTNAMES` impide arrancar.
-  `RECAPTCHA_MIN_SCORE` fuera de 0 a 1, o un `RECAPTCHA_HOSTNAMES` que no sea una lista de dominios,
-  también.
-- **En producción sin `RECAPTCHA_SECRET_KEY`, todos los registros e inicios de sesión pasan por el
-  límite estricto** (5 registros o 15 inicios de sesión por cliente y hora). En desarrollo no cambia
-  nada.
-- La API de cuentas tiene respuestas nuevas: `429` con `code: "login_throttled"` y `Retry-After`
-  durante el freno del inicio de sesión; `400` con `captcha_invalid` o `captcha_expired`; y `429`
-  con `captcha_required` en el límite estricto. Un campo `website` con contenido se rechaza con `400`.
-
-- **El playground está desactivado salvo que se active de forma explícita.** Antes se activaba
-  siempre que `PLAYGROUND_ENABLED` no fuera exactamente `false`: sin definir, vacía o con una errata
-  (`False`, `0`), quedaba abierto. Ahora solo `PLAYGROUND_ENABLED=true` lo activa; sin definir,
-  vacía o `false`, la API responde 503 (`playground_disabled`) y no arranca ningún worker. Una
-  instalación local que quiera usar el playground tiene que añadir `PLAYGROUND_ENABLED=true` a su
-  `servidor/.env`.
-- Cualquier otro valor de `PLAYGROUND_ENABLED` (`True`, `1`, `yes`…) impide arrancar el servidor,
-  con un mensaje que pide `"true"` o `"false"`.
-- **La única orden de contenedor que admite `PLAYGROUND_WORKER_COMMAND` es la documentada.** Tiene
-  que empezar por `"docker","run"`, llevar exactamente una vez cada opción de aislamiento y de
-  límites de `servidor/.env.example` con su valor exacto, entre ellas `"--init"`,
-  `"--pull","never"` y `"--name","{container}"`, y terminar en la imagen. Cualquier otra orden de
-  contenedor impide arrancar el servidor, aunque el playground esté desactivado, con un mensaje que
-  nombra lo que falla. Eso incluye una opción que falte, se repita, tenga otro valor o no esté en la
-  lista, como los alias `-m`, `-u`, `--net` o `--interactive`; la forma `--opción=valor`; algo
-  después de la imagen; una ruta al ejecutable, `docker.exe`, `sudo`, Podman,
-  `docker container run` u opciones globales de Docker. Lo que va después de la imagen no lo aplica
-  Docker, sino que lo recibe el programa del contenedor. Con la comprobación anterior, un
-  `"--name","{container}"` escrito detrás de la imagen se aceptaba (comprobado con el validador
-  anterior) y, según el código, el servidor podía dar por eliminado un contenedor que seguía vivo;
-  no se ha observado con Docker real. Para actualizar una configuración existente, copia la orden
-  de `servidor/.env.example`. Cambiar un límite exige cambiar el servidor
-  (`servidor/src/playground/config.js`), no solo `servidor/.env`.
-- **Solo se ejecuta la imagen local `nexora-worker`, y Docker no la descarga nunca.** La imagen
-  tiene que ser `nexora-worker` o `nexora-worker:<etiqueta>`: no se admite otro nombre, una ruta, un
-  registro ni un digest. `"--pull","never"` hace que, si la imagen no está en el equipo, la
-  ejecución falle en vez de descargarla. Hay que construir la imagen en el servidor antes de
-  activar el playground y en cada actualización (ver la
-  [guía del playground](docs/playground.md#3-imagen-del-worker)). `--pull` necesita Docker 20.10 o
-  posterior.
-- Las órdenes del modo de proceso siguen sin comprobarse, salvo las que contienen `{container}` o
-  un ejecutable llamado `docker` o `podman`: esas se tratan como órdenes de contenedor y se
-  rechazan si no son la documentada.
-
-### Corregido
-
-- **Un contenedor que agota el tiempo ya no sigue ejecutándose con su hueco liberado.** Antes, el
-  servidor mataba el cliente `docker run`, que no detiene el contenedor, y liberaba el hueco en ese
-  momento. Según el código, eso permitía que hubiera más contenedores vivos que
-  `PLAYGROUND_MAX_CONCURRENT`; no se ha observado con Docker real, porque el modo contenedor
-  todavía no se ha probado. Ahora cada
-  contenedor tiene un nombre generado por el servidor; si no termina bien, se elimina por ese
-  nombre y el hueco solo se libera cuando se confirma que ya no existe. Los intentos de eliminarlo
-  están limitados; si ninguno confirma, el hueco queda ocupado.
-- **El botón Run del playground vuelve a verse en móvil.** A 390 px quedaba cortado y a 320 y 360 px
-  no se veía; solo quedaba el atajo Ctrl+Enter. Por debajo de 440 px los cuatro botones van ahora en
-  dos filas.
-- **Con el playground desactivado, la página ya no parece lista para ejecutar.** Antes mostraba
-  «Real interpreter» con un punto verde y Run y Check activos, y cada carga recibía dos respuestas
-  503. Ahora dice «Disabled», Run y Check están desactivados (también sus atajos), la ayuda y el pie
-  no dicen que el código se ejecuta, y no envía ninguna petición de ejecución. Mientras espera la
-  respuesta del servidor dice «Connecting…». Si el servidor no confirma si está activado (no
-  responde o responde algo que la página no entiende), dice «Status unknown» y tampoco deja ejecutar:
-  Run y Check solo se activan cuando el servidor lo confirma. «Real interpreter» en verde solo
-  aparece si además el intérprete respondió; si no, «Unavailable». Activado, se comporta como antes.
-- El formulario de registro cabe entero, botón incluido, en una pantalla de 1366×768. El inicio de
-  sesión ya cabía y no cambia.
-- **El registro es atómico.** Antes se creaba la cuenta y después, aparte, su primera sesión: si la
-  sesión no se podía guardar, la cuenta quedaba creada, la persona recibía un error y, al volver a
-  intentarlo, un 409. Ahora la cuenta y la sesión se guardan en una sola transacción, la cookie solo
-  se envía después de confirmarla, y el resumen de la contraseña se calcula antes de abrirla, para no
-  ocupar una conexión del pool durante scrypt. Si además falla el `ROLLBACK`, cuenta el error
-  original (un email duplicado sigue respondiendo 409) y esa conexión no vuelve al pool, porque podría
-  haber quedado con la transacción abierta: se destruye. El fallo del `ROLLBACK` queda en el registro
-  con su tipo y su código (`auth: sign-up rollback failed (Error ER_ERROR_DURING_ROLLBACK)`), sin el
-  mensaje ni ningún dato de la petición. Probado con una base de datos simulada; contra MySQL real, la
-  prueba está preparada y sin ejecutar.
-- El inicio de sesión con Google o GitHub sigue la misma regla en su transacción: si falla el
-  `ROLLBACK`, cuenta el error original (por ejemplo, `account_exists` sigue siendo `account_exists`), la
-  conexión se destruye en vez de volver al pool (una sola vez, nunca devuelta y destruida) y queda una
-  línea `oauth: <proveedor>: rollback failed (…)` sin datos. Antes, un `ROLLBACK` fallido sustituía al
-  error original y la conexión volvía al pool. Probado con una base de datos simulada.
-- **El registro del servidor ya no copia los errores enteros.** Un error interno de la aplicación o
-  del inicio de sesión con Google o GitHub escribía el objeto completo, que en un error de MySQL
-  incluye la consulta y el mensaje del servidor (con el email, por ejemplo). Ahora solo se escribe el
-  tipo y un código conocido (`Error ER_DUP_ENTRY`, `ProviderError token_http_500`), nunca el mensaje,
-  la pila, la consulta, el token, el código de autorización ni el secreto. La ruta se escribe por su
-  plantilla (`/api/auth/:provider/callback`), nunca por el camino pedido ni su cadena de consulta; sin
-  una ruta que coincida, `(no route)`. El borrado de sesiones caducadas sigue la misma regla: antes
-  escribía el mensaje del error cuando no tenía código.
-- Google: una cuenta solo se crea o se enlaza si `email_verified` es exactamente `true`; antes
-  bastaba cualquier valor que JavaScript tome por verdadero. Un perfil sin identificador, o una lista
-  de emails de GitHub que no es una lista, son ahora un fallo del proveedor con su propio código.
-- Un resumen de contraseña guardado con campos de más (`…$extra`) ya no se acepta como válido: el
-  formato tiene que ser exactamente el de `hashPassword`.
-
-### Documentación
-
-- `servidor/.env.example` deja el playground en `false`, y la [guía del playground](docs/playground.md)
-  lo mantiene desactivado en un servidor público hasta completar la
-  [comprobación del aislamiento](docs/playground.md#comprobar-el-aislamiento). Las comprobaciones
-  que necesitan el playground activo se hacen en un entorno controlado, sin exposición pública.
-- Linux comprobado ([Pruebas](docs/testing.md#linux)): en Ubuntu 24.04 sobre WSL 2 pasan las
-  pruebas automáticas de `nexora/` con Python 3.11, 3.12 y 3.13 (también las cuatro de POSIX, que
-  nunca se habían ejecutado) y las de `npm/` y `servidor/`, y los paquetes de pip y npm se instalan
-  y funcionan. No hizo falta cambiar código. Docker y el aislamiento del playground siguen sin
-  comprobar.
-- Despliegue ([guía del playground](docs/playground.md#despliegue-en-un-servidor-propio)): nginx con
-  redirección de HTTP a HTTPS, `limit_req`, `server_tokens off` y la sintaxis `http2 on` de las
-  versiones actuales; `TimeoutStopSec` en systemd; la ruta de salud; y copias de seguridad y
-  restauración de MySQL. **Nada de ello se ha probado** con nginx, systemd ni MySQL reales: la guía
-  lo dice en cada apartado.
-
-### Limitaciones
-
-- El aislamiento en contenedor sigue **sin comprobar**: este cambio evita activar el playground por
-  error, pero no lo hace más seguro una vez activado.
-- Nada de esto se ha probado con Docker real. Las pruebas de la orden solo analizan la lista de
-  argumentos, sin ejecutar ningún Docker; las del ciclo de vida (eliminación de contenedores, hueco
-  ocupado, imagen ausente) usan un Docker falso. Si el servidor se cae, nadie elimina los
-  contenedores que tuviera en marcha.
-- Qué es una orden de contenedor se decide solo por los nombres documentados. Un script
-  envoltorio, otra herramienta (`nerdctl`…) o un ejecutable de Docker con otro nombre quedan fuera
-  de la detección: no son una forma admitida de ejecutar contenedores, y el servidor no validaría
-  su orden ni eliminaría sus contenedores.
-- Validar la orden no garantiza la configuración efectiva del demonio Docker ni de sus runtimes.
-- La etiqueta local (`nexora-worker` o `nexora-worker:<etiqueta>`) es mutable: quien tenga acceso
-  al demonio Docker puede volver a etiquetar otra imagen con ese nombre, y el servidor la
-  ejecutaría sin notarlo. Que se ejecute la imagen de Nexora depende del control de acceso al
-  equipo y al demonio Docker.
-- Docker en modo *rootless* no está admitido: la orden no permite `-H` ni `--context`, y el
-  servidor solo pasa `PATH` y `SystemRoot` a las órdenes que lanza.
-- El antispam, el freno del inicio de sesión, el borrado de sesiones y las cabeceras se han probado
-  con la base de datos, Google reCAPTCHA y el navegador simulados: no contra un MySQL real, con claves
-  reales de reCAPTCHA, en un navegador ni detrás de nginx. Las pruebas automatizadas del servidor,
-  con esos mismos servicios simulados, dan 811 superadas y 0 fallos con Node 24.21.0 (una ejecución,
-  en Windows 11, con las guardas de las pruebas de integración limitadas a las ramas medidas). Antes de
-  ese cambio dieron 810 superadas y 0 fallos con Node 24.21.0 (en cada una de
-  tres ejecuciones), 24.14.0, 22.23.3 y 22.22.3, y 796 superadas, 14 omitidas (las que necesitan Node
-  22.22.3 o posterior en la rama 22, o 24.14.0 o posterior) y 0 fallos con Node 20.6.1 y 22.15.0 (una
-  ejecución con cada una de esas versiones), en Windows 11. Con los mínimos de `engines` (22.23.2 y
-  24.18.1) no se han ejecutado. En Ubuntu 24.04 en WSL 2 se ejecutaron antes de las últimas correcciones de la web
-  (567 superadas, 0 fallos, en cada una de tres ejecuciones) ([Pruebas](docs/testing.md)).
-- Los contadores de los límites y del freno del inicio de sesión están en memoria: se pierden al
-  reiniciar y no se comparten entre varias instancias del servidor.
-- En el inicio de sesión con Google o GitHub, la sesión se crea fuera de la transacción de la cuenta y
-  su enlace: si falla, la cuenta queda enlazada sin sesión hasta el siguiente intento. Durante el
-  apagado, un segundo `SIGTERM` o `SIGINT` termina el proceso sin completar la limpieza, y el 503 de
-  `/api/health` solo llega por conexiones ya abiertas. Las pruebas automatizadas, en Windows y con la
-  base de datos simulada, cubren el fallo de la sesión de OAuth y el reintento, el 503 durante el
-  apagado y el rechazo de las conexiones nuevas. No cubren la segunda señal del mismo tipo ni dos
-  primeros inicios simultáneos con la misma identidad, que siguen sin probar. Quedan pendientes las
-  pruebas contra un MySQL real, con señales reales del sistema operativo, con systemd y detrás de
-  nginx ([Tareas pendientes y riesgos](docs/playground.md#tareas-pendientes-y-riesgos)).
-- Las páginas legales son un borrador sin los datos del titular ni revisión jurídica: no deben
-  publicarse así. Riesgos y decisiones pendientes (Analytics y su CSP, el `409` que revela si un email
-  tiene cuenta, la cancelación de consultas de MySQL):
-  [Tareas pendientes y riesgos](docs/playground.md#tareas-pendientes-y-riesgos).
-
-## 0.6.0 — Operaciones sobre textos que declaran sus requisitos
-
-Un programa puede medir un texto, cortarlo, buscar en él, ordenarlo y leer los números escritos en
-él. Las funciones nuevas pertenecen a un tipo y se llaman con su nombre (`Text.length`,
-`Int.parse`…), y las que pueden no tener respuesta declaran cuándo la tienen con un `requires`
-escrito en NEXORA, igual que una función del programa. Implementa la
-[decisión 0011](docs/decisions/0011-operaciones-sobre-textos.md). Ningún programa válido en la 0.5.1
-deja de serlo ni cambia de resultado, y no se reserva ningún nombre. Para un programa válido solo
-cambian los documentos de las herramientas, que ganan campos y entradas sin cambiar de versión:
-`"qualifier": null` en los nodos `Call` de `nex inspect`, y las funciones nuevas en `nex symbols`.
-
-### Añadido
-
-- **Funciones de un tipo**, llamadas como `Tipo.función(…)`:
-  - `Text.length`, `Text.slice`, `Text.contains`, `Text.starts_with` y `Text.ends_with`. Trabajan
-    con caracteres (puntos de código Unicode), sin normalizar y distinguiendo mayúsculas.
-  - `Int.can_parse`, `Int.parse`, `Float.can_parse` y `Float.parse`. Leen una única forma de
-    número, la misma en cualquier máquina: `Int.parse` un entero dentro del rango de `Int`
-    (`"-42"`), y `Float.parse` un número con parte decimal o exponente (`"2.5"`, `"2.5e3"`, pero no
-    `"42"`). No admiten espacios, `+` delante, separadores ni otras bases.
-- **Las funciones del lenguaje tienen `requires`.** `Text.slice`, `Int.parse` y `Float.parse`
-  declaran sus condiciones en NEXORA, con su explicación, y una llamada que las incumple se detiene
-  con el mismo `E4001` que una función del programa (código de salida `5`). En `Int.parse` y
-  `Float.parse`, el diagnóstico añade una sugerencia según lo que falló: comprobar antes el texto con
-  `Int.can_parse` o `Float.can_parse`, o el rango de `Int` si el número no cabe. Un programa puede
-  usar las mismas funciones en sus propios `requires` (`requires Int.can_parse(written)`) y en sus
-  tipos refinados (`type Code = Text where Text.length(value) == 3`).
-- **Orden entre textos:** `<`, `<=`, `>` y `>=` entre dos `Text` (también de tipos refinados con
-  base `Text`). Se comparan carácter a carácter por punto de código, y un texto va antes que
-  cualquier otro que empiece por él (`"ab" < "abc"`, `"" < "a"`). No depende del idioma ni de la
-  configuración del sistema (`"Z" < "a"`), y compara caracteres, no números (`"10" < "9"`).
-- Diagnósticos para la nueva sintaxis, sin códigos nuevos: `E1101` cuando la forma está mal
-  (`Text.length` sin paréntesis, espacios alrededor del `.`, más de un punto) y `E2008` cuando el
-  nombre no existe, con sugerencias como `Did you mean 'Text.length'?` para `length(t)`.
-- `nex inspect`: campo `qualifier` en cada nodo `Call` (`null` en las llamadas sin cualificar),
-  sin cambiar la versión del esquema (`nexora.inspect/2`). `nex symbols` y las capacidades
-  (`language.builtins`): nombres cualificados y campo `contracts` con los requisitos de cada función
-  integrada. `nex context`: nombres cualificados en `builtins_called` y valor `text_operations` en
-  `features`.
-- Ejemplos `texts.nex` y `failing/parse_number.nex`.
-
-### Cambiado
-
-Solo en programas que ya eran inválidos:
-
-- Un `.` fuera de un número, un texto o un comentario pasa a ser un token. Donde antes había `E1001`
-  (`x.y`), ahora hay `E1101` o `E2008`.
-- `E2011` mantiene su código, su título y su categoría, pero su sugerencia, cuando se compara un
-  `Text` con un número, propone convertir uno de los lados con `to_text(...)` o `Int.parse(...)`.
-  Ordenar dos `Text` ya no es un error.
-
-### Corregido
-
-- **El paquete de código fuente no podía ejecutar su propia batería de pruebas.** `MANIFEST.in` no
-  incluía los esquemas JSON de `tests/golden/schemas/`, y las pruebas que los leen fallaban en una
-  copia generada con `python -m build`. El paquete instalable (`.whl`) no estaba afectado.
-
-### Documentación
-
-- Especificación 0.6: sección 8.1 (funciones de un tipo y orden entre textos).
-- Guías: requisitos de las funciones del lenguaje en
-  [contratos](docs/contracts.md#las-funciones-del-lenguaje-también-tienen-requires), y límites
-  actualizados en [limitaciones](docs/limitations.md).
-- El ejemplo de bucles de la guía web y de la especificación suma hasta 10 000 en lugar de 100 000:
-  así se ejecuta con holgura dentro del límite de tiempo del playground.
-
-### Limitaciones
-
-- Un carácter es un punto de código, no lo que una persona ve como una letra: una `e` con el acento
-  combinado tiene longitud 2, y dos textos que se ven iguales pueden ser distintos para `==`.
-- El orden entre textos no es alfabético en ningún idioma.
-- Los requisitos de las funciones integradas se comprueban al ejecutar; `nex check` no avisa aunque
-  los argumentos sean constantes.
-- `Float.parse` redondea al `Float` más cercano: el valor que devuelve puede no ser exactamente el
-  número escrito (`"0.1"`).
-- No hay `trim`, mayúsculas, `split`, `replace`, interpolación ni búsqueda de posiciones.
-
-## 0.5.1 — Revisión de la memoria agotada
-
-Resultado de auditar la [decisión 0009](docs/decisions/0009-memoria-agotada.md) después de
-implementarla. Su garantía se cumple: `E3007` se sigue construyendo sin retener los valores del
-programa que falló, y cada ejemplo de `nex test` se evalúa aislado. La auditoría encontró dos
-defectos alrededor de ella, corregidos aquí. Ningún programa cambia de resultado ni de código de
-salida.
-
-### Corregido
-
-- **`E3007` y el `E3004` por falta de pila no decían en qué bucle ocurrieron.** La
-  [decisión 0010](docs/decisions/0010-var-y-while.md) (sección 7) da a todo error de ejecución
-  dentro de un bucle una nota por bucle (`In turn 3 of the loop at line 6.`). Estos dos se
-  construyen cuando el error ya ha salido de los bucles, y llegaban sin ellas. Ahora llevan las
-  mismas notas que cualquier otro error en el mismo punto, del bucle más interior al exterior y con
-  el mismo máximo de seis.
-- **`nex test` en texto podía dejar un resumen sin terminar.** El informe se escribía a medida que
-  se preparaba: si fallaba después del resumen (un error interno, la memoria agotada), ese resumen
-  quedaba en la salida estándar igual que en un informe completo, con el código `70`. Ahora el
-  informe se prepara entero y se escribe al final, como el documento JSON: si algo falla, la salida
-  estándar queda vacía. Los informes normales no cambian.
-
-### Limitaciones
-
-- La prueba que agota memoria real (la del worker, con `RLIMIT_AS`) solo puede ejecutarse en Linux
-  y macOS, y no se ha ejecutado todavía: en Windows se omite y la integración continua no ha
-  funcionado nunca. Las demás pruebas de `E3007` provocan el `MemoryError` a propósito.
-
-## 0.5.0 — `var` y bucles que dicen por qué terminan
-
-La repetición deja de depender de la recursividad y del límite de 1000 llamadas. Y lo hace a la
-manera de NEXORA: cada bucle declara por qué termina (`decreases`) y qué mantiene (`invariant`), y
-el intérprete lo comprueba en cada vuelta. Así ningún bucle se queda repitiendo para siempre: o
-termina, o se detiene y dice en qué vuelta y con qué valores. Implementa la
-[decisión 0010](docs/decisions/0010-var-y-while.md).
-
-### Añadido
-
-- **Variables reasignables:** `var count = 0` y `count = count + 1`. El tipo de una `var` no cambia
-  nunca. `let` sigue siendo inmutable, y los parámetros también, para que `ensures` y los
-  diagnósticos vean siempre los valores con los que se llamó a la función. Una `var` de tipo
-  refinado conserva su garantía: se le asigna una constante válida o un valor comprobado con
-  `Tipo(x)`.
-- **Bucles `while`** con dos cláusulas al principio del cuerpo, con la forma de los contratos y su
-  explicación opcional tras una coma:
-  - `decreases` (exactamente una): la medida, un `Int` que no baja de 0 y disminuye en cada vuelta.
-  - `invariant` (cero o más): condiciones que se cumplen antes de cada evaluación de la condición.
-- Códigos nuevos: `E2021` (bucle sin medida, o con más de una), `E4005` (invariante incumplido) y
-  `E4006` (la medida no disminuye o es negativa), estos dos de categoría `contract`, con código de
-  salida `5`. Sus diagnósticos dicen la vuelta y los valores de todas las variables visibles.
-- Un error dentro de un bucle (`E3xxx`, `E4xxx`) gana una nota por cada bucle que lo contiene:
-  `In turn 3 of the loop at line 6.`
-- `nex test` ya no puede quedarse esperando por un bucle: el ejemplo queda en `error` con `E4006`.
-- `nex inspect`: nodos `Var`, `While` y `LoopClause` (sigue siendo `nexora.inspect/2`). `nex symbols`:
-  campos `mutable` y `assignments`. `nex context`: campo `mutable` en las variables, campo `loops` al
-  final de cada función con la condición, los invariantes y la medida de cada bucle, valores
-  `mutable_variables`, `loops` y `loop_invariants` en `features`, y una nota cuando hay bucles.
-- `E1103` sugiere cómo escribir con `while` lo que se intentaba con `for`, `break` o `continue`.
-- Ejemplos `loops.nex` y `failing/loop_measure.nex`.
-
-### Cambiado
-
-- `E2007` mantiene su código y su título, pero su etiqueta y su sugerencia dicen ahora si el nombre
-  es una variable `let` o un parámetro, y proponen `var`.
-- La sugerencia de `E2014` recuerda que un bucle puede no ejecutarse nunca.
-
-### Cambios incompatibles
-
-- **`invariant` y `decreases` pasan a ser palabras clave.** Un programa que los use como nombre de
-  variable, parámetro o función deja de ser válido (`E1101`); se renombran.
-- `var` y `while` dejan de ser palabras reservadas. Ningún programa válido podía usarlas.
-
-### Documentación
-
-- Especificación 0.5: sección 5.3 (`var` y la asignación) y sección 9.5 (bucles).
-- Guías: bucles en [contratos](docs/contracts.md#bucles-invariant-y-decreases) y en
-  [primeros pasos](docs/getting-started.md).
-
-### Limitaciones
-
-- No hay `for`, `break` ni `continue`, ni asignaciones compuestas (`+=`).
-- La medida es un `Int`; no hay medidas compuestas.
-- Una medida garantiza que un bucle termina, no que termine pronto: una medida inicial enorme
-  permite muchísimas vueltas. Una recursividad lenta (`fib(40)`) sigue sin límite de tiempo.
-
-## 0.4.0 — Ejemplos y `nex test`
-
-Tercer paso de la línea principal: una función puede llevar casos concretos de lo que debe dar, y
-`nex test` los comprueba sin escribir `main`. Implementa la
-[decisión 0008](docs/decisions/0008-ejemplos-y-nex-test.md) y la
-[decisión 0009](docs/decisions/0009-memoria-agotada.md).
-
-### Añadido
-
-- **Ejemplos en las funciones:** `example double(2) == 4, "Two doubled"`, una cláusula del principio
-  del cuerpo junto a `requires` y `ensures`. Es una expresión `Bool` que tiene que llamar a su propia
-  función (`E2020` si no lo hace) y que no ve los parámetros ni `result`. El análisis nunca la evalúa.
-- **`nex test`**: evalúa los ejemplos, cada uno en un intérprete nuevo, comprobando los contratos de
-  todo lo que se ejecuta. No exige `main` ni lo ejecuta. Opciones `--format text|json` y
-  `--function FUNCION`. Cada ejemplo termina en `passed`, `failed` (`E4004`, categoría nueva `test`) o
-  `error` (el diagnóstico original, con una nota que identifica el ejemplo).
-- Código de salida `6`: algún ejemplo no pasó, o no había ningún ejemplo que evaluar.
-- Formato `nexora.test/1` y `nexora.api.test_source`, que devuelve el mismo documento.
-- `nex inspect`: nodo `Example` y campo `examples` al final de `Function` (sigue siendo
-  `nexora.inspect/2`). `nex context`: campo `examples` y valor `examples` en `features`.
-- Ejemplo `examples/checked_examples.nex`.
-- **`E3007` (Out of memory):** un programa que agota la memoria mientras se ejecuta recibe un
-  diagnóstico de ejecución, con la cadena de llamadas, en vez de un error interno. En `nex test`, el
-  ejemplo queda en `error` y se evalúan los siguientes. `nexora.api.run_source` sigue respondiendo
-  `memory_limit`, con el mismo mensaje, y ahora con el `E3007` en `diagnostics`.
-
-### Corregido
-
-- **Las pruebas de npm y del servidor no se ejecutaban con Node 18 y 20.** `node --test` solo expande
-  patrones como `"test/*.test.js"` desde Node 21, así que con las versiones que declaran los paquetes
-  no encontraba ningún archivo. Los scripts nombran ahora cada archivo, y una prueba comprueba que no
-  falte ninguno. La integración continua prueba npm con Node 18, 20 y 22, y el servidor con Node 20.6
-  y 22.
-
-### Cambios incompatibles
-
-- `example` pasa de palabra reservada a palabra clave. Ningún programa válido podía usarla como
-  nombre.
-- **`nex run` con un programa que agota la memoria termina con `3`, no con `70`**, y la salida de
-  error muestra `runtime error[E3007]` en vez de `internal error`. Con `--format json` escribe el
-  documento `nexora.diagnostics/1`. El código `70` vuelve a significar solo un defecto de NEXORA.
-  Un script que trate `70` como "falta de memoria" debe mirar el código `E3007`.
-
-### Limitaciones
-
-- `nex test` no tiene límite de tiempo ni de memoria por ejemplo.
-- `E3007` solo aparece si Python llega a quedarse sin memoria. En Linux, el sistema puede matar el
-  proceso antes, sin ningún mensaje.
-- Una memoria agotada fuera de la ejecución (al analizar el programa o al construir un informe)
-  sigue terminando con `70`.
-
-## 0.3.1 — Revisión de los tipos refinados
-
-Resultado de intentar romper las garantías de la 0.3.0. La garantía principal resistió: ningún
-camino permite que un valor llegue a un tipo refinado sin cumplir su condición, y la comprobación
-sin ejecutar y la ejecución coinciden en los casos límite (`-0.0`, redondeo de `Float`, división
-por cero evitada con `and`, desbordamiento). Esos ataques forman parte ahora de las pruebas.
-La revisión encontró cuatro defectos alrededor de esa garantía, corregidos aquí.
-
-### Corregido
-
-- **`nex check` podía tardar demasiado con tipos refinados.** Cada constante evalúa las condiciones
-  de toda la cadena de su tipo, así que el trabajo crecía con tipos × condiciones × constantes: un
-  programa válido de 60 KB tardaba 2,5 s y agotaba el tiempo del playground (2 s). Ahora el
-  trabajo está acotado a 100 000 nodos de condición evaluados; por encima, el programa se rechaza
-  con el código nuevo `E2019` en vez de quedar comprobado a medias. El mismo programa se rechaza
-  ahora en 0,18 s, y uno corriente se comprueba en centésimas.
-- **Una condición de tipo mal escrita producía errores falsos en cada uso del tipo** ("Cannot apply
-  '+' to Bad and Int", "Expected Bad, found Int"). Las condiciones se comprueban ahora antes que las
-  firmas, y un tipo con la condición incorrecta queda fuera sin más errores.
-- **Un error de ejecución dentro de una condición no decía dónde se pidió la comprobación.** Si
-  `Huge(n)` desbordaba dentro de la condición de `Huge`, el diagnóstico señalaba la declaración del
-  tipo y nada más. Ahora añade la nota `While checking that a value is a valid Huge, at line …`.
-- **Una explicación con `\n` rompía el formato de texto del diagnóstico.** Una explicación es ahora
-  una sola línea: un `\n` en ella es el error `E1101`.
-
-### Documentación
-
-- La especificación (sección 10.1), la guía del servidor MCP y la descripción de
-  `analysis_executes_code` decían que el análisis "no ejecuta nada". Ahora dicen con precisión lo
-  que hace: no ejecuta el programa, pero evalúa las condiciones de los tipos refinados sobre las
-  constantes, sin llamadas a funciones del programa y con el trabajo acotado.
-- Nuevo límite en el documento de capacidades (`get_capabilities()` en Python y en el servidor
-  MCP): `max_refinement_steps`.
-
-## 0.3.0 — Contratos y tipos refinados
-
-Consolida la característica que distingue a NEXORA: los requisitos forman parte verificable del
-programa ([decisión 0006](docs/decisions/0006-requisitos-verificables.md)). Los contratos dejan de
-ser experimentales, cada regla puede llevar su explicación y llegan los tipos refinados. Los motivos
-de cada elección están en la [decisión 0007](docs/decisions/0007-contratos-estables-y-tipos-refinados.md).
-
-Esta versión incluye también todo lo hecho después de la 0.2.0 que no llegó a publicarse con otro
-número: documentación, pruebas, playground y herramientas de análisis.
-
-### Añadido
-
-- **Tipos refinados:** `type Percent = Int where value >= 0 and value <= 100`. Todo valor de un
-  tipo refinado cumple su condición:
-  - Una constante usada como valor del tipo se comprueba **sin ejecutar** (`E2017`).
-  - Cualquier otro valor se comprueba explícitamente con `Percent(x)`, al ejecutar (`E4003`,
-    categoría `contract`, código de salida `5`).
-  - Un valor refinado se acepta donde se espera su base; una operación con él da un valor de la
-    base.
-  - Un tipo puede refinar otro (`type Pass = Percent where value >= 50`); se comprueban las dos
-    condiciones, desde la base.
-  - La condición solo puede usar `value`, literales, operadores y conversiones integradas
-    (`E2018`).
-- **Explicación de las reglas:** `requires amount <= balance, "An account cannot go below zero"`.
-  Sirve en `requires`, `ensures` y `where`, y aparece en el diagnóstico como `Reason: ...` cuando
-  la regla se incumple.
-- Códigos nuevos: `E2016` (declaración de tipo no válida), `E2017` (constante fuera del tipo
-  refinado), `E2018` (condición de refinamiento no válida) y `E4003` (refinamiento incumplido).
-- `nex context` lista los tipos refinados (campo `types`) y la explicación de cada contrato (campo
-  `message`). Característica nueva en `features`: `refined_types`.
-- Ejemplos `refined_types.nex`, `invalid/refinement_errors.nex` y
-  `failing/refinement_violation.nex`.
-- **Licencia MIT** (`LICENSE`).
-- **Paquete de npm** (`npm/`, nombre `nexora-lang`): instala el comando `nex` con un lanzador que
-  ejecuta el intérprete incluido usando el Python 3.11+ de la máquina. Preparado y probado en
-  local; **no publicado**.
-- **`nex context`**: resumen de un programa (firmas, contratos, variables, llamadas entre
-  funciones, características usadas, diagnósticos), en texto o JSON. No ejecuta el programa.
-- **`nex symbols`**: funciones, parámetros y variables con su tipo, su ámbito, su declaración y
-  cada uso, con los filtros `--name` y `--function`. No ejecuta el programa.
-- **`nexora.tooling`**: API de Python con las mismas salidas (`check_source`, `inspect_source`,
-  `get_symbols`, `get_context`, `get_language_spec`, `get_capabilities`). **Experimental.**
-- **Servidor MCP opcional** (`nex-mcp`, `pip install -e ".[mcp]"`): siete herramientas de análisis
-  para asistentes compatibles. No ejecuta código ni abre archivos indicados por quien llama.
-  Probado de forma automática con el cliente del SDK oficial (versión 2.3.0) y, a mano, en una
-  sesión de Claude Code 2.1.296 en Windows. No se ha probado en otros asistentes.
-- Formatos `nexora.symbols/1`, `nexora.context/1`, `nexora.spec/1` y `nexora.capabilities/1`.
-- JSON Schema de todos los formatos en `docs/schemas/`, generados desde el código y usados por las
-  pruebas para validar la salida real.
-- Campo `nexora_version` en los documentos `nexora.diagnostics/1` y `nexora.inspect/1`. Es un campo
-  añadido: la versión del formato no cambia.
-- Tareas de referencia para las herramientas de análisis (`tests/tooling_tasks.py`).
-- **Análisis parcial con errores de sintaxis.** `nex inspect`, `nex symbols` y `nex context` (y sus
-  equivalentes en Python y en MCP) describen el código que sí pudo analizarse, con el campo nuevo
-  `complete` a `false`. Faltan las sentencias con errores y las funciones cuya declaración tiene
-  uno. Un programa con errores de sintaxis sigue sin ejecutarse.
-
-- **Playground**: página web que comprueba y ejecuta código con el intérprete real
-  (`docs/playground.md`). Preparado para uso local; el aislamiento en contenedor para un servicio
-  público está configurado pero **no probado**.
-- `nexora.api`: `check_source` y `run_source`, para comprobar o ejecutar código en memoria con
-  límites opcionales de salida y de longitud de texto. Esquema de resultado `nexora.result/1`.
-- `python -m nexora.worker`: proceso de un solo uso que atiende una petición JSON.
-- Diagnóstico `E3006` (texto demasiado largo), que solo aparece donde el entorno fija un límite.
-- Código de salida `130` cuando la ejecución se interrumpe con Ctrl+C, en lugar de una traza de Python.
-- Límite de 100 errores por etapa y archivo; el resumen del comando indica cuándo se alcanza.
-- Ejemplos `arithmetic.nex` e `invalid/syntax_error.nex`.
-- Pruebas: ejemplos con salida registrada, documentación ejecutable, seguridad y robustez.
-- Medición de cobertura (`pytest-cov`) y análisis estático del código (`ruff`), como dependencias
-  de desarrollo.
-- Configuración para generar un paquete instalable con el código, la documentación, los ejemplos
-  y las pruebas (`MANIFEST.in`).
-- Flujo de integración continua para GitHub Actions. **No se ha ejecutado todavía.**
-
-### Corregido
-
-- Un número entero literal de más de 4300 cifras provocaba un error interno. Ahora es el
-  diagnóstico `E1004`.
-- Un archivo que no es NEXORA (por ejemplo, un binario) producía un error por carácter, sin límite.
-- Cuando la pila se agotaba por llamadas recursivas dentro de expresiones muy anidadas, el mensaje
-  de `E3004` afirmaba que se habían superado 1000 llamadas aunque no fuera así. Ahora indica
-  cuántas había.
-- Si el lector de la salida se cerraba antes de tiempo (`nex run … | head -1`), se mostraba un
-  error interno. Ahora `nex` termina en silencio.
-
-### Cambios incompatibles
-
-- **`type` y `where` son palabras clave** (antes, palabras reservadas). Ningún programa válido de la
-  0.2 podía usarlas como nombres, así que ninguno deja de funcionar.
-- **`nex inspect` pasa a `nexora.inspect/2`.** El campo `type` de una expresión puede ser el nombre
-  de un tipo refinado, no solo `Int`, `Float`, `Bool`, `Text` o `Void`. Añadidos: nodo `TypeDecl`,
-  campo `types` en `Program` y campo `message` en `Contract`. Cómo actualizar: aceptar cualquier
-  texto en `type` y comprobar `schema`.
-- Los contratos dejan de ser experimentales: su sintaxis no cambia, pero a partir de ahora solo
-  cambiará siguiendo las reglas de los cambios incompatibles.
-- El paquete de Python pasa a llamarse `nexora-lang` (antes `nexora`), porque `nexora` ya existe en
-  PyPI. El comando (`nex`) y el módulo (`import nexora`) no cambian. Cómo actualizar una
-  instalación en modo desarrollo: `python -m pip uninstall nexora` y `python -m pip install -e .`.
-  Los archivos generados se llaman ahora `nexora_lang-0.3.0…`, y el extra opcional se instala con
-  `nexora-lang[mcp]`.
-- En el documento de `nex inspect`, con errores de sintaxis, `program` es ahora un árbol parcial y
-  no `null`. Sigue siendo `null` con errores léxicos o si el archivo no puede leerse. Cómo
-  actualizar: para saber si un programa es válido, usa `ok`; para saber si el árbol cubre todo el
-  archivo, usa `complete`. El nombre del formato (`nexora.inspect/1`) no cambia; el motivo está en
-  `docs/json-protocol.md`.
-- Los ejemplos incorrectos a propósito se han movido: `examples/errors.nex` es ahora
-  `examples/invalid/name_errors.nex`; `type_errors.nex` está en `examples/invalid/`;
-  `runtime_error.nex` y `contract_violation.nex`, en `examples/failing/`.
-
-### Retirado
-
-- La función interna `values.type_name`, que no se usaba desde la 0.2.0.
-
-### Documentación
-
-- Nuevas guías: instalación, primeros pasos, tipos, funciones, contratos, CLI, diagnósticos,
-  herramientas automáticas e IA, arquitectura, pruebas, limitaciones y hoja de ruta.
-- `CONTRIBUTING.md`, `SECURITY.md` y `CODE_OF_CONDUCT.md`.
-- Todos los programas de la documentación se ejecutan en las pruebas y su salida se compara con
-  la real.
-- Especificación 0.3: sección 4.4 (tipos refinados), contratos estables (sección 9) y códigos
-  nuevos. Guías de tipos y contratos ampliadas. Decisiones 0006 y 0007.
-
-### Limitaciones
-
-- De los tipos refinados, `nex check` solo comprueba las constantes; un valor calculado se comprueba
-  al ejecutar. No existe forma de comprobarlo sin detener el programa si falla (no hay `Result`).
-- No hay alias de tipos sin condición.
-- El proyecto sigue sin repositorio público y sin canal de contacto.
-- Solo se ha comprobado en Windows 11 con Python 3.12.
+# Changes
+
+Changelog for NEXORA, with the most recent version first.
+
+All versions are prior to 1.0: the language may change incompatibly between versions. Each incompatible change is indicated here and explained in `docs/decisions/`.
+
+This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Version 0.10.0, with `Option` and `Result`, is also tagged (`v0.10.0`) and published in both registries. Earlier ones only identify code states: they were never tagged or published.
+
+Each version groups its changes into these sections, when they contain content:
+
+| Section | What it covers |
+|---------|----------------|
+| Added | New features |
+| Fixed | Resolved defects |
+| Incompatible changes | What may cause an existing program or script to stop working, and how to update it |
+| Removed | What no longer exists |
+| Documentation | Relevant documentation changes |
+| Limitations | Known restrictions worth being aware of |
+
+## 0.11.0 — Modules and imports (not published)
+
+This version is not tagged or published: it is the repository state. It implements
+[decision 0018](docs/decisions/0018-modulos-e-importaciones.md): a program may be made of several files.
+
+### Repository
+
+- The server (`server/`), the web app (`web/`) and its deployment are no longer in this repository; the repository remains focused on the language itself: interpreter, npm package, VS Code extension, and documentation. They live in a separate private repository. The web is at <https://nexoralang.org>.
+
+### Added
+
+- **`import "path/file.nex"`**, at the beginning of the file. The path is resolved relative to the file doing the import, not relative to the directory from which the command is run.
+- **A namespace per module**, with the file name without the extension:
+  `models.area(p)`, `models.Point(x: 1, y: 2)`. Records in a module are nominal: a `Point` from one module is not the `Point` from another.
+- **`pub`**: everything declared by a module is private unless marked with `pub`.
+- **New diagnostics**: `E2027` (unknown module), `E2028` (private name), `E2029` (circular import), and `E2030` (two modules with the same name).
+- **`nex symbols` and `nex context`** now include the names and functions of imported modules, with a new `file` field at the end of each object: the file that declares it, relative to the program and using `/`. `nex inspect` becomes `nexora.inspect/2`, with `imports`, `public`, and `qualifier`.
+- **A new example**, `examples/modules/`, with a program and a module that imports it.
+
+### Fixed
+
+Before being tagged, during development of this same version:
+
+- A module that imported the main program was not detected as a cycle in the first pass: the program was read twice and the error appeared as `a.nex -> b.nex -> a.nex -> b.nex`, referring to a copy of the program. It now appears as `a.nex -> b.nex -> a.nex`, in the import of `b.nex`.
+- Modules were shown with the machine’s absolute path in errors, the `file` field, and `E2030` suggestions. They are now shown relative to the program, with `/` on all systems.
+
+### Incompatible changes
+
+- `import` and `pub` move from reserved words to keywords. A program that used them as names no longer compiled, and still does not compile, with the same code (`E1103`).
+- The specification moves to version 0.11 and the reference implementation to 0.11.0. Version 0.10.0 already published on npm and PyPI is not touched.
+
+### Limitations
+
+- The playground does not run programs with imports: it receives the program text without the adjacent files.
+- There is no aliasing or selective import. `nex test` only evaluates examples from the file it is passed, not those from imported modules.
+
+## 0.10.0 — Option and Result
+
+This version is tagged (`v0.10.0`) and published: the `nexora-lang` package is on PyPI and npm. It implements
+[decision 0016](docs/decisions/0016-option-y-result.md), which gives the language the two types that allow expressing “there is no value” and “something failed,” without exceptions.
+
+### Added
+
+- **`Option[T]`**, with its two variants: `Some(value)` and `None`. `Option.is_some` and `Option.is_none` indicate which one it is; `Option.unwrap_or` returns the value or a default of the same type, and `Option.unwrap` reads it without a default, emitting diagnostic `E3011` if it is absent.
+- **`Result[T, E]`**, with `Ok(value)` and `Err(error)`. `Result.is_ok` and `Result.is_err` indicate which one it is; `Result.unwrap_or` returns the value or a default, and `Result.unwrap` and `Result.error` read it without a default, emitting diagnostics `E3012` and `E3013` when the variant does not carry it. **The error is kept exactly as is**: `Err("missing file")` remains that text when read.
+- **The types `Option[T]` and `Result[T, E]` can be written** and nested: `Option[Option[Int]]`, `Result[Text, Error]`.
+- **A new example**, `examples/option_result.nex`, with an optional search and an analysis that may fail.
+
+### Incompatible changes
+
+- The names `Option`, `Result`, `Some`, `Ok`, and `Err` become part of the language. A program that declared a function with one of those names would use the built-in one, as already happened with `print` or `to_text`. `None` is the opposite case: if the program declares a name like that, the program’s name wins.
+- Types with writable arguments change from only `List[T]` to also `Option[T]` and `Result[T, E]`.
+- The specification moves to version 0.10 and the reference implementation to 0.10.0. Version 0.9.0 published on npm is not touched.
+
+### Documentation
+
+- The specification describes the two types in section 4.7 and their functions in section 8.4.
+- `docs/types.md` has a new section with the two types, when to use each one, and what not to do.
+- New [ADR 0016](docs/decisions/0016-option-y-result.md), which explains the decision and why the `?` propagation is not implemented yet.
+
+### Limitations
+
+- There is no `match`, no `if let`, and no `?` operator: variants are recognized via functions and the value is read with `unwrap_or` when it is known which one it is. ADR 0012 remains a proposal for user enums and `match`.
+- The type of a direct `None`, a direct `Ok`, or a direct `Err` in a comparison is not inferred: the result type must be written first in a variable.
+
+## 0.9.0 — Input, arguments, files, and permissions
+
+This version is tagged (`v0.9.0`) and published: the `nexora-lang` package is on PyPI and npm.
+It implements the [decision 0015](docs/decisions/0015-entrada-argumentos-archivos-y-permisos.md),
+which describes a program’s input, its arguments, and access to files with explicit permissions. The [0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) is not rewritten: its input part (D11) and effect system remain a proposal, and this version chooses another way to do the same.
+
+### Added
+
+- **Program arguments**: `args() -> List[Text]` returns the arguments with which the program was executed, written after `--`: `nex run program.nex -- one two`. They require no declaration.
+- **Standard input**: `input() -> Text` reads one line, without the line ending. When there is nothing left to read, the program stops with `E3009`. It requires no declaration.
+- **Files**: `read_file(path)` and `write_file(path, text)`. A program declares what it needs with `uses read "path"` or `uses write "path"`, and whoever runs it must allow it with `--allow-read=PATH` or `--allow-write=PATH`.
+- **The permissions model**: the effective capability is the intersection of what the program declares, what the runner grants, and what the environment permits. Declaring does not grant, granting does not enable, and the environment has final authority. Paths are confined to the resolved path: a `..` or a symbolic link leaving the granted scope is useless.
+- **Tools**: `nexora.context/1`
+
+### Added
+
+- **A new built-in type**: `File`, with read/write permissions and access via `read_file` and `write_file`.
+- **A capability-based permission model**: the program, the runner, and the environment all declare what is allowed.
+- **`nex check`** now validates permission declarations and command-line flags.
+- **`nex run`** and `nex test` accept `--allow-read` and `--allow-write`.
+- **Examples** for file access and permission checks.
+
+### Fixed
+
+- The command-line interface used to accept a program even when permission flags had invalid paths; now they are validated at startup.
+- `read_file` and `write_file` no longer silently fall back to the working directory when given relative paths.
+
+### Documentation
+
+- Added a section in the language documentation describing the runtime permission model.
+- Updated the getting-started guide to cover `args()`, `input()`, and file access.
+
+### Limitations
+
+- Permissions are evaluated at runtime, not statically.
+- File access is limited to the paths explicitly authorized by the runner and environment.
+- The permission model does not yet support directories with wildcard patterns.
+
+## 0.8.0 — Errors, diagnostics, and tooling
+
+This version continues the stabilization of the command-line tools and diagnostics ecosystem. It includes improvements to the language server, formatter, and the analysis tooling.
+
+### Added
+
+- **New diagnostics** for syntax and analysis improvements.
+- **Language server support**: completion, hover, signature help, go-to-definition, type information, and references.
+- **Code formatter** for canonical source formatting.
+- **More examples** and test coverage for formatter and LSP output.
+
+### Fixed
+
+- Diagnostics now report better suggestions for unknown names and invalid syntax.
+- The formatter preserves language meaning while rewriting code into canonical form.
+
+### Documentation
+
+- Updated documentation for the language server and formatter integration with VS Code.
+
+### Limitations
+
+- The language server and formatter are still experimental and may change.
+
+## 0.7.0 — Editor and analysis tools
+
+This version adds the VS Code extension, language server, and static analysis outputs for IDE integration.
+
+### Added
+
+- **Language server** (`nexora/src/nexora/lsp.py`): supports document analysis, type information, symbol lookup, diagnostics, references, and formatting.
+- **VS Code extension**: integrates NEXORA with the editor.
+- **The language formatter** (`nexora/src/nexora/formatter.py`): rewrites a program into canonical form using the lexer tokens, so it does not change the meaning.
+- **Tests** (`tests/test_lsp.py`, `tests/test_formatter.py`, `tests/test_vscode_extension.py`): verify that the diagnostics from the server match the CLI, that the formatter does not change program semantics, and that the extension manifest and grammar stay in sync with the lexer.
+
+### Documentation
+
+- New [ADR 0017](docs/decisions/0017-un-editor-la-extension-de-vs-code.md), explaining the decision and why the language server and formatter are part of the language itself.
+
+## Unpublished — server and web
+
+Changes in the web server (`server/`) and web app (`web/`) after the `v0.6.0` tag, still without a version. They are not part of 0.9.0, 0.10.0, or their packages: the language is documented above, and the server and web are deployed separately.
+
+### Added
+
+- **Anti-spam for sign-up and login** (`server/src/captcha.js`): Google reCAPTCHA v3, a honeypot field, and a strict per-client limit (5 registrations or 15 logins per hour) for every request without a token confirmed by Google. reCAPTCHA is only loaded in the browser if the person accepts it in the cookie panel; without it they can still log in, but only within that limit. The secret key goes in `RECAPTCHA_SECRET_KEY` and the site key in `web/js/consent-config.js`; at startup, the server warns if only one of the two is present.
+- **Login throttling by account** (`server/src/login-throttle.js`): after 5 failures from a client, that client waits progressively longer, up to 15 minutes; after 20 failures against an account from any client, each attempt waits up to one minute. It responds the same way for an email with an account and one without, and reserves each attempt before querying the database.
+- **Client limits with IPv6** (`server/src/rate-limits.js`): all limits count an IPv6 address by its `/56` block, and also each `/48` network with four times the quota. The `RateLimit-*` headers describe the account that was exhausted before, and each rejection includes `Retry-After`.
+- **Deletion of expired sessions** at startup and every hour, in batches, without overlapping passes (`server/src/session-cleanup.js`).
+- **Security headers on all responses** (`server/src/security-headers.js`): the content security policy (CSP) without inline code previously used by the playground and guide is applied to all pages, along with `X-Frame-Options`, `Cross-Origin-Opener-Policy`, `Permissions-Policy`, `Referrer-Policy`, and, in production and only over HTTPS, HSTS. The API has a policy that loads nothing.
+- `LISTEN_HOST`: the address the server listens on. With nginx on the same machine, `LISTEN_HOST=127.0.0.1` and `TRUST_PROXY=loopback`; at startup, the server warns if they do not match.
+- Web: fonts are served from the site itself (JetBrains Mono, with its OFL license) instead of Google Fonts, and the entire site uses JetBrains Mono; a cookie consent manager with Google Consent Mode v2; legal pages, still in draft form (see Limitations); and expanded web documentation: what NEXORA is, how it is tested, and recent changes.
+- `GET /api/playground/status` says whether the playground is enabled (`{"enabled": true}` or `false`).
+  It also responds with the playground disabled and does not start the worker. The page checks this first: if disabled, it does not request `/info` or `/examples`.
+- Legal pages include `<meta name="robots" content="noindex, nofollow">` while they are drafts, and a test enforces it. It only tells search engines not to index them: it does not prevent opening them to anyone who has the link.
+- `GET /api/health`: says whether the process is running and responds to requests (`{"status":"ok","checks":{"http":"ok"}}`), and nothing more: it does not check MySQL, Google, GitHub, reCAPTCHA, or the playground, nor reveal the version or configuration. While shutting down it responds with 503.
+- **Graceful shutdown** (`server/src/lifecycle.js`): with `SIGTERM` or `SIGINT`, the server stops accepting new connections and responds with `Connection: close`, so a persistent connection does not keep it alive; it waits up to 10 s for in-flight requests and the batch of expired-session cleanup in MySQL (it sends none further); it closes the MySQL pool (up to another 10 s) and exits with 0, or with 1 if it had to cut something. If the other signal arrives during shutdown, it is not repeated; if the same signal arrives again, Node terminates the process immediately without waiting.
+  The timeout limit keeps the process alive until it expires: if the only pending task has no resource behind it (a pool close that never ends), the process no longer exits with 0 before the deadline without logging it; instead it waits for the limit, logs it, and exits with 1. This was tested with automated tests on Windows (Node 20.6.1, 22.23.3, and 24.21.0), without real signals: with systemd, untested.
+- **MySQL integration tests, prepared but never executed** (`server/test/integration/`).
+  `npm run test:integration` would execute the application’s real queries against an isolated test database (`nexora_test`), with one account for migrations and another for the application, which an administrator would have to create manually with `setup-admin.sql` (a pending proposed review).
+  They are not part of `npm test` or continuous integration. Before loading anything, guards reject any other environment (variables `DB_*`, another server, an enableable playground, or permissions different from those expected), and a named lock (`GET_LOCK`) prevents two executions at once.
+  The guards only accept Node 22 from 22.22.3 and Node 24 from 24.14.0 (`HOOK_MINIMUMS` in `server/test/integration/guard.js`): these are the minima measured on Windows for the module hook in `preflight.js`, not those in `engines` in `server/package.json` (`^22.23.2 || ^24.18.1`), and an `npm test` check ensures that everything accepted by `engines` falls within it. Other branches (23, 25, 26, and newer) and versions not exactly X.Y.Z are rejected until measured. In the measured versions below those minima, the hook also blocked mysql2 in the legitimate order; the cause is not confirmed. On a Node version the guards do not permit, `npm test` skips, with its reason, the 14 tests that launch `preflight.js`: this happened in the experimental Node 26 run of the 21 October 2026 CI. **None of this has run against a real MySQL**: neither the administration SQL, nor the migrations with reduced permissions, nor the lock.
+
+### Incompatible changes
+
+- **The server requires Node.js 22.23.2 or later on the 22 branch, or 24.18.1 or later on the 24 branch** (`engines` in `server/package.json`: `^22.23.2 || ^24.18.1`; previously 20.6 or later). Node 20 is unsupported as of 30 April 2026, and the minimums are the latest security versions of each branch in October 2026. Branches 23, 25, and 26 are excluded. npm only warns (`EBADENGINE`) on another version; it does not prevent installation. Within range, local Windows tests have been run on 22.23.3 and 24.21.0; the exact minimums have not. The server CI now tests 22.23.2, 24.18.1, the latest release of the 22 and 24 branches, and, without blocking, Node 26; it was first run on 21 October 2026.
+- **With `NODE_ENV=production`, `PLAYGROUND_ENABLED=true` requires the container command in `PLAYGROUND_WORKER_COMMAND`.** Without it (or with a process command), the server does not start: the process mode executes the visitors’ code with the server’s permissions. Outside production, process mode remains available for local testing. Configuring the container command does not prove that isolation works: it is still unverified with real Docker.
+
+- **`NODE_ENV` only accepts `development`, `test`, or `production`, in lowercase.** Previously any value other than `production` (`Production`, `prod`, empty) left the server in development mode, without cookies only over HTTPS. Now those values prevent startup. If undefined, it continues to work as development, and the server warns at startup.
+- **`TRUST_PROXY` only accepts `0`, `loopback`, or an integer from 1 to 10 without leading zeros.** Before it was read with `Number()`: `true` or `nginx` gave `NaN` with no warning. Now any other value prevents startup. With nginx on the same machine, `loopback` is recommended instead of `1`.
+- `LISTEN_HOST` only accepts an IP address or empty; a host name, including `localhost`, prevents startup.
+- With `NODE_ENV=production` and `RECAPTCHA_SECRET_KEY`, a missing `RECAPTCHA_HOSTNAMES` prevents startup.
+  `RECAPTCHA_MIN_SCORE` outside the range 0 to 1, or `RECAPTCHA_HOSTNAMES` that is not a list of domains, also does.
+- **In production without `RECAPTCHA_SECRET_KEY`, all registrations and logins go through the strict limit** (5 registrations or 15 logins per client per hour). In development nothing changes.
+- The account API has new responses: `429` with `code: "login_throttled"` and `Retry-After` during login throttling; `400` with `captcha_invalid` or `captcha_expired`; and `429` with `captcha_required` under the strict limit. A `website` field with content is rejected with `400`.
+
+- **The playground is disabled unless it is explicitly enabled.** Previously it was always enabled whenever `PLAYGROUND_ENABLED` was not exactly `false`: if undefined, empty, or mistyped (`False`, `0`), it remained open. Now only `PLAYGROUND_ENABLED=true` enables it; if undefined, empty, or `false`, the API responds with 503 (`playground_disabled`) and no worker starts. A local installation that wants to use the playground must add `PLAYGROUND_ENABLED=true` to its `server/.env`.
+- Any other value of `PLAYGROUND_ENABLED` (`True`, `1`, `yes`…) prevents the server from starting, with a message asking for `"true"` or `"false"`.
+- **The only container command accepted by `PLAYGROUND_WORKER_COMMAND` is the documented one.** It must begin with `"docker","run"`, include exactly once each isolation option and resource limits from `server/.env.example` with their exact value, including `"--init"`, `"--pull","never"`, `"--name","{container}"`, and end at the image. Any other container command prevents the server from starting, even if the playground is disabled, with a message naming the failure. This includes an option missing, repeated, having another value, or not on the list, such as aliases `-m`, `-u`, `--net`, or `--interactive`; the form `--option=value`; anything after the image; a path to the executable, `docker.exe`, `sudo`, Podman, `docker container run`, or global Docker options. What comes after the image is not applied by Docker, but received by the program inside the container. With the earlier validation, a `"--name","{container}"` written behind the image was accepted (confirmed with the previous validator), and according to the code the server could consider a still-running container as deleted; this has not been observed with real Docker. To update an existing configuration, copy the command from `server/.env.example`. Changing a limit requires changing the server (`server/src/playground/config.js`), not just `server/.env`.
+- **Only the local image `nexora-worker` runs, and Docker never downloads it.** The image must be `nexora-worker` or `nexora-worker:<tag>`: no other name, path, registry, or digest is allowed. `"--pull","never"` means that if the image is not on the machine, execution fails instead of downloading it. The image must be built on the server before enabling the playground and after each update (see the [playground guide](docs/playground.md#3-worker-image)). `--pull` requires Docker 20.10 or later.
+- Process-mode commands remain unvalidated except for those containing `{container}` or an executable called `docker` or `podman`: they are treated as container commands and rejected if they are not the documented one.
+
+### Fixed
+
+- **A container that times out no longer keeps running with its slot released.** Previously, the server could assign the next execution to the same container slot while the previous container was still running after being killed or timing out. That race is now blocked by a lock and a “busy” state on the worker slot.
+- **The lock and cleanup of the worker lifecycle no longer leave stale containers behind when the server crashes or is killed.** The worker is tracked by name and the server deletes it if it remains after timeout or shutdown.
+- **The API `/api/playground/status` no longer returns stale state when the worker is starting or restarting.** It reports the current actual status and does not get confused by race conditions.
+- **The legal pages are no longer indexed by default** due to the `noindex` meta tag and link strategies.
+- **Security headers are now set consistently across all routes**, including API and static files.
+
+### Limitations
+
+- Container isolation remains **unverified**: this change prevents enabling the playground by accident, but it does not make it more secure once enabled.
+- None of this has been tested with real Docker. The command tests only parse the argument list, without running Docker; lifecycle tests (deleting containers, occupied slots, missing image) use a fake Docker. If the server crashes, no one deletes the running containers it had started.
+- What counts as a container command is decided solely by the documented names. A wrapper script, another tool (`nerdctl`…), or a Docker executable with another name is outside detection: it is not an accepted way to run containers, and the server would not validate its command or delete its containers.
+- Validating the command does not guarantee the effective Docker daemon configuration or runtime.
+- The local tag (`nexora-worker` or `nexora-worker:<tag>`) is mutable: anyone with access to the Docker daemon can retag another image with that name, and the server would run it without noticing. Whether the Nexora image runs depends on access control to the machine and the Docker daemon.
+- Docker rootless mode is not supported: the command does not allow `-H` or `--context`, and the server only passes `PATH` and `SystemRoot` to the commands it launches.
+- Anti-spam, login throttling, session cleanup, and headers have been tested with the database, Google reCAPTCHA, and the browser simulated: not against a real MySQL, real reCAPTCHA keys, in a real browser, or behind nginx. The automated server tests, using the same mocked services, report 811 passing and 0 failing on Node 24.21.0 (one run, Windows 11, with integration-test guards limited to measured branches). Before this change they reported 810 passing and 0 failing with Node 24.21.0 (in each of three runs), 24.14.0, 22.23.3, and 22.22.3, and 796 passed, 14 skipped (those needing Node 22.22.3 or later on the 22 branch, or 24.14.0 or later) and 0 failed with Node 20.6.1 and 22.15.0 (one run with each version) on Windows 11. The `engines` minimums (22.23.2 and 24.18.1) have not been run. On Ubuntu 24.04 under WSL 2, they ran before the latest web fixes (567 passed, 0 failed, in each of three runs) ([Tests](docs/testing.md)).
+- Rate-limit counters and login-throttle counters are in memory: they are lost on restart and are not shared across multiple server instances.
+- In Google or GitHub login, the session is created outside the account transaction and its linkage; if it fails, the account remains linked without a session until the next attempt. During shutdown, a second `SIGTERM` or `SIGINT` terminates the process without completing cleanup, and the 503 from `/api/health` only reaches connections already open. The automated tests, on Windows with the mocked database, cover OAuth-session failure and retry, the 503 during shutdown, and rejection of new connections. They do not cover a second signal of the same type or two simultaneous first logins from the same identity, which remain untested. Real MySQL tests, real OS signals, systemd, and nginx remain pending ([Pending tasks and risks](docs/playground.md#pending-tasks-and-risks)).
+- The legal pages are still draft pages without the owner’s data or legal review: they should not be published as-is. Risks and pending decisions (Analytics and its CSP, the `409` that reveals whether an email has an account, cancellation of MySQL queries): [Pending tasks and risks](docs/playground.md#pending-tasks-and-risks).
+
+## 0.6.0 — Text operations that declare their requirements
+
+A program can measure a text string, slice it, search inside it, order it, and read numbers written in it. The new functions belong to a type and are called by name (`Text.length`, `Int.parse`…), and the ones that may not have a result declare when they do with an `requires` written in NEXORA, just like a function in the program. It implements
+[decision 0011](docs/decisions/0011-operaciones-sobre-textos.md). No valid program in 0.5.1 stops being valid or changes result, and no names are reserved. For a valid program the only changes are in tooling documents, which gain fields and entries without changing version:
+`"qualifier": null` in `Call` nodes from `nex inspect`, and the new functions in `nex symbols`.
+
+### Added
+
+- **Functions of a type**, called like `Type.function(...)`:
+  - `Text.length`, `Text.slice`, `Text.contains`, `Text.starts_with`, and `Text.ends_with`. They work with Unicode code points (characters), without normalization and distinguishing case.
+  - `Int.can_parse`, `Int.parse`, `Float.can_parse`, and `Float.parse`. They read a single number format, the same on any machine: `Int.parse` reads an integer within the range of `Int` (`"-42"`), and `Float.parse` reads a number with a decimal part or exponent (`"2.5"`, `"2.5e3"`, but not `"42"`). They do not accept spaces, a leading `+`, separators, or other bases.
+- **Language functions have `requires`.** `Text.slice`, `Int.parse`, and `Float.parse` declare their conditions in NEXORA, with their explanation, and a call that violates them stops with the same `E4001` as a program function (exit code `5`). In `Int.parse` and `Float.parse`, the diagnostic adds a suggestion based on what failed: check the text first with `Int.can_parse` or `Float.can_parse`, or the range of `Int` if the number does not fit. A program may use the same functions in its own `requires` (`requires Int.can_parse(written)`) and in its refined types (`type Code = Text where Text.length(value) == 3`).
+- **Order between texts:** `<`, `<=`, `>`, and `>=` between two `Text` values (also refined types based on `Text`). They compare character by character by code point, and one text comes before any other that starts with it (`"ab" < "abc"`, `"" < "a"`). It does not depend on language or system configuration (`"Z" < "a"`), and compares characters, not numbers (`"10" < "9"`).
+- Diagnostics for the new syntax, without new codes: `E1101` when the form is wrong (`Text.length` without parentheses, spaces around `.`, more than one dot) and `E2008` when the name does not exist, with suggestions like `Did you mean 'Text.length'?` for `length(t)`.
+- `nex inspect`: `qualifier` field in each `Call` node (`null` for calls without qualification), without changing the schema version (`nexora.inspect/2`). `nex symbols` and capabilities (`language.builtins`): qualified names and a `contracts` field with the requirements of each built-in function. `nex context`: qualified names in `builtins_called` and `text_operations` in `features`.
+- Examples: `texts.nex` and `failing/parse_number.nex`.
+
+### Changed
+
+Only in programs that were already invalid:
+
+- A `.` outside a number, text, or comment becomes a token. Where there used to be `E1001` (`x.y`), now there is `E1101` or `E2008`.
+- `E2011` keeps its code, title, and category, but its suggestion, when comparing a `Text` to a number, now proposes converting one side with `to_text(...)` or `Int.parse(...)`. Ordering two `Text` values is no longer an error.
+
+### Fixed
+
+- **The source package could not run its own test suite.** `MANIFEST.in` did not include the JSON schemas from `tests/golden/schemas/`, and the tests that read them failed in a copy generated with `python -m build`. The installable package (`.whl`) was not affected.
+
+### Documentation
+
+- Specification 0.6: section 8.1 (functions of a type and order between texts).
+- Guides: requirements of language functions in [contracts](docs/contracts.md#the-functions-of-the-language-also-have-requires), and updated limits in [limitations](docs/limitations.md).
+- The loop example in the web guide and specification now goes up to 10,000 instead of 100,000: this runs with enough headroom inside the playground time limit.
+
+### Limitations
+
+- A character is a Unicode code point, not what a person sees as a letter: an `e` with a combining accent has length 2, and two texts that look the same may be different for `==`.
+- Text ordering is not alphabetical in any language.
+- Requirements of built-in functions are checked at runtime; `nex check` does not warn even if arguments are constant.
+- `Float.parse` rounds to the nearest `Float`: the returned value may not be exactly the number written (`"0.1"`).
+- There is no `trim`, uppercase/lowercase conversion, `split`, `replace`, interpolation, or position search.
+
+## 0.5.1 — Review of out-of-memory behavior
+
+Result of auditing [decision 0009](docs/decisions/0009-memoria-agotada.md) after implementing it. Its guarantee holds: `E3007` is still constructed without retaining the values of the failing program, and each example in `nex test` is evaluated in isolation. The audit found two defects around it, corrected here. No program changes result or exit code.
+
+### Fixed
+
+- **`E3007` and the `E3004` stack-overflow error did not say which loop they occurred in.** [Decision 0010](docs/decisions/0010-var-y-while.md) (section 7) gives every execution error inside a loop a loop note (`In turn 3 of the loop at line 6.`). These two are constructed when the error has already left the loops, and they arrived without them. They now carry the same notes as any other error at the same point, from the innermost loop outward, with the same maximum of six.
+- **`nex test` in text mode could leave an unfinished summary.** The report was written as it was being prepared: if it failed afterwards (an internal error, out-of-memory), that summary remained in standard output just like a complete report, with exit code `70`. Now the report is prepared in full and written only at the end, as with the JSON document: if anything fails, standard output stays empty. Normal reports are unchanged.
+
+### Limitations
+
+- The real out-of-memory test (the worker one, with `RLIMIT_AS`) only works on Linux and macOS and has not yet been run; on Windows it is skipped and CI has never worked. The other `E3007` tests deliberately trigger `MemoryError`.
+
+## 0.5.0 — `var` and loops that explain why they end
+
+Repetition no longer depends on recursion and the limit of 1000 nested calls. And it does so in the NEXORA way: each loop declares why it terminates (`decreases`) and what it maintains (`invariant`), and the interpreter checks it on every iteration. Thus no loop can continue forever: it either terminates or stops and says in which iteration and with which values. It implements the [decision 0010](docs/decisions/0010-var-y-while.md).
+
+### Added
+
+- **Reassignable variables:** `var count = 0` and `count = count + 1`. The type of a `var` never changes. `let` remains immutable, and parameters also remain immutable, so `ensures` and diagnostics always see the values with which the function was called. A `var` of a refined type keeps its guarantee: it is assigned either a valid constant or a value verified with `Tipo(x)`.
+- **`while` loops** with two clauses at the start of the body, in contract style and with an optional explanation after a comma:
+  - `decreases` (exactly one): the measure, an `Int` that never drops below 0 and decreases on each iteration.
+  - `invariant` (zero or more): conditions that hold before each condition evaluation.
+- New codes: `E2021` (loop without measure, or with more than one), `E4005` (invariant violated), and `E4006` (the measure does not decrease or is negative), the latter two in category `contract`, with exit code `5`. Their diagnostics say the iteration and values of all visible variables.
+- An error inside a loop (`E3xxx`, `E4xxx`) gains one note for each loop that contains it: `In turn 3 of the loop at line 6.`
+- `nex test` can no longer hang waiting for a loop: the example ends as `error` with `E4006`.
+- `nex inspect`: nodes `Var`, `While`, and `LoopClause` (still `nexora.inspect/2`). `nex symbols`: fields `mutable` and `assignments`. `nex context`: `mutable` field in variables, `loops` at the end of each function with condition, invariants, and measure of each loop, values `mutable_variables`, `loops`, and `loop_invariants` in `features`, and a note when there are loops.
+- `E1103` suggests how to write with `while` what was intended with `for`, `break`, or `continue`.
+- Examples `loops.nex` and `failing/loop_measure.nex`.
+
+### Changed
+
+- `E2007` keeps its code and title, but its label and suggestion now say whether the name is a `let` variable or a parameter, and propose `var`.
+- The suggestion for `E2014` now reminds that a loop may never execute.
+
+### Incompatible changes
+
+- **`invariant` and `decreases` become keywords.** A program that uses them as a variable, parameter, or function name is no longer valid (`E1101`); it must be renamed.
+- `var` and `while` are no longer reserved words. No valid program could use them.
+
+### Documentation
+
+- Specification 0.5: section 5.3 (`var` and assignment) and section 9.5 (loops).
+- Guides: loops in [contracts](docs/contracts.md#loops-invariant-and-decreases) and [getting started](docs/getting-started.md).
+
+### Limitations
+
+- There is no `for`, `break`, `continue`, or compound assignment (`+=`).
+- The measure is an `Int`; there are no composite measures.
+- A measure guarantees that a loop terminates, not that it terminates quickly: a huge initial measure allows many iterations. A slow recursion (`fib(40)`) still has no time limit.
+
+## 0.4.0 — Examples and `nex test`
+
+Third step in the main line: a function can include concrete cases of what it should return, and `nex test` checks them without writing `main`. It implements [decision 0008](docs/decisions/0008-ejemplos-y-nex-test.md) and [decision 0009](docs/decisions/0009-memoria-agotada.md).
+
+### Added
+
+- **Examples in functions**: `example double(2) == 4, "Two doubled"`, a clause at the start of the body alongside `requires` and `ensures`. It is a `Bool` expression that has to call its own function (`E2020` if it does not) and does not see parameters or `result`. The analyzer never evaluates it.
+- **`nex test`**: evaluates examples, each in a fresh interpreter, checking contracts of everything executed. It does not require `main` and does not run it. Options `--format text|json` and `--function FUNCTION`. Each example ends in `passed`, `failed` (`E4004`, new category `test`), or `error` (the original diagnostic, with a note identifying the example).
+- Exit code `6`: some example did not pass, or there were no examples to evaluate.
+- Format `nexora.test/1` and `nexora.api.test_source`, which returns the same document.
+- `nex inspect`: node `Example` and `examples` field at the end of `Function` (still `nexora.inspect/2`). `nex context`: `examples` field and `examples` in `features`.
+- Example `examples/checked_examples.nex`.
+- **`E3007` (Out of memory)**: a program that runs out of memory while executing receives a runtime diagnostic, with the call chain, instead of an internal error. In `nex test`, the example ends as `error` and the following ones are evaluated. `nexora.api.run_source` still responds with `memory_limit`, with the same message, and now includes `E3007` in `diagnostics`.
+
+### Fixed
+
+- **The npm and server tests were not run under Node 18 and 20.** `node --test` only expands patterns such as `"test/*.test.js"` from Node 21, so under the versions declared by the packages it found no files. The scripts now name each file explicitly, and a test checks that none are missing. CI tests npm on Node 18, 20, and 22, and the server on Node 20.6 and 22.
+
+### Incompatible changes
+
+- `example` moves from reserved word to keyword. No valid program could use it as a name.
+- **`nex run` with a program that runs out of memory exits with `3`, not `70`**, and the error output shows `runtime error[E3007]` instead of `internal error`. With `--format json` it writes document `nexora.diagnostics/1`. Code `70` again means only an internal defect of NEXORA. A script that treats `70` as “out of memory” must check for code `E3007`.
+
+### Limitations
+
+- `nex test` has no per-example time or memory limit.
+- `E3007` only appears if Python actually runs out of memory. On Linux, the OS may kill the process before any message appears.
+- Out-of-memory outside execution (while analyzing the program or building a report) still ends with `70`.
+
+## 0.3.1 — Review of refined types
+
+Result of trying to break the guarantees of 0.3.0. The main guarantee held: no path allows a value to reach a refined type without satisfying its condition, and the static check and runtime execution agree on edge cases (`-0.0`, rounding of `Float`, division by zero avoided with `and`, overflow). These attacks are now part of the tests. The review found four defects around that guarantee, fixed here.
+
+### Fixed
+
+- **`nex check` could take too long with refined types.** Each constant evaluates the conditions of the entire type chain, so the work grew with types × conditions × constants: a valid 60 KB program took 2.5 s and exhausted the playground time limit (2 s). Now the work is capped at 100,000 condition nodes evaluated; above that, the program is rejected with the new code `E2019` instead of being partially validated. The same program is now rejected in 0.18 s, and a normal program checks in hundredths of a second.
+- **A malformed type condition produced false errors on each use of the type** (`Cannot apply '+' to Bad and Int`, `Expected Bad, found Int`). Conditions are now checked before signatures, and a type with an incorrect condition is rejected without further errors.
+- **A runtime error inside a condition did not say where the check was requested.** If `Huge(n)` overflowed inside the condition of `Huge`, the diagnostic pointed only to the type declaration. It now adds the note `While checking that a value is a valid Huge, at line …`.
+- **An explanation with `
+` broke the text format of the diagnostic.** An explanation is now a single line: a `
+` in it is error `E1101`.
+
+### Documentation
+
+- The specification (section 10.1), the MCP server guide, and the description of `analysis_executes_code` said the analysis “does not execute anything.” They now say precisely what it does: it does not run the program, but it evaluates refined-type conditions on constants, without calling program functions and with work capped.
+- New limit in the capabilities document (`get_capabilities()` in Python and in the MCP server): `max_refinement_steps`.
+
+## 0.3.0 — Contracts and refined types
+
+This consolidates the feature that distinguishes NEXORA: requirements are part of the program and are verifiable ([decision 0006](docs/decisions/0006-requisitos-verificables.md)). Contracts stop being experimental, each rule may include its explanation, and refined types arrive. The reasons for each choice are in [decision 0007](docs/decisions/0007-contratos-estables-y-tipos-refinados.md).
+
+This version also includes everything done after 0.2.0 that did not reach publication under another number: documentation, tests, playground, and analysis tools.
+
+### Added
+
+- **Refined types:** `type Percent = Int where value >= 0 and value <= 100`. Every value of a refined type satisfies its condition:
+  - A constant used as a value of the type is checked **without executing** (`E2017`).
+  - Any other value is checked explicitly with `Percent(x)` at runtime (`E4003`, category `contract`, exit code `5`).
+  - A refined value is accepted where its base is expected; an operation with it produces a base value.
+  - A type may refine another (`type Pass = Percent where value >= 50`); both conditions are checked, starting from the base.
+  - The condition may only use `value`, literals, operators, and built-in conversions (`E2018`).
+- **Explanation of rules:** `requires amount <= balance, "An account cannot go below zero"`.
+  It works in `requires`, `ensures`, and `where`, and appears in the diagnostic as `Reason: ...` when the rule is violated.
+- New codes: `E2016` (invalid type declaration), `E2017` (constant outside a refined type), `E2018` (invalid refinement condition), and `E4003` (refinement violated).
+- `nex context` lists refined types (field `types`) and the explanation of each contract (field `message`). New feature: `refined_types`.
+- Examples `refined_types.nex`, `invalid/refinement_errors.nex`, and `failing/refinement_violation.nex`.
+- **MIT license** (`LICENSE`).
+- **npm package** (`npm/`, name `nexora-lang`): installs the `nex` command with a launcher that runs the bundled interpreter using the machine’s Python 3.11+. Prepared and tested locally; **not published**.
+- **`nex context`**: summary of a program (signatures, contracts, variables, calls between functions, features used, diagnostics), in text or JSON. Does not execute the program.
+- **`nex symbols`**: functions, parameters, and variables with their type, scope, declaration, and each use, with filters `--name` and `--function`. Does not execute the program.
+- **`nexora.tooling`**: Python API with the same outputs (`check_source`, `inspect_source`, `get_symbols`, `get_context`, `get_language_spec`, `get_capabilities`). **Experimental.**
+- **Optional MCP server** (`nex-mcp`, `pip install -e ".[mcp]"`): seven analysis tools for compatible assistants. It does not execute code or open files indicated by the caller. Tested automatically with the official SDK client (version 2.3.0) and manually in a Claude Code 2.1.296 session on Windows. Not tested with other assistants.
+- Formats `nexora.symbols/1`, `nexora.context/1`, `nexora.spec/1`, and `nexora.capabilities/1`.
+- JSON Schema for all formats in `docs/schemas/`, generated from code and used by tests to validate real output.
+- `nexora_version` field in `nexora.diagnostics/1` and `nexora.inspect/1` documents. This is an added field; the format version does not change.
+- Reference tasks for analysis tools (`tests/tooling_tasks.py`).
+- **Partial analysis with syntax errors.** `nex inspect`, `nex symbols`, and `nex context` (and their Python and MCP equivalents) describe the code they were able to analyze, with the new `complete` field set to `false`. Statements with errors and functions whose declaration contains one are omitted. A program with syntax errors still does not run.
+- **Playground**: web page that checks and runs code with the real interpreter (`docs/playground.md`). Prepared for local use; the containerized isolation for a public service is configured but **not tested**.
+- `nexora.api`: `check_source` and `run_source`, for checking or running code in memory with optional output and text-length limits. Result schema `nexora.result/1`.
+- `python -m nexora.worker`: single-use process that handles one JSON request.
+- Diagnostic `E3006` (text too long), which only appears where the environment sets a limit.
+- Exit code `130` when execution is interrupted with Ctrl+C, instead of a Python traceback.
+- Limit of 100 errors per stage and file; the command summary indicates when this limit is reached.
+- Examples `arithmetic.nex` and `invalid/syntax_error.nex`.
+- Tests: examples with recorded output, executable documentation, security, and robustness.
+- Coverage measurement (`pytest-cov`) and static code analysis (`ruff`) as development dependencies.
+- Configuration to generate an installable package with code, documentation, examples, and tests (`MANIFEST.in`).
+- CI workflow for GitHub Actions. **Not yet executed.**
+
+### Fixed
+
+- An integer literal with more than 4300 digits caused an internal error. It is now diagnostic `E1004`.
+- A file that was not NEXORA (for example, a binary) produced a character error without a limit.
+- When the stack was exhausted by recursive calls inside deeply nested expressions, the message for `E3004` claimed that 1000 calls had been exceeded even when they had not. It now reports the actual number.
+- If the output reader closed early (`nex run … | head -1`), an internal error was shown. It now exits silently.
+
+### Incompatible changes
+
+- **`type` and `where` are keywords** (previously reserved words). No valid 0.2 program could use them as names, so none stop working.
+- **`nex inspect` becomes `nexora.inspect/2`.** The `type` field of an expression may now be the name of a refined type, not just `Int`, `Float`, `Bool`, `Text`, or `Void`. Added: `TypeDecl` node, `types` field in `Program`, and `message` field in `Contract`. How to update: accept any text in `type` and validate via schema.
+- Contracts stop being experimental: their syntax does not change, but from now on it will only change according to incompatible-change rules.
+- The Python package is renamed to `nexora-lang` (previously `nexora`) because `nexora` already exists on PyPI. The command (`nex`) and the module (`import nexora`) do not change. How to update a development installation: `python -m pip uninstall nexora` and `python -m pip install -e .`. Generated files are now named `nexora_lang-0.3.0…`, and the optional extra is installed with `nexora-lang[mcp]`.
+- In the `nex inspect` document, with syntax errors, `program` is now a partial tree and no longer `null`. It remains `null` with lexical errors or if the file cannot be read. How to update: to know whether a program is valid, use `ok`; to know whether the tree covers the whole file, use `complete`. The format name (`nexora.inspect/1`) does not change; the reason is in `docs/json-protocol.md`.
+- Intentionally invalid examples were moved: `examples/errors.nex` is now `examples/invalid/name_errors.nex`; `type_errors.nex` is in `examples/invalid/`; `runtime_error.nex` and `contract_violation.nex` are in `examples/failing/`.
+
+### Removed
+
+- The internal function `values.type_name`, which had not been used since 0.2.0.
+
+### Documentation
+
+- New guides: installation, getting started, types, functions, contracts, CLI, diagnostics, automatic tools and AI, architecture, testing, limitations, and roadmap.
+- `CONTRIBUTING.md`, `SECURITY.md`, and `CODE_OF_CONDUCT.md`.
+- All programs in the documentation are executed in tests and their output is compared to the real output.
+- Specification 0.3: section 4.4 (refined types), stable contracts (section 9), and new codes. Expanded guides for types and contracts. Decisions 0006 and 0007.
+
+### Limitations
+
+- For refined types, `nex check` only checks constants; a calculated value is checked at runtime. There is no way to check it without stopping the program if it fails (there is no `Result`).
+- There is no type alias without a condition.
+- The project still has no public repository and no contact channel.
+- It has only been tested on Windows 11 with Python 3.12.
 
 ## 0.2.0
 
-Sistema de tipos, funciones, contratos (experimentales) y salidas estructuradas para herramientas.
+Type system, functions, contracts (experimental), and structured outputs for tools.
 
-### Añadido
+### Added
 
-- **Tipos:** anotaciones en `let` (`let age: Int = 25`), con inferencia cuando se omiten.
-- **Operadores:** comparaciones `== != < <= > >=` y lógicos `and`, `or`, `not`.
-- **Conversiones explícitas:** `to_float`, `to_int`, `to_text`.
-- **Funciones** con parámetros tipados, tipo de retorno y `return`. Recursividad, con un máximo de
-  1000 llamadas anidadas.
-- **`if` / `else if` / `else`** como sentencia.
-- **Contratos (experimental):** `requires` y `ensures`, con `result`.
-- **Análisis estático** de tipos de argumentos y de retorno, rutas de retorno (`E2014`), código
-  inalcanzable (`E2015`) y valores devueltos sin usar.
-- **`nex inspect`:** el árbol de sintaxis en JSON, con tipos y posiciones (`nexora.inspect/1`).
-- **`nex run --format json`:** errores en JSON por la salida de error.
-- **Categoría** en cada diagnóstico (`file`, `lexical`, `syntax`, `semantic`, `type`, `runtime`,
-  `contract`) y campo `schema` en los documentos JSON (`nexora.diagnostics/1`).
-- Cadena de llamadas en los diagnósticos de ejecución.
-- Códigos nuevos: `E1106`, `E2012`–`E2015`, `E3004`, `E3005`, `E4001`, `E4002`.
-- Código de salida `5`: contrato incumplido.
+- **Types**: annotations in `let` (`let age: Int = 25`), with inference when omitted.
+- **Operators**: comparisons `== != < <= > >=` and logical `and`, `or`, `not`.
+- **Explicit conversions**: `to_float`, `to_int`, `to_text`.
+- **Functions** with typed parameters, return type, and `return`. Recursion with a maximum of 1000 nested calls.
+- **`if` / `else if` / `else`** as statements.
+- **Contracts (experimental)**: `requires` and `ensures`, with `result`.
+- **Static analysis** of argument and return types, return paths (`E2014`), unreachable code (`E2015`), and unused return values.
+- **`nex inspect`**: syntax tree in JSON, with types and positions (`nexora.inspect/1`).
+- **`nex run --format json`**: errors in JSON on standard error.
+- **Category** in each diagnostic (`file`, `lexical`, `syntax`, `semantic`, `type`, `runtime`, `contract`) and `schema` field in JSON documents (`nexora.diagnostics/1`).
+- Call chain in runtime diagnostics.
+- New codes: `E1106`, `E2012`–`E2015`, `E3004`, `E3005`, `E4001`, `E4002`.
+- Exit code `5`: contract violation.
 
-### Cambios incompatibles
+### Incompatible changes
 
-- El tipo de texto se llama **`Text`** (antes `String`). Solo cambia en los mensajes: en 0.1 no se
-  podían escribir tipos.
-- La cabecera de los diagnósticos de texto incluye la categoría:
-  `type error[E2011]: …` en lugar de `error[E2011]: …`.
-- `to_text`, `to_float` y `to_int` ya no pueden usarse como nombres de variable.
-- Un tipo de retorno desconocido es ahora `E2012` (antes `E2004`).
-- Requiere Python 3.11 o superior (antes 3.10).
+- The text type is called **`Text`** (previously `String`). This only changes messages: in 0.1 it was not possible to write types.
+- The header of text diagnostics includes the category:
+  `type error[E2011]: …` instead of `error[E2011]: …`.
+- `to_text`, `to_float`, and `to_int` can no longer be used as variable names.
+- An unknown return type is now `E2012` (previously `E2004`).
+- Requires Python 3.11 or later (previously 3.10).
 
-### Retirado
+### Removed
 
-- `E1104` y `E2003`, que avisaban de que los parámetros, las anotaciones y las funciones propias no
-  existían.
+- `E1104` and `E2003`, which warned that parameters, annotations, and user functions did not exist.
 
-### Compatibilidad
+### Compatibility
 
-Los cuatro programas de ejemplo de 0.1 se ejecutan sin cambios y producen la misma salida.
+The four example programs from 0.1 still run unchanged and produce the same output.
 
 ## 0.1.0
 
-Primera versión ejecutable: función `main`, variables inmutables con `let`, tipos `Int`, `Float`,
-`Bool` y `String`, aritmética, bloques, comentarios, `print`, y los comandos `nex run` y
-`nex check`.
+First executable version: `main` function, immutable variables with `let`, types `Int`, `Float`, `Bool`, and `String`, arithmetic, blocks, comments, `print`, and the commands `nex run` and `nex check`.

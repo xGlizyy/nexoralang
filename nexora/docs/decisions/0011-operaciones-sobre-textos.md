@@ -1,98 +1,98 @@
-# 0011 — Operaciones sobre textos: funciones asociadas a un tipo que declaran sus requisitos
+# 0011 — Operations on texts: functions associated with a type that declare their requirements
 
-- **Estado:** aceptada
-- **Versión:** 0.6.0
-- **Relacionada con:** la [decisión 0001](0001-tipos-estaticos-sin-conversiones-implicitas.md) (sin
-  conversiones implícitas), la [0003](0003-funciones-retorno-e-if.md) (un único espacio de nombres),
-  la [0004](0004-contratos-en-ejecucion.md) (`requires` comprobado en ejecución), la
-  [0005](0005-diagnosticos-y-esquemas-json.md) (esquemas JSON versionados), la
-  [0006](0006-requisitos-verificables.md) (la línea principal), la
-  [0007](0007-contratos-estables-y-tipos-refinados.md) (tipos refinados) y la
-  [0010](0010-var-y-while.md) (notas de bucle). **No modifica ninguna.**
+- **Status:** accepted
+- **Version:** 0.6.0
+- **Related to:** [decision 0001](0001-tipos-estaticos-sin-conversiones-implicitas.md) (no
+  implicit conversions), [0003](0003-funciones-retorno-e-if.md) (a single namespace),
+  [0004](0004-contratos-en-ejecucion.md) (`requires` checked at run time),
+  [0005](0005-diagnosticos-y-esquemas-json.md) (versioned JSON schemas),
+  [0006](0006-requisitos-verificables.md) (the main line),
+  [0007](0007-contratos-estables-y-tipos-refinados.md) (refined types) and
+  [0010](0010-var-y-while.md) (loop notes). **It modifies none.**
 
-## Contexto
+## Context
 
-Es el primer punto de "Planificado" en la [hoja de ruta](../roadmap.md): "Operaciones sobre textos:
-longitud, comparación de orden, conversión de texto a número". Hoy un `Text` solo se puede unir con
-`+`, comparar con `==` y `!=`, y obtener con `to_text`.
+It is the first point of "Planned" in the [roadmap](../roadmap.md): "Operations on texts:
+length, order comparison, conversion from text to number". Today a `Text` can only be joined with
+`+`, compared with `==` and `!=`, and obtained with `to_text`.
 
-| Necesidad | Hoy | Problema |
-|-----------|-----|----------|
-| Saber si un texto está vacío o es demasiado largo | Solo comparando con `""` | Un tipo refinado no puede decir que un texto tiene como mucho 20 caracteres |
-| Ordenar o comparar dos nombres | `<` sobre `Text` es `E2011` | — |
-| Leer un número escrito en un texto | Imposible | Cuando haya entrada de datos (punto 4 de "Planificado") todo llegará como texto |
-| Quedarse con una parte de un texto | Imposible | — |
+| Need | Today | Problem |
+|------|-------|---------|
+| Knowing whether a text is empty or too long | Only by comparing with `""` | A refined type cannot say that a text has at most 20 characters |
+| Sorting or comparing two names | `<` on `Text` is `E2011` | — |
+| Reading a number written in a text | Impossible | When there is data input (point 4 of "Planned") everything will arrive as text |
+| Keeping part of a text | Impossible | — |
 
-### Dos problemas que hay que resolver
+### Two problems that have to be solved
 
-**Las operaciones que no siempre tienen respuesta.** El trozo de `"abc"` entre las posiciones 2 y 9
-no existe, y `"12a"` no es un número. Los lenguajes habituales eligen entre:
+**Operations that do not always have an answer.** The slice of `"abc"` between positions 2 and 9
+does not exist, and `"12a"` is not a number. The usual languages choose between:
 
-| Elección | Ejemplo | Problema |
-|----------|---------|----------|
-| Inventar una respuesta | `"abc"[2:9]` da `"c"` en Python; `parseInt("12a")` da `12` en JavaScript | El error pasa desapercibido y aparece lejos de su causa |
-| Lanzar una excepción | `int("12a")` en Python | La condición que hay que cumplir no está escrita en ninguna parte del programa |
-| Devolver un valor opcional | `"12a".parse::<i32>()` en Rust | Exige `Option` o `Result`, que NEXORA todavía no tiene (punto 3 de "Planificado") |
+| Choice | Example | Problem |
+|--------|---------|---------|
+| Making up an answer | `"abc"[2:9]` gives `"c"` in Python; `parseInt("12a")` gives `12` in JavaScript | The error goes unnoticed and appears far from its cause |
+| Throwing an exception | `int("12a")` in Python | The condition that has to be met is written nowhere in the program |
+| Returning an optional value | `"12a".parse::<i32>()` in Rust | It requires `Option` or `Result`, which NEXORA does not have yet (point 3 of "Planned") |
 
-NEXORA ya tiene una forma de decir "esta función solo tiene sentido si…": `requires`. Lo que no
-existía es que **las funciones del propio lenguaje** la usaran.
+NEXORA already has a way of saying "this function only makes sense if…": `requires`. What did not
+exist is **the functions of the language itself** using it.
 
-**Los nombres.** NEXORA tiene un único espacio de nombres sin ocultación (decisión 0003, punto 4): una
-variable o un parámetro no puede llamarse como una función, tampoco como una integrada (`E2006`). Con
-nombres planos como `length`, `slice` o `contains`, que son nombres de variable muy habituales, cada
-función nueva prohibiría un nombre, y cada versión que añadiera funciones podría invalidar programas
-que hoy son correctos. Además, NEXORA no tiene sobrecarga: `length` no podría servir a la vez para los
-textos y para las listas (punto 2 de "Planificado").
+**Names.** NEXORA has a single namespace without shadowing (decision 0003, point 4): a
+variable or a parameter cannot be named like a function, not even a built-in one (`E2006`). With
+flat names such as `length`, `slice` or `contains`, which are very common variable names, every
+new function would forbid a name, and every version that added functions could invalidate programs
+that are correct today. Besides, NEXORA has no overloading: `length` could not serve both for
+texts and for lists (point 2 of "Planned").
 
-## Decisión
+## Decision
 
-### 1. Qué es un `Text`
+### 1. What a `Text` is
 
-- **Un `Text` es una secuencia de valores escalares Unicode** (puntos de código de U+0000 a U+10FFFF,
-  sin los sustitutos U+D800–U+DFFF). En este documento, "carácter" significa siempre eso.
-- **Ningún `Text` puede contener un sustituto aislado.** Un programa se lee como UTF-8 estricto
-  (`E0002` si no lo es), los únicos escapes son `\n`, `\t`, `\"`, `\\` y `\{`, y ninguna operación
-  de esta decisión puede crear uno: `Text.slice` corta entre caracteres, nunca dentro de uno.
-- **No se normaliza nada, nunca.** NEXORA no aplica NFC, NFD ni ninguna otra forma de normalización
-  ni al leer el programa, ni al comparar, ni al buscar. Un texto es exactamente la secuencia de
-  caracteres escrita o calculada.
-- Las posiciones empiezan en 0. Un trozo se indica con su principio incluido y su final excluido.
-- No se usan bytes ni unidades UTF-16: ningún resultado depende de cómo guarde el texto la
-  implementación.
+- **A `Text` is a sequence of Unicode scalar values** (code points from U+0000 to U+10FFFF,
+  without the surrogates U+D800–U+DFFF). In this document, "character" always means that.
+- **No `Text` can contain a lone surrogate.** A program is read as strict UTF-8
+  (`E0002` if it is not), the only escapes are `\n`, `\t`, `\"`, `\\` and `\{`, and no operation
+  of this decision can create one: `Text.slice` cuts between characters, never inside one.
+- **Nothing is ever normalized.** NEXORA applies no NFC, NFD or any other normalization form,
+  neither when reading the program, nor when comparing, nor when searching. A text is exactly the sequence of
+  characters written or computed.
+- Positions start at 0. A slice is given by its start, included, and its end, excluded.
+- Neither bytes nor UTF-16 units are used: no result depends on how the implementation stores the
+  text.
 
-### 2. Comparar textos
+### 2. Comparing texts
 
-| Operador | Entre dos `Text` | Hoy |
-|----------|------------------|-----|
-| `==`, `!=` | Igualdad carácter a carácter (sin normalizar) | Ya existe; no cambia |
-| `<`, `<=`, `>`, `>=` | **Nuevo**: orden lexicográfico por punto de código | `E2011` |
+| Operator | Between two `Text` | Today |
+|----------|--------------------|-------|
+| `==`, `!=` | Equality character by character (without normalizing) | It already exists; it does not change |
+| `<`, `<=`, `>`, `>=` | **New**: lexicographic order by code point | `E2011` |
 
-**El orden exacto.** Para comparar `a` y `b` se recorren a la vez desde la posición 0:
+**The exact order.** To compare `a` and `b` they are traversed together from position 0:
 
-1. En la primera posición en la que difieren, va antes el texto cuyo carácter tiene el punto de código
-   más bajo.
-2. Si no difieren en ninguna posición del más corto, va antes el más corto. El texto vacío va antes
-   que cualquier otro.
-3. Si tienen la misma longitud y no difieren, son iguales.
+1. At the first position where they differ, the text whose character has the lower code point
+   comes first.
+2. If they do not differ in any position of the shorter one, the shorter one comes first. The empty text comes before
+   any other.
+3. If they have the same length and do not differ, they are equal.
 
-| Expresión | Valor | Por qué |
-|-----------|-------|---------|
-| `"ab" < "abc"` | `true` | `"ab"` es el principio de `"abc"` |
-| `"" < "a"` | `true` | El vacío va antes que cualquier otro |
-| `"Z" < "a"` | `true` | `Z` es U+005A y `a` es U+0061 |
-| `"z" < "é"` | `true` | `é` (U+00E9) está después de todas las letras ASCII |
-| `"10" < "9"` | `true` | Se comparan caracteres, no números: `1` va antes que `9` |
-| `"é" == "é"` escritos uno como U+00E9 y otro como `e` + U+0301 | `false` | No se normaliza |
+| Expression | Value | Why |
+|------------|-------|-----|
+| `"ab" < "abc"` | `true` | `"ab"` is the beginning of `"abc"` |
+| `"" < "a"` | `true` | The empty one comes before any other |
+| `"Z" < "a"` | `true` | `Z` is U+005A and `a` is U+0061 |
+| `"z" < "é"` | `true` | `é` (U+00E9) is after all the ASCII letters |
+| `"10" < "9"` | `true` | Characters are compared, not numbers: `1` comes before `9` |
+| `"é" == "é"` written one as U+00E9 and the other as `e` + U+0301 | `false` | Nothing is normalized |
 
-- **No depende del idioma ni de la configuración del sistema**: el mismo programa da el mismo
-  resultado en cualquier máquina. No es el orden alfabético de ningún idioma.
-- Un `Text` sigue sin poder compararse con otro tipo: `"1" < 2` es `E2011`, con la sugerencia de
-  convertir uno de los dos lados.
-- Un tipo refinado con base `Text` se compara como su base, como ya ocurre con `==`.
+- **It does not depend on the language or on the system configuration**: the same program gives the same
+  result on any machine. It is not the alphabetical order of any language.
+- A `Text` still cannot be compared with another type: `"1" < 2` is `E2011`, with the suggestion to
+  convert one of the two sides.
+- A refined type with base `Text` is compared as its base, as already happens with `==`.
 
-### 3. Funciones asociadas a un tipo: `Tipo.función(…)`
+### 3. Functions associated with a type: `Type.function(…)`
 
-Las funciones nuevas pertenecen a un tipo integrado y se llaman con el nombre del tipo delante:
+The new functions belong to a built-in type and are called with the name of the type in front:
 
 ```text
 let size = Text.length(name)
@@ -102,52 +102,52 @@ if Int.can_parse(input) {
 }
 ```
 
-#### 3.1 La forma
+#### 3.1 The form
 
 ```text
-llamada_cualificada = NombreDeTipo "." nombre "(" [ argumentos ] ")"
+qualified_call = TypeName "." name "(" [ arguments ] ")"
 ```
 
-- **Delante del punto va el nombre de un tipo integrado** que tenga funciones: hoy `Text`, `Int` y
-  `Float`. `Bool` no tiene ninguna todavía.
-- **Detrás va el nombre de una de sus funciones**, y la llamada lleva siempre paréntesis: una función
-  no es un valor (decisión 0003, punto 5).
-- **Una sola forma de escribirla**: el punto va pegado al nombre del tipo y al de la función, y hay un
-  solo punto. `Text . length(t)` y `Text.length.x(t)` son errores de sintaxis. Entre el nombre de la
-  función y el `(` puede haber espacios, como en cualquier llamada (`f (1)` ya es válido). Cómo se lee
-  el punto, con precisión: sección 3.4.
-- El nombre completo de la función es `Text.length`. Así aparece en los diagnósticos, en los
-  contratos y en las herramientas.
+- **In front of the dot goes the name of a built-in type** that has functions: today `Text`, `Int` and
+  `Float`. `Bool` has none yet.
+- **After it goes the name of one of its functions**, and the call always carries parentheses: a function
+  is not a value (decision 0003, point 5).
+- **A single way of writing it**: the dot is attached to the name of the type and to that of the function, and there is
+  a single dot. `Text . length(t)` and `Text.length.x(t)` are syntax errors. Between the name of the
+  function and the `(` there may be spaces, as in any call (`f (1)` is already valid). How the
+  dot is read, precisely: section 3.4.
+- The full name of the function is `Text.length`. That is how it appears in diagnostics, in
+  contracts and in tools.
 
-#### 3.2 Las funciones
+#### 3.2 The functions
 
-| Función | Qué hace | Requisitos (`requires`) |
-|---------|----------|-------------------------|
-| `Text.length(text: Text) -> Int` | Número de caracteres | Ninguno |
-| `Text.slice(text: Text, start: Int, end: Int) -> Text` | Los caracteres desde `start` (incluido) hasta `end` (excluido) | Tres (sección 5.2) |
-| `Text.contains(text: Text, part: Text) -> Bool` | Si `part` aparece en `text` | Ninguno |
-| `Text.starts_with(text: Text, part: Text) -> Bool` | Si `text` empieza por `part` | Ninguno |
-| `Text.ends_with(text: Text, part: Text) -> Bool` | Si `text` termina en `part` | Ninguno |
-| `Int.can_parse(text: Text) -> Bool` | Si `text` es un entero escrito según la sección 6 | Ninguno |
-| `Int.parse(text: Text) -> Int` | El entero escrito en `text` | `Int.can_parse(text)` |
-| `Float.can_parse(text: Text) -> Bool` | Si `text` es un decimal escrito según la sección 6 | Ninguno |
-| `Float.parse(text: Text) -> Float` | El decimal escrito en `text` | `Float.can_parse(text)` |
+| Function | What it does | Requirements (`requires`) |
+|----------|--------------|---------------------------|
+| `Text.length(text: Text) -> Int` | Number of characters | None |
+| `Text.slice(text: Text, start: Int, end: Int) -> Text` | The characters from `start` (included) to `end` (excluded) | Three (section 5.2) |
+| `Text.contains(text: Text, part: Text) -> Bool` | Whether `part` appears in `text` | None |
+| `Text.starts_with(text: Text, part: Text) -> Bool` | Whether `text` starts with `part` | None |
+| `Text.ends_with(text: Text, part: Text) -> Bool` | Whether `text` ends with `part` | None |
+| `Int.can_parse(text: Text) -> Bool` | Whether `text` is an integer written according to section 6 | None |
+| `Int.parse(text: Text) -> Int` | The integer written in `text` | `Int.can_parse(text)` |
+| `Float.can_parse(text: Text) -> Bool` | Whether `text` is a decimal written according to section 6 | None |
+| `Float.parse(text: Text) -> Float` | The decimal written in `text` | `Float.can_parse(text)` |
 
-- `Int.parse` y `Float.parse` pertenecen al tipo que **producen**, no al que reciben: se leen como "un
-  `Int` a partir de un texto".
-- Los argumentos se comprueban sin ejecutar como los de cualquier función (`E2009`, `E2011`). Un
-  argumento de un tipo refinado con base `Text` o `Int` se acepta donde se espera su base.
-- No hay `trim`, `upper`, `split`, `replace` ni búsqueda de posiciones: `split` necesita listas y el
-  resto se decidirá cuando haya programas que lo necesiten.
+- `Int.parse` and `Float.parse` belong to the type they **produce**, not to the one they receive: they read as "an
+  `Int` from a text".
+- The arguments are checked without running like those of any function (`E2009`, `E2011`). An
+  argument of a refined type with base `Text` or `Int` is accepted where its base is expected.
+- There is no `trim`, `upper`, `split`, `replace` or search for positions: `split` needs lists and the
+  rest will be decided when there are programs that need it.
 
-#### 3.3 Qué no cambia
+#### 3.3 What does not change
 
-- **No se reserva ningún nombre.** `let length = Text.length(name)` es válido: `length` sin cualificar
-  sigue significando una sola cosa, la variable, y `Text.length` es otra. Un nombre del programa no
-  puede contener un punto, así que un nombre cualificado nunca coincide con uno del programa.
-- **`Int`, `Float`, `Bool` y `Text` se pueden seguir usando como nombres de variable y de parámetro**,
-  como hoy. NEXORA ya distingue tipos y valores por la posición en que aparecen: este programa es
-  válido en la 0.5.1 y lo sigue siendo:
+- **No name is reserved.** `let length = Text.length(name)` is valid: unqualified `length`
+  still means a single thing, the variable, and `Text.length` is another one. A name of the program cannot
+  contain a dot, so a qualified name never matches one of the program.
+- **`Int`, `Float`, `Bool` and `Text` can still be used as variable and parameter names**,
+  as today. NEXORA already tells types and values apart by the position in which they appear: this program is
+  valid in 0.5.1 and it still is:
 
   ```text
   fn twice(Text: Int) -> Int {
@@ -155,50 +155,50 @@ llamada_cualificada = NombreDeTipo "." nombre "(" [ argumentos ] ")"
   }
   ```
 
-  La posición delante del punto es una posición de tipo, igual que la de una anotación
-  (`let label: Text = "a"`). Como un valor nunca puede ir seguido de un punto, `Text.length(s)`
-  significa la función del tipo aunque exista una variable llamada `Text` (sección 9 y prueba 17).
-- **La regla del espacio de nombres (decisión 0003) no cambia**: los nombres cualificados no entran en
-  el espacio de nombres de funciones, parámetros y variables.
-- **`print`, `to_text`, `to_float` y `to_int` siguen como están**, sin cualificar. Convivirán las dos
-  formas. Si se añaden equivalentes cualificados, será en otra decisión.
+  The position in front of the dot is a type position, like that of an annotation
+  (`let label: Text = "a"`). Since a value can never be followed by a dot, `Text.length(s)`
+  means the function of the type even if there is a variable called `Text` (section 9 and test 17).
+- **The namespace rule (decision 0003) does not change**: qualified names do not enter the
+  namespace of functions, parameters and variables.
+- **`print`, `to_text`, `to_float` and `to_int` stay as they are**, unqualified. The two
+  forms will coexist. If qualified equivalents are added, it will be in another decision.
 
-#### 3.4 Cómo se lee el punto
+#### 3.4 How the dot is read
 
-**Analizador léxico.**
+**Lexer.**
 
-1. Los textos y los comentarios se leen como hoy: un `.` dentro de ellos no es un token.
-2. Al leer un número, un `.` **seguido de un dígito** forma parte del número decimal, como hoy
+1. Texts and comments are read as today: a `.` inside them is not a token.
+2. When reading a number, a `.` **followed by a digit** is part of the decimal number, as today
    (`1.5`).
-3. **Cualquier otro `.` es el token nuevo `DOT`.** Hoy ese mismo `.` es el error léxico `E1001`.
-   Ejemplos: el de `Text.length`, el de `1.length` (el `1` es un entero y el `.` un `DOT`), el de `.5` y
-   el segundo de `1.5.2`.
-4. Como hoy, los saltos de línea dentro de paréntesis no producen token; fuera de ellos, terminan la
-   sentencia.
+3. **Any other `.` is the new token `DOT`.** Today that same `.` is the lexical error `E1001`.
+   Examples: the one of `Text.length`, the one of `1.length` (the `1` is an integer and the `.` a `DOT`), the one of `.5` and
+   the second one of `1.5.2`.
+4. As today, line breaks inside parentheses produce no token; outside them, they end the
+   statement.
 
-**Analizador sintáctico.** El `DOT` solo es válido en un sitio: en una expresión, entre dos nombres,
-como parte de la llamada `nombre DOT nombre "(" … ")"`.
+**Parser.** The `DOT` is only valid in one place: in an expression, between two names,
+as part of the call `name DOT name "(" … ")"`.
 
-1. El analizador construye esa llamada **siempre que encuentra esa forma**, sin saber todavía si el
-   primer nombre es un tipo, una variable o un módulo: `Text.length(s)`, `name.length()` y
-   `geometry.area(c)` se analizan igual. Lo que significan lo decide el comprobador.
-2. Los dos nombres tienen que tocar el punto: la columna en que acaba el primero es la del punto, y la
-   siguiente a la del punto es la del segundo, en la misma línea. Se comprueba con las posiciones de
-   los tokens, porque dentro de paréntesis un salto de línea no deja token.
-3. **Reparto de los errores.** El analizador sintáctico da `E1101` cuando la **forma** está mal; el
-   comprobador da `E2008` cuando la forma es correcta pero el **nombre** no existe o no es un tipo. La
-   tabla completa está en la sección 9.
+1. The parser builds that call **whenever it finds that form**, without knowing yet whether the
+   first name is a type, a variable or a module: `Text.length(s)`, `name.length()` and
+   `geometry.area(c)` are parsed the same way. What they mean is decided by the checker.
+2. Both names have to touch the dot: the column where the first one ends is that of the dot, and the
+   one after the dot is that of the second, on the same line. It is checked with the positions of
+   the tokens, because inside parentheses a line break leaves no token.
+3. **Distribution of errors.** The parser gives `E1101` when the **form** is wrong; the
+   checker gives `E2008` when the form is correct but the **name** does not exist or is not a type. The
+   complete table is in section 9.
 
-**Programas válidos de la 0.5.1.** Ningún programa válido contiene un `DOT`, porque en la 0.5.1 un `.`
-fuera de un número, un texto o un comentario era siempre `E1001`. Su secuencia de tokens, su árbol, su
-comprobación y su ejecución no cambian (sección 10). Solo cambian los diagnósticos de programas que ya
-eran inválidos.
+**Valid programs of 0.5.1.** No valid program contains a `DOT`, because in 0.5.1 a `.`
+outside a number, a text or a comment was always `E1001`. Their sequence of tokens, their tree, their
+checking and their execution do not change (section 10). Only the diagnostics of programs that were already
+invalid change.
 
-### 4. Las funciones integradas declaran sus requisitos, en NEXORA
+### 4. The built-in functions declare their requirements, in NEXORA
 
-Esto es lo que hace que estas funciones sean de NEXORA y no una copia de las de otro lenguaje.
-**Cada función que puede no tener respuesta declara cuándo la tiene, con un `requires` escrito en
-NEXORA y con su explicación**, exactamente igual que una función del programa. Son estas, completas:
+This is what makes these functions NEXORA's and not a copy of those of another language.
+**Every function that may have no answer declares when it has one, with a `requires` written in
+NEXORA and with its explanation**, exactly like a function of the program. These are them, complete:
 
 ```text
 fn Text.length(text: Text) -> Int
@@ -217,217 +217,217 @@ fn Float.parse(text: Text) -> Float
     requires Float.can_parse(text), "Only a decimal number that fits in a Float can be read as a Float"
 ```
 
-- Las explicaciones nombran el rango a propósito: `"99999999999999999999"` está escrito como un
-  número entero y aun así no puede leerse, porque no cabe en un `Int`. Una explicación que solo
-  hablara de la forma sería falsa para ese caso.
-- **La notación `fn Text.length(text: Text) -> Int` de este bloque es la forma en que se muestran las
-  firmas**, la misma que usan los diagnósticos y `nex symbols`. No es una declaración que un programa
-  pueda escribir: un programa no puede declarar funciones de un tipo (sección 9).
-- **Las condiciones** (lo que va detrás de `requires` y `ensures`) se escriben en NEXORA y se analizan
-  como expresiones con el analizador real al cargar el intérprete.
-  Una prueba comprueba que todas tienen tipo `Bool`, que solo usan sus parámetros, `result` (en
-  `ensures`) y funciones integradas sin `requires`, y que **ninguna puede fallar al evaluarse**: no
-  dividen, no desbordan y solo llaman a `Text.length`, `Int.can_parse` y `Float.can_parse`, que tienen
-  respuesta para cualquier texto.
-- Quien llama puede trasladar el requisito: `requires Int.can_parse(code)` en una función del programa
-  usa la misma condición, y un tipo refinado puede decir
+- The explanations name the range on purpose: `"99999999999999999999"` is written as an
+  integer and still cannot be read, because it does not fit in an `Int`. An explanation that only
+  talked about the form would be false for that case.
+- **The notation `fn Text.length(text: Text) -> Int` of this block is the way signatures
+  are shown**, the same one that diagnostics and `nex symbols` use. It is not a declaration a program
+  can write: a program cannot declare functions of a type (section 9).
+- **The conditions** (what goes after `requires` and `ensures`) are written in NEXORA and parsed
+  as expressions with the real parser when the interpreter is loaded.
+  A test checks that all of them have type `Bool`, that they only use their parameters, `result` (in
+  `ensures`) and built-in functions without `requires`, and that **none can fail when evaluated**: they do not
+  divide, do not overflow and only call `Text.length`, `Int.can_parse` and `Float.can_parse`, which have an
+  answer for any text.
+- The caller can move the requirement: `requires Int.can_parse(code)` in a function of the program
+  uses the same condition, and a refined type can say
   `type Code = Text where Text.length(value) == 3, "A code has exactly three characters"`.
-- Las funciones de antes (`print`, `to_text`, `to_float`, `to_int`) no tienen `requires`, y `to_int`
-  sigue dando `E3005` fuera del rango de `Int`.
+- The earlier functions (`print`, `to_text`, `to_float`, `to_int`) have no `requires`, and `to_int`
+  still gives `E3005` outside the range of `Int`.
 
-### 5. Comportamiento exacto de cada función
+### 5. Exact behaviour of each function
 
 #### 5.1 `Text.length`, `Text.contains`, `Text.starts_with`, `Text.ends_with`
 
-Cuentan y comparan caracteres (sección 1), sin normalizar y distinguiendo mayúsculas de minúsculas.
-Tienen respuesta para cualquier texto, también el vacío.
+They count and compare characters (section 1), without normalizing and distinguishing uppercase from lowercase.
+They have an answer for any text, also the empty one.
 
-| Llamada | Valor | Regla |
-|---------|-------|-------|
+| Call | Value | Rule |
+|------|-------|------|
 | `Text.length("")` | `0` | |
-| `Text.length("año")` | `3` | `ñ` es un carácter |
-| `Text.length` de una `e` seguida del acento combinado U+0301 | `2` | Dos caracteres, aunque se vean como uno |
-| `Text.length` del emoji de familia 👨‍👩‍👧‍👦 | `7` | Cuatro personas unidas por tres U+200D |
+| `Text.length("año")` | `3` | `ñ` is one character |
+| `Text.length` of an `e` followed by the combining accent U+0301 | `2` | Two characters, even though they look like one |
+| `Text.length` of the family emoji 👨‍👩‍👧‍👦 | `7` | Four people joined by three U+200D |
 | `Text.contains("hello", "ell")` | `true` | |
-| `Text.contains("hello", "")` | `true` | **El texto vacío aparece en cualquier texto**, en cualquier posición |
+| `Text.contains("hello", "")` | `true` | **The empty text appears in any text**, at any position |
 | `Text.contains("", "")` | `true` | |
 | `Text.contains("", "a")` | `false` | |
-| `Text.contains("Hello", "hello")` | `false` | Distingue mayúsculas |
+| `Text.contains("Hello", "hello")` | `false` | Case-sensitive |
 | `Text.starts_with("hello", "he")` | `true` | |
-| `Text.starts_with("hello", "")` | `true` | Todo texto empieza por el vacío |
-| `Text.starts_with("he", "hello")` | `false` | `part` más largo que `text` |
+| `Text.starts_with("hello", "")` | `true` | Every text starts with the empty one |
+| `Text.starts_with("he", "hello")` | `false` | `part` longer than `text` |
 | `Text.ends_with("hello", "lo")` | `true` | |
-| `Text.ends_with("hello", "")` | `true` | Todo texto termina en el vacío |
+| `Text.ends_with("hello", "")` | `true` | Every text ends with the empty one |
 | `Text.ends_with("", "a")` | `false` | |
 
-Equivalencias que se cumplen siempre (con `n = Text.length(t)` y `m = Text.length(p)`):
-`Text.starts_with(t, p) == (m <= n and Text.slice(t, 0, m) == p)` y
+Equivalences that always hold (with `n = Text.length(t)` and `m = Text.length(p)`):
+`Text.starts_with(t, p) == (m <= n and Text.slice(t, 0, m) == p)` and
 `Text.ends_with(t, p) == (m <= n and Text.slice(t, n - m, n) == p)`.
 
 #### 5.2 `Text.slice`
 
-`Text.slice(text, start, end)` devuelve los caracteres de las posiciones `start`, `start + 1`, …,
-`end - 1`. Sus tres `requires` definen cuándo tiene respuesta:
-`0 <= start <= end <= Text.length(text)`. **No hay índices negativos que cuenten desde el final, ni
-recortes silenciosos**: fuera de esos límites, la llamada se detiene con `E4001`.
+`Text.slice(text, start, end)` returns the characters at positions `start`, `start + 1`, …,
+`end - 1`. Its three `requires` define when it has an answer:
+`0 <= start <= end <= Text.length(text)`. **There are no negative indices that count from the end, and no
+silent truncation**: outside those limits, the call stops with `E4001`.
 
-| Llamada | Resultado | Regla |
-|---------|-----------|-------|
-| `Text.slice("hello", 1, 3)` | `"el"` | Principio incluido, final excluido |
-| `Text.slice("hello", 0, 5)` | `"hello"` | El texto entero |
-| `Text.slice("hello", 2, 2)` | `""` | `start == end`: trozo vacío |
-| `Text.slice("hello", 5, 5)` | `""` | Un trozo vacío al final es válido |
-| `Text.slice("", 0, 0)` | `""` | El único trozo del texto vacío |
-| `Text.slice("año", 1, 2)` | `"ñ"` | Se cuentan caracteres, no bytes |
+| Call | Result | Rule |
+|------|--------|------|
+| `Text.slice("hello", 1, 3)` | `"el"` | Start included, end excluded |
+| `Text.slice("hello", 0, 5)` | `"hello"` | The whole text |
+| `Text.slice("hello", 2, 2)` | `""` | `start == end`: empty slice |
+| `Text.slice("hello", 5, 5)` | `""` | An empty slice at the end is valid |
+| `Text.slice("", 0, 0)` | `""` | The only slice of the empty text |
+| `Text.slice("año", 1, 2)` | `"ñ"` | Characters are counted, not bytes |
 | `Text.slice("hello", -1, 2)` | `E4001` | `requires start >= 0` |
-| `Text.slice("hello", 3, 1)` | `E4001` | Rango invertido: `requires start <= end` |
+| `Text.slice("hello", 3, 1)` | `E4001` | Inverted range: `requires start <= end` |
 | `Text.slice("hello", 0, 6)` | `E4001` | `requires end <= Text.length(text)` |
 | `Text.slice("hello", 6, 6)` | `E4001` | `requires end <= Text.length(text)` |
 | `Text.slice("", 0, 1)` | `E4001` | `requires end <= Text.length(text)` |
-| `Text.slice("hello", -3, -1)` | `E4001` | `requires start >= 0`: no cuenta desde el final |
-| `Text.slice("abc", -1, 9)` | `E4001` por `start >= 0` | Si fallan varios, se informa el primero en el orden escrito |
+| `Text.slice("hello", -3, -1)` | `E4001` | `requires start >= 0`: it does not count from the end |
+| `Text.slice("abc", -1, 9)` | `E4001` for `start >= 0` | If several fail, the first one in the written order is reported |
 
-Siempre se cumple `Text.length(Text.slice(t, a, b)) == b - a` y
-`Text.slice(t, 0, k) + Text.slice(t, k, Text.length(t)) == t` para todo `k` entre `0` y
+`Text.length(Text.slice(t, a, b)) == b - a` and
+`Text.slice(t, 0, k) + Text.slice(t, k, Text.length(t)) == t` always hold for every `k` between `0` and
 `Text.length(t)`.
 
-### 6. Cómo se escribe un número en un texto
+### 6. How a number is written in a text
 
-#### 6.1 La gramática
+#### 6.1 The grammar
 
-Una única forma, sin depender del idioma ni de la configuración del sistema. Todos los caracteres son
-ASCII; `dígito` es solo `0`–`9`.
+A single form, not depending on the language or on the system configuration. All the characters are
+ASCII; `digit` is only `0`–`9`.
 
 ```text
-entero    = [ "-" ] dígito { dígito }
-decimal   = [ "-" ] dígito { dígito } ( fracción [ exponente ] | exponente )
-fracción  = "." dígito { dígito }
-exponente = ( "e" | "E" ) [ "+" | "-" ] dígito { dígito }
+integer   = [ "-" ] digit { digit }
+decimal   = [ "-" ] digit { digit } ( fraction [ exponent ] | exponent )
+fraction  = "." digit { digit }
+exponent  = ( "e" | "E" ) [ "+" | "-" ] digit { digit }
 ```
 
-- **`Int.can_parse(t)`** es verdadero si y solo si `t` entero cumple la regla `entero` **y** su valor
-  está entre -9223372036854775808 (−2⁶³) y 9223372036854775807 (2⁶³ − 1), ambos incluidos: el rango de
-  `Int` (`values.py`, `INT_MIN` e `INT_MAX`; `language-spec.md`, sección 4).
-- **`Float.can_parse(t)`** es verdadero si y solo si `t` entero cumple la regla `decimal` **y** su
-  valor, redondeado al `Float` más cercano, es finito.
-- No se admite **nada** fuera de la gramática: ni espacios (tampoco tabuladores, saltos de línea ni
-  espacios no separables) al principio, al final o en medio, ni `+` delante del número, ni `_`, ni
-  separadores de miles, ni otra coma decimal, ni dígitos que no sean ASCII, ni prefijos (`0x`, `0b`),
-  ni valores especiales (`inf`, `Infinity`, `nan`, `NaN`).
-- La longitud del texto no limita nada: se admiten tantos dígitos y ceros a la izquierda como haya.
-  Solo cuenta el valor.
+- **`Int.can_parse(t)`** is true if and only if the whole of `t` matches the rule `integer` **and** its value
+  is between -9223372036854775808 (−2⁶³) and 9223372036854775807 (2⁶³ − 1), both included: the range of
+  `Int` (`values.py`, `INT_MIN` and `INT_MAX`; `language-spec.md`, section 4).
+- **`Float.can_parse(t)`** is true if and only if the whole of `t` matches the rule `decimal` **and** its
+  value, rounded to the nearest `Float`, is finite.
+- **Nothing** outside the grammar is accepted: no spaces (nor tabs, line breaks or
+  non-breaking spaces) at the beginning, at the end or in the middle, no `+` in front of the number, no `_`, no
+  thousands separators, no other decimal comma, no digits that are not ASCII, no prefixes (`0x`, `0b`),
+  no special values (`inf`, `Infinity`, `nan`, `NaN`).
+- The length of the text limits nothing: as many digits and leading zeros as there are are accepted.
+  Only the value counts.
 
-#### 6.2 Casos
+#### 6.2 Cases
 
-| Texto | `Int.can_parse` | `Float.can_parse` | Notas |
-|-------|-----------------|-------------------|-------|
-| `"0"`, `"42"`, `"-7"` | sí | no | |
-| `"007"` | sí (7) | no | Ceros a la izquierda permitidos |
-| `"0000000000000000000000000042"` | sí (42) | no | Los ceros a la izquierda no cuentan para el rango |
-| `"-0"` | sí (0) | no | `Int` no tiene cero negativo |
-| `"9223372036854775807"` | sí | no | El mayor `Int` |
-| `"-9223372036854775808"` | sí | no | El menor `Int`. Como literal no puede escribirse (`E1004`); solo calculándolo, `-9223372036854775807 - 1` |
-| `"9223372036854775808"` | **no** | no | Uno más que el mayor `Int` |
-| `"-9223372036854775809"` | **no** | no | Uno menos que el menor `Int` |
-| `"99999999999999999999"` | **no** | no | Bien escrito, pero fuera del rango |
-| `"+5"` | no | no | Sin `+` delante |
-| `" 5"`, `"5 "`, `"5\n"` | no | no | Sin espacios |
-| `""`, `"-"` | no | no | Sin dígitos |
-| `"1_000"`, `"1,000"` | no | no | Sin separadores, aunque los literales del código admitan `_` |
-| `"٣"`, `"１"` | no | no | Solo dígitos ASCII |
+| Text | `Int.can_parse` | `Float.can_parse` | Notes |
+|------|-----------------|-------------------|-------|
+| `"0"`, `"42"`, `"-7"` | yes | no | |
+| `"007"` | yes (7) | no | Leading zeros allowed |
+| `"0000000000000000000000000042"` | yes (42) | no | Leading zeros do not count towards the range |
+| `"-0"` | yes (0) | no | `Int` has no negative zero |
+| `"9223372036854775807"` | yes | no | The largest `Int` |
+| `"-9223372036854775808"` | yes | no | The smallest `Int`. As a literal it cannot be written (`E1004`); only by computing it, `-9223372036854775807 - 1` |
+| `"9223372036854775808"` | **no** | no | One more than the largest `Int` |
+| `"-9223372036854775809"` | **no** | no | One less than the smallest `Int` |
+| `"99999999999999999999"` | **no** | no | Well written, but out of range |
+| `"+5"` | no | no | No `+` in front |
+| `" 5"`, `"5 "`, `"5\n"` | no | no | No spaces |
+| `""`, `"-"` | no | no | No digits |
+| `"1_000"`, `"1,000"` | no | no | No separators, even though the literals of the code accept `_` |
+| `"٣"`, `"１"` | no | no | Only ASCII digits |
 | `"0x10"` | no | no | |
-| `"1.5"`, `"-0.25"`, `"0.0"` | no | sí | |
-| `"-0.0"` | no | sí (`-0.0`) | Conserva el signo del cero |
-| `"1e3"`, `"1e+16"`, `"2.5E-3"` | no | sí | Exponentes, aunque los literales del código no los admitan |
-| `"1"` | sí | **no** | Un entero no es un decimal (sección 6.3) |
-| `".5"`, `"5."`, `"1e"`, `"1e+"` | no | no | Faltan dígitos |
+| `"1.5"`, `"-0.25"`, `"0.0"` | no | yes | |
+| `"-0.0"` | no | yes (`-0.0`) | It keeps the sign of zero |
+| `"1e3"`, `"1e+16"`, `"2.5E-3"` | no | yes | Exponents, even though the literals of the code do not accept them |
+| `"1"` | yes | **no** | An integer is not a decimal (section 6.3) |
+| `".5"`, `"5."`, `"1e"`, `"1e+"` | no | no | Digits are missing |
 | `"+1.5"`, `"1,5"`, `" 1.5"` | no | no | |
-| `"inf"`, `"Infinity"`, `"nan"`, `"NaN"` | no | no | Sin valores especiales |
-| `"1e309"` | no | **no** | Redondeado sería infinito: no cabe en un `Float` |
-| `"1e-400"` | no | sí (`0.0`) | Demasiado pequeño: se redondea a cero, como cualquier `Float` |
-| `"-1e-400"` | no | sí (`-0.0`) | El redondeo a cero conserva el signo |
-| `"5e-324"` | no | sí | El menor `Float` positivo |
-| `"2.4703282292062328e-324"` | no | sí (`5e-324`) | Por encima de la mitad del menor positivo: se redondea a él |
-| `"2.4703282292062327e-324"` | no | sí (`0.0`) | Por debajo de esa mitad: se redondea a cero |
-| `"1.7976931348623157e308"` | no | sí | El mayor `Float` finito |
-| `"1.7976931348623158e308"` | no | sí (el mayor finito) | Mayor que el máximo, pero se redondea a él: decide el valor redondeado, no el escrito |
-| `"1.7976931348623159e308"` | no | **no** | Se redondearía a infinito |
+| `"inf"`, `"Infinity"`, `"nan"`, `"NaN"` | no | no | No special values |
+| `"1e309"` | no | **no** | Rounded, it would be infinity: it does not fit in a `Float` |
+| `"1e-400"` | no | yes (`0.0`) | Too small: it is rounded to zero, like any `Float` |
+| `"-1e-400"` | no | yes (`-0.0`) | Rounding to zero keeps the sign |
+| `"5e-324"` | no | yes | The smallest positive `Float` |
+| `"2.4703282292062328e-324"` | no | yes (`5e-324`) | Above half of the smallest positive: it is rounded to it |
+| `"2.4703282292062327e-324"` | no | yes (`0.0`) | Below that half: it is rounded to zero |
+| `"1.7976931348623157e308"` | no | yes | The largest finite `Float` |
+| `"1.7976931348623158e308"` | no | yes (the largest finite) | Larger than the maximum, but it rounds to it: the rounded value decides, not the written one |
+| `"1.7976931348623159e308"` | no | **no** | It would round to infinity |
 
-#### 6.3 Reglas que se derivan
+#### 6.3 Rules that follow
 
-- **`Float.can_parse("1")` es falso a propósito**: `Int` y `Float` no se mezclan (decisión 0001). Para
-  leer `"1"` como `Float` se escribe `to_float(Int.parse("1"))`.
-- **`Float.parse` da el `Float` más cercano al valor escrito** (redondeo al más cercano, con empate al
-  par, como el estándar IEEE 754). `Float.parse("0.1")` no es exactamente un décimo, igual que el
+- **`Float.can_parse("1")` is false on purpose**: `Int` and `Float` do not mix (decision 0001). To
+  read `"1"` as a `Float`, write `to_float(Int.parse("1"))`.
+- **`Float.parse` gives the `Float` nearest to the written value** (rounding to nearest, ties to
+  even, as in the IEEE 754 standard). `Float.parse("0.1")` is not exactly a tenth, just like the
   literal `0.1`.
-- **`Int.parse` nunca da `E3002` ni `E3005`.** Un texto fuera del rango hace falso `Int.can_parse`, así
-  que la llamada se detiene antes, con el `E4001` de su `requires` y la sugerencia de la sección 7.2. Es
-  distinto de `to_int`, que convierte un `Float` y da `E3005` fuera del rango (sin cambios).
-- **`Float.parse` nunca devuelve un infinito ni `NaN`**: no existen en NEXORA, y un texto que daría
-  uno hace falso `Float.can_parse`.
-- **Ida y vuelta garantizada.** Para todo `Int` `n`, `Int.parse(to_text(n)) == n`. Para todo `Float`
-  `x`, `Float.parse(to_text(x)) == x`, también para `-0.0`. Por eso se admiten exponentes: es como
-  `to_text` escribe los `Float` muy grandes o muy pequeños (`1e+16`).
-- **Asimetría con los literales, a propósito**: el código fuente admite `1_000_000` y no admite `1e3`;
-  los textos al revés. Los literales son para personas que escriben un programa; los textos, para
-  leer datos y para la ida y vuelta de `to_text`.
+- **`Int.parse` never gives `E3002` or `E3005`.** A text out of range makes `Int.can_parse` false, so
+  the call stops before, with the `E4001` of its `requires` and the suggestion of section 7.2. It is
+  different from `to_int`, which converts a `Float` and gives `E3005` out of range (unchanged).
+- **`Float.parse` never returns an infinity or `NaN`**: they do not exist in NEXORA, and a text that would give
+  one makes `Float.can_parse` false.
+- **Guaranteed round trip.** For every `Int` `n`, `Int.parse(to_text(n)) == n`. For every `Float`
+  `x`, `Float.parse(to_text(x)) == x`, also for `-0.0`. That is why exponents are accepted: it is how
+  `to_text` writes very large or very small `Float` values (`1e+16`).
+- **Asymmetry with literals, on purpose**: the source code accepts `1_000_000` and does not accept `1e3`;
+  texts the other way round. Literals are for people writing a program; texts, for
+  reading data and for the round trip of `to_text`.
 
-#### 6.4 Textos enormes, redondeo y límites de `Float`
+#### 6.4 Huge texts, rounding and limits of `Float`
 
-**Coste.** Las cuatro funciones de esta sección tienen un coste proporcional a la longitud del texto,
-y no usan más memoria que una cantidad fija además del propio texto:
+**Cost.** The four functions of this section have a cost proportional to the length of the text,
+and use no more memory than a fixed amount besides the text itself:
 
-| Función | Cómo se garantiza |
-|---------|-------------------|
-| `Int.can_parse`, `Int.parse` | Se recorre el texto una vez para comprobar la gramática; se ignoran los ceros a la izquierda; **si quedan más de 19 dígitos, el valor está fuera del rango sin convertir nada**, y si quedan 19 o menos se convierten y se comparan con los límites. Nunca se construye un entero de más de 19 dígitos |
-| `Float.can_parse`, `Float.parse` | Se comprueba la gramática en un recorrido, y solo después se convierte con un algoritmo de redondeo correcto que admite mantisas y exponentes de cualquier longitud: un exponente enorme da infinito (no admitido) o cero (admitido) |
+| Function | How it is guaranteed |
+|----------|----------------------|
+| `Int.can_parse`, `Int.parse` | The text is traversed once to check the grammar; leading zeros are ignored; **if more than 19 digits remain, the value is out of range without converting anything**, and if 19 or fewer remain they are converted and compared with the limits. An integer of more than 19 digits is never built |
+| `Float.can_parse`, `Float.parse` | The grammar is checked in one pass, and only then is it converted with a correctly rounding algorithm that accepts mantissas and exponents of any length: a huge exponent gives infinity (not accepted) or zero (accepted) |
 
-- **Nota para la implementación:** en Python, `int()` sobre un texto de más de 4300 dígitos lanza
-  `ValueError`, y `int()` y `float()` admiten espacios, `_`, `+`, `inf` y `nan`. Por eso la gramática
-  se comprueba antes y nunca se convierte el texto entero de un `Int`. Una entrada de millones de
-  dígitos no puede producir un error interno.
-- **Medido** con Python 3.12.10 en Windows 11, en esta revisión: textos de 10 millones de caracteres
-  (10 millones de dígitos, de ceros a la izquierda, de mantisa o de exponente) se resuelven en entre
-  17 y 58 ms, sin memoria adicional apreciable. Las pruebas no comprueban tiempos (`limitations.md`:
-  el rendimiento no se ha medido como garantía); comprueban que la respuesta es correcta y que no hay
-  error interno.
+- **Note for the implementation:** in Python, `int()` on a text of more than 4300 digits raises
+  `ValueError`, and `int()` and `float()` accept spaces, `_`, `+`, `inf` and `nan`. That is why the grammar
+  is checked first and the whole text of an `Int` is never converted. An input of millions of
+  digits cannot produce an internal error.
+- **Measured** with Python 3.12.10 on Windows 11, in this revision: texts of 10 million characters
+  (10 million digits, of leading zeros, of mantissa or of exponent) are resolved in between
+  17 and 58 ms, without noticeable additional memory. The tests do not check times (`limitations.md`:
+  performance has not been measured as a guarantee); they check that the answer is correct and that there is no
+  internal error.
 
-**Redondeo de `Float.parse`.**
+**Rounding of `Float.parse`.**
 
-- **Redondeo correcto al más cercano, con empate al par** (IEEE 754, *round half to even*): el
-  resultado es el `Float` más cercano al valor exacto escrito, considerando todos sus dígitos. La
-  implementación de referencia usa la conversión de CPython, que es correcta cuando
-  `sys.float_repr_style` es `"short"` (comprobado: lo es); una prueba lo exige.
-- **Máximo finito**: un valor exacto se admite si y solo si su redondeo es finito. El umbral es el punto
-  medio entre el mayor `Float` finito y 2¹⁰²⁴: por debajo se redondea al máximo; en el punto medio o por
-  encima, a infinito, y `Float.can_parse` es falso.
-- **Subdesbordamiento**: los valores menores que la mitad del menor `Float` positivo (5e-324) se
-  redondean a cero; los mayores que esa mitad, a 5e-324 o a un subnormal. En el punto medio exacto, el
-  empate al par da cero. El cero conserva el signo: `"-1e-400"` da `-0.0`.
-- **Ninguna lectura falla por redondear**: `Float.can_parse` solo es falso por la gramática o porque el
-  redondeo sería infinito.
+- **Correct rounding to nearest, ties to even** (IEEE 754, *round half to even*): the
+  result is the `Float` nearest to the exact written value, considering all its digits. The
+  reference implementation uses the conversion of CPython, which is correct when
+  `sys.float_repr_style` is `"short"` (checked: it is); a test requires it.
+- **Finite maximum**: an exact value is accepted if and only if its rounding is finite. The threshold is the
+  midpoint between the largest finite `Float` and 2¹⁰²⁴: below it, it rounds to the maximum; at the midpoint or
+  above, to infinity, and `Float.can_parse` is false.
+- **Underflow**: values smaller than half of the smallest positive `Float` (5e-324) are
+  rounded to zero; those larger than that half, to 5e-324 or to a subnormal. At the exact midpoint, the
+  tie to even gives zero. Zero keeps its sign: `"-1e-400"` gives `-0.0`.
+- **No read fails because of rounding**: `Float.can_parse` is only false because of the grammar or because the
+  rounding would be infinite.
 
-### 7. Cuándo se comprueban los requisitos y qué ocurre si fallan
+### 7. When the requirements are checked and what happens if they fail
 
-#### 7.1 Orden de evaluación de una llamada a una función integrada
+#### 7.1 Order of evaluation of a call to a built-in function
 
-1. Se evalúan los argumentos, de izquierda a derecha. Un error al evaluar uno detiene la llamada con
-   ese error; los requisitos no se llegan a comprobar.
-2. Se comprueban los `requires`, **en el orden en que están escritos** en la sección 4. El primero que
-   resulte falso detiene el programa con `E4001`; los siguientes no se evalúan.
-3. Solo si todos se cumplen, se realiza la operación.
+1. The arguments are evaluated, from left to right. An error when evaluating one stops the call with
+   that error; the requirements are never checked.
+2. The `requires` are checked, **in the order in which they are written** in section 4. The first one that
+   turns out false stops the program with `E4001`; the following ones are not evaluated.
+3. Only if all of them hold is the operation performed.
 
-Los `ensures` de las funciones integradas **no se evalúan al ejecutar**: los cumple la
-implementación, y las pruebas lo verifican con muchos valores. Están escritos para informar a quien
-llama, y las herramientas los marcan como no comprobados al ejecutar (sección 7.4).
+The `ensures` of the built-in functions **are not evaluated when running**: the
+implementation meets them, and the tests verify it with many values. They are written to inform the
+caller, and the tools mark them as not checked when running (section 7.4).
 
-Dentro de `and` y `or`, una llamada que no hace falta evaluar no se evalúa, y sus requisitos tampoco:
-`Int.can_parse(t) and Int.parse(t) > 0` no llega a llamar a `Int.parse` si el texto no es un entero.
+Inside `and` and `or`, a call that does not need to be evaluated is not evaluated, and neither are its requirements:
+`Int.can_parse(t) and Int.parse(t) > 0` never calls `Int.parse` if the text is not an integer.
 
-#### 7.2 El diagnóstico
+#### 7.2 The diagnostic
 
-El mismo `E4001` (`Precondition violated`, categoría `contract`, código de salida `5`) que da una
-función del programa, con la posición de la llamada:
+The same `E4001` (`Precondition violated`, category `contract`, exit code `5`) that a
+function of the program gives, with the position of the call:
 
 ```text
 contract error[E4001]: Precondition violated
@@ -441,91 +441,91 @@ contract error[E4001]: Precondition violated
   = note: In 'shorten', called at line 9, column 11.
 ```
 
-| Campo | Contenido |
-|-------|-----------|
-| Posición | La llamada entera, desde el nombre del tipo hasta el `)` (como en `E4001` de una función del programa) |
-| Etiqueta | `This call breaks a 'requires' condition of '<Tipo.función>'` |
-| Notas, en orden | `The condition of the built-in function is false: requires <condición>` · `Reason: <explicación>` · `It was called with: <parámetro> = <valor>, …` (los textos entre comillas) · la cadena de llamadas · las notas de bucle de la decisión 0010 |
-| Sugerencia | Solo en `Int.parse` y `Float.parse`, según la tabla siguiente. Ninguna en `Text.slice` |
+| Field | Content |
+|-------|---------|
+| Position | The whole call, from the name of the type to the `)` (as in the `E4001` of a function of the program) |
+| Label | `This call breaks a 'requires' condition of '<Type.function>'` |
+| Notes, in order | `The condition of the built-in function is false: requires <condition>` · `Reason: <explanation>` · `It was called with: <parameter> = <value>, …` (texts in quotes) · the chain of calls · the loop notes of decision 0010 |
+| Suggestion | Only in `Int.parse` and `Float.parse`, according to the following table. None in `Text.slice` |
 
-**Sugerencias de `Int.parse` y `Float.parse`.** Dicen qué hacer en cada caso, no repiten la condición.
-Cuando hablan del rango de `Int`, usan el mismo texto que ya usan `E3002` y `E3005`:
+**Suggestions of `Int.parse` and `Float.parse`.** They say what to do in each case, they do not repeat the condition.
+When they talk about the range of `Int`, they use the same text that `E3002` and `E3005` already use:
 
-| Función | Caso | Sugerencia |
-|---------|------|------------|
-| `Int.parse` | El texto no cumple la regla `entero` | `Check the text first with Int.can_parse(...), and call Int.parse only when it is true.` |
-| `Int.parse` | Cumple la regla, pero está fuera del rango | `Int holds whole numbers from -9223372036854775808 to 9223372036854775807.` |
-| `Float.parse` | El texto cumple la regla `entero` (por ejemplo `"1"`) | `This text is a whole number: read it with to_float(Int.parse(...)).` |
-| `Float.parse` | No cumple ninguna de las dos reglas | `Check the text first with Float.can_parse(...), and call Float.parse only when it is true.` |
-| `Float.parse` | Cumple la regla `decimal`, pero redondeado sería infinito | `The number is too large for a Float.` |
+| Function | Case | Suggestion |
+|----------|------|------------|
+| `Int.parse` | The text does not match the rule `integer` | `Check the text first with Int.can_parse(...), and call Int.parse only when it is true.` |
+| `Int.parse` | It matches the rule, but it is out of range | `Int holds whole numbers from -9223372036854775808 to 9223372036854775807.` |
+| `Float.parse` | The text matches the rule `integer` (for example `"1"`) | `This text is a whole number: read it with to_float(Int.parse(...)).` |
+| `Float.parse` | It matches neither of the two rules | `Check the text first with Float.can_parse(...), and call Float.parse only when it is true.` |
+| `Float.parse` | It matches the rule `decimal`, but rounded it would be infinity | `The number is too large for a Float.` |
 
-La sugerencia se elige con la misma gramática de la sección 6, sin evaluar nada más: no puede fallar
-ni contradecir la condición.
+The suggestion is chosen with the same grammar of section 6, without evaluating anything else: it cannot fail
+or contradict the condition.
 
-Las diferencias con el `E4001` de una función del programa son dos, y las dos se deben a que la
-función es del lenguaje: la primera nota dice `of the built-in function` en lugar de `at line N`,
-porque no tiene línea en el archivo; y `Int.parse` y `Float.parse` pueden llevar sugerencia, porque el
-lenguaje sabe qué falló. Una función del programa no puede declarar sugerencias, y esta decisión no lo
-cambia.
+There are two differences from the `E4001` of a function of the program, and both are because the
+function belongs to the language: the first note says `of the built-in function` instead of `at line N`,
+because it has no line in the file; and `Int.parse` and `Float.parse` can carry a suggestion, because the
+language knows what failed. A function of the program cannot declare suggestions, and this decision does not
+change that.
 
-#### 7.3 En cada interfaz
+#### 7.3 In each interface
 
-| Interfaz | Comportamiento |
-|----------|----------------|
-| `nex run` | Código `5`, el diagnóstico de la sección 7.2 |
-| `nex run --format json` | Documento `nexora.diagnostics/1` con el `E4001`; `notes` y `hint` contienen lo mismo |
-| `nex test` | El ejemplo queda en `error` con el `E4001` y la nota del ejemplo; se evalúan los demás |
-| `api.run_source` y el playground | Estado `contract_violation` con el diagnóstico |
-| `Tipo(x)` al ejecutar | Si la condición de un tipo refinado llama a una función integrada que incumple un requisito: `E4001`, con la nota `While checking that a value is a valid <Tipo>…` que ya existe |
-| `nex check` sobre constantes de tipos refinados | El `E2017` que ya existe ("cannot be checked against the condition"), con la causa en una nota |
-| Dentro del `requires` o el `ensures` de una función del programa | Como cualquier error al evaluar un contrato: el `E4001` de la función integrada |
+| Interface | Behaviour |
+|-----------|-----------|
+| `nex run` | Code `5`, the diagnostic of section 7.2 |
+| `nex run --format json` | `nexora.diagnostics/1` document with the `E4001`; `notes` and `hint` contain the same |
+| `nex test` | The example stays as `error` with the `E4001` and the note of the example; the others are evaluated |
+| `api.run_source` and the playground | Status `contract_violation` with the diagnostic |
+| `Type(x)` when running | If the condition of a refined type calls a built-in function that breaks a requirement: `E4001`, with the note `While checking that a value is a valid <Type>…` that already exists |
+| `nex check` on constants of refined types | The `E2017` that already exists ("cannot be checked against the condition"), with the cause in a note |
+| Inside the `requires` or the `ensures` of a function of the program | Like any error when evaluating a contract: the `E4001` of the built-in function |
 
-#### 7.4 En las herramientas (representación R1)
+#### 7.4 In the tools (representation R1)
 
-**`nex inspect` (`nexora.inspect/2`).** El nodo `Call` gana el campo `qualifier`:
+**`nex inspect` (`nexora.inspect/2`).** The `Call` node gains the `qualifier` field:
 
-| Campo | Llamada sin cualificar (`print(x)`, `double(2)`, `Percent(x)`) | Llamada cualificada (`Text.length(s)`) |
-|-------|---------------------------------------------------------------|----------------------------------------|
-| `callee` | `"print"` (como hoy) | `"Text.length"`: el nombre completo |
-| `callee_span` | El nombre (como hoy) | Todo `Text.length` |
-| `arguments`, `span`, `type` | Como hoy | Como en cualquier llamada |
+| Field | Unqualified call (`print(x)`, `double(2)`, `Percent(x)`) | Qualified call (`Text.length(s)`) |
+|-------|---------------------------------------------------------|-----------------------------------|
+| `callee` | `"print"` (as today) | `"Text.length"`: the full name |
+| `callee_span` | The name (as today) | The whole `Text.length` |
+| `arguments`, `span`, `type` | As today | As in any call |
 | `qualifier` | **`null`** | `"Text"` |
 
-- **`qualifier` está presente en todas las llamadas**, con `null` cuando no hay cualificador. Es la
-  regla que ya siguen todos los nodos: cada campo aparece siempre, con `null` si no tiene valor
-  (`declared_type` en `Let`, `message` en `Contract`). Un consumidor puede contar con la clave.
-- **Va después de `arguments` y antes de `type`.** Los campos que ya existen conservan su orden
-  relativo, como ya se comprueba para el campo `examples` que la 0.4.0 añadió a `Function`
-  (`tests/test_example_clauses.py`); la prueba 20 hace lo mismo para `Call`.
+- **`qualifier` is present in all calls**, with `null` when there is no qualifier. It is the
+  rule all nodes already follow: every field always appears, with `null` if it has no value
+  (`declared_type` in `Let`, `message` in `Contract`). A consumer can rely on the key.
+- **It goes after `arguments` and before `type`.** The fields that already exist keep their relative
+  order, as is already checked for the `examples` field that 0.4.0 added to `Function`
+  (`tests/test_example_clauses.py`); test 20 does the same for `Call`.
 
-**Por qué no hace falta una versión nueva.** Son tres cosas distintas, y las tres se han comprobado:
+**Why a new version is not needed.** These are three different things, and all three have been checked:
 
-| Nivel | Qué se pregunta | Resultado |
-|-------|-----------------|-----------|
-| **Protocolo** | ¿Lo permite la política de versiones? | Sí. `json-protocol.md`, "Versiones y compatibilidad": "Se añade un campo a un objeto: no cambia el número", y quien consume debe "ignorar los campos que no conozca". `test_inspect.py` lo dice igual: solo eliminar o renombrar exige versión nueva. Precedentes: `examples` en `Function` (0.4.0) y los nodos de bucle (0.5.0) |
-| **Esquema** | ¿Valida la salida nueva con el esquema de la 0.5.1? | Sí, comprobado en esta revisión con `jsonschema` y el esquema actual: los 9 programas de `examples/` con `"qualifier": null` añadido a cada `Call`, y un programa con una llamada `Text.length` escrita como la escribiría R1. El esquema no usa `additionalProperties` y `callee` es `{"type": "string"}`, sin patrón |
-| **Interpretación** | ¿Puede un consumidor de `nexora.inspect/2` entender mal la salida nueva? | No, comprobado con un consumidor que resuelve cada `callee` contra las funciones del programa y la lista `builtins` de `nex symbols`, en un programa con un parámetro llamado `length`. Con la lista de la 0.5.1, `Text.length` queda "desconocida", nunca atribuida al parámetro `length`; con la lista nueva, "integrada". A diferencia de `var` en la 0010, donde un campo nuevo habría hecho leer un `var` como un `let` y por eso se creó un nodo nuevo, aquí ningún nombre del programa puede contener un punto |
+| Level | What is asked | Result |
+|-------|---------------|--------|
+| **Protocol** | Does the versioning policy allow it? | Yes. `json-protocol.md`, "Versions and compatibility": "A field is added to an object: the number does not change", and the consumer must "ignore the fields it does not know". `test_inspect.py` says the same: only removing or renaming requires a new version. Precedents: `examples` in `Function` (0.4.0) and the loop nodes (0.5.0) |
+| **Schema** | Does the new output validate with the schema of 0.5.1? | Yes, checked in this revision with `jsonschema` and the current schema: the 9 programs of `examples/` with `"qualifier": null` added to every `Call`, and a program with a `Text.length` call written as R1 would write it. The schema does not use `additionalProperties` and `callee` is `{"type": "string"}`, without a pattern |
+| **Interpretation** | Can a consumer of `nexora.inspect/2` misunderstand the new output? | No, checked with a consumer that resolves every `callee` against the functions of the program and the `builtins` list of `nex symbols`, in a program with a parameter called `length`. With the list of 0.5.1, `Text.length` stays "unknown", never attributed to the parameter `length`; with the new list, "built-in". Unlike `var` in 0010, where a new field would have made a `var` be read as a `let` and that is why a new node was created, here no name of the program can contain a dot |
 
-**Cambios observables en la salida JSON**, aunque no cambie la versión:
+**Observable changes in the JSON output**, even though the version does not change:
 
-- **Todo `Call` tiene una clave más**, `qualifier`, también en los programas que no usan la sintaxis
-  nueva. Quien compare documentos completos byte a byte verá la diferencia. En este repositorio:
-  `EXPECTED_FIELDS` de `test_inspect.py` (la lista exacta de campos por nodo) y las salidas registradas
-  en `ai-tooling.md`, que se actualizan.
-- **Aparecen nombres de función con punto** en `callee` y en `builtins_called`, solo en los programas
-  que usan la sintaxis nueva.
-- **Un consumidor que tenga escrita su propia lista de funciones integradas** verá nombres que no
-  conoce. Ningún documento promete una lista cerrada: la lista vigente está en el campo `builtins` de
-  `nex symbols` y en `get_capabilities()`, que la da en `language.builtins`. Le pasaría lo mismo con
-  cualquier función integrada nueva, con cualquier forma de nombrarla. `nex context` no expone esa
-  lista: solo nombra, en `builtins_called`, las que el programa llama.
-- **Consumidores existentes**: solo en este repositorio (`tooling.py`, el servidor MCP, que reenvía el
-  documento, las pruebas y los documentos con salidas registradas). El servidor web, la web y el
-  paquete npm no leen `nex inspect`. No hay consumidores publicados.
+- **Every `Call` has one more key**, `qualifier`, also in the programs that do not use the new
+  syntax. Whoever compares whole documents byte by byte will see the difference. In this repository:
+  `EXPECTED_FIELDS` of `test_inspect.py` (the exact list of fields per node) and the recorded outputs
+  in `ai-tooling.md`, which are updated.
+- **Function names with a dot appear** in `callee` and in `builtins_called`, only in the programs
+  that use the new syntax.
+- **A consumer that has written its own list of built-in functions** will see names it does not
+  know. No document promises a closed list: the current list is in the `builtins` field of
+  `nex symbols` and in `get_capabilities()`, which gives it in `language.builtins`. The same would happen with
+  any new built-in function, with any way of naming it. `nex context` does not expose that
+  list: it only names, in `builtins_called`, the ones the program calls.
+- **Existing consumers**: only in this repository (`tooling.py`, the MCP server, which forwards the
+  document, the tests and the documents with recorded outputs). The web server, the website and the
+  npm package do not read `nex inspect`. There are no published consumers.
 
-**`nex symbols`.** Cada función integrada de la lista `builtins` se describe con su nombre completo y
-gana el campo `contracts`, vacío si no tiene ninguno. `get_capabilities()` publica la misma lista en
-`language.builtins`; `nex context` no expone `builtins`:
+**`nex symbols`.** Every built-in function of the `builtins` list is described with its full name and
+gains the `contracts` field, empty if it has none. `get_capabilities()` publishes the same list in
+`language.builtins`; `nex context` does not expose `builtins`:
 
 ```json
 {
@@ -542,284 +542,284 @@ gana el campo `contracts`, vacío si no tiene ninguno. `get_capabilities()` publ
 }
 ```
 
-- Mismos nombres de campo que los contratos de las funciones del programa, sin `line`, y con
-  `checked_at_run_time`: `true` en `requires`, `false` en `ensures`. Así un agente no da por comprobado
-  lo que no se comprueba.
-- `builtins_called` de `nex context` contiene los nombres completos (`["Text.length", "print"]`), y
-  `calls` y `called_by` no cambian: solo contienen funciones del programa.
-- `features` gana el valor `text_operations` cuando el programa compara textos por orden o llama a
-  alguna de las nueve funciones.
-- `nex context` en texto muestra, bajo la línea `built-ins:` de cada función, los `requires` de las
-  funciones integradas que llama, con su explicación.
-- Las variables y los parámetros del programa se describen como siempre: una variable `length` es un
-  símbolo más, sin relación con `Text.length`.
-- Todo son campos o valores añadidos: `nexora.symbols/1` y `nexora.context/1` conservan su versión.
+- The same field names as the contracts of the functions of the program, without `line`, and with
+  `checked_at_run_time`: `true` in `requires`, `false` in `ensures`. That way an agent does not take as checked
+  what is not checked.
+- `builtins_called` of `nex context` contains the full names (`["Text.length", "print"]`), and
+  `calls` and `called_by` do not change: they only contain functions of the program.
+- `features` gains the value `text_operations` when the program compares texts by order or calls
+  any of the nine functions.
+- `nex context` as text shows, under the `built-ins:` line of each function, the `requires` of the
+  built-in functions it calls, with their explanation.
+- The variables and parameters of the program are described as always: a `length` variable is one more
+  symbol, unrelated to `Text.length`.
+- Everything is added fields or values: `nexora.symbols/1` and `nexora.context/1` keep their version.
 
-### 8. Qué puede ir delante del punto: tipos, módulos y métodos
+### 8. What can go in front of the dot: types, modules and methods
 
-La forma `nombre.función(…)` tiene, en el diseño de NEXORA, tres usos posibles. Esta decisión fija el
-primero, reserva el segundo y deja el tercero fuera, sin cerrarlo:
+The form `name.function(…)` has, in the design of NEXORA, three possible uses. This decision sets the
+first one, reserves the second one and leaves the third one out, without closing it:
 
-| Uso | Ejemplo | Qué va delante del punto | Estado |
-|-----|---------|-------------------------|--------|
-| **Función de un tipo** | `Text.length(name)` | El nombre de un **tipo integrado**, que empieza por mayúscula (los tipos siempre empiezan por mayúscula, `E2016`) | **Esta decisión** |
-| **Función de un módulo** | `geometry.area(circle)` | El nombre de un **módulo**, en minúscula | Futuro (punto 5 de "Planificado"). Hoy es un error (sección 9) |
-| **Método de un valor** | `name.length()` | Un **valor** (una variable o una expresión) | **Fuera del diseño actual**. Hoy es un error (sección 9) |
+| Use | Example | What goes in front of the dot | Status |
+|-----|---------|-------------------------------|--------|
+| **Function of a type** | `Text.length(name)` | The name of a **built-in type**, which starts with an uppercase letter (types always start with an uppercase letter, `E2016`) | **This decision** |
+| **Function of a module** | `geometry.area(circle)` | The name of a **module**, in lowercase | Future (point 5 of "Planned"). Today it is an error (section 9) |
+| **Method of a value** | `name.length()` | A **value** (a variable or an expression) | **Outside the current design**. Today it is an error (section 9) |
 
-- **Funciones de un tipo.** Se resuelven por el nombre del tipo, en la posición de tipo. Hoy solo los
-  tipos integrados tienen funciones. Cuando haya listas, `List.length(xs)` y `List.get(xs, i)` usarán
-  la misma forma sin cambiar la sintaxis. Que los tipos del usuario (registros) puedan declarar sus
-  propias funciones (`fn Point.distance(a: Point, b: Point) -> Float`) se decidirá cuando existan.
-- **Funciones de un módulo.** Cuando haya módulos, un nombre en minúscula delante del punto será un
-  módulo importado. Mayúscula para los tipos y minúscula para los módulos: las dos cosas no se
-  confunden. Esta decisión no define nada de los módulos.
-- **Métodos de un valor.** No forman parte del diseño actual, y esta decisión **no los declara
-  imposibles**. Si una decisión futura los añade, tendrá que resolver cómo se distinguen de las
-  funciones de un módulo y de un tipo cuando el nombre delante del punto pudiera ser las dos cosas: por
-  ejemplo, una variable llamada `Text` (permitida, sección 3.3) delante de `.length()`. La regla de un
-  único espacio de nombres ya garantiza que una variable y un módulo no podrán llamarse igual, lo que
-  deja esa puerta abierta.
+- **Functions of a type.** They are resolved by the name of the type, in the type position. Today only
+  built-in types have functions. When there are lists, `List.length(xs)` and `List.get(xs, i)` will use
+  the same form without changing the syntax. Whether user types (records) can declare their
+  own functions (`fn Point.distance(a: Point, b: Point) -> Float`) will be decided when they exist.
+- **Functions of a module.** When there are modules, a lowercase name in front of the dot will be an
+  imported module. Uppercase for types and lowercase for modules: the two things are not
+  confused. This decision defines nothing about modules.
+- **Methods of a value.** They are not part of the current design, and this decision **does not declare them
+  impossible**. If a future decision adds them, it will have to solve how they are told apart from the
+  functions of a module and of a type when the name in front of the dot could be both: for
+  example, a variable called `Text` (allowed, section 3.3) in front of `.length()`. The rule of a
+  single namespace already guarantees that a variable and a module cannot have the same name, which
+  leaves that door open.
 
-### 9. Diagnósticos
+### 9. Diagnostics
 
-No se crea ningún código nuevo. `E1101` (`Unexpected token`, del analizador sintáctico) se da cuando
-la **forma** está mal; `E2008` (`Unknown function`, del comprobador) cuando la forma `nombre.nombre(…)`
-es correcta pero el nombre de delante no es un tipo con esa función (sección 3.4). Los dos conservan
-su título y su categoría.
+No new code is created. `E1101` (`Unexpected token`, from the parser) is given when
+the **form** is wrong; `E2008` (`Unknown function`, from the checker) when the form `name.name(…)`
+is correct but the name in front is not a type with that function (section 3.4). Both keep
+their title and their category.
 
-**Forma correcta, nombre incorrecto: `E2008`**
+**Correct form, wrong name: `E2008`**
 
-| Situación | Ejemplo | Etiqueta | Sugerencia o nota |
-|-----------|---------|----------|-------------------|
-| Función que el tipo no tiene | `Text.lenght(t)` | `'Text' has no function named 'lenght'` | `Did you mean 'Text.length'?`; nota con las funciones de `Text` |
-| Tipo integrado sin funciones | `Bool.parse(t)` | `'Bool' has no function named 'parse'` | Nota: `Bool has no functions yet.` |
-| Tipo refinado delante del punto | `Percent.parse(t)` | `'Percent' has no functions of its own` | Si su tipo base tiene funciones: `A value of Percent can be passed to the functions of its base type, Int.` (con el tipo refinado y su base de cada caso) |
-| Tipo que no existe | `Texto.length(t)` | `There is no type named 'Texto'` | `Did you mean 'Text'?` |
-| Nombre en minúscula que no es nada | `geometry.area(c)` | `There is no type named 'geometry'` | Nota: `Before the '.' goes the name of a type, such as Text. Modules are not part of NEXORA yet.` |
-| Un valor delante del punto | `name.length()` | `'name' is a variable: values have no functions of their own` | `Call the function of its type: Text.length(name)`, si su tipo tiene esa función |
-| Una función delante del punto | `print.x(1)` | `'print' is a function, not a type` | |
-| La función sin cualificar | `length(t)` | `There is no function named 'length'` (la etiqueta de hoy) | `Did you mean 'Text.length'?` |
+| Situation | Example | Label | Suggestion or note |
+|-----------|---------|-------|--------------------|
+| Function that the type does not have | `Text.lenght(t)` | `'Text' has no function named 'lenght'` | `Did you mean 'Text.length'?`; note with the functions of `Text` |
+| Built-in type without functions | `Bool.parse(t)` | `'Bool' has no function named 'parse'` | Note: `Bool has no functions yet.` |
+| Refined type in front of the dot | `Percent.parse(t)` | `'Percent' has no functions of its own` | If its base type has functions: `A value of Percent can be passed to the functions of its base type, Int.` (with the refined type and its base in each case) |
+| Type that does not exist | `Texto.length(t)` | `There is no type named 'Texto'` | `Did you mean 'Text'?` |
+| Lowercase name that is nothing | `geometry.area(c)` | `There is no type named 'geometry'` | Note: `Before the '.' goes the name of a type, such as Text. Modules are not part of NEXORA yet.` |
+| A value in front of the dot | `name.length()` | `'name' is a variable: values have no functions of their own` | `Call the function of its type: Text.length(name)`, if its type has that function |
+| A function in front of the dot | `print.x(1)` | `'print' is a function, not a type` | |
+| The unqualified function | `length(t)` | `There is no function named 'length'` (today's label) | `Did you mean 'Text.length'?` |
 
-**Forma incorrecta: `E1101`**
+**Wrong form: `E1101`**
 
-| Situación | Ejemplo | Etiqueta | Sugerencia o nota |
-|-----------|---------|----------|-------------------|
-| Sin paréntesis | `let f = Text.length` | `Expected '(' to call 'Text.length'` | `A function is not a value: call it, as in Text.length(...).` |
-| Sin nombre detrás del punto | `Text.(t)`; `Text.` al final del archivo o seguido de un salto de línea fuera de paréntesis | `Expected the name of a function after 'Text.'` | |
-| Espacios alrededor del punto | `Text . length(t)`; también `Text` y `.length(t)` separados por un salto de línea dentro de paréntesis | `Write 'Text.length' without spaces around the '.'` | |
-| Más de un punto | `Text.length.x(t)` | `Expected '(' after 'Text.length', found '.'` | Nota: `A qualified name has one '.': Type.function` |
-| Declarar una función de un tipo | `fn Text.length(t: Text) -> Int { … }` | La de hoy cuando falta el `(` tras el nombre de la función, señalando el `.` | `Only the language defines functions of a type, such as Text.length. Choose a name without '.'.` |
-| Un punto en cualquier otro sitio | `.length(t)` al principio de una expresión; `1.length`; `.5`; `1.5.2`; `Text.length(s).x`; `Text` al final de una línea fuera de paréntesis y `.length(t)` en la siguiente | La que el analizador ya da para un símbolo inesperado en ese punto, con el `.` descrito como `'.'`: por ejemplo `Expected a value or an expression, found '.'` al principio de una expresión | |
+| Situation | Example | Label | Suggestion or note |
+|-----------|---------|-------|--------------------|
+| Without parentheses | `let f = Text.length` | `Expected '(' to call 'Text.length'` | `A function is not a value: call it, as in Text.length(...).` |
+| Without a name after the dot | `Text.(t)`; `Text.` at the end of the file or followed by a line break outside parentheses | `Expected the name of a function after 'Text.'` | |
+| Spaces around the dot | `Text . length(t)`; also `Text` and `.length(t)` separated by a line break inside parentheses | `Write 'Text.length' without spaces around the '.'` | |
+| More than one dot | `Text.length.x(t)` | `Expected '(' after 'Text.length', found '.'` | Note: `A qualified name has one '.': Type.function` |
+| Declaring a function of a type | `fn Text.length(t: Text) -> Int { … }` | Today's one when the `(` is missing after the name of the function, pointing at the `.` | `Only the language defines functions of a type, such as Text.length. Choose a name without '.'.` |
+| A dot anywhere else | `.length(t)` at the beginning of an expression; `1.length`; `.5`; `1.5.2`; `Text.length(s).x`; `Text` at the end of a line outside parentheses and `.length(t)` on the next one | The one the parser already gives for an unexpected symbol at that point, with the `.` described as `'.'`: for example `Expected a value or an expression, found '.'` at the beginning of an expression | |
 
-**Otros casos**
+**Other cases**
 
-| Ejemplo | Resultado |
-|---------|-----------|
-| `Text.length (s)` | Válido: entre el nombre de la función y el `(` puede haber espacios, como en cualquier llamada |
-| `Text.length(t)` como sentencia | `E2010` (valor sin usar), como cualquier llamada que devuelve un valor |
+| Example | Result |
+|---------|--------|
+| `Text.length (s)` | Valid: between the name of the function and the `(` there may be spaces, as in any call |
+| `Text.length(t)` as a statement | `E2010` (unused value), like any call that returns a value |
 
-### 10. Los programas válidos de hoy no cambian
+### 10. Today's valid programs do not change
 
-- **Hoy un `.` solo puede aparecer en un programa válido dentro de un número decimal, de un texto o de
-  un comentario.** En cualquier otro sitio es el error léxico `E1001`. El analizador léxico lee los
-  números, los textos y los comentarios antes de considerar un `.` suelto, y eso no cambia. Por tanto,
-  **la secuencia de tokens de todo programa válido en la 0.5.1 es idéntica**, y con ella su árbol, su
-  comprobación y su ejecución.
-- La única diferencia observable en un programa válido es el campo `"qualifier": null` en los nodos
-  `Call` de `nex inspect` (sección 7.4).
-- Los programas que hoy tienen un `.` suelto siguen siendo inválidos; solo cambia el diagnóstico (por
-  ejemplo, `x.y` pasa de `E1001` a `E1101` o `E2008`).
-- No se reserva ningún nombre: ningún programa válido deja de serlo.
+- **Today a `.` can only appear in a valid program inside a decimal number, a text or
+  a comment.** Anywhere else it is the lexical error `E1001`. The lexer reads
+  numbers, texts and comments before considering a loose `.`, and that does not change. Therefore,
+  **the sequence of tokens of every program valid in 0.5.1 is identical**, and with it its tree, its
+  checking and its execution.
+- The only observable difference in a valid program is the field `"qualifier": null` in the
+  `Call` nodes of `nex inspect` (section 7.4).
+- The programs that today have a loose `.` are still invalid; only the diagnostic changes (for
+  example, `x.y` goes from `E1001` to `E1101` or `E2008`).
+- No name is reserved: no valid program stops being so.
 
-## Motivos
+## Reasons
 
-- **Coherencia con la línea principal** ([0006](0006-requisitos-verificables.md)): si los requisitos
-  forman parte verificable del programa, deben formar parte también del lenguaje. Una función
-  integrada no es una excepción a la regla.
-- **Un único mecanismo**: la misma palabra, el mismo diagnóstico y el mismo formato de herramientas
-  para las condiciones del usuario y las del lenguaje.
-- **Ninguna función nueva rompe un programa**: un nombre cualificado no puede coincidir con uno del
-  programa, ni hoy ni cuando lleguen las listas o `Option`.
-- **Las funciones se agrupan por tipo**: quien escribe `Text.` sabe dónde buscar, y una herramienta
-  puede listar las funciones de un tipo.
-- **Sin esperar a `Option`**: `Int.can_parse` + `Int.parse` es seguro hoy, y cuando exista `Option`
-  se podrá añadir una variante que lo devuelva sin cambiar estas.
-- **Determinismo**: ni el orden, ni la forma de los números, ni la longitud dependen del sistema.
+- **Coherence with the main line** ([0006](0006-requisitos-verificables.md)): if requirements
+  are a verifiable part of the program, they must also be part of the language. A built-in
+  function is not an exception to the rule.
+- **A single mechanism**: the same word, the same diagnostic and the same tool format
+  for the conditions of the user and those of the language.
+- **No new function breaks a program**: a qualified name cannot match one of the
+  program, neither today nor when lists or `Option` arrive.
+- **Functions are grouped by type**: whoever writes `Text.` knows where to look, and a tool
+  can list the functions of a type.
+- **Without waiting for `Option`**: `Int.can_parse` + `Int.parse` is safe today, and when `Option` exists
+  a variant that returns it can be added without changing these.
+- **Determinism**: neither the order, nor the form of numbers, nor the length depend on the system.
 
-## Lo que no garantiza
+## What it does not guarantee
 
-- **La longitud no es lo que una persona ve como "una letra".** Una `e` con el acento combinado tiene
-  longitud 2, y un emoji de familia, 7. Dos textos que se ven iguales pueden ser distintos para `==`.
-- **El orden no es alfabético** en ningún idioma: es el de los puntos de código. Sirve para ordenar de
-  forma reproducible, no para mostrar listas ordenadas a una persona (`"Zoe" < "ana"`).
-- **Los requisitos se comprueban al ejecutar**, como los de las funciones del programa. `nex check` no
-  avisa de que `Text.slice("abc", 0, 5)` va a fallar, aunque sus argumentos sean constantes.
-- **`Float.parse` redondea**: el `Float` que devuelve puede no ser exactamente el número escrito.
-- **Una variable llamada `Text` es válida** y puede confundir a quien lea `Text.length(s)` cerca de
-  ella. El analizador no se confunde (sección 3.3); para las personas, un aviso futuro (punto 6 de
-  "Planificado") podría señalarlo.
+- **The length is not what a person sees as "a letter".** An `e` with the combining accent has
+  length 2, and a family emoji, 7. Two texts that look the same can be different for `==`.
+- **The order is not alphabetical** in any language: it is that of the code points. It is useful to sort
+  reproducibly, not to show sorted lists to a person (`"Zoe" < "ana"`).
+- **The requirements are checked when running**, like those of the functions of the program. `nex check` does not
+  warn that `Text.slice("abc", 0, 5)` is going to fail, even if its arguments are constants.
+- **`Float.parse` rounds**: the `Float` it returns may not be exactly the written number.
+- **A variable called `Text` is valid** and may confuse whoever reads `Text.length(s)` near
+  it. The analyzer is not confused (section 3.3); for people, a future warning (point 6 of
+  "Planned") could point it out.
 
-## Fuera del alcance
+## Out of scope
 
-- Interpolación de textos, `trim`, mayúsculas, `split`, `replace`, búsqueda de posiciones.
-- Recorrer un texto con `for` (llegará con las listas).
-- Normalización Unicode y comparación según el idioma.
-- Leer números en otras bases, con separadores o con espacios.
-- Comprobar sin ejecutar los requisitos de las funciones integradas.
-- Funciones cualificadas para los tipos del usuario, módulos y métodos de valores (sección 8).
-- Versiones cualificadas de `print`, `to_text`, `to_float` y `to_int`.
+- Text interpolation, `trim`, case conversion, `split`, `replace`, search for positions.
+- Going through a text with `for` (it will come with lists).
+- Unicode normalization and language-dependent comparison.
+- Reading numbers in other bases, with separators or with spaces.
+- Checking the requirements of the built-in functions without running.
+- Qualified functions for user types, modules and methods of values (section 8).
+- Qualified versions of `print`, `to_text`, `to_float` and `to_int`.
 
-## Alternativas descartadas
+## Alternatives ruled out
 
-| Alternativa | Por qué no |
-|-------------|------------|
-| **A.** Nombres planos (`length`, `slice`, `parse_int`) reservados | Prohíbe nombres de variable muy habituales y no deja que las listas tengan su propia `length` sin sobrecarga |
-| **B.** Que una variable oculte la función integrada | Contradice la decisión 0003: un mismo nombre significaría dos cosas según dónde se lea |
-| **D.** Métodos sobre los valores (`t.length()`) | Exige acceso a miembros, encadenamiento y una forma de nombrar el valor en los contratos; merece una decisión propia (sección 8) |
-| **E.** Nombres planos poco habituales (`text_length`) | Cada versión que añada funciones reservaría nombres nuevos y podría invalidar programas; el espacio de nombres crecería con cada tipo |
-| Prohibir `Int`, `Float`, `Bool` y `Text` como nombres de variable | No es necesario (sección 3.3) y sería un cambio incompatible sin motivo técnico |
-| `callee: "length"` con `qualifier: "Text"` en `nex inspect` | Un consumidor que ignore `qualifier` creería que se llama a algo llamado `length`, que puede ser una variable del programa. Exigiría `nexora.inspect/3` |
-| Recortar en silencio (`slice` como en Python) | Oculta el error; contradice la regla de no inventar respuestas |
-| Índices negativos que cuentan desde el final | Un índice negativo calculado por error se convertiría en un resultado válido |
-| Un código de error nuevo para cada función integrada | Más códigos que aprender para lo mismo: una condición previa incumplida |
-| `Int.parse` que devuelve `0` si el texto no es un número | Un valor válido que no significa lo que parece |
-| Aceptar espacios o `+` en los números | Varias formas de escribir lo mismo; quitar espacios será una operación explícita |
-| Contar bytes o unidades UTF-16 | La longitud dependería de la representación |
-| Normalizar los textos | Cambiaría los datos sin que el programa lo pida, y la forma elegida sería arbitraria |
-| Orden según el idioma del sistema | El mismo programa daría resultados distintos en máquinas distintas |
-| Esperar a tener `Option` | Bloquearía el punto 1 de la hoja de ruta tras el 3 sin necesidad |
+| Alternative | Why not |
+|-------------|---------|
+| **A.** Reserved flat names (`length`, `slice`, `parse_int`) | It forbids very common variable names and does not let lists have their own `length` without overloading |
+| **B.** Letting a variable shadow the built-in function | It contradicts decision 0003: the same name would mean two things depending on where it is read |
+| **D.** Methods on values (`t.length()`) | It requires member access, chaining and a way of naming the value in contracts; it deserves its own decision (section 8) |
+| **E.** Unusual flat names (`text_length`) | Every version that adds functions would reserve new names and could invalidate programs; the namespace would grow with every type |
+| Forbidding `Int`, `Float`, `Bool` and `Text` as variable names | It is not necessary (section 3.3) and it would be an incompatible change without a technical reason |
+| `callee: "length"` with `qualifier: "Text"` in `nex inspect` | A consumer that ignored `qualifier` would believe that something called `length` is called, which can be a variable of the program. It would require `nexora.inspect/3` |
+| Silent truncation (`slice` as in Python) | It hides the error; it contradicts the rule of not making up answers |
+| Negative indices that count from the end | A negative index computed by mistake would turn into a valid result |
+| A new error code for each built-in function | More codes to learn for the same thing: a broken precondition |
+| `Int.parse` returning `0` if the text is not a number | A valid value that does not mean what it seems |
+| Accepting spaces or `+` in numbers | Several ways of writing the same thing; removing spaces will be an explicit operation |
+| Counting bytes or UTF-16 units | The length would depend on the representation |
+| Normalizing texts | It would change the data without the program asking for it, and the chosen form would be arbitrary |
+| Order according to the language of the system | The same program would give different results on different machines |
+| Waiting for `Option` | It would block point 1 of the roadmap behind point 3 for no reason |
 
-## Compatibilidad
+## Compatibility
 
-- **Ningún programa válido en la 0.5.1 deja de serlo ni cambia de resultado** (sección 10). No se
-  reserva ningún nombre.
-- **Diagnósticos de programas inválidos**: los que contienen un `.` suelto pasan de `E1001` a `E1101`
-  o `E2008` (sección 9).
-- **La sugerencia de `E2011` cambia cuando un lado es un `Text` y el otro un número**: ahora dice
-  convertir uno de los dos lados (`to_text(...)` convierte un número en un texto, `Int.parse(...)` lee
-  un número de un texto) en lugar de decir que el operador solo compara `Int` y `Float`. El código, el
-  título y la categoría no cambian, y solo ocurre en un programa que ya era inválido. Se ve en
-  `tests/golden/examples/invalid__type_errors.run.stderr`. Ordenar dos `Text` ya no da `E2011`.
-- **`nexora.inspect/2`**: campo `qualifier` añadido a `Call`, sin cambiar la versión (sección 7.4).
-  Una fila nueva en el historial de `inspect-schema.md`.
-- **`nexora.symbols/1`**: campo `contracts` y nombres cualificados en `builtins`. **`nexora.context/1`**:
-  nombres cualificados en `builtins_called` y valor `text_operations` en `features`. Sin cambiar la
-  versión de ninguna de las dos.
-- **`nexora.diagnostics/1`**: sin cambios de formato.
+- **No program valid in 0.5.1 stops being so or changes its result** (section 10). No name
+  is reserved.
+- **Diagnostics of invalid programs**: those that contain a loose `.` go from `E1001` to `E1101`
+  or `E2008` (section 9).
+- **The suggestion of `E2011` changes when one side is a `Text` and the other a number**: now it says to
+  convert one of the two sides (`to_text(...)` converts a number into a text, `Int.parse(...)` reads
+  a number from a text) instead of saying that the operator only compares `Int` and `Float`. The code, the
+  title and the category do not change, and it only happens in a program that was already invalid. It can be seen in
+  `tests/golden/examples/invalid__type_errors.run.stderr`. Ordering two `Text` no longer gives `E2011`.
+- **`nexora.inspect/2`**: `qualifier` field added to `Call`, without changing the version (section 7.4).
+  A new row in the history of `inspect-schema.md`.
+- **`nexora.symbols/1`**: `contracts` field and qualified names in `builtins`. **`nexora.context/1`**:
+  qualified names in `builtins_called` and the value `text_operations` in `features`. Without changing the
+  version of either of the two.
+- **`nexora.diagnostics/1`**: no format changes.
 
-## Cambios necesarios si se aprueba
+## Required changes if it is approved
 
-| Dónde | Qué |
-|-------|-----|
-| `tokens.py`, `lexer.py` | El token `.` fuera de los números, con su posición para comprobar que no lleva espacios alrededor |
-| `parser.py` | La llamada cualificada y los errores de sintaxis de la sección 9 |
-| `ast_nodes.py` | El campo `qualifier` de `Call` |
-| `checker.py` | Las funciones de los tipos, su resolución, los diagnósticos de la sección 9 y el orden entre textos |
-| `prelude.py` (nuevo) | Los contratos de la sección 4, escritos en NEXORA y analizados con el analizador real |
-| `interpreter.py` | Las funciones nuevas y la comprobación de sus `requires` y sugerencias (sección 7) |
-| `tooling.py`, `schemas.py` | `qualifier`, `contracts`, `text_operations` y los esquemas regenerados |
-| `docs/language-spec.md`, `docs/types.md`, `docs/diagnostics.md`, `docs/inspect-schema.md`, `docs/ai-context.md`, `docs/limitations.md` | La sintaxis, las reglas y las funciones |
-| `examples/texts.nex` | Un ejemplo que usa todas, con su salida registrada |
-| `web/guide.html`, `web/js/playground/syntax.js` | La guía, y resaltar `Tipo.función` |
+| Where | What |
+|-------|------|
+| `tokens.py`, `lexer.py` | The `.` token outside numbers, with its position to check that it has no spaces around it |
+| `parser.py` | The qualified call and the syntax errors of section 9 |
+| `ast_nodes.py` | The `qualifier` field of `Call` |
+| `checker.py` | The functions of the types, their resolution, the diagnostics of section 9 and the ordering between texts |
+| `prelude.py` (new) | The contracts of section 4, written in NEXORA and parsed with the real parser |
+| `interpreter.py` | The new functions and the checking of their `requires` and suggestions (section 7) |
+| `tooling.py`, `schemas.py` | `qualifier`, `contracts`, `text_operations` and the regenerated schemas |
+| `docs/language-spec.md`, `docs/types.md`, `docs/diagnostics.md`, `docs/inspect-schema.md`, `docs/ai-context.md`, `docs/limitations.md` | The syntax, the rules and the functions |
+| `examples/texts.nex` | An example that uses all of them, with its recorded output |
+| `web/guide.html`, `web/js/playground/syntax.js` | The guide, and highlighting `Type.function` |
 
-## Pruebas de regresión
+## Regression tests
 
-**Semántica**
+**Semantics**
 
-1. `Text.length`, `Text.contains`, `Text.starts_with` y `Text.ends_with`: cada fila de la sección 5.1.
-2. `Text.slice`: cada fila de la sección 5.2, y las dos equivalencias para todos los cortes de varios
-   textos con caracteres fuera de ASCII.
-3. Comparación: cada fila de la sección 2; `E2011` entre un `Text` y otro tipo; un tipo refinado de
-   base `Text` se compara como su base.
-4. `Int.can_parse` y `Float.can_parse`: cada fila de la sección 6.2. Textos de 1 000 000 de dígitos,
-   de ceros a la izquierda seguidos de un número pequeño, de mantisa y de exponente (sección 6.4):
-   respuesta correcta y ningún error interno, que es lo que fallaría si se convirtiera con `int()` un
-   texto de más de 4300 dígitos. Sin medir tiempos.
-5. Redondeo e ida y vuelta: los extremos de `Int`; `-0.0`; los dos puntos medios de la sección 6.4
-   escritos con todos sus dígitos (la mitad exacta del menor positivo da `0.0`, y el punto medio entre
-   el mayor finito y 2¹⁰²⁴ no se admite); `sys.float_repr_style == "short"`; y una batería de valores
-   aleatorios con semilla fija en la que `Float.parse(to_text(x)) == x`.
+1. `Text.length`, `Text.contains`, `Text.starts_with` and `Text.ends_with`: every row of section 5.1.
+2. `Text.slice`: every row of section 5.2, and the two equivalences for all the cuts of several
+   texts with characters outside ASCII.
+3. Comparison: every row of section 2; `E2011` between a `Text` and another type; a refined type with
+   base `Text` is compared as its base.
+4. `Int.can_parse` and `Float.can_parse`: every row of section 6.2. Texts of 1,000,000 digits,
+   of leading zeros followed by a small number, of mantissa and of exponent (section 6.4):
+   correct answer and no internal error, which is what would fail if a text of more than 4300 digits were
+   converted with `int()`. Without measuring times.
+5. Rounding and round trip: the extremes of `Int`; `-0.0`; the two midpoints of section 6.4
+   written with all their digits (the exact half of the smallest positive gives `0.0`, and the midpoint between
+   the largest finite and 2¹⁰²⁴ is not accepted); `sys.float_repr_style == "short"`; and a battery of random
+   values with a fixed seed in which `Float.parse(to_text(x)) == x`.
 
-**Requisitos**
+**Requirements**
 
-6. Cada `requires` incumplido da `E4001` con la etiqueta, las notas exactas de la sección 7.2 y la
-   posición de la llamada; con varios incumplidos, se informa el primero. Cada fila de la tabla de
-   sugerencias, incluido `Int.parse` con un texto fuera del rango (`E4001` con la sugerencia del rango,
-   nunca `E3002` ni `E3005`).
-7. Un error al evaluar un argumento se informa antes que cualquier requisito.
-8. `and` y `or` no evalúan los requisitos de una llamada que no hacen falta.
-9. Los contratos de la sección 4 se analizan sin errores, tienen tipo `Bool` y no pueden fallar al
-   evaluarse; los `ensures` se cumplen en todos los casos de las pruebas 1 a 5.
-10. Cada fila de la tabla de la sección 7.3, incluidos `Tipo(x)`, `E2017` y `nex test`.
+6. Every broken `requires` gives `E4001` with the label, the exact notes of section 7.2 and the
+   position of the call; with several broken, the first one is reported. Every row of the table of
+   suggestions, including `Int.parse` with a text out of range (`E4001` with the suggestion of the range,
+   never `E3002` or `E3005`).
+7. An error when evaluating an argument is reported before any requirement.
+8. `and` and `or` do not evaluate the requirements of a call that is not needed.
+9. The contracts of section 4 are parsed without errors, have type `Bool` and cannot fail when
+   evaluated; the `ensures` hold in all the cases of tests 1 to 5.
+10. Every row of the table of section 7.3, including `Type(x)`, `E2017` and `nex test`.
 
-**Llamadas cualificadas**
+**Qualified calls**
 
-11. Llamadas válidas: cada función de la sección 3.2 como expresión, como argumento de otra llamada,
-    dentro de `requires`, `ensures`, `invariant`, `decreases`, `example` y de la condición de un tipo
-    refinado.
-12. Cualificadores desconocidos: `Texto.length`, `geometry.area`, `Percent.parse`, `Bool.parse`,
-    `print.x`, con el código, la etiqueta y la sugerencia de la sección 9.
-13. Funciones inexistentes: `Text.lenght` (con su sugerencia), `Int.length`, y `length(t)` sin
-    cualificar (sugiere `Text.length`).
-14. Errores de sintaxis con el punto: cada fila de `E1101` de la sección 9, incluidos `Text.` al final
-    del archivo y antes de un salto de línea, `Text . length(t)`, `Text` y `.length(t)` separados por un
-    salto de línea dentro y fuera de paréntesis, `Text.length.x(t)`, `Text.length(s).x`, `1.length`,
-    `.5`, `1.5.2` y la declaración `fn Text.length(...)`. Y que `Text.length (s)` es válido.
-15. Un valor delante del punto: `name.length()` da `E2008` con la sugerencia `Text.length(name)`.
-16. Una variable o un parámetro llamado `length`, `slice` o `contains` es válido y convive con
-    `Text.length` en la misma función.
-17. Una variable o un parámetro llamado `Text` o `Int` es válido, y `Text.length(s)` llama a la función
-    del tipo aunque esa variable sea visible.
-18. Los programas válidos no cambian: para cada programa de `examples/` y de la documentación, la
-    secuencia de tokens, la salida y los diagnósticos son los de la 0.5.1, y `nex inspect` solo añade
+11. Valid calls: every function of section 3.2 as an expression, as an argument of another call,
+    inside `requires`, `ensures`, `invariant`, `decreases`, `example` and the condition of a refined
+    type.
+12. Unknown qualifiers: `Texto.length`, `geometry.area`, `Percent.parse`, `Bool.parse`,
+    `print.x`, with the code, the label and the suggestion of section 9.
+13. Functions that do not exist: `Text.lenght` (with its suggestion), `Int.length`, and unqualified `length(t)`
+    (it suggests `Text.length`).
+14. Syntax errors with the dot: every `E1101` row of section 9, including `Text.` at the end
+    of the file and before a line break, `Text . length(t)`, `Text` and `.length(t)` separated by a
+    line break inside and outside parentheses, `Text.length.x(t)`, `Text.length(s).x`, `1.length`,
+    `.5`, `1.5.2` and the declaration `fn Text.length(...)`. And that `Text.length (s)` is valid.
+15. A value in front of the dot: `name.length()` gives `E2008` with the suggestion `Text.length(name)`.
+16. A variable or a parameter called `length`, `slice` or `contains` is valid and coexists with
+    `Text.length` in the same function.
+17. A variable or a parameter called `Text` or `Int` is valid, and `Text.length(s)` calls the function
+    of the type even if that variable is visible.
+18. Valid programs do not change: for every program of `examples/` and of the documentation, the
+    sequence of tokens, the output and the diagnostics are those of 0.5.1, and `nex inspect` only adds
     `"qualifier": null`.
-19. El programa cortado en cada carácter (la prueba de robustez que ya existe) incluye llamadas
-    cualificadas y nunca produce un fallo interno.
+19. The program cut at every character (the robustness test that already exists) includes qualified
+    calls and never produces an internal failure.
 
-**Herramientas**
+**Tools**
 
-20. `nex inspect`: `qualifier` presente en todas las llamadas (`null` o el tipo), después de
-    `arguments` y antes de `type`; los campos que ya existían conservan su orden (`EXPECTED_FIELDS` de
-    `test_inspect.py` gana `qualifier`); el documento valida con el esquema nuevo y con el de la 0.5.1,
-    con y sin llamadas cualificadas; un consumidor que resuelve `callee` contra las funciones del
-    programa y la lista `builtins` nunca atribuye `Text.length` a una variable o un parámetro `length`.
-21. `nex symbols`: nombres cualificados en `builtins` y `contracts` con `checked_at_run_time`;
-    `get_capabilities()`: la misma lista con `contracts`. `nex context`: nombres cualificados en
-    `builtins_called`, valor `text_operations` en `features` y los `requires` de las funciones
-    integradas llamadas en la salida de texto. Cada documento validado con su esquema.
+20. `nex inspect`: `qualifier` present in all calls (`null` or the type), after
+    `arguments` and before `type`; the fields that already existed keep their order (`EXPECTED_FIELDS` of
+    `test_inspect.py` gains `qualifier`); the document validates with the new schema and with that of 0.5.1,
+    with and without qualified calls; a consumer that resolves `callee` against the functions of the
+    program and the `builtins` list never attributes `Text.length` to a variable or a parameter `length`.
+21. `nex symbols`: qualified names in `builtins` and `contracts` with `checked_at_run_time`;
+    `get_capabilities()`: the same list with `contracts`. `nex context`: qualified names in
+    `builtins_called`, the value `text_operations` in `features` and the `requires` of the built-in
+    functions called in the text output. Every document validated with its schema.
 
-## Revisión
+## Review
 
-### Respuestas a las revisiones anteriores
+### Answers to the previous reviews
 
-| # | Tema | Respuesta | Dónde |
-|---|------|-----------|-------|
-| 1 | Nombres de las funciones nuevas | Alternativa C: funciones cualificadas por su tipo | Sección 3 |
-| 2 | `_` en los números de un texto | No: fuera de la gramática | Secciones 6.1 y 6.2 |
-| 3 | Ceros a la izquierda | Sí: `"007"` es un entero válido de valor 7 | Sección 6.2 |
-| 4 | `"1e-400"` | Sí, como `0.0` (y `"-1e-400"` como `-0.0`); un resultado no finito, como el de `"1e309"`, no | Sección 6.2 |
-| 5 | Sugerencia en la lectura de números | Sí, distinta según lo que falló | Sección 7.2 |
-| 6 | Los `ensures` de las funciones integradas | Se conservan como información, con `checked_at_run_time: false`, y las pruebas los comprueban | Secciones 7.1 y 7.4; prueba 9 |
-| 7 | `Int`, `Float`, `Bool` y `Text` como nombres de variable | Se siguen permitiendo; no es necesario prohibirlos | Sección 3.3; prueba 17 |
-| 8 | `nex inspect` | R1: `callee` con el nombre completo y `qualifier` en todas las llamadas (`null` si no hay), sin cambiar de versión | Sección 7.4 |
-| 9 | Métodos sobre valores | Fuera del diseño actual, sin declararlos imposibles | Sección 8 |
+| # | Topic | Answer | Where |
+|---|-------|--------|-------|
+| 1 | Names of the new functions | Alternative C: functions qualified by their type | Section 3 |
+| 2 | `_` in the numbers of a text | No: outside the grammar | Sections 6.1 and 6.2 |
+| 3 | Leading zeros | Yes: `"007"` is a valid integer of value 7 | Section 6.2 |
+| 4 | `"1e-400"` | Yes, as `0.0` (and `"-1e-400"` as `-0.0`); a non-finite result, like that of `"1e309"`, no | Section 6.2 |
+| 5 | Suggestion when reading numbers | Yes, different depending on what failed | Section 7.2 |
+| 6 | The `ensures` of the built-in functions | They are kept as information, with `checked_at_run_time: false`, and the tests check them | Sections 7.1 and 7.4; test 9 |
+| 7 | `Int`, `Float`, `Bool` and `Text` as variable names | They are still allowed; forbidding them is not necessary | Section 3.3; test 17 |
+| 8 | `nex inspect` | R1: `callee` with the full name and `qualifier` in all calls (`null` if there is none), without changing the version | Section 7.4 |
+| 9 | Methods on values | Outside the current design, without declaring them impossible | Section 8 |
 
-### Correcciones de la última revisión
+### Fixes of the last review
 
-| Problema | Corrección |
-|----------|------------|
-| Los contratos se mostraban como `fn Text.length(...)` y se decía que se analizan con el analizador real, pero un programa no puede declarar funciones así | Sección 4: esa notación es la forma de mostrar las firmas; lo que se analiza son las condiciones, como expresiones. Sección 9: diagnóstico para quien intente declarar `fn Text.length` |
-| "Sin espacios ni saltos de línea alrededor del punto" no decía qué pasa con un salto de línea fuera de paréntesis, que termina la sentencia antes | Sección 3.4 (nueva): cómo se tokeniza y se analiza el punto. Sección 9: cada caso de salto de línea, con su diagnóstico |
-| `1.length` aparecía con un mensaje fijo, pero el mensaje depende de dónde aparece el punto | Sección 9: "un punto en cualquier otro sitio" da el `E1101` que el analizador ya da en ese contexto |
-| La sugerencia para un tipo refinado nombraba `Int` fuera cual fuera su base | Sección 9: nombra la base de cada caso, y solo si esa base tiene funciones |
-| Una fila decía "lo que no es un error" e incluía un caso que da `E2010` | Sección 9: "Otros casos" |
-| Faltaban el coste de los textos enormes y las garantías de redondeo | Sección 6.4 (nueva), con mediciones; casos límite añadidos a la tabla de la sección 6.2; pruebas 4 y 5 |
-| La compatibilidad de `nex inspect` no separaba protocolo, esquema y salida | Sección 7.4: tres niveles comprobados, y los cambios observables aparte |
-| «La lista vigente está en `builtins` de `nex symbols` y `nex context`», y el título «`nex symbols` y `nex context`», atribuían a `nex context` una lista y un campo que no expone | Sección 7.4, sección de compatibilidad y prueba 21: `builtins` y `contracts` en `nex symbols` y en `get_capabilities()` (`language.builtins`); `nex context` solo nombra en `builtins_called` las funciones llamadas y muestra sus `requires` en la salida de texto. El alcance de la decisión no cambia: es donde se nombra cada campo, no qué campos hay |
-| Un fragmento de código partido entre dos líneas (sección 3.3) | Unido |
-| La sección de compatibilidad no enumeraba el cambio de la sugerencia de `E2011` al ordenar un `Text` con un número, que sí ocurrió | Sección de compatibilidad: el texto de la sugerencia se registra como cambio observable. No cambia el alcance: `E2011` sigue siendo el mismo código, con el mismo título y la misma categoría |
+| Problem | Fix |
+|---------|-----|
+| The contracts were shown as `fn Text.length(...)` and it was said that they are parsed with the real parser, but a program cannot declare functions like that | Section 4: that notation is the way of showing signatures; what is parsed are the conditions, as expressions. Section 9: a diagnostic for whoever tries to declare `fn Text.length` |
+| "No spaces or line breaks around the dot" did not say what happens with a line break outside parentheses, which ends the statement earlier | Section 3.4 (new): how the dot is tokenized and parsed. Section 9: every line break case, with its diagnostic |
+| `1.length` appeared with a fixed message, but the message depends on where the dot appears | Section 9: "a dot anywhere else" gives the `E1101` the parser already gives in that context |
+| The suggestion for a refined type named `Int` whatever its base was | Section 9: it names the base of each case, and only if that base has functions |
+| A row said "what is not an error" and included a case that gives `E2010` | Section 9: "Other cases" |
+| The cost of huge texts and the rounding guarantees were missing | Section 6.4 (new), with measurements; edge cases added to the table of section 6.2; tests 4 and 5 |
+| The compatibility of `nex inspect` did not separate protocol, schema and output | Section 7.4: three levels checked, and the observable changes separately |
+| "The current list is in `builtins` of `nex symbols` and `nex context`", and the title "`nex symbols` and `nex context`", attributed to `nex context` a list and a field that it does not expose | Section 7.4, the compatibility section and test 21: `builtins` and `contracts` in `nex symbols` and in `get_capabilities()` (`language.builtins`); `nex context` only names in `builtins_called` the functions called and shows their `requires` in the text output. The scope of the decision does not change: it is where each field is named, not which fields there are |
+| A code fragment split across two lines (section 3.3) | Joined |
+| The compatibility section did not list the change of the suggestion of `E2011` when ordering a `Text` with a number, which did happen | Compatibility section: the text of the suggestion is recorded as an observable change. The scope does not change: `E2011` is still the same code, with the same title and the same category |
 
-### Aprobación
+### Approval
 
-Aprobada tal como está escrita: alternativa C (funciones cualificadas por su tipo), representación R1
-en `nex inspect`, métodos sobre valores fuera del diseño actual y ningún nombre plano reservado.
+Approved as written: alternative C (functions qualified by their type), representation R1
+in `nex inspect`, methods on values outside the current design and no flat name reserved.

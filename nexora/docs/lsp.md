@@ -1,74 +1,74 @@
 # Language Server Protocol (LSP)
 
-**Estado: planificado. No está implementado.** NEXORA no incluye un servidor LSP, y ningún editor
-tiene hoy integración con el lenguaje.
+**Status: planned. It is not implemented.** NEXORA does not include an LSP server, and no editor
+has integration with the language today.
 
-Esta página recoge la evaluación hecha y lo que haría falta, para que quien lo implemente no parta
-de cero.
+This page gathers the evaluation that was made and what would be needed, so that whoever implements it does not start
+from scratch.
 
-## Por qué no se ha implementado todavía
+## Why it has not been implemented yet
 
-Se evaluó al final de la fase de herramientas y se decidió no entregar una versión a medias. Un
-programa que devuelve diagnósticos sin respetar el protocolo no es un servidor LSP, y uno que lo
-respeta necesita resolver bien tres cosas, de las que hoy solo una está resuelta en parte:
+It was evaluated at the end of the tooling phase and it was decided not to deliver a half-done version. A
+program that returns diagnostics without respecting the protocol is not an LSP server, and one that
+respects it needs to solve three things well, of which only one is partly solved today:
 
-1. **Posiciones.** LSP mide las columnas, por defecto, en unidades UTF-16 y desde 0. NEXORA las
-   mide en caracteres Unicode y desde 1. La conversión es sencilla para texto ASCII, pero tiene que
-   ser exacta también con caracteres fuera del plano básico (emojis), y requiere negociar la
-   codificación con el editor.
-2. **Código a medio escribir.** Un editor envía el documento en cada pulsación, casi siempre con
-   errores. **Resuelto en parte:** con errores de sintaxis NEXORA ya entrega un árbol y unos
-   símbolos parciales. Quedan dos huecos: una función cuya declaración tiene un error desaparece
-   entera, y con un error léxico (unas comillas sin cerrar, lo más habitual al escribir un texto)
-   no hay estructura, así que *hover* e "ir a la definición" desaparecerían en ese momento.
-3. **Ciclo de vida.** Versiones de documento, descarte de resultados obsoletos, cancelación y cierre
-   ordenado. Es trabajo de protocolo que exige sus propias pruebas.
+1. **Positions.** LSP measures columns, by default, in UTF-16 units and from 0. NEXORA
+   measures them in Unicode characters and from 1. The conversion is simple for ASCII text, but it has to
+   be exact also with characters outside the basic plane (emojis), and it requires negotiating the
+   encoding with the editor.
+2. **Half-written code.** An editor sends the document on every keystroke, almost always with
+   errors. **Partly solved:** with syntax errors NEXORA already delivers a partial tree and
+   partial symbols. Two gaps remain: a function whose declaration has an error disappears
+   entirely, and with a lexical error (an unclosed quote, the most common thing while typing a text)
+   there is no structure, so *hover* and "go to definition" would disappear at that moment.
+3. **Life cycle.** Document versions, discarding stale results, cancellation and orderly
+   shutdown. It is protocol work that needs its own tests.
 
-Se priorizó lo que ya aporta valor a herramientas y agentes: el [protocolo JSON](json-protocol.md),
-el [contexto estructurado](ai-context.md) y el [servidor MCP](mcp.md).
+Priority went to what already brings value to tools and agents: the [JSON protocol](json-protocol.md),
+the [structured context](ai-context.md) and the [MCP server](mcp.md).
 
-## Lo que ya existe y se reutilizaría
+## What already exists and would be reused
 
-Un servidor LSP no necesitaría ninguna lógica nueva del lenguaje:
+An LSP server would not need any new logic of the language:
 
-| Función de LSP | Fuente en NEXORA | ¿Suficiente hoy? |
-|----------------|------------------|------------------|
-| Diagnósticos (`textDocument/publishDiagnostics`) | `tooling.check_source`: código, categoría, posición de inicio y fin, sugerencia | Sí |
-| *Hover* con el tipo de una expresión | El tipo de cada nodo en `tooling.inspect_source` | Sí; parcial con errores de sintaxis, nada con errores léxicos |
-| Firma de una función | `signature` en `tooling.get_symbols` | Sí |
-| Ir a la definición | `declaration` y `references` en `tooling.get_symbols`, resueltas por el comprobador | Sí; parcial con errores de sintaxis, nada con errores léxicos |
-| Buscar referencias | `references` | Sí, dentro del archivo |
-| Símbolos del documento | `tooling.get_symbols` | Sí |
-| Autocompletado | — | **No.** Completar solo palabras clave sería un autocompletado ficticio; hace falta saber qué nombres son visibles en un punto del código, y eso exige análisis con errores |
+| LSP feature | Source in NEXORA | Enough today? |
+|-------------|------------------|---------------|
+| Diagnostics (`textDocument/publishDiagnostics`) | `tooling.check_source`: code, category, start and end position, suggestion | Yes |
+| *Hover* with the type of an expression | The type of each node in `tooling.inspect_source` | Yes; partial with syntax errors, nothing with lexical errors |
+| Signature of a function | `signature` in `tooling.get_symbols` | Yes |
+| Go to definition | `declaration` and `references` in `tooling.get_symbols`, resolved by the checker | Yes; partial with syntax errors, nothing with lexical errors |
+| Find references | `references` | Yes, within the file |
+| Document symbols | `tooling.get_symbols` | Yes |
+| Completion | — | **No.** Completing only keywords would be a fake completion; it requires knowing which names are visible at a point of the code, and that needs analysis with errors |
 
-## Arquitectura prevista
+## Planned architecture
 
 ```text
-Editor  ⇄  servidor LSP (nuevo módulo, opcional)  ⇄  nexora.tooling  ⇄  lexer, parser, checker
+Editor  ⇄  LSP server (new module, optional)  ⇄  nexora.tooling  ⇄  lexer, parser, checker
 ```
 
-- Un módulo aparte, `src/nexora/lsp_server.py`, con su dependencia declarada como opcional
-  (`pip install "nexora-lang[lsp]"`), igual que el servidor MCP. El núcleo no dependería de él.
-- Una biblioteca que implemente el protocolo (por ejemplo `pygls`), para no escribir a mano el
-  transporte JSON-RPC. Habría que comprobar su versión y su interfaz vigentes antes de empezar.
-- Sincronización de documentos completa (el editor envía el texto entero en cada cambio): los
-  programas son de un solo archivo y pequeños, y el análisis es rápido.
-- Una función de conversión de posiciones, con pruebas propias, en un único lugar.
-- Nada de ejecución: el servidor solo analizaría.
+- A separate module, `src/nexora/lsp_server.py`, with its dependency declared as optional
+  (`pip install "nexora-lang[lsp]"`), like the MCP server. The core would not depend on it.
+- A library that implements the protocol (for example `pygls`), so as not to write the
+  JSON-RPC transport by hand. Its current version and interface would have to be checked before starting.
+- Full document synchronization (the editor sends the whole text on every change): the
+  programs are single-file and small, and the analysis is fast.
+- A position conversion function, with its own tests, in a single place.
+- No execution: the server would only analyze.
 
-## Requisitos previos
+## Prerequisites
 
-En este orden:
+In this order:
 
-1. **Completar la tolerancia a errores.** El árbol parcial con errores de sintaxis ya existe
-   (`complete: false`). Falta conservar las funciones con la declaración incompleta y que el
-   analizador léxico se recupere de un texto sin cerrar.
-2. **Conversión de posiciones a UTF-16**, con pruebas.
-3. El servidor, empezando solo por diagnósticos, con pruebas de protocolo: inicialización, apertura,
-   cambios con versión, cierre de documento y cierre del servidor.
-4. *Hover* y definición, una vez resuelto el punto 1.
+1. **Complete the error tolerance.** The partial tree with syntax errors already exists
+   (`complete: false`). What is missing is keeping the functions with an incomplete declaration and having the
+   lexer recover from an unclosed text.
+2. **Conversion of positions to UTF-16**, with tests.
+3. The server, starting with diagnostics only, with protocol tests: initialization, opening,
+   versioned changes, closing a document and shutting down the server.
+4. *Hover* and definition, once point 1 is solved.
 
-## Mientras tanto
+## Meanwhile
 
-Un editor o un script puede obtener hoy los diagnósticos con posiciones exactas ejecutando
-`nex check archivo.nex --format json` al guardar. No es LSP ni pretende serlo.
+An editor or a script can get the diagnostics with exact positions today by running
+`nex check file.nex --format json` on save. It is not LSP and does not pretend to be.

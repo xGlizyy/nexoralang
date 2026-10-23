@@ -1,10 +1,10 @@
 # NEXORA
 
-**Un lenguaje de programación nuevo, con sintaxis y reglas propias, que explora cómo estructurar
-los programas para que sean más fáciles de analizar por personas y por herramientas automáticas.**
+**A new programming language, with its own syntax and rules, that explores how to structure
+programs so that they are easier to analyze for people and for automated tools.**
 
-Este directorio contiene el núcleo del lenguaje: su intérprete de referencia, la herramienta de
-línea de comandos `nex`, la especificación, los ejemplos y las pruebas.
+This directory contains the core of the language: its reference interpreter, the command-line
+tool `nex`, the specification, the examples and the tests.
 
 <!-- nex:run -->
 ```nex
@@ -29,69 +29,69 @@ fn main() -> Void {
 Passed with 67.5
 ```
 
-## Visión y motivación
+## Vision and motivation
 
-La mayoría de los lenguajes se diseñaron para que una persona diera instrucciones a una máquina.
-Hoy el código también lo generan, lo leen y lo revisan sistemas de inteligencia artificial.
-NEXORA parte de una pregunta: **¿cómo debería ser un lenguaje pensado para ese trabajo compartido?**
+Most languages were designed for a person to give instructions to a machine.
+Today code is also generated, read and reviewed by artificial intelligence systems.
+NEXORA starts from a question: **what should a language designed for that shared work look like?**
 
-En esta versión, la pregunta se concreta en decisiones de diseño comprobables:
+In this version, the question takes the shape of design decisions that can be checked:
 
-- **Nada implícito.** No hay conversiones automáticas entre tipos; todo cambio de tipo se escribe.
-- **Un nombre, un significado.** Dentro de una función un nombre no se redefine ni se oculta.
-- **Lo que puede comprobarse antes de ejecutar, se comprueba antes.** Todos los errores de tipos se
-  detectan sin ejecutar el programa.
-- **Las reglas forman parte del código.** Es la característica que distingue a NEXORA: una función
-  declara qué espera y qué promete (contratos), un tipo declara qué valores admite (tipos
-  refinados), y cada regla puede llevar su explicación. Cuando una regla se incumple, el diagnóstico
-  dice cuál, dónde, con qué valores y por qué existe
-  ([decisión 0006](docs/decisions/0006-requisitos-verificables.md)).
-- **Las herramientas reciben datos, no texto.** El programa y sus errores pueden obtenerse en JSON,
-  con un esquema versionado.
+- **Nothing implicit.** There are no automatic conversions between types; every change of type is written down.
+- **One name, one meaning.** Inside a function a name is neither redefined nor shadowed.
+- **What can be checked before running is checked before.** All type errors are
+  detected without running the program.
+- **The rules are part of the code.** It is the feature that distinguishes NEXORA: a function
+  declares what it expects and what it promises (contracts), a type declares which values it accepts (refined
+  types), and every rule can carry its explanation. When a rule is broken, the diagnostic
+  says which one, where, with which values and why it exists
+  ([decision 0006](docs/decisions/0006-requisitos-verificables.md)).
+- **Tools receive data, not text.** The program and its errors can be obtained as JSON,
+  with a versioned schema.
 
-Estas decisiones son una **hipótesis de trabajo**. No existe ninguna evaluación que demuestre que
-facilitan el trabajo de una herramienta de IA, y este proyecto no afirma que NEXORA sea más rápido,
-más seguro, más productivo ni mejor que ningún otro lenguaje.
+These decisions are a **working hypothesis**. There is no evaluation that shows that
+they make the work of an AI tool easier, and this project does not claim that NEXORA is faster,
+safer, more productive or better than any other language.
 
-NEXORA no incluye ni llama a ningún modelo de IA. Sus reglas son código determinista que funciona
-sin conexión. Lo que hay y lo que no, con precisión: [Herramientas automáticas e IA](docs/ai-tooling.md).
+NEXORA neither includes nor calls any AI model. Its rules are deterministic code that works
+offline. What there is and what there is not, precisely: [Automated tools and AI](docs/ai-tooling.md).
 
-## Estado
+## Status
 
-**Versión 0.11.0. Proyecto en fase temprana**, anterior a la 1.0: el lenguaje puede cambiar de forma
-incompatible y no es apto para uso en producción.
+**Version 0.11.0. Early-stage project**, before 1.0: the language may change
+incompatibly and it is not suitable for production use.
 
-| Estado | Qué incluye |
-|--------|-------------|
-| **Implementado y probado** | Tipos estáticos `Int`, `Float`, `Bool`, `Text` y `Void`, con inferencia y anotaciones · **listas** `List[T]` inmutables, con `List.length`, `List.get`, `List.append`, `List.concat`, `List.contains` y `for` sobre listas · **registros** inmutables (`type Point = { x: Int, y: Int }`), con identidad nominal · **tipos refinados** (`type Percent = Int where ...`): las constantes se comprueban sin ejecutar y el resto con `Percent(x)` al ejecutar · **argumentos** (`args()`) y **entrada estándar** (`input()`) · **archivos** con permisos explícitos (`uses read "ruta"` y `--allow-read=ruta`) · **contratos** (`requires`, `ensures`), estables desde la 0.3, comprobados al ejecutar · **ejemplos** en las funciones (`example`), evaluados con `nex test` · explicación de cada regla en los diagnósticos · variables inmutables (`let`) y reasignables (`var`), y ámbitos · **bucles** `while` con su medida (`decreases`) e invariantes (`invariant`), comprobados en cada vuelta · **operaciones sobre textos** (`Text.length`, `Text.slice`, orden, `Int.parse`), cada función con sus requisitos · aritmética, comparaciones y lógica · conversiones explícitas · funciones con parámetros y `return` · `if` / `else` · recursividad · análisis estático de nombres, tipos y rutas de retorno · comandos `run`, `check`, `inspect`, `context`, `symbols` y `test` · diagnósticos con código y categoría, en texto y en JSON · formatos JSON versionados con JSON Schema |
-| **Experimental** | API de Python `nexora.tooling` · servidor MCP opcional (probado con el cliente del SDK y, a mano, en Claude Code; en ningún otro asistente) · [playground](docs/playground.md) web, solo en local |
-| **Previsto** (no existe) | `break` y `continue`, `for` sobre rangos o `Text`, mapas, valores opcionales (`Option`, `Result`), genéricos de usuario, red y procesos externos, módulos, servidor de lenguaje (LSP) |
-| **En investigación** (no existe) | Verificación estática de contratos, características de IA dentro del lenguaje, y la evaluación de la hipótesis del proyecto |
+| Status | What it includes |
+|--------|------------------|
+| **Implemented and tested** | Static types `Int`, `Float`, `Bool`, `Text` and `Void`, with inference and annotations · immutable **lists** `List[T]`, with `List.length`, `List.get`, `List.append`, `List.concat`, `List.contains` and `for` over lists · immutable **records** (`type Point = { x: Int, y: Int }`), with nominal identity · **`Option[T]` and `Result[T, E]`** · **modules** (`import "path/file.nex"`, `pub`) · **refined types** (`type Percent = Int where ...`): constants are checked without running and the rest with `Percent(x)` when running · **arguments** (`args()`) and **standard input** (`input()`) · **files** with explicit permissions (`uses read "path"` and `--allow-read=path`) · **contracts** (`requires`, `ensures`), stable since 0.3, checked when running · **examples** in functions (`example`), evaluated with `nex test` · explanation of every rule in the diagnostics · immutable (`let`) and reassignable (`var`) variables, and scopes · **`while` loops** with their measure (`decreases`) and invariants (`invariant`), checked on every iteration · **operations on texts** (`Text.length`, `Text.slice`, ordering, `Int.parse`), each function with its requirements · arithmetic, comparisons and logic · explicit conversions · functions with parameters and `return` · `if` / `else` · recursion · static analysis of names, types and return paths · commands `run`, `check`, `inspect`, `context`, `symbols` and `test` · diagnostics with code and category, as text and JSON · versioned JSON formats with JSON Schema |
+| **Experimental** | Python API `nexora.tooling` · optional MCP server (tested with the SDK client and, by hand, in Claude Code; in no other assistant) · web [playground](docs/playground.md), only locally |
+| **Planned** (does not exist) | `break` and `continue`, `for` over ranges or `Text`, maps, user generics, network and external processes |
+| **Under research** (does not exist) | Static verification of contracts, AI features inside the language, and the evaluation of the hypothesis of the project |
 
-Detalle: [hoja de ruta](docs/roadmap.md) y [limitaciones](docs/limitations.md).
+Detail: [roadmap](docs/roadmap.md) and [limitations](docs/limitations.md).
 
-## Requisitos
+## Requirements
 
-- Python 3.11 o superior.
-- Nada más para usar el lenguaje: el intérprete solo usa la biblioteca estándar de Python.
-- Conexión a internet solo durante la instalación.
+- Python 3.11 or newer.
+- Nothing else to use the language: the interpreter only uses the Python standard library.
+- An internet connection only during installation.
 
-## Instalación
+## Installation
 
-Desde este directorio (`nexora/`):
+From this directory (`nexora/`):
 
 ```bash
 python -m venv .venv
 ```
 
-Activa el entorno virtual:
+Activate the virtual environment:
 
-| Sistema | Comando |
-|---------|---------|
+| System | Command |
+|--------|---------|
 | Windows (PowerShell) | `.venv\Scripts\Activate.ps1` |
-| Linux y macOS | `source .venv/bin/activate` |
+| Linux and macOS | `source .venv/bin/activate` |
 
-Instala y comprueba:
+Install and check:
 
 ```bash
 python -m pip install -e .
@@ -102,16 +102,16 @@ nex --version
 NEXORA 0.11.0
 ```
 
-El comando `nex` queda instalado dentro del entorno virtual, no en todo el sistema: solo está
-disponible con el entorno activado. `python -m nexora` hace lo mismo que `nex`.
+The `nex` command is installed inside the virtual environment, not system-wide: it is only
+available with the environment activated. `python -m nexora` does the same as `nex`.
 
-Comprobado en Windows 11 con Python 3.12 y en Linux (Ubuntu 24.04 sobre WSL 2) con Python 3.11, 3.12
-y 3.13. macOS no se ha probado todavía. Guía completa,
-alternativas y solución de problemas: [Instalación](docs/installation.md).
+Checked on Windows 11 with Python 3.12 and on Linux (Ubuntu 24.04 on WSL 2) with Python 3.11, 3.12
+and 3.13. It has not been tested on a real Mac yet. Complete guide,
+alternatives and troubleshooting: [Installation](docs/installation.md).
 
-## Primer programa
+## First program
 
-Guarda esto en un archivo `program.nex`:
+Save this in a file `program.nex`:
 
 <!-- nex:run -->
 ```nex
@@ -126,7 +126,7 @@ fn main() -> Void {
 }
 ```
 
-Ejecútalo:
+Run it:
 
 ```bash
 nex run program.nex
@@ -137,7 +137,7 @@ Side: 12
 Area: 144
 ```
 
-Si el programa tiene un error, NEXORA lo explica **antes de ejecutar nada**:
+If the program has an error, NEXORA explains it **before running anything**:
 
 <!-- nex:check-fails -->
 ```nex
@@ -162,49 +162,49 @@ type error[E2011]: Type mismatch
 error: program.nex: check failed with 1 error
 ```
 
-Siguiente paso: [Primeros pasos](docs/getting-started.md), una guía que recorre variables, tipos,
-funciones y cómo leer un error.
+Next step: [Getting started](docs/getting-started.md), a guide that goes through variables, types,
+functions and how to read an error.
 
-## Comandos
+## Commands
 
-| Comando | Qué hace |
-|---------|----------|
-| `nex run archivo.nex` | Analiza el programa y, si no tiene errores, lo ejecuta |
-| `nex check archivo.nex` | Comprueba sintaxis, nombres y tipos **sin ejecutar** el programa |
-| `nex inspect archivo.nex` | Escribe la estructura del programa en JSON, **sin ejecutarlo** |
-| `nex context archivo.nex` | Resume el programa: firmas, contratos, llamadas, características. **Sin ejecutarlo** |
-| `nex symbols archivo.nex` | Lista funciones, parámetros y variables, y dónde se usa cada uno. **Sin ejecutarlo** |
-| `nex test archivo.nex` | Evalúa los ejemplos (`example`) de las funciones, cada uno por separado. No exige `main` ni lo ejecuta |
-| `nex --version` | Muestra la versión |
-| `nex --help` | Muestra la ayuda |
+| Command | What it does |
+|---------|--------------|
+| `nex run file.nex` | Analyzes the program and, if it has no errors, runs it |
+| `nex check file.nex` | Checks syntax, names and types **without running** the program |
+| `nex inspect file.nex` | Writes the structure of the program as JSON, **without running it** |
+| `nex context file.nex` | Summarizes the program: signatures, contracts, calls, features. **Without running it** |
+| `nex symbols file.nex` | Lists functions, parameters and variables, and where each one is used. **Without running it** |
+| `nex test file.nex` | Evaluates the examples (`example`) of the functions, each one separately. It does not require `main` or run it |
+| `nex --version` | Shows the version |
+| `nex --help` | Shows the help |
 
-`nex check`, `nex run`, `nex context`, `nex symbols` y `nex test` aceptan `--format json` para entregar el
-resultado como datos.
+`nex check`, `nex run`, `nex context`, `nex symbols` and `nex test` accept `--format json` to deliver the
+result as data.
 
-| Código de salida | Significado |
-|------------------|-------------|
-| `0` | Correcto |
-| `1` | El programa tiene errores (detectados sin ejecutar) |
-| `2` | Uso incorrecto del comando |
-| `3` | El programa falló durante la ejecución |
-| `4` | El archivo no pudo leerse |
-| `5` | El programa incumplió un contrato |
-| `6` | `nex test`: algún ejemplo no pasó, o no había ningún ejemplo que evaluar |
-| `70` | Error interno de NEXORA |
-| `130` | Interrumpido con Ctrl+C |
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Success |
+| `1` | The program has errors (detected without running) |
+| `2` | Wrong use of the command |
+| `3` | The program failed while running |
+| `4` | The file could not be read |
+| `5` | The program broke a contract |
+| `6` | `nex test`: some example did not pass, or there was no example to evaluate |
+| `70` | Internal error of NEXORA |
+| `130` | Interrupted with Ctrl+C |
 
-Referencia completa: [CLI](docs/cli-reference.md).
+Complete reference: [CLI](docs/cli-reference.md).
 
-## Estructura para personas y para herramientas
+## Structure for people and for tools
 
-El mismo análisis produce dos lecturas. Una para personas: el diagnóstico de texto del apartado
-anterior. Y otra para programas, con `nex check program.nex --format json`: el mismo error como
-datos, con un código que no cambia (`E2011`), una categoría (`type`), la posición exacta de
-principio a fin y, cuando existe una corrección fundamentada, una sugerencia.
+The same analysis produces two readings. One for people: the text diagnostic of the previous
+section. And another for programs, with `nex check program.nex --format json`: the same error as
+data, with a code that does not change (`E2011`), a category (`type`), the exact position from
+start to end and, when there is a well-founded fix, a suggestion.
 
-`nex inspect` entrega además el árbol de sintaxis completo, con el tipo de cada expresión;
-`nex symbols`, cada nombre declarado y sus usos; y `nex context`, un resumen breve del programa.
-Ninguno de estos comandos ejecuta el programa, y en ninguno interviene un modelo de IA.
+`nex inspect` also delivers the complete syntax tree, with the type of every expression;
+`nex symbols`, every declared name and its uses; and `nex context`, a short summary of the program.
+None of these commands runs the program, and no AI model is involved in any of them.
 
 ```bash
 nex context examples/contracts.nex
@@ -212,30 +212,30 @@ nex symbols examples/functions.nex --name factorial
 nex check examples/invalid/type_errors.nex --format json
 ```
 
-Las mismas salidas están disponibles desde Python (`nexora.tooling`, experimental) y, de forma
-opcional, como herramientas para un asistente compatible con MCP:
+The same outputs are available from Python (`nexora.tooling`, experimental) and, optionally,
+as tools for an MCP-compatible assistant:
 
 ```bash
 python -m pip install -e ".[mcp]"
 nex-mcp
 ```
 
-El servidor MCP solo analiza: no ejecuta programas ni abre archivos. Está probado con el cliente
-del SDK oficial y, a mano, en una sesión de Claude Code; no en otros asistentes. No existe todavía un servidor de lenguaje (LSP).
+The MCP server only analyzes: it does not run programs or open files. It has been tested with the client
+of the official SDK and, by hand, in a Claude Code session; not in other assistants. There is no language server (LSP) yet.
 
 | | |
 |-|-|
-| [Herramientas automáticas e IA](docs/ai-tooling.md) | Qué hay, qué no, la API de Python y el ciclo de un agente |
-| [Contexto estructurado](docs/ai-context.md) | `nex context` y `nex symbols` |
-| [Protocolo JSON](docs/json-protocol.md) | Formatos, versiones y JSON Schema |
-| [Servidor MCP](docs/mcp.md) | Instalación, herramientas, configuración y seguridad |
-| [LSP](docs/lsp.md) | Planificado, no implementado |
+| [Automated tools and AI](docs/ai-tooling.md) | What there is, what there is not, the Python API and the cycle of an agent |
+| [Structured context](docs/ai-context.md) | `nex context` and `nex symbols` |
+| [JSON protocol](docs/json-protocol.md) | Formats, versions and JSON Schema |
+| [MCP server](docs/mcp.md) | Installation, tools, configuration and security |
+| [LSP](docs/lsp.md) | Planned, not implemented |
 
-## Ejemplos
+## Examples
 
-En [`examples/`](examples/README.md) hay quince programas: ocho válidos, cuatro con errores detectados
-sin ejecutar y tres que fallan al ejecutarse. Todos se ejecutan en las pruebas, que comparan su
-salida con la registrada.
+In [`examples/`](examples/README.md) there are valid programs, programs with errors detected
+without running and programs that fail when running. All of them run in the tests, which compare their
+output with the recorded one.
 
 ```bash
 nex run examples/functions.nex
@@ -243,45 +243,45 @@ nex check examples/invalid/type_errors.nex
 nex run examples/failing/contract_violation.nex
 ```
 
-## Pruebas
+## Tests
 
-Con el entorno virtual activado y las herramientas de desarrollo instaladas
+With the virtual environment activated and the development tools installed
 (`python -m pip install -e ".[dev]"`):
 
 ```bash
-python -m pytest                 # todas las pruebas
-python -m pytest --cov           # con medición de cobertura
-python -m ruff check src tests   # análisis estático del código
+python -m pytest                 # all the tests
+python -m pytest --cov           # with coverage measurement
+python -m ruff check src tests   # static analysis of the code
 ```
 
-Qué cubren y cómo interpretarlas: [Pruebas](docs/testing.md).
+What they cover and how to read them: [Testing](docs/testing.md).
 
-## Documentación
+## Documentation
 
 | | |
 |-|-|
-| [Índice](docs/index.md) | Todas las páginas |
-| [Primeros pasos](docs/getting-started.md) | Tutorial |
-| [Tipos](docs/types.md) · [Funciones](docs/functions.md) · [Contratos](docs/contracts.md) | Guías del lenguaje |
-| [Especificación](docs/language-spec.md) | Referencia formal: gramática, tipos, semántica |
-| [CLI](docs/cli-reference.md) · [Diagnósticos](docs/diagnostics.md) | Referencia de la herramienta y de los errores |
-| [Arquitectura](docs/architecture.md) | Cómo está construido el intérprete |
-| [Limitaciones](docs/limitations.md) · [Hoja de ruta](docs/roadmap.md) | Qué falta |
-| [Cambios](CHANGELOG.md) · [Decisiones](docs/decisions/README.md) | Historial y motivos |
+| [Index](docs/index.md) | All the pages |
+| [Getting started](docs/getting-started.md) | Tutorial |
+| [Types](docs/types.md) · [Functions](docs/functions.md) · [Contracts](docs/contracts.md) | Language guides |
+| [Specification](docs/language-spec.md) | Formal reference: grammar, types, semantics |
+| [CLI](docs/cli-reference.md) · [Diagnostics](docs/diagnostics.md) | Reference of the tool and of the errors |
+| [Architecture](docs/architecture.md) | How the interpreter is built |
+| [Limitations](docs/limitations.md) · [Roadmap](docs/roadmap.md) | What is missing |
+| [Changes](CHANGELOG.md) · [Decisions](docs/decisions/README.md) | History and reasons |
 
-Todos los programas de ejemplo de la documentación se ejecutan en las pruebas, y la salida
-mostrada se compara con la real.
+All the example programs of the documentation run in the tests, and the output
+shown is compared with the real one.
 
-## Contribuir
+## Contributing
 
-El proyecto es público: <https://github.com/xGlizyy/nexoralang>. Las incidencias y las colaboraciones
-se tratan en su [rastreador de incidencias](https://github.com/xGlizyy/nexoralang/issues).
+The project is public: <https://github.com/xGlizyy/nexoralang>. Issues and contributions
+are handled in its [issue tracker](https://github.com/xGlizyy/nexoralang/issues).
 
-- [Cómo contribuir](CONTRIBUTING.md): entorno de desarrollo, cómo añadir una funcionalidad y qué
-  comprobaciones deben pasar.
-- [Seguridad](SECURITY.md): qué protege el proyecto, qué no, y cómo avisar de un problema.
-- [Código de conducta](CODE_OF_CONDUCT.md).
+- [How to contribute](CONTRIBUTING.md): development environment, how to add a feature and which
+  checks must pass.
+- [Security](SECURITY.md): what the project protects, what it does not, and how to report a problem.
+- [Code of conduct](CODE_OF_CONDUCT.md).
 
-## Licencia
+## Licence
 
 [MIT](LICENSE).

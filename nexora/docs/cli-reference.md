@@ -1,51 +1,51 @@
-# Referencia de la CLI
+# CLI reference
 
-`nex` es la herramienta de línea de comandos de NEXORA. Esta página describe la versión
-`nexora` 0.11.0. Una prueba automatizada comprueba que todos los comandos, opciones y códigos de
-salida que acepta el programa están documentados aquí.
+`nex` is the command-line tool of NEXORA. This page describes version
+`nexora` 0.11.0. An automated test checks that all the commands, options and exit
+codes that the program accepts are documented here.
 
-`python -m nexora` es equivalente a `nex` y acepta exactamente los mismos argumentos.
+`python -m nexora` is equivalent to `nex` and accepts exactly the same arguments.
 
-## Resumen
+## Summary
 
 ```text
-nex run <archivo> [--format text|json] [--allow-read RUTA] [--allow-write RUTA] [-- argumentos...]
-nex check <archivo> [--format text|json]
-nex inspect <archivo> [--format json]
-nex context <archivo> [--format text|json]
-nex symbols <archivo> [--format text|json] [--name NOMBRE] [--function FUNCION]
-nex test <archivo> [--format text|json] [--function FUNCION] [--allow-read RUTA] [--allow-write RUTA]
+nex run <file> [--format text|json] [--allow-read PATH] [--allow-write PATH] [-- arguments...]
+nex check <file> [--format text|json]
+nex inspect <file> [--format json]
+nex context <file> [--format text|json]
+nex symbols <file> [--format text|json] [--name NAME] [--function FUNCTION]
+nex test <file> [--format text|json] [--function FUNCTION] [--allow-read PATH] [--allow-write PATH]
 nex --version
 nex --help
 ```
 
-| Comando | Analiza | Ejecuta el programa | Escribe |
-|---------|---------|---------------------|---------|
-| `nex run` | Sí | Sí, si no hay errores estáticos | La salida del programa |
-| `nex check` | Sí | **No** | El resultado del análisis |
-| `nex inspect` | Sí | **No** | El árbol de sintaxis en JSON |
-| `nex context` | Sí | **No** | Un resumen del programa |
-| `nex symbols` | Sí | **No** | Los nombres declarados y dónde se usan |
-| `nex test` | Sí | Sus ejemplos, no `main` | El resultado de cada ejemplo |
+| Command | Analyzes | Runs the program | Writes |
+|---------|----------|------------------|--------|
+| `nex run` | Yes | Yes, if there are no static errors | The output of the program |
+| `nex check` | Yes | **No** | The result of the analysis |
+| `nex inspect` | Yes | **No** | The syntax tree as JSON |
+| `nex context` | Yes | **No** | A summary of the program |
+| `nex symbols` | Yes | **No** | The declared names and where they are used |
+| `nex test` | Yes | Its examples, not `main` | The result of each example |
 
-Todos los comandos usan el mismo analizador léxico, el mismo parser y el mismo comprobador
-estático. Lo que `nex check` acepta es exactamente lo que `nex run` ejecuta.
+All the commands use the same lexer, the same parser and the same static
+checker. What `nex check` accepts is exactly what `nex run` runs.
 
-El servidor MCP opcional tiene su propio comando, `nex-mcp`, descrito en [Servidor MCP](mcp.md).
+The optional MCP server has its own command, `nex-mcp`, described in [MCP server](mcp.md).
 
-## El argumento `<archivo>`
+## The `<file>` argument
 
-- Es la ruta de **un** archivo `.nex`. Una ruta relativa se interpreta respecto al directorio
-  desde el que se ejecuta el comando.
-- El archivo tiene que estar codificado en UTF-8.
-- La ruta se muestra en los diagnósticos tal como se escribió.
-- **Un argumento nunca se interpreta como código.** No existe ninguna opción para pasar código
-  NEXORA en la línea de comandos: el código siempre se lee de un archivo.
-- Si el nombre del archivo empieza por `-`, sepáralo con `--`: `nex run -- -raro.nex`.
+- It is the path of **one** `.nex` file. A relative path is interpreted relative to the directory
+  from which the command is run.
+- The file has to be encoded in UTF-8.
+- The path is shown in the diagnostics as it was written.
+- **An argument is never interpreted as code.** There is no option to pass NEXORA code
+  on the command line: the code is always read from a file.
+- If the file name starts with `-`, separate it with `--`: `nex run -- -odd.nex`.
 
 ## `nex run`
 
-Analiza el programa y, si no tiene errores, ejecuta su función `main`.
+Analyzes the program and, if it has no errors, runs its `main` function.
 
 ```bash
 nex run examples/hello.nex
@@ -55,29 +55,29 @@ nex run examples/hello.nex
 Hello from NEXORA
 ```
 
-- La salida del programa (lo que escribe `print`) va a la **salida estándar**.
-- Los diagnósticos van a la **salida de error**.
-- Un programa con errores léxicos, sintácticos, semánticos o de tipos **no se inicia**: no escribe
-  nada.
-- Si el programa falla durante la ejecución, lo que ya había escrito se conserva.
+- The output of the program (what `print` writes) goes to the **standard output**.
+- The diagnostics go to the **standard error**.
+- A program with lexical, syntax, semantic or type errors **does not start**: it writes
+  nothing.
+- If the program fails while running, what it had already written is kept.
 
-| Opción | Efecto |
+| Option | Effect |
 |--------|--------|
-| `--format text` | Por defecto. Los errores se escriben como texto para personas |
-| `--format json` | Si el programa es inválido o falla, escribe un documento JSON en la **salida de error**. Si termina bien, no escribe nada adicional. La salida del programa no cambia |
-| `--allow-read RUTA` | Permite al programa leer los archivos de esa ruta. Se puede repetir. Un programa además tiene que declararlo con `uses read` |
-| `--allow-write RUTA` | Permite al programa escribir los archivos de esa ruta. Se puede repetir. Un programa además tiene que declararlo con `uses write` |
-| `-- uno dos` | Los argumentos del programa. Se escriben después de `--` y el programa los lee con `args()` |
+| `--format text` | Default. Errors are written as text for people |
+| `--format json` | If the program is invalid or fails, it writes a JSON document to the **standard error**. If it ends well, it writes nothing extra. The output of the program does not change |
+| `--allow-read PATH` | Allows the program to read the files of that path. It can be repeated. A program also has to declare it with `uses read` |
+| `--allow-write PATH` | Allows the program to write the files of that path. It can be repeated. A program also has to declare it with `uses write` |
+| `-- one two` | The arguments of the program. They are written after `--` and the program reads them with `args()` |
 
-Los permisos son explícitos y reproducibles: los archivos que un programa puede usar son la
-intersección de lo que declara (`uses`), lo que permite la orden (`--allow-read`,
-`--allow-write`) y lo que admite el entorno. Declarar no concede, y conceder no habilita
-([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)).
+Permissions are explicit and reproducible: the files a program can use are the
+intersection of what it declares (`uses`), what the command allows (`--allow-read`,
+`--allow-write`) and what the environment supports. Declaring does not grant, and granting does not enable
+([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)).
 
 ## `nex check`
 
-Analiza el programa **sin ejecutarlo**: sintaxis, nombres, ámbitos, tipos, rutas de retorno y las
-condiciones de los contratos (que estén bien escritas, no que se cumplan).
+Analyzes the program **without running it**: syntax, names, scopes, types, return paths and the
+conditions of the contracts (that they are well written, not that they hold).
 
 ```bash
 nex check examples/hello.nex
@@ -87,117 +87,117 @@ nex check examples/hello.nex
 ✓ Check passed: examples/hello.nex
 ```
 
-- Si el programa es correcto, escribe la línea anterior en la salida estándar.
-- Si no lo es, escribe los diagnósticos en la salida de error y una línea final con el número de
-  errores.
+- If the program is correct, it writes the line above to the standard output.
+- If it is not, it writes the diagnostics to the standard error and a final line with the number of
+  errors.
 
-| Opción | Efecto |
+| Option | Effect |
 |--------|--------|
-| `--format text` | Por defecto |
-| `--format json` | Escribe **siempre** un único documento JSON en la **salida estándar**, sea el programa válido o no. No escribe nada en la salida de error |
+| `--format text` | Default |
+| `--format json` | It **always** writes a single JSON document to the **standard output**, whether the program is valid or not. It writes nothing to the standard error |
 
-`nex check` no detecta lo que depende de valores calculados: división por cero, desbordamiento,
-recursividad sin fin ni contratos incumplidos. Eso solo se ve con `nex run`.
+`nex check` does not detect what depends on computed values: division by zero, overflow,
+endless recursion or broken contracts. That is only seen with `nex run`.
 
 ## `nex inspect`
 
-Escribe en la salida estándar un documento JSON con la estructura del programa: funciones,
-parámetros, contratos, sentencias y expresiones, con sus posiciones y sus tipos. **No ejecuta el
-programa.**
+Writes to the standard output a JSON document with the structure of the program: functions,
+parameters, contracts, statements and expressions, with their positions and their types. **It does not run the
+program.**
 
 ```bash
 nex inspect examples/hello.nex
 ```
 
-| Opción | Efecto |
+| Option | Effect |
 |--------|--------|
-| `--format json` | Es el valor por defecto y el único disponible |
+| `--format json` | It is the default value and the only one available |
 
-- Si el programa tiene errores semánticos o de tipos, el documento incluye el árbol y los errores.
-- Si tiene errores de sintaxis, el documento incluye los errores, `"complete": false` y un árbol
-  **parcial**: sin las sentencias que tienen un error y sin las funciones cuya declaración lo tiene.
-- Si tiene errores léxicos, el documento incluye los errores y `"program": null`.
+- If the program has semantic or type errors, the document includes the tree and the errors.
+- If it has syntax errors, the document includes the errors, `"complete": false` and a
+  **partial** tree: without the statements that have an error and without the functions whose declaration has one.
+- If it has lexical errors, the document includes the errors and `"program": null`.
 
-El formato está descrito en [`inspect-schema.md`](inspect-schema.md).
+The format is described in [`inspect-schema.md`](inspect-schema.md).
 
 ## `nex context`
 
-Escribe un resumen del programa: funciones con sus firmas y contratos, variables y sus tipos, qué
-función llama a cuál, qué características del lenguaje usa y los diagnósticos. **No ejecuta el
-programa** y no interviene ningún modelo de IA.
+Writes a summary of the program: functions with their signatures and contracts, variables and their types, which
+function calls which, which features of the language it uses and the diagnostics. **It does not run the
+program** and no AI model is involved.
 
 ```bash
 nex context examples/contracts.nex
 ```
 
-| Opción | Efecto |
+| Option | Effect |
 |--------|--------|
-| `--format text` | Por defecto. Un resumen breve para leer |
-| `--format json` | Un único documento JSON (`nexora.context/1`) en la salida estándar, sea el programa válido o no |
+| `--format text` | Default. A short summary to read |
+| `--format json` | A single JSON document (`nexora.context/1`) on the standard output, whether the program is valid or not |
 
-En los dos formatos el resumen va a la salida estándar e incluye los diagnósticos del programa. La
-única excepción: si el archivo no puede leerse y el formato es `text`, el error se escribe en la
-salida de error y no hay resumen. Con errores de sintaxis el resumen es parcial y lo indica; con errores léxicos no hay estructura que resumir y el resumen se
-reduce a los diagnósticos. Detalles en [Contexto estructurado](ai-context.md).
+In both formats the summary goes to the standard output and includes the diagnostics of the program. The
+only exception: if the file cannot be read and the format is `text`, the error is written to the
+standard error and there is no summary. With syntax errors the summary is partial and says so; with lexical errors there is no structure to summarize and the summary is
+reduced to the diagnostics. Details in [Structured context](ai-context.md).
 
 ## `nex symbols`
 
-Lista las funciones, parámetros y variables que declara el programa, con su tipo, su ámbito, la
-posición de su declaración y la de cada uso. **No ejecuta el programa.**
+Lists the functions, parameters and variables that the program declares, with their type, their scope, the
+position of their declaration and that of each use. **It does not run the program.**
 
 ```bash
 nex symbols examples/functions.nex
 nex symbols examples/functions.nex --name factorial --format json
 ```
 
-| Opción | Efecto |
+| Option | Effect |
 |--------|--------|
-| `--format text` | Por defecto |
-| `--format json` | Un único documento JSON (`nexora.symbols/1`) en la salida estándar |
-| `--name NOMBRE` | Solo los símbolos con ese nombre |
-| `--function FUNCION` | Solo esa función y lo que se declara dentro de ella |
+| `--format text` | Default |
+| `--format json` | A single JSON document (`nexora.symbols/1`) on the standard output |
+| `--name NAME` | Only the symbols with that name |
+| `--function FUNCTION` | Only that function and what is declared inside it |
 
-Un filtro que no coincide con nada no es un error: la lista queda vacía (`No symbols match.`). Detalles en
-[Contexto estructurado](ai-context.md#nex-symbols).
+A filter that matches nothing is not an error: the list is empty (`No symbols match.`). Details in
+[Structured context](ai-context.md#nex-symbols).
 
 ## `nex test`
 
-Analiza el programa y, si no tiene errores, evalúa las cláusulas `example` de sus funciones, cada
-una por separado ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)). **No exige `main` y nunca
-lo ejecuta.** Durante cada ejemplo se comprueban los contratos y los tipos refinados de todas las
-funciones que se ejecutan.
+Analyzes the program and, if it has no errors, evaluates the `example` clauses of its functions, each
+one separately ([decision 0008](decisions/0008-ejemplos-y-nex-test.md)). **It does not require `main` and never
+runs it.** During every example the contracts and refined types of all the
+functions that run are checked.
 
 ```bash
 nex test examples/checked_examples.nex
 nex test examples/checked_examples.nex --function apply_discount --format json
 ```
 
-| Opción | Efecto |
+| Option | Effect |
 |--------|--------|
-| `--format text` | Por defecto. El resumen va a la salida estándar; los ejemplos que no pasan, a la de error |
-| `--format json` | Un único documento JSON (`nexora.test/1`) en la salida estándar |
-| `--function FUNCION` | Solo los ejemplos declarados en esa función |
+| `--format text` | Default. The summary goes to the standard output; the examples that do not pass, to the standard error |
+| `--format json` | A single JSON document (`nexora.test/1`) on the standard output |
+| `--function FUNCTION` | Only the examples declared in that function |
 
-Cada ejemplo termina en `passed`, `failed` (`E4004`) o `error` (el diagnóstico original, con una nota
-que identifica el ejemplo). El resultado global es:
+Every example ends as `passed`, `failed` (`E4004`) or `error` (the original diagnostic, with a note
+that identifies the example). The overall result is:
 
-| Estado | Cuándo | Código de salida |
-|--------|--------|------------------|
-| `passed` | Se evaluó al menos un ejemplo y todos pasaron | `0` |
-| `failed` | Algún ejemplo terminó en `failed` o `error` | `6` |
-| `no_examples` | El programa es correcto, pero no había ningún ejemplo seleccionado | `6`: no se ha probado nada |
-| `not_run` | El programa tiene errores estáticos (código `1`) o el archivo no pudo leerse (código `4`) | `1` o `4` |
+| Status | When | Exit code |
+|--------|------|-----------|
+| `passed` | At least one example was evaluated and all passed | `0` |
+| `failed` | Some example ended as `failed` or `error` | `6` |
+| `no_examples` | The program is correct, but there was no selected example | `6`: nothing has been tested |
+| `not_run` | The program has static errors (code `1`) or the file could not be read (code `4`) | `1` or `4` |
 
-- Con errores estáticos no se evalúa nada, y se informan antes que cualquier problema con
+- With static errors nothing is evaluated, and they are reported before any problem with
   `--function`.
-- **Una función inexistente en `--function` es un error de uso** (código `2`): un mensaje en la salida
-  de error, sin documento JSON. Es distinto de `nex symbols --function`, que describe y devuelve una
-  lista vacía; `nex test` verifica, y no probar nada por un nombre mal escrito no puede parecer un
-  resultado.
-- **Nada se escribe hasta que han terminado todos los ejemplos.** Si `nex test` se interrumpe (Ctrl+C,
-  código `130`) o encuentra un error interno (código `70`), no deja ningún informe parcial.
-- Lo que imprime una función durante un ejemplo se muestra solo si el ejemplo no pasa; en JSON está
-  siempre, en el campo `output`.
+- **A function that does not exist in `--function` is a usage error** (code `2`): a message on the standard
+  error, without a JSON document. It is different from `nex symbols --function`, which describes and returns an
+  empty list; `nex test` verifies, and testing nothing because of a misspelled name cannot look like a
+  result.
+- **Nothing is written until all the examples have finished.** If `nex test` is interrupted (Ctrl+C,
+  code `130`) or hits an internal error (code `70`), it leaves no partial report.
+- What a function prints during an example is only shown if the example does not pass; in JSON it is
+  always there, in the `output` field.
 
 ## `nex --version`
 
@@ -211,76 +211,76 @@ NEXORA 0.11.0
 
 ## `nex --help`
 
-`nex --help` muestra los comandos y los códigos de salida. Cada comando tiene su propia ayuda:
+`nex --help` shows the commands and the exit codes. Every command has its own help:
 `nex run --help`, `nex check --help`, `nex inspect --help`, `nex context --help`,
 `nex symbols --help`.
 
-## Formatos de salida
+## Output formats
 
-| Formato | Para quién | Dónde se describe |
-|---------|------------|-------------------|
-| `text` | Personas | [Diagnósticos](diagnostics.md) |
-| `json` (diagnósticos) | Programas. Esquema `nexora.diagnostics/1` | [Especificación, sección 11.4](language-spec.md#114-formato-json) |
-| `json` (inspección) | Programas. Esquema `nexora.inspect/2` | [`inspect-schema.md`](inspect-schema.md) |
-| `json` (contexto y símbolos) | Programas. Esquemas `nexora.context/1` y `nexora.symbols/1` | [Contexto estructurado](ai-context.md) |
-| `json` (pruebas) | Programas. Esquema `nexora.test/1` | [Decisión 0008](decisions/0008-ejemplos-y-nex-test.md), sección 6 |
+| Format | For whom | Where it is described |
+|--------|----------|-----------------------|
+| `text` | People | [Diagnostics](diagnostics.md) |
+| `json` (diagnostics) | Programs. Schema `nexora.diagnostics/1` | [Specification, section 11.4](language-spec.md#114-json-format) |
+| `json` (inspection) | Programs. Schema `nexora.inspect/2` | [`inspect-schema.md`](inspect-schema.md) |
+| `json` (context and symbols) | Programs. Schemas `nexora.context/1` and `nexora.symbols/1` | [Structured context](ai-context.md) |
+| `json` (tests) | Programs. Schema `nexora.test/1` | [Decision 0008](decisions/0008-ejemplos-y-nex-test.md), section 6 |
 
-Las reglas comunes a todos los documentos JSON y sus JSON Schema están en
-[Protocolo JSON](json-protocol.md).
+The rules common to all JSON documents and their JSON Schemas are in
+[JSON protocol](json-protocol.md).
 
-Toda la salida se escribe en **UTF-8**, sea cual sea la configuración de la terminal.
+All the output is written in **UTF-8**, whatever the configuration of the terminal.
 
-Dónde aparece cada cosa:
+Where each thing appears:
 
-| Comando | Salida estándar | Salida de error |
-|---------|-----------------|-----------------|
-| `nex run` | Lo que escribe el programa | Diagnósticos (texto o JSON) |
-| `nex check` | `✓ Check passed: …` | Diagnósticos |
-| `nex check --format json` | El documento JSON | Nada |
-| `nex inspect` | El documento JSON | Nada |
-| `nex context`, `nex symbols` | El resumen o la lista (texto o JSON), con los diagnósticos | Nada, salvo el error de un archivo ilegible en formato `text` |
-| `nex test` | El resumen, o el documento JSON | Los ejemplos que no pasan, los diagnósticos y los errores de uso |
+| Command | Standard output | Standard error |
+|---------|-----------------|----------------|
+| `nex run` | What the program writes | Diagnostics (text or JSON) |
+| `nex check` | `✓ Check passed: …` | Diagnostics |
+| `nex check --format json` | The JSON document | Nothing |
+| `nex inspect` | The JSON document | Nothing |
+| `nex context`, `nex symbols` | The summary or the list (text or JSON), with the diagnostics | Nothing, except the error of an unreadable file in `text` format |
+| `nex test` | The summary, or the JSON document | The examples that do not pass, the diagnostics and the usage errors |
 
-## Códigos de salida
+## Exit codes
 
-| Código | Significado | Comandos |
-|--------|-------------|----------|
-| `0` | Correcto | Todos |
-| `1` | El programa tiene errores léxicos, sintácticos, semánticos o de tipos | `run`, `check`, `inspect`, `context`, `symbols`, `test` |
-| `2` | Uso incorrecto de la línea de comandos | Todos |
-| `3` | El programa falló durante la ejecución (categoría `runtime`) | `run` |
-| `4` | El archivo no existe, no puede leerse o no es UTF-8 | `run`, `check`, `inspect`, `context`, `symbols`, `test` |
-| `5` | El programa incumplió durante la ejecución una regla que declara: un contrato, un tipo refinado, un invariante o la medida de un bucle (categoría `contract`) | `run` |
-| `6` | Algún ejemplo no pasó (`failed` o `error`), o no había ningún ejemplo que evaluar | `test` |
-| `70` | Error interno de NEXORA: un fallo de la herramienta, no del programa. Un programa que agota la memoria al ejecutarse da `3` en `run` y `6` en `test`, con el diagnóstico `E3007` | Todos |
-| `130` | Interrumpido con Ctrl+C | Todos |
+| Code | Meaning | Commands |
+|------|---------|----------|
+| `0` | Success | All |
+| `1` | The program has lexical, syntax, semantic or type errors | `run`, `check`, `inspect`, `context`, `symbols`, `test` |
+| `2` | Wrong use of the command line | All |
+| `3` | The program failed while running (category `runtime`) | `run` |
+| `4` | The file does not exist, cannot be read or is not UTF-8 | `run`, `check`, `inspect`, `context`, `symbols`, `test` |
+| `5` | While running, the program broke a rule that it declares: a contract, a refined type, an invariant or the measure of a loop (category `contract`) | `run` |
+| `6` | Some example did not pass (`failed` or `error`), or there was no example to evaluate | `test` |
+| `70` | Internal error of NEXORA: a failure of the tool, not of the program. A program that runs out of memory while running gives `3` in `run` and `6` in `test`, with the diagnostic `E3007` | All |
+| `130` | Interrupted with Ctrl+C | All |
 
-El código de salida nunca es `0` si el programa no se ejecutó correctamente.
+The exit code is never `0` if the program did not run correctly.
 
-Si el lector de la salida se cierra antes de tiempo (por ejemplo, `nex run programa.nex | head -1`),
-`nex` termina en silencio con código `0`: no es un error del programa.
+If the reader of the output closes early (for example, `nex run program.nex | head -1`),
+`nex` ends silently with code `0`: it is not an error of the program.
 
-## Límites
+## Limits
 
-- Cada etapa del análisis comunica como máximo 100 errores por archivo. Si se alcanza el límite,
-  la línea final lo indica.
-- Como máximo 1000 llamadas anidadas durante la ejecución.
-- Como máximo 64 niveles de anidamiento de paréntesis, bloques u operadores unarios, y 256 niveles
-  en una expresión.
+- Every stage of the analysis reports at most 100 errors per file. If the limit is reached,
+  the final line says so.
+- At most 1000 nested calls while running.
+- At most 64 levels of nesting of parentheses, blocks or unary operators, and 256 levels
+  in an expression.
 
-## Variables de entorno
+## Environment variables
 
-| Variable | Efecto |
+| Variable | Effect |
 |----------|--------|
-| `NEXORA_DEBUG` | Si está definida con cualquier valor no vacío, un error interno muestra la traza completa de Python en vez del mensaje resumido. Sirve para investigar fallos del propio intérprete |
+| `NEXORA_DEBUG` | If it is set to any non-empty value, an internal error shows the full Python traceback instead of the summarized message. It is useful to investigate failures of the interpreter itself |
 
-## Errores internos
+## Internal errors
 
-Un error interno (código `70`) significa que NEXORA ha fallado, no tu programa. Se muestra así:
+An internal error (code `70`) means that NEXORA has failed, not your program. It is shown like this:
 
 ```text
 internal error: NEXORA hit an unexpected problem (...).
 This is a bug in NEXORA, not in your program. Run the command again with the environment variable NEXORA_DEBUG=1 to see the details.
 ```
 
-Si ves uno, es un defecto que merece un aviso: consulta [cómo contribuir](../CONTRIBUTING.md).
+If you see one, it is a defect worth reporting: see [how to contribute](../CONTRIBUTING.md).

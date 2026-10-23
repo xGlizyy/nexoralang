@@ -1,162 +1,162 @@
-# NEXORA para Visual Studio Code
+# NEXORA for Visual Studio Code
 
-![El icono de la extensión](images/icon.png)
+![The icon of the extension](images/icon.png)
 
-Extensión del lenguaje de programación NEXORA: resaltado, diagnósticos, navegación y
-formateador.
+Extension for the NEXORA programming language: highlighting, diagnostics, navigation and
+formatter.
 
-No reimplementa el lenguaje. Todas las respuestas salen del mismo analizador que usa la
-línea de órdenes (`nex check`), así que lo que el editor dice de un programa es exactamente
-lo que dice `nex check`, con los mismos códigos y los mismos textos.
+It does not reimplement the language. All the answers come from the same analyzer that the
+command line uses (`nex check`), so what the editor says about a program is exactly
+what `nex check` says, with the same codes and the same texts.
 
-## Qué da
+## What it gives
 
 | | |
 |---|---|
-| Resaltado | Gramática TextMate escrita sobre el léxico real: palabras clave, tipos, funciones integradas, operadores, textos, números y comentarios |
-| Diagnósticos | Errores léxicos, sintácticos y semánticos, en el panel *Problems*, con el código (`E2011`), la posición y la sugerencia |
-| Autocompletado | Palabras clave, funciones integradas, los nombres que están en alcance y las palabras reservadas |
-| Hover | El tipo de un valor y la firma de una función |
-| Ir a definición, referencias y renombrado | Sobre funciones, parámetros y variables |
-| Símbolos del documento | Las funciones y las variables, con su tipo |
-| Ayuda de firma | Los parámetros de la función que se está llamando |
-| Formateador | Documento entero o selección, con la forma canónica del lenguaje |
+| Highlighting | TextMate grammar written over the real lexer: keywords, types, built-in functions, operators, texts, numbers and comments |
+| Diagnostics | Lexical, syntax and semantic errors, in the *Problems* panel, with the code (`E2011`), the position and the suggestion |
+| Completion | Keywords, built-in functions, the names that are in scope and the reserved words |
+| Hover | The type of a value and the signature of a function |
+| Go to definition, references and rename | On functions, parameters and variables |
+| Document symbols | Functions and variables, with their type |
+| Signature help | The parameters of the function being called |
+| Formatter | Whole document or selection, with the canonical shape of the language |
 
-## Qué necesita
+## What it needs
 
-- **Python 3.11 o superior** con el paquete `nexora` instalado: el servidor de lenguaje es un
-  proceso de Python.
+- **Python 3.11 or newer** with the `nexora` package installed: the language server is a
+  Python process.
 
   ```bash
   cd nexora
   python -m pip install -e .
   ```
 
-- **Node.js 18 o superior** solo para compilar la extensión (el `.vsix` ya viene compilado).
+- **Node.js 18 or newer** only to build the extension (the `.vsix` comes already built).
 
-## Instalar
+## Install
 
-1. Compilar y empaquetar:
+1. Build and package:
 
    ```bash
    cd vscode-nexora
    npm install
    npm run compile
-   npm run package        # deja nexora-0.10.0.vsix
+   npm run package        # leaves nexora-0.10.0.vsix
    ```
 
-2. Instalarlo:
+2. Install it:
 
    ```bash
    code --install-extension vscode-nexora/nexora-0.10.0.vsix
    ```
 
-   Ese camino es **relativo**: el comando tiene que ejecutarse desde la raíz del repositorio, que
-   es donde está la carpeta `vscode-nexora/`. Si el paquete está en otro sitio, con la ruta
-   completa:
+   That path is **relative**: the command has to be run from the root of the repository, which
+   is where the `vscode-nexora/` folder is. If the package is somewhere else, with the full
+   path:
 
    ```bash
-   code --install-extension C:\ruta\completa\nexora-0.10.0.vsix
+   code --install-extension C:\full\path\nexora-0.10.0.vsix
    ```
 
-   O desde el editor: *Extensions* → *⋯* → *Install from VSIX…*, y elegir el fichero.
+   Or from the editor: *Extensions* → *⋯* → *Install from VSIX…*, and choose the file.
 
-   Y cuando la extensión esté publicada en el marketplace, la forma corta, que funciona desde
-   cualquier sitio, es:
+   And once the extension is published on the marketplace, the short form, which works from
+   anywhere, is:
 
    ```bash
    code --install-extension nexoralang.nexora
    ```
 
-## Configurar
+## Configure
 
-| Ajuste | Qué hace | Por defecto |
+| Setting | What it does | Default |
 |---|---|---|
-| `nexora.python.path` | El Python que arranca el servidor. Vacío = el `python` del PATH. | `""` |
-| `nexora.trace.server` | Cuánto escribe el servidor en el panel de salida: `off`, `messages`, `verbose`. | `off` |
-| `nexora.format.enable` | Formatear los documentos con el formateador del lenguaje. | `true` |
-| `nexora.format.onSave` | Formatear cada vez que se guarda. | `false` |
+| `nexora.python.path` | The Python that starts the server. Empty = the `python` on the PATH. | `""` |
+| `nexora.trace.server` | How much the server writes to the output panel: `off`, `messages`, `verbose`. | `off` |
+| `nexora.format.enable` | Format documents with the formatter of the language. | `true` |
+| `nexora.format.onSave` | Format every time the file is saved. | `false` |
 
-Si el Python del PATH no tiene el paquete instalado, la extensión busca el entorno del propio
-repositorio (`nexora/.venv`), que es lo habitual cuando se desarrolla dentro del proyecto.
+If the Python on the PATH does not have the package installed, the extension looks for the environment of the
+repository itself (`nexora/.venv`), which is the usual case when developing inside the project.
 
-## Publicar en el marketplace de Visual Studio Code
+## Publishing on the Visual Studio Code marketplace
 
-La extensión está preparada para el marketplace: lleva el icono (128×128), la licencia, la
-bandeja, la descripción, las categorías, las palabras clave y el aviso para reportar un
-problema.
+The extension is ready for the marketplace: it has the icon (128×128), the licence, the
+banner, the description, the categories, the keywords and the link to report a
+problem.
 
 ```bash
 cd vscode-nexora
 npm run compile
-npm run package          # comprueba que el paquete está bien
-npm run publish:marketplace -- --pat <EL_TOKEN>
+npm run package          # checks that the package is fine
+npm run publish:marketplace -- --pat <THE_TOKEN>
 ```
 
-Hacen falta dos cosas que solo puede hacer quien publica:
+Two things are needed that only whoever publishes can do:
 
-1. **Ser dueño del publicador** `nexoralang` en el marketplace (o cambiar `"publisher"` en
-   `package.json` por el que ya tengas). Con el publicador `nexoralang` y el nombre `nexora`, la
-   extensión es `nexoralang.nexora` en el marketplace.
-2. **Un token de acceso** del marketplace: en <https://marketplace.visualstudio.com/manage/publishers>
-   se crea, con el alcance *Manage extensions*. Se pasa con `--pat` para que no quede en el
-   historial del shell; `vsce publish` lo pide de forma interactiva si no se le da.
+1. **Owning the publisher** `nexoralang` on the marketplace (or changing `"publisher"` in
+   `package.json` to the one you already have). With the publisher `nexoralang` and the name `nexora`, the
+   extension is `nexoralang.nexora` on the marketplace.
+2. **An access token** for the marketplace: it is created at <https://marketplace.visualstudio.com/manage/publishers>,
+   with the scope *Manage extensions*. It is passed with `--pat` so that it does not stay in the
+   shell history; `vsce publish` asks for it interactively if it is not given.
 
-La primera publicación tiene que hacer la cuenta de publisher, que pide verificarla a
-través de una cuenta de Microsoft. Nada de esto lo puede hacer el repositorio: es una
-decisión de quien publica.
+The first publication has to be done by the publisher account, which has to be verified
+through a Microsoft account. None of this can be done by the repository: it is a
+decision of whoever publishes.
 
-Antes de publicar, una comprobación rápida de que el paquete sirve (desde la raíz del
-repositorio):
+Before publishing, a quick check that the package works (from the root of the
+repository):
 
 ```bash
 code --install-extension vscode-nexora/nexora-0.10.0.vsix
 ```
 
-## Comandos
+## Commands
 
-- **NEXORA: Check the current file** — ejecuta `nex check` sobre el fichero abierto y escribe el
-  resultado en un panel de salida.
-- **NEXORA: Restart the language server** — lo reinicia.
+- **NEXORA: Check the current file** — runs `nex check` on the open file and writes the
+  result to an output panel.
+- **NEXORA: Restart the language server** — restarts it.
 
-## Desarrollar
+## Develop
 
 ```bash
 cd vscode-nexora
 npm install
-npm run compile      # compila TypeScript a out/
-npm run watch        # recompila al guardar
+npm run compile      # compiles TypeScript into out/
+npm run watch        # recompiles on save
 ```
 
-Para depurar el servidor de lenguaje:
+To debug the language server:
 
 ```bash
 cd nexora
 python -m nexora.lsp
 ```
 
-habla el protocolo por la entrada y la salida estándar, así que se puede probar sin el editor.
+speaks the protocol over the standard input and output, so it can be tried without the editor.
 
-## Las pruebas
+## Tests
 
-El servidor, el formateador y la extensión se prueban desde la suite del propio lenguaje:
+The server, the formatter and the extension are tested from the suite of the language itself:
 
 ```bash
 cd nexora
 python -m pytest tests/test_lsp.py tests/test_formatter.py tests/test_vscode_extension.py
 ```
 
-Ahí se comprueba que los diagnósticos del servidor son los de `nex check`, que el formateador
-no cambia lo que significa un programa y que el manifiesto y la gramática de la extensión
-siguen al léxico.
+There it is checked that the diagnostics of the server are those of `nex check`, that the formatter
+does not change what a program means and that the manifest and the grammar of the extension
+follow the lexer.
 
-## Limitaciones
+## Limitations
 
-- El analizador no resuelve todavía los miembros de un registro por tipo (`x.field` se comprueba
-  contra el tipo que tiene `x`, no contra el de cada registro posible), así que la navegación y
-  el renombrado no llegan a los campos de un registro.
-- No hay tipo variable en el lenguaje: `Option[T]` y `Result[T, E]` son los únicos tipos con
-  argumentos, y el tipo de error de un `Ok` lo dice el contexto.
-- No hay `match`: las variantes se reconocen con funciones.
-- El formateador no reescribe el interior de un texto, ni toca los comentarios, ni une ni parte
-  líneas: solo la sangría y el espaciado.
+- The analyzer does not yet resolve the members of a record by type (`x.field` is checked
+  against the type that `x` has, not against that of every possible record), so navigation and
+  renaming do not reach the fields of a record.
+- There are no type variables in the language: `Option[T]` and `Result[T, E]` are the only types with
+  arguments, and the error type of an `Ok` is given by the context.
+- There is no `match`: the variants are recognized with functions.
+- The formatter does not rewrite the inside of a text, does not touch comments and does not join or split
+  lines: only indentation and spacing.

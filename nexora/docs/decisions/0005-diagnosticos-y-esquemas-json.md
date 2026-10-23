@@ -1,49 +1,49 @@
-# 0005 — Categorías de diagnóstico, esquemas JSON versionados y código de salida 5
+# 0005 — Diagnostic categories, versioned JSON schemas and exit code 5
 
-- **Estado:** aceptada
-- **Versión:** 0.2.0
+- **Status:** accepted
+- **Version:** 0.2.0
 
-## Decisión
+## Decision
 
-1. **Cada código de error pertenece a una categoría**: `file`, `lexical`, `syntax`, `semantic`,
-   `type`, `runtime` o `contract`. La categoría indica qué etapa encontró el problema.
-2. **La cabecera de un diagnóstico de texto incluye la categoría**:
-   `type error[E2011]: Type mismatch` en lugar de `error[E2011]: Type mismatch`.
-3. **Los códigos no se reutilizan.** Un código que deja de emitirse se retira y queda documentado.
-4. **Los documentos JSON llevan un campo `schema`** con nombre y versión: `nexora.diagnostics/1`
-   y `nexora.inspect/1`. La versión cambia solo si un campo se elimina, se renombra o cambia de
-   significado.
-5. **Comando nuevo `nex inspect`**, que escribe el árbol de sintaxis con tipos y posiciones.
-6. **`nex run --format json`** escribe los errores como JSON en la salida de error.
-7. **Código de salida `5`** para un contrato incumplido.
-8. **Las sugerencias (`hint`) solo aparecen cuando una regla las fundamenta**: existe una
-   conversión entre los dos tipos, hay un nombre declarado parecido al escrito, o el mensaje
-   describe la forma correcta de la construcción.
+1. **Every error code belongs to a category**: `file`, `lexical`, `syntax`, `semantic`,
+   `type`, `runtime` or `contract`. The category says which stage found the problem.
+2. **The header of a text diagnostic includes the category**:
+   `type error[E2011]: Type mismatch` instead of `error[E2011]: Type mismatch`.
+3. **Codes are not reused.** A code that stops being emitted is retired and stays documented.
+4. **JSON documents carry a `schema` field** with a name and a version: `nexora.diagnostics/1`
+   and `nexora.inspect/1`. The version only changes if a field is removed, renamed or changes its
+   meaning.
+5. **New command `nex inspect`**, which writes the syntax tree with types and positions.
+6. **`nex run --format json`** writes the errors as JSON to the standard error.
+7. **Exit code `5`** for a broken contract.
+8. **Suggestions (`hint`) only appear when a rule supports them**: there is a
+   conversion between the two types, there is a declared name similar to the one written, or the message
+   describes the correct form of the construct.
 
-## Motivos
+## Reasons
 
-- Una herramienta puede decidir qué hacer con un error por su categoría sin interpretar el texto ni
-  memorizar rangos de códigos.
-- Un esquema con versión permite que el formato evolucione sin romper a quien lo consume, y que
-  quien lo consume sepa cuándo debe revisarse.
-- El árbol que muestra `nex inspect` es el mismo que usan el comprobador y el intérprete: no hay
-  una segunda representación que pueda desviarse.
-- Las reglas del lenguaje siguen siendo código determinista. Estas salidas son datos para
-  herramientas externas; ninguna herramienta, ni ningún modelo, interviene en decidir si un
-  programa es válido.
+- A tool can decide what to do with an error from its category without interpreting the text or
+  memorizing ranges of codes.
+- A versioned schema lets the format evolve without breaking whoever consumes it, and lets
+  whoever consumes it know when it has to be reviewed.
+- The tree that `nex inspect` shows is the same one that the checker and the interpreter use: there is
+  no second representation that can drift.
+- The rules of the language are still deterministic code. These outputs are data for
+  external tools; no tool, and no model, takes part in deciding whether a
+  program is valid.
 
-## Cambios incompatibles y cómo actualizar
+## Incompatible changes and how to update
 
-| Cambio | A quién afecta | Qué hacer |
-|--------|----------------|-----------|
-| La cabecera de texto empieza por la categoría | Scripts que busquen líneas que **empiecen** por `error[` | Buscar `error[` en cualquier posición o, mejor, usar `--format json` |
-| El JSON de `nex check` añade `schema` y, en cada diagnóstico, `category` | Nadie que lea el JSON por nombre de campo; solo quien compare el documento completo | Ignorar los campos desconocidos |
-| Un contrato incumplido termina con código `5` | Nadie: los contratos no existían en 0.1 | — |
-| `E1104` y `E2003` ya no se emiten | Quien filtrase por esos códigos | Las situaciones que señalaban ahora son código válido |
-| `E2004` ya no cubre los tipos de retorno desconocidos | Quien filtrase por `E2004` | Un tipo que no existe es ahora `E2012`; `E2004` queda para "`main` debe devolver `Void`" |
+| Change | Who it affects | What to do |
+|--------|----------------|------------|
+| The text header starts with the category | Scripts that look for lines that **start** with `error[` | Look for `error[` at any position or, better, use `--format json` |
+| The JSON of `nex check` adds `schema` and, in every diagnostic, `category` | Nobody who reads the JSON by field name; only whoever compares the whole document | Ignore unknown fields |
+| A broken contract ends with code `5` | Nobody: contracts did not exist in 0.1 | — |
+| `E1104` and `E2003` are no longer emitted | Whoever filtered by those codes | The situations they pointed at are now valid code |
+| `E2004` no longer covers unknown return types | Whoever filtered by `E2004` | A type that does not exist is now `E2012`; `E2004` remains for "`main` must return `Void`" |
 
-## Alternativas descartadas
+## Alternatives ruled out
 
-- **Renumerar los códigos por categoría** (por ejemplo, mover todos los de tipos a un rango
-  propio). Habría roto la estabilidad de los códigos de 0.1; la categoría va en un campo aparte.
-- **Un formato de texto para `nex inspect`.** No hay un uso claro todavía; se añade solo JSON.
+- **Renumbering the codes by category** (for example, moving all the type ones to a range of their
+  own). It would have broken the stability of the 0.1 codes; the category goes in a separate field.
+- **A text format for `nex inspect`.** There is no clear use for it yet; only JSON is added.

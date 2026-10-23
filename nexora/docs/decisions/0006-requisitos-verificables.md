@@ -1,72 +1,72 @@
-# 0006 — Característica diferencial: los requisitos son parte verificable del programa
+# 0006 — Distinguishing feature: requirements are a verifiable part of the program
 
-- **Estado:** aceptada
-- **Versión:** ninguna todavía. Esta decisión fija una dirección; no cambia el lenguaje por sí sola.
+- **Status:** accepted
+- **Version:** none yet. This decision sets a direction; it does not change the language by itself.
 
-## Contexto
+## Context
 
-El borrador de diseño reúne muchas ideas (contratos, efectos, `ai fn`, diagnósticos en JSON,
-sintaxis regular) y la hoja de ruta formula la hipótesis central en términos generales: si estas
-decisiones "facilitan el trabajo de las herramientas de IA". Así planteada, no se puede comprobar
-ni sirve para elegir qué construir primero. Hace falta un problema concreto.
+The design draft gathers many ideas (contracts, effects, `ai fn`, diagnostics in JSON,
+regular syntax) and the roadmap phrases the central hypothesis in general terms: whether these
+decisions "make the work of AI tools easier". Put like that, it cannot be checked
+and it does not help choose what to build first. A concrete problem is needed.
 
-### El problema elegido
+### The chosen problem
 
-Cuando una función se escribe o se modifica con ayuda de una IA, **los requisitos viven en lenguaje
-natural**: en la instrucción que recibe el modelo, en una conversación, en un ticket o en un
-comentario. De ahí salen cuatro fallos concretos:
+When a function is written or modified with the help of an AI, **the requirements live in natural
+language**: in the instruction the model receives, in a conversation, in a ticket or in a
+comment. Four concrete failures come from that:
 
-| Fallo | Ejemplo |
-|-------|---------|
-| **Nadie los comprueba** | Se pide "el descuento nunca puede subir el precio" y nada avisa si el código generado lo incumple |
-| **Se pierden entre ediciones** | La siguiente persona o el siguiente modelo que toca la función no ve la conversación original y puede romper el requisito sin saberlo |
-| **Son ambiguos** | "El porcentaje es válido" admite varias lecturas; una condición escrita solo admite una |
-| **Encarecen la revisión** | Quien revisa tiene que reconstruir la intención antes de poder juzgar si el código la cumple |
+| Failure | Example |
+|---------|---------|
+| **Nobody checks them** | Someone asks "the discount can never raise the price" and nothing warns if the generated code breaks it |
+| **They get lost between edits** | The next person or the next model that touches the function does not see the original conversation and can break the requirement without knowing it |
+| **They are ambiguous** | "The percentage is valid" allows several readings; a written condition allows only one |
+| **They make review more expensive** | Whoever reviews has to rebuild the intention before being able to judge whether the code meets it |
 
-Lo que una instrucción en lenguaje natural no puede dar es una respuesta mecánica a la pregunta:
-**"¿este código sigue cumpliendo lo que se pidió?"**
+What an instruction in natural language cannot give is a mechanical answer to the question:
+**"does this code still meet what was asked?"**
 
-## Decisión
+## Decision
 
-La característica que distingue a NEXORA es esta:
+The feature that distinguishes NEXORA is this:
 
-> **Los requisitos, las restricciones y las condiciones de validación de una función se escriben
-> en el propio programa, junto a la función, y una herramienta determinista comprueba si se
-> cumplen.** Una instrucción en lenguaje natural puede explicarlos, pero no es el único sitio
-> donde existen.
+> **The requirements, constraints and validation conditions of a function are written
+> in the program itself, next to the function, and a deterministic tool checks whether they
+> hold.** An instruction in natural language can explain them, but it is not the only place
+> where they exist.
 
-Todo el trabajo sobre el lenguaje se ordena según esa característica. En concreto:
+All the work on the language is ordered according to that feature. Concretely:
 
-1. **Un requisito que se puede comprobar se escribe como condición en el código**, no solo en la
-   instrucción ni en un comentario. Hay cuatro clases:
+1. **A requirement that can be checked is written as a condition in the code**, not only in the
+   instruction or in a comment. There are four kinds:
 
-   | Clase | Pregunta que responde | Mecanismo |
-   |-------|-----------------------|-----------|
-   | Precondición | ¿Qué necesita la función para funcionar? | `requires` |
-   | Postcondición | ¿Qué promete la función al terminar? | `ensures` |
-   | Restricción sobre datos | ¿Qué valores son válidos para un tipo? | Tipos refinados (`where`), planificados |
-   | Caso concreto | ¿Qué debe dar con estas entradas? | `example`, planificado |
+   | Kind | Question it answers | Mechanism |
+   |------|---------------------|-----------|
+   | Precondition | What does the function need to work? | `requires` |
+   | Postcondition | What does the function promise when it ends? | `ensures` |
+   | Constraint on data | Which values are valid for a type? | Refined types (`where`), planned |
+   | Concrete case | What should it give with these inputs? | `example`, planned |
 
-2. **La explicación en lenguaje natural acompaña a la condición; no la sustituye.** Un requisito
-   puede llevar una frase que diga por qué existe, y esa frase aparece en el diagnóstico cuando se
-   incumple. Una frase sin condición no cuenta como requisito.
-3. **La comprobación es determinista.** Ningún modelo de IA decide si un requisito se cumple: el
-   mismo programa con las mismas entradas da siempre el mismo resultado.
-4. **Cada incumplimiento dice qué requisito falló, quién lo incumplió y con qué valores**: la
-   llamada (precondición) o la función (postcondición). En texto para personas y en JSON para
-   herramientas.
-5. **Los requisitos son visibles antes de editar.** `nex context` y `nex inspect` los entregan como
-   datos, de modo que un agente los recibe como restricciones del trabajo y no tiene que deducirlos.
-6. **Quitar o debilitar un requisito es un cambio visible.** Si una edición borra o relaja una
-   condición para que el programa "pase", la herramienta debe señalarlo, igual que señala un error.
-7. **NEXORA nunca dice que un requisito "se cumple" si solo lo ha comprobado en algunas
-   ejecuciones.** Comprobar en ejecución detecta incumplimientos; no demuestra que no existan.
+2. **The natural-language explanation accompanies the condition; it does not replace it.** A requirement
+   can carry a sentence that says why it exists, and that sentence appears in the diagnostic when it is
+   broken. A sentence without a condition does not count as a requirement.
+3. **The check is deterministic.** No AI model decides whether a requirement holds: the
+   same program with the same inputs always gives the same result.
+4. **Every violation says which requirement failed, who broke it and with which values**: the
+   call (precondition) or the function (postcondition). As text for people and as JSON for
+   tools.
+5. **Requirements are visible before editing.** `nex context` and `nex inspect` deliver them as
+   data, so an agent receives them as constraints of the work and does not have to deduce them.
+6. **Removing or weakening a requirement is a visible change.** If an edit deletes or relaxes a
+   condition so that the program "passes", the tool must point it out, just as it points out an error.
+7. **NEXORA never says that a requirement "holds" if it has only checked it on some
+   runs.** Checking at run time detects violations; it does not prove that there are none.
 
-## Un ejemplo con lo que existe hoy
+## An example with what exists today
 
-La instrucción en lenguaje natural sería: *"Aplica un descuento a un precio en céntimos. El
-porcentaje va de 0 a 100, y el resultado nunca puede ser negativo ni mayor que el precio."* En
-NEXORA esos requisitos se escriben en la función:
+The instruction in natural language would be: *"Apply a discount to a price in cents. The
+percentage goes from 0 to 100, and the result can never be negative or greater than the price."* In
+NEXORA those requirements are written in the function:
 
 <!-- nex:run -->
 ```nex
@@ -88,9 +88,9 @@ fn main() -> Void {
 999
 ```
 
-Si una edición posterior, hecha por una persona o por un modelo, cambia el signo y convierte el
-descuento en un recargo, el requisito sigue ahí aunque la instrucción original ya no esté en
-ninguna parte. El programa se detiene y dice qué promesa se rompió y con qué valores:
+If a later edit, made by a person or by a model, changes the sign and turns the
+discount into a surcharge, the requirement is still there even though the original instruction is no longer
+anywhere. The program stops and says which promise was broken and with which values:
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -121,92 +121,92 @@ contract error[E4002]: Postcondition violated
 error: program.nex: the program stopped because a contract was broken
 ```
 
-Hacia donde apunta esta decisión, con una sintaxis **solo ilustrativa y no decidida**: cada
-condición con su explicación, un tipo que lleva su propia restricción y un caso concreto que se
-comprueba sin escribir `main`.
+Where this decision points, with a syntax that is **only illustrative and not decided**: every
+condition with its explanation, a type that carries its own constraint and a concrete case that is
+checked without writing `main`.
 
 ```text
 type Percent = Int where value >= 0 and value <= 100
 
 fn apply_discount(price_cents: Int, percent: Percent) -> Int {
-    requires price_cents >= 0           "Un precio no puede ser negativo"
-    ensures result <= price_cents       "Un descuento nunca sube el precio"
+    requires price_cents >= 0           "A price cannot be negative"
+    ensures result <= price_cents       "A discount never raises the price"
     example apply_discount(10000, 20) == 8000
     return price_cents * (100 - percent) / 100
 }
 ```
 
-## Qué existe y qué falta
+## What exists and what is missing
 
-| Pieza | Estado |
+| Piece | Status |
 |-------|--------|
-| `requires` y `ensures`, comprobados en cada llamada ([0004](0004-contratos-en-ejecucion.md)) | Implementado; **experimental** |
-| Atribución del incumplimiento (`E4001` a la llamada, `E4002` a la función) con los valores | Implementado |
-| Contratos visibles para herramientas en `nex context` y `nex inspect` | Implementado |
-| Diagnósticos de contrato en JSON (`nexora.diagnostics/1`) | Implementado |
-| Explicación en lenguaje natural unida a cada condición | No existe |
-| Casos concretos en la función (`example`) y un comando que los ejecute | No existe; planificado |
-| Tipos refinados (`where`) | No existe; necesita antes registros o tipos definidos por el usuario |
-| Aviso cuando una edición elimina o debilita un requisito | No existe; no está decidido cómo detectar "debilitar" |
-| Evaluación de si esto ayuda de verdad a una IA | **No se ha hecho** |
+| `requires` and `ensures`, checked on every call ([0004](0004-contratos-en-ejecucion.md)) | Implemented; **experimental** |
+| Attribution of the violation (`E4001` to the call, `E4002` to the function) with the values | Implemented |
+| Contracts visible to tools in `nex context` and `nex inspect` | Implemented |
+| Contract diagnostics in JSON (`nexora.diagnostics/1`) | Implemented |
+| Natural-language explanation attached to every condition | Does not exist |
+| Concrete cases in the function (`example`) and a command that runs them | Does not exist; planned |
+| Refined types (`where`) | Does not exist; it needs records or user-defined types first |
+| Warning when an edit removes or weakens a requirement | Does not exist; it is not decided how to detect "weakening" |
+| Evaluation of whether this really helps an AI | **It has not been done** |
 
-> **Actualización (0.3.0).** La [decisión 0007](0007-contratos-estables-y-tipos-refinados.md)
-> implementa tres piezas de esta tabla: los contratos dejan de ser experimentales, cada condición
-> puede llevar su explicación y existen los tipos refinados sobre los tipos integrados. El estado
-> al día está en la [hoja de ruta](../roadmap.md#línea-principal-requisitos-verificables).
+> **Update (0.3.0).** [Decision 0007](0007-contratos-estables-y-tipos-refinados.md)
+> implements three pieces of this table: contracts stop being experimental, every condition
+> can carry its explanation and refined types exist over the built-in types. The up-to-date status
+> is in the [roadmap](../roadmap.md#main-line-verifiable-requirements).
 
-## Cómo se sabrá si funciona
+## How we will know whether it works
 
-La característica es una hipótesis hasta que se mida. El experimento mínimo:
+The feature is a hypothesis until it is measured. The minimal experiment:
 
-- Un conjunto de tareas en las que un agente modifica funciones que tienen requisitos.
-- Dos variantes de cada tarea: los requisitos **solo en la instrucción**, o **también en el
-  código** como condiciones.
-- Medidas:
-  - Ediciones que incumplen un requisito y se detectan antes de entregarlas.
-  - Ediciones que incumplen un requisito y no se detectan.
-  - Avisos falsos: requisitos señalados como incumplidos sin estarlo.
-  - Requisitos eliminados o relajados por el agente para que el programa pase.
+- A set of tasks in which an agent modifies functions that have requirements.
+- Two variants of each task: the requirements **only in the instruction**, or **also in the
+  code** as conditions.
+- Measures:
+  - Edits that break a requirement and are detected before being delivered.
+  - Edits that break a requirement and are not detected.
+  - False alarms: requirements reported as broken when they are not.
+  - Requirements removed or relaxed by the agent so that the program passes.
 
-Las [tareas de referencia](../ai-tooling.md#tareas-de-referencia) son el punto de partida. Hasta
-tener resultados, ninguna página del proyecto debe afirmar que NEXORA mejora el trabajo con IA.
+The [reference tasks](../ai-tooling.md#reference-tasks) are the starting point. Until
+there are results, no page of the project should claim that NEXORA improves work with AI.
 
-## Lo que no pretende
+## What it does not aim to be
 
-- **No es verificación formal.** No demuestra que un requisito se cumpla para todas las entradas;
-  detecta incumplimientos en las llamadas que se ejecutan.
-- **No sustituye a las pruebas.** Un requisito dice qué debe ser cierto; una prueba elige con qué
-  entradas comprobarlo. Hacen falta los dos.
-- **No hace que la IA escriba código correcto.** Hace que el código incorrecto se note, y que se
-  note pronto y con una explicación.
-- **No cubre todos los requisitos.** El rendimiento, la experiencia de uso o el estilo no se
-  expresan como condiciones sobre valores.
-- **No es una idea nueva por separado.** Los contratos existen en otros lenguajes desde hace
-  décadas. Lo que NEXORA propone es hacer de ellos el centro del trabajo con IA: obligatorios en
-  la unidad que se edita, entregados como datos a las herramientas, con la culpa atribuida y sin
-  que un modelo decida nada.
+- **It is not formal verification.** It does not prove that a requirement holds for all inputs;
+  it detects violations on the calls that run.
+- **It does not replace tests.** A requirement says what must be true; a test chooses with which
+  inputs to check it. Both are needed.
+- **It does not make the AI write correct code.** It makes incorrect code noticeable, and
+  noticeable early and with an explanation.
+- **It does not cover all requirements.** Performance, user experience or style are not
+  expressed as conditions on values.
+- **It is not a new idea on its own.** Contracts have existed in other languages for
+  decades. What NEXORA proposes is to make them the centre of work with AI: required in
+  the unit that is edited, delivered as data to the tools, with the blame assigned and without
+  a model deciding anything.
 
-## Alternativas descartadas como característica diferencial
+## Alternatives ruled out as the distinguishing feature
 
-| Alternativa | Por qué no es la característica principal |
-|-------------|-------------------------------------------|
-| **Funciones resueltas por un modelo (`ai fn`, `tool fn`)** | No son deterministas, ya existen como bibliotecas en otros lenguajes y no resuelven el problema de comprobar el código. Siguen en investigación |
-| **Efectos declarados (`uses`)** | Útiles para saber qué toca una función, pero secundarios: no dicen si el resultado es correcto |
-| **Diagnósticos y salidas en JSON** | Ya existen y son necesarios, pero son el medio por el que se comunican los requisitos, no el fin |
-| **Una sintaxis "más fácil para la IA"** | No se puede afirmar sin un experimento, y no aporta nada que una herramienta pueda comprobar |
+| Alternative | Why it is not the main feature |
+|-------------|--------------------------------|
+| **Functions resolved by a model (`ai fn`, `tool fn`)** | They are not deterministic, they already exist as libraries in other languages and they do not solve the problem of checking the code. They remain under research |
+| **Declared effects (`uses`)** | Useful to know what a function touches, but secondary: they do not say whether the result is correct |
+| **Diagnostics and outputs in JSON** | They already exist and are necessary, but they are the means through which requirements are communicated, not the end |
+| **A syntax "easier for AI"** | It cannot be claimed without an experiment, and it brings nothing that a tool can check |
 
-## Consecuencias
+## Consequences
 
-El orden de trabajo de la hoja de ruta que tiene que ver con esta característica pasa a ser el
-siguiente (en la [hoja de ruta](../roadmap.md#línea-principal-requisitos-verificables), con el
-estado de cada paso):
+The order of work of the roadmap that has to do with this feature becomes the
+following (in the [roadmap](../roadmap.md#main-line-verifiable-requirements), with the
+status of each step):
 
-1. Estabilizar los contratos y sacarlos de experimental (posición en el código y nombre `result`).
-2. Unir una explicación en lenguaje natural a cada condición y mostrarla en el diagnóstico.
-3. Casos concretos en la función (`example`) y un comando que los ejecute sin `main`.
-4. Detectar cuándo una edición elimina o debilita un requisito.
-5. Tipos refinados, cuando existan los tipos definidos por el usuario.
-6. El experimento de evaluación, antes de presentar la característica como una ventaja demostrada.
+1. Stabilize contracts and take them out of experimental (position in the code and name `result`).
+2. Attach a natural-language explanation to every condition and show it in the diagnostic.
+3. Concrete cases in the function (`example`) and a command that runs them without `main`.
+4. Detect when an edit removes or weakens a requirement.
+5. Refined types, when user-defined types exist.
+6. The evaluation experiment, before presenting the feature as a proven advantage.
 
-La web y la documentación general deben presentar NEXORA a partir de este problema, sin afirmar
-resultados que todavía no se han medido.
+The website and the general documentation must present NEXORA starting from this problem, without claiming
+results that have not been measured yet.

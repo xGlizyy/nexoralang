@@ -1,218 +1,218 @@
-# Arquitectura
+# Architecture
 
-Cómo está construido el intérprete de NEXORA. Describe el código tal como es hoy
-(`src/nexora/`, unas 1500 líneas de Python sin dependencias externas).
+How the NEXORA interpreter is built. It describes the code as it is today
+(`src/nexora/`, about 1500 lines of Python without external dependencies).
 
-## Flujo
+## Flow
 
 ```text
-        archivo .nex
+        .nex file
              |
-             |  cli.py lee el archivo como UTF-8
+             |  cli.py reads the file as UTF-8
              v
    +-------------------+
-   |  1. Lexer         |  lexer.py        texto -> tokens            errores: lexical
+   |  1. Lexer         |  lexer.py        text -> tokens             errors: lexical
    +-------------------+
-             |  lista de tokens
+             |  list of tokens
              v
    +-------------------+
-   |  2. Parser        |  parser.py       tokens -> AST              errores: syntax
+   |  2. Parser        |  parser.py       tokens -> AST              errors: syntax
    +-------------------+
              |  AST (ast_nodes.py)
              v
    +-------------------+
-   |  3. Checker       |  checker.py      nombres, ámbitos, tipos,   errores: semantic, type
-   |                   |                  rutas de retorno
+   |  3. Checker       |  checker.py      names, scopes, types,      errors: semantic, type
+   |                   |                  return paths
    +-------------------+
-             |  CheckedProgram (AST + funciones + tipos)
+             |  CheckedProgram (AST + functions + types)
              |
-             +----------------------> nex check    informa y termina
-             +----------------------> nex inspect  escribe el AST en JSON y termina
-             +----------------------> nex context, nex symbols, servidor MCP
-             |                        (tooling.py: resumen y símbolos, y termina)
-             |
-             v
-   +-------------------+
-   |  4. Interpreter   |  interpreter.py  recorre el AST             errores: runtime, contract
-   +-------------------+
+             +----------------------> nex check    reports and ends
+             +----------------------> nex inspect  writes the AST as JSON and ends
+             +----------------------> nex context, nex symbols, MCP server
+             |                        (tooling.py: summary and symbols, and ends)
              |
              v
-        salida estándar
+   +-------------------+
+   |  4. Interpreter   |  interpreter.py  walks the AST              errors: runtime, contract
+   +-------------------+
+             |
+             v
+        standard output
 ```
 
-Reglas del flujo:
+Rules of the flow:
 
-- **Cada etapa solo se ejecuta si la anterior no encontró errores.** Así un mismo error no se
-  comunica dos veces con formas distintas.
-- **Las etapas 1 a 3 no ejecutan nada del programa.** `nex check`, `nex inspect`, `nex context`,
-  `nex symbols` y el servidor MCP terminan ahí.
-- **El intérprete solo acepta un `CheckedProgram`**, que únicamente produce el comprobador. No se
-  puede ejecutar un programa sin comprobar.
-- `pipeline.analyze()` encadena las etapas 1 a 3 y es lo que usan todos los comandos y todas las
-  herramientas. Por eso `check`, `inspect`, `context`, `symbols` y `run` ven exactamente el mismo
-  programa.
+- **Each stage only runs if the previous one found no errors.** That way the same error is not
+  reported twice in different forms.
+- **Stages 1 to 3 run nothing of the program.** `nex check`, `nex inspect`, `nex context`,
+  `nex symbols` and the MCP server end there.
+- **The interpreter only accepts a `CheckedProgram`**, which only the checker produces. A
+  program cannot be run without being checked.
+- `pipeline.analyze()` chains stages 1 to 3 and is what every command and every
+  tool uses. That is why `check`, `inspect`, `context`, `symbols` and `run` see exactly the same
+  program.
 
-## Módulos
+## Modules
 
-| Módulo | Responsabilidad | Depende de |
-|--------|-----------------|------------|
-| `version.py` | El número de versión. Único lugar donde se define | — |
-| `diagnostics.py` | `Span`, `Source`, `Diagnostic`, el registro de códigos y categorías, y el formato de texto | — |
-| `values.py` | Nombres de los tipos, límites de `Int` y cómo se escribe un valor | — |
-| `types.py` | Modelo de tipos estructurado: primitivos, `List[T]`, tipos refinados, registros y variables de tipo; identidad, compatibilidad, sustitución y unificación | — |
-| `type_adapter.py` | Puente entre los nombres de tipo del comprobador y el modelo; resuelve solo los tipos habilitados | `types`, `values` |
-| `tokens.py` | Tipos de token, palabras clave y palabras reservadas | `diagnostics` |
-| `lexer.py` | Texto → tokens | `tokens`, `diagnostics`, `values` |
-| `ast_nodes.py` | Los nodos del árbol y su conversión a JSON | `diagnostics` |
-| `parser.py` | Tokens → AST, con recuperación de errores | `ast_nodes`, `tokens`, `diagnostics` |
-| `checker.py` | Análisis estático. **Único lugar que decide qué regla de tipos se aplica a cada expresión**; el modelo de `types.py` define identidad y compatibilidad | `ast_nodes`, `diagnostics`, `values`, `types`, `type_adapter` |
-| `interpreter.py` | Ejecución, contratos y errores de ejecución | `ast_nodes`, `checker`, `diagnostics`, `prelude`, `values`, `capabilities` |
-| `prelude.py` | Las funciones de un tipo (`Text.length`, `Int.parse`, `List.get`…): sus contratos, escritos en NEXORA, sus implementaciones y la gramática de los números escritos en un texto | `ast_nodes`, `diagnostics`, `lexer`, `parser`, `values` |
-| `capabilities.py` | El modelo de permisos: lo que declara un programa, lo que concede quien lo ejecuta y la comparación de dos rutas. **No toca el sistema operativo** | — |
-| `host.py` | Lo que un programa puede hacer además de calcular: sus argumentos, su entrada y los archivos que puede usar, con la comprobación de los tres permisos. **Único módulo que abre archivos** | `capabilities` |
-| `pipeline.py` | Encadena lexer, parser y checker | Los tres |
-| `api.py` | Comprobar o ejecutar código en memoria, con límites opcionales. La interfaz para quien integra NEXORA en otro programa | `pipeline`, `interpreter`, `checker`, `tokens`, `diagnostics` |
-| `worker.py` | Proceso de un solo uso que atiende una petición JSON; lo usa el [playground](playground.md) | `api` |
-| `tooling.py` | Las herramientas de análisis: documentos JSON de diagnósticos, árbol, símbolos, contexto, especificación y capacidades. **Nunca ejecuta un programa**: del intérprete solo toma la constante del límite de llamadas | `pipeline`, `checker`, `parser`, `ast_nodes`, `tokens`, `values`, `diagnostics` |
-| `schemas.py` | Los JSON Schema de todos los formatos; la parte del árbol se deriva de las clases de `ast_nodes` | `ast_nodes`, `diagnostics` |
-| `mcp_server.py` | Servidor MCP **opcional**. Único módulo que importa el SDK de MCP; valida los argumentos y delega en `tooling` | `tooling` |
-| `cli.py` | Argumentos, lectura del archivo, formatos de salida, códigos de salida, y los permisos que se conceden al programa | `pipeline`, `interpreter`, `tooling`, `diagnostics`, `capabilities`, `host` |
-| `__main__.py` | Permite `python -m nexora` | `cli` |
+| Module | Responsibility | Depends on |
+|--------|----------------|------------|
+| `version.py` | The version number. The only place where it is defined | — |
+| `diagnostics.py` | `Span`, `Source`, `Diagnostic`, the registry of codes and categories, and the text format | — |
+| `values.py` | Names of the types, limits of `Int` and how a value is written | — |
+| `types.py` | Structured type model: primitives, `List[T]`, refined types, records and type variables; identity, compatibility, substitution and unification | — |
+| `type_adapter.py` | Bridge between the type names of the checker and the model; it only resolves the enabled types | `types`, `values` |
+| `tokens.py` | Token kinds, keywords and reserved words | `diagnostics` |
+| `lexer.py` | Text → tokens | `tokens`, `diagnostics`, `values` |
+| `ast_nodes.py` | The nodes of the tree and their conversion to JSON | `diagnostics` |
+| `parser.py` | Tokens → AST, with error recovery | `ast_nodes`, `tokens`, `diagnostics` |
+| `checker.py` | Static analysis. **The only place that decides which type rule applies to each expression**; the model of `types.py` defines identity and compatibility | `ast_nodes`, `diagnostics`, `values`, `types`, `type_adapter` |
+| `interpreter.py` | Execution, contracts and runtime errors | `ast_nodes`, `checker`, `diagnostics`, `prelude`, `values`, `capabilities` |
+| `prelude.py` | The functions of a type (`Text.length`, `Int.parse`, `List.get`…): their contracts, written in NEXORA, their implementations and the grammar of numbers written in a text | `ast_nodes`, `diagnostics`, `lexer`, `parser`, `values` |
+| `capabilities.py` | The permission model: what a program declares, what whoever runs it grants and the comparison of two paths. **It does not touch the operating system** | — |
+| `host.py` | What a program can do besides computing: its arguments, its input and the files it can use, with the check of the three permissions. **The only module that opens files** | `capabilities` |
+| `pipeline.py` | Chains lexer, parser and checker | All three |
+| `api.py` | Checking or running code in memory, with optional limits. The interface for whoever integrates NEXORA into another program | `pipeline`, `interpreter`, `checker`, `tokens`, `diagnostics` |
+| `worker.py` | Single-use process that handles a JSON request; used by the [playground](playground.md) | `api` |
+| `tooling.py` | The analysis tools: JSON documents of diagnostics, tree, symbols, context, specification and capabilities. **It never runs a program**: from the interpreter it only takes the constant of the call limit | `pipeline`, `checker`, `parser`, `ast_nodes`, `tokens`, `values`, `diagnostics` |
+| `schemas.py` | The JSON Schemas of all the formats; the tree part is derived from the classes of `ast_nodes` | `ast_nodes`, `diagnostics` |
+| `mcp_server.py` | **Optional** MCP server. The only module that imports the MCP SDK; it validates the arguments and delegates to `tooling` | `tooling` |
+| `cli.py` | Arguments, reading the file, output formats, exit codes, and the permissions granted to the program | `pipeline`, `interpreter`, `tooling`, `diagnostics`, `capabilities`, `host` |
+| `__main__.py` | Allows `python -m nexora` | `cli` |
 
-Solo los puntos de entrada tocan el sistema operativo: `cli.py` lee el archivo y escribe en la
-terminal, `worker.py` lee una petición de su entrada estándar, `mcp_server.py` habla por la entrada
-y la salida estándar, y `tooling.py` lee un único archivo fijo (la especificación del proyecto), sin
-que ningún argumento influya en la ruta. El lexer, el
-parser, el comprobador y el intérprete trabajan con texto y estructuras en memoria; el intérprete
-recibe una función `write` para la salida, lo que permite probarlo sin terminal. Una prueba
-(`tests/test_security.py`) comprueba que esos módulos no importan `os`, `pathlib` ni `subprocess`.
+Only the entry points touch the operating system: `cli.py` reads the file and writes to the
+terminal, `worker.py` reads a request from its standard input, `mcp_server.py` talks over the standard input
+and output, and `tooling.py` reads a single fixed file (the specification of the project), without
+any argument influencing the path. The lexer, the
+parser, the checker and the interpreter work with text and structures in memory; the interpreter
+receives a `write` function for the output, which allows testing it without a terminal. A test
+(`tests/test_security.py`) checks that those modules do not import `os`, `pathlib` or `subprocess`.
 
-La única excepción es `host.py`: es el módulo que le da a un programa sus argumentos, su entrada
-y los archivos que puede usar, y por eso es el único que abre archivos. El intérprete no lo importa:
-recibe un *host* y le pregunta ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)).
-El modelo de permisos, en `capabilities.py`, no toca el sistema operativo: solo compara rutas.
+The only exception is `host.py`: it is the module that gives a program its arguments, its input
+and the files it can use, and that is why it is the only one that opens files. The interpreter does not import it:
+it receives a *host* and asks it ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)).
+The permission model, in `capabilities.py`, does not touch the operating system: it only compares paths.
 
-## Las piezas, una a una
+## The pieces, one by one
 
 ### Lexer
 
-Recorre el texto carácter a carácter y produce tokens con su posición (`Span`: línea y columna de
-inicio y de fin).
+It goes through the text character by character and produces tokens with their position (`Span`: line and column of
+start and of end).
 
-- **No ignora nada en silencio**: todo carácter es parte de un token, espacio, comentario, o un
+- **It ignores nothing silently**: every character is part of a token, a space, a comment, or an
   error.
-- **Finales de línea**: emite un token `NEWLINE`, que es lo que termina una sentencia. Dentro de
-  paréntesis no lo emite, para que una expresión pueda ocupar varias líneas.
-- **Recuperación**: si falta un `)` y aparece una palabra que no puede estar entre paréntesis
-  (`let`, `fn`, `if`, una llave…), cierra la línea donde se quedó abierta, para que el parser
-  señale el error en la línea correcta y pueda seguir.
-- Tras un error continúa, para comunicar varios en una pasada (hasta 100).
+- **Line endings**: it emits a `NEWLINE` token, which is what ends a statement. Inside
+  parentheses it does not emit it, so that an expression can span several lines.
+- **Recovery**: if a `)` is missing and a word appears that cannot be inside parentheses
+  (`let`, `fn`, `if`, a brace…), it closes the line where it was left open, so that the parser
+  reports the error on the right line and can continue.
+- After an error it continues, to report several in one pass (up to 100).
 
 ### Parser
 
-Descenso recursivo para declaraciones y sentencias; *precedence climbing* para expresiones (una
-sola función, `_expression`, con la tabla `_PRECEDENCE`).
+Recursive descent for declarations and statements; *precedence climbing* for expressions (a
+single function, `_expression`, with the `_PRECEDENCE` table).
 
-- **Recuperación de errores**: una sentencia incorrecta lanza `ParseError`, que se captura a nivel
-  de bloque; el parser salta hasta el final de la línea y continúa. A nivel de archivo, salta hasta
-  el siguiente `fn`.
-- **Límites**: cuenta el anidamiento (`MAX_NESTING`, 64) y la profundidad de cada expresión
-  (`MAX_EXPRESSION_DEPTH`, 256). Existen para que ningún programa aceptado pueda agotar la pila de
-  Python en las etapas siguientes, que recorren el árbol de forma recursiva.
-- Reconoce construcciones no válidas (una asignación `x = 1`, una cláusula de contrato fuera de
-  sitio) para poder rechazarlas con un mensaje preciso.
+- **Error recovery**: a wrong statement raises `ParseError`, which is caught at the
+  block level; the parser skips to the end of the line and continues. At the file level, it skips to
+  the next `fn`.
+- **Limits**: it counts the nesting (`MAX_NESTING`, 64) and the depth of each expression
+  (`MAX_EXPRESSION_DEPTH`, 256). They exist so that no accepted program can exhaust the Python
+  stack in the following stages, which walk the tree recursively.
+- It recognizes invalid constructs (an assignment `x = 1`, a misplaced contract
+  clause) to be able to reject them with a precise message.
 
 ### AST
 
-Clases de datos inmutables (`@dataclass(frozen=True)`), una por construcción del lenguaje. Todo
-nodo lleva su `span`.
+Immutable data classes (`@dataclass(frozen=True)`), one per construct of the language. Every
+node carries its `span`.
 
-**Los nombres de los campos de estas clases son los nombres de los campos del JSON de
-`nex inspect`** (`to_dict` los recorre por reflexión). Renombrar un campo cambia el esquema
-público. Las pruebas de `tests/test_inspect.py` fijan la lista exacta.
+**The names of the fields of these classes are the names of the fields of the JSON of
+`nex inspect`** (`to_dict` walks them by reflection). Renaming a field changes the public
+schema. The tests of `tests/test_inspect.py` pin the exact list.
 
 ### Checker
 
-Recorre el AST una vez y verifica nombres, ámbitos, tipos y rutas de retorno.
+It walks the AST once and verifies names, scopes, types and return paths.
 
-- **Dos pasadas sobre las funciones**: primero recoge todas las firmas, después comprueba los
-  cuerpos. Por eso una función puede llamar a otra declarada más abajo.
-- **Ámbitos**: una cadena de objetos `_Scope`, uno por bloque.
-- **Tipos**: `_expression` devuelve el tipo de cada expresión como texto (`"Int"`, `"Text"`…) o
-  `None` si la expresión tiene un error. `None` silencia los errores derivados: un nombre
-  desconocido se comunica una vez, no en cada operación que lo usa.
-- **Rutas de retorno**: `_block` y `_statement` devuelven `True` si siempre terminan con `return`.
-- Los tipos calculados se guardan en un diccionario (`id(nodo)` → tipo) que usa `nex inspect`.
-- Las funciones integradas se describen en la tabla `BUILTINS`, con la misma forma (`Signature`)
-  que las funciones del programa.
+- **Two passes over the functions**: first it collects all the signatures, then it checks the
+  bodies. That is why a function can call another one declared further down.
+- **Scopes**: a chain of `_Scope` objects, one per block.
+- **Types**: `_expression` returns the type of each expression as text (`"Int"`, `"Text"`…) or
+  `None` if the expression has an error. `None` silences the derived errors: an unknown
+  name is reported once, not in every operation that uses it.
+- **Return paths**: `_block` and `_statement` return `True` if they always end with `return`.
+- The computed types are stored in a dictionary (`id(node)` → type) that `nex inspect` uses.
+- The built-in functions are described in the `BUILTINS` table, with the same form (`Signature`)
+  as the functions of the program.
 
 ### Interpreter
 
-Recorre el AST de un programa ya comprobado. No genera ni evalúa código Python.
+It walks the AST of an already checked program. It neither generates nor evaluates Python code.
 
-- **Valores**: un valor de NEXORA es un `int`, `float`, `bool` o `str` de Python.
-- **Entornos**: una cadena de objetos `Environment`, uno por bloque. Cada llamada empieza un
-  entorno nuevo, sin acceso al de quien llama.
-- **`return`**: las sentencias devuelven un objeto `_Returned` que sube por los bloques hasta la
-  llamada. No se usan excepciones para el flujo normal.
-- **Lo que comprueba**: solo lo que no puede saberse antes: división por cero, rango de `Int` y de
-  `Float`, profundidad de llamadas y contratos. No repite las comprobaciones de nombres ni de tipos.
-- **Pila de llamadas**: `_stack` guarda la función y el punto de llamada, para añadir la cadena de
-  llamadas a los diagnósticos.
-- **Límite de recursividad**: `MAX_CALL_DEPTH` (1000). Además eleva temporalmente el límite de
-  recursión de Python y captura `RecursionError`, que convierte en el diagnóstico `E3004`, y
-  `MemoryError`, que convierte en `E3007` fuera del bloque `except` (decisión 0009).
+- **Values**: a NEXORA value is a Python `int`, `float`, `bool` or `str`.
+- **Environments**: a chain of `Environment` objects, one per block. Every call starts a
+  new environment, without access to that of its caller.
+- **`return`**: statements return a `_Returned` object that goes up through the blocks to the
+  call. Exceptions are not used for the normal flow.
+- **What it checks**: only what cannot be known before: division by zero, range of `Int` and of
+  `Float`, call depth and contracts. It does not repeat the name or type checks.
+- **Call stack**: `_stack` keeps the function and the call point, to add the chain of
+  calls to the diagnostics.
+- **Recursion limit**: `MAX_CALL_DEPTH` (1000). It also temporarily raises the Python recursion
+  limit and catches `RecursionError`, which it turns into the diagnostic `E3004`, and
+  `MemoryError`, which it turns into `E3007` outside the `except` block (decision 0009).
 
-## Cómo se representan los errores
+## How errors are represented
 
-Hay tres clases de fallo, y se mantienen separadas:
+There are three kinds of failure, and they are kept separate:
 
-| Clase | Qué es | Cómo se representa | Qué ve quien usa `nex` |
-|-------|--------|--------------------|------------------------|
-| Error del programa, detectado sin ejecutar | Léxico, sintáctico, semántico o de tipos | Objetos `Diagnostic` devueltos en una lista | Diagnósticos; código de salida `1` |
-| Error del programa, al ejecutar | División por cero, contrato incumplido… | Excepción `NexoraRuntimeError` con un `Diagnostic` | Diagnóstico; código `3` o `5` |
-| Defecto de NEXORA | Cualquier otra excepción de Python | No se captura en las etapas | `internal error: …`; código `70` |
+| Kind | What it is | How it is represented | What whoever uses `nex` sees |
+|------|------------|-----------------------|------------------------------|
+| Error of the program, detected without running | Lexical, syntax, semantic or type | `Diagnostic` objects returned in a list | Diagnostics; exit code `1` |
+| Error of the program, when running | Division by zero, broken contract… | `NexoraRuntimeError` exception with a `Diagnostic` | Diagnostic; code `3` or `5` |
+| Defect of NEXORA | Any other Python exception | It is not caught in the stages | `internal error: …`; code `70` |
 
-Un `Diagnostic` es un dato: código, explicación, posición, sugerencia y notas. El título y la
-categoría salen del registro `_REGISTRY` de `diagnostics.py`, a partir del código. `render` lo
-convierte en texto y `to_dict` en JSON; ambos formatos proceden del mismo objeto.
+A `Diagnostic` is data: code, explanation, position, suggestion and notes. The title and the
+category come from the `_REGISTRY` of `diagnostics.py`, from the code. `render`
+turns it into text and `to_dict` into JSON; both formats come from the same object.
 
-`cli.main` captura cualquier excepción inesperada y la presenta como error interno. Con
-`NEXORA_DEBUG=1` la deja pasar, para ver la traza.
+`cli.main` catches any unexpected exception and presents it as an internal error. With
+`NEXORA_DEBUG=1` it lets it through, to see the traceback.
 
-Las ramas "imposibles" del intérprete (`raise TypeError`, `raise LookupError`) no son errores del
-usuario: si se alcanzan, el comprobador ha dejado pasar algo que no debía, y es un error interno.
+The "impossible" branches of the interpreter (`raise TypeError`, `raise LookupError`) are not errors of the
+user: if they are reached, the checker has let something through that it should not have, and it is an internal error.
 
-## Dónde añadir cosas
+## Where to add things
 
-| Para añadir… | Hay que tocar |
-|--------------|---------------|
-| Una palabra clave o un símbolo | `tokens.py` (y `lexer.py` si es un símbolo nuevo) |
-| Una sentencia | Nodo en `ast_nodes.py` → `_statement` en `parser.py` → `_statement` en `checker.py` (tipos y si "siempre devuelve") → `_statement` en `interpreter.py` |
-| Un operador | `tokens.py`, `lexer.py`, la tabla `_PRECEDENCE` de `parser.py`, `binary_result` en `checker.py` y `_binary` en `interpreter.py` |
-| Un tipo | `values.py` (nombre y formato), `types.py` y `type_adapter.py` si tiene estructura, `KNOWN_TYPES` y las reglas en `checker.py`, y su representación en `interpreter.py` |
-| Una función integrada | La tabla `BUILTINS` de `checker.py` y `_call` en `interpreter.py`. Si pertenece a un tipo (`Text.length`), su nombre lleva el tipo delante en `BUILTINS`, y su implementación y sus contratos van en `prelude.py` |
-| Un error | Una entrada en `_REGISTRY` (`diagnostics.py`) y una fila en las tablas de `language-spec.md` y `diagnostics.md` |
-| Una opción o un comando | `_build_parser` en `cli.py` y `cli-reference.md` |
+| To add… | Touch |
+|---------|-------|
+| A keyword or a symbol | `tokens.py` (and `lexer.py` if it is a new symbol) |
+| A statement | Node in `ast_nodes.py` → `_statement` in `parser.py` → `_statement` in `checker.py` (types and whether it "always returns") → `_statement` in `interpreter.py` |
+| An operator | `tokens.py`, `lexer.py`, the `_PRECEDENCE` table of `parser.py`, `binary_result` in `checker.py` and `_binary` in `interpreter.py` |
+| A type | `values.py` (name and format), `types.py` and `type_adapter.py` if it has structure, `KNOWN_TYPES` and the rules in `checker.py`, and its representation in `interpreter.py` |
+| A built-in function | The `BUILTINS` table of `checker.py` and `_call` in `interpreter.py`. If it belongs to a type (`Text.length`), its name carries the type in front in `BUILTINS`, and its implementation and its contracts go in `prelude.py` |
+| An error | An entry in `_REGISTRY` (`diagnostics.py`) and a row in the tables of `language-spec.md` and `diagnostics.md` |
+| An option or a command | `_build_parser` in `cli.py` and `cli-reference.md` |
 
-En todos los casos: la especificación primero, un ejemplo en `examples/` si es una característica
-nueva, y pruebas. [`CONTRIBUTING.md`](../CONTRIBUTING.md) detalla el proceso, y las pruebas fallan
-si alguna de las listas anteriores queda sin sincronizar.
+In every case: the specification first, an example in `examples/` if it is a new
+feature, and tests. [`CONTRIBUTING.md`](../CONTRIBUTING.md) details the process, and the tests fail
+if any of the lists above gets out of sync.
 
-## Decisiones que condicionan la arquitectura
+## Decisions that shape the architecture
 
-- **Intérprete que recorre el árbol.** Es la forma más simple de tener una semántica correcta y
-  comprobable. No es rápida, y limita la profundidad de recursión. No se ha medido su rendimiento.
-- **El tipo canónico es un texto; la semántica vive en un modelo estructurado.** El texto sigue
-  siendo la forma estable de la especificación, del AST y de los documentos JSON. Para razonar
-  sobre identidad, compatibilidad, unificación y tipos compuestos, el comprobador construye objetos
-  de `types.py` a través de `type_adapter.py`. La migración es incremental: las reglas que aún no
-  usan el modelo conservan su representación de cadena. `List[T]` es el primer tipo compuesto que
-  usa esta vía, y los registros la usan con una identidad propia: la de su declaración, que el
-  comprobador crea y el intérprete hereda del `CheckedProgram` ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)). El resto de la propuesta 0012 no está implementado.
-- **El análisis estático es obligatorio.** Permite que el intérprete sea pequeño y que la lista de
-  errores de ejecución sea corta y cerrada.
-- **El AST es la interfaz pública de `nex inspect`.** Acopla el esquema JSON a las clases internas;
-  a cambio no hay dos representaciones que mantener iguales.
+- **An interpreter that walks the tree.** It is the simplest way to have a correct and
+  checkable semantics. It is not fast, and it limits the recursion depth. Its performance has not been measured.
+- **The canonical type is a text; the semantics lives in a structured model.** The text is still
+  the stable form of the specification, of the AST and of the JSON documents. To reason
+  about identity, compatibility, unification and compound types, the checker builds objects
+  of `types.py` through `type_adapter.py`. The migration is incremental: the rules that do not yet
+  use the model keep their string representation. `List[T]` is the first compound type that
+  uses this path, and records use it with an identity of their own: that of their declaration, which the
+  checker creates and the interpreter inherits from the `CheckedProgram` ([decision 0014](decisions/0014-registros-nominales-inmutables.md)). The rest of proposal 0012 is not implemented.
+- **The static analysis is mandatory.** It allows the interpreter to be small and the list of
+  runtime errors to be short and closed.
+- **The AST is the public interface of `nex inspect`.** It couples the JSON schema to the internal classes;
+  in exchange there are no two representations to keep equal.
 
-Los motivos de cada una están en [`decisions/`](decisions/README.md).
+The reasons for each one are in [`decisions/`](decisions/README.md).
