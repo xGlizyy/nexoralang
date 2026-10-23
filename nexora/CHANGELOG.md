@@ -4,7 +4,7 @@ Changelog for NEXORA, with the most recent version first.
 
 All versions are prior to 1.0: the language may change incompatibly between versions. Each incompatible change is indicated here and explained in `docs/decisions/`.
 
-This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Version 0.10.0, with `Option` and `Result`, is also tagged (`v0.10.0`) and published in both registries. Earlier ones only identify code states: they were never tagged or published.
+This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Versions 0.10.0, with `Option` and `Result`, and 0.11.0, with modules and imports, are also tagged (`v0.10.0`, `v0.11.0`) and published in both registries. Earlier ones only identify code states: they were never tagged or published.
 
 Each version groups its changes into these sections, when they contain content:
 
@@ -17,14 +17,25 @@ Each version groups its changes into these sections, when they contain content:
 | Documentation | Relevant documentation changes |
 | Limitations | Known restrictions worth being aware of |
 
-## 0.11.0 — Modules and imports (not published)
+## Unreleased
 
-This version is not tagged or published: it is the repository state. It implements
+### Incompatible changes
+
+- **The specification is written in English, and `get_language_spec` moves to `nexora.spec/2`.** `language` is `"en"` (it was `"es"`), and the section ids come from the English headings (`7-functions` instead of `7-funciones`). How to update: read the ids again from the index the tool returns, or from `docs/language-spec.md`. The rest of the document does not change ([JSON protocol](docs/json-protocol.md)).
+
+### Documentation
+
+- The whole documentation is in English: the READMEs, `docs/` (guides, reference and `decisions/`), this changelog, `CONTRIBUTING.md`, `SECURITY.md` and `CODE_OF_CONDUCT.md`. Decision files keep their Spanish filenames.
+- [LSP](docs/lsp.md) describes the language server that exists since the editor work (`nexora-lsp`), instead of calling it planned.
+
+## 0.11.0 — Modules and imports
+
+This version is tagged (`v0.11.0`) and published: the `nexora-lang` package is on PyPI and npm. It implements
 [decision 0018](docs/decisions/0018-modulos-e-importaciones.md): a program may be made of several files.
 
 ### Repository
 
-- The server (`server/`), the web app (`web/`) and its deployment are no longer in this repository; the repository remains focused on the language itself: interpreter, npm package, VS Code extension, and documentation. They live in a separate private repository. The web is at <https://nexoralang.org>.
+- The server (`servidor/`), the web app (`web/`) and its deployment are no longer in this repository; the repository remains focused on the language itself: interpreter, npm package, VS Code extension, and documentation. They live in a separate private repository. The web is at <https://nexoralang.org>.
 
 ### Added
 
@@ -33,7 +44,7 @@ This version is not tagged or published: it is the repository state. It implemen
   `models.area(p)`, `models.Point(x: 1, y: 2)`. Records in a module are nominal: a `Point` from one module is not the `Point` from another.
 - **`pub`**: everything declared by a module is private unless marked with `pub`.
 - **New diagnostics**: `E2027` (unknown module), `E2028` (private name), `E2029` (circular import), and `E2030` (two modules with the same name).
-- **`nex symbols` and `nex context`** now include the names and functions of imported modules, with a new `file` field at the end of each object: the file that declares it, relative to the program and using `/`. `nex inspect` becomes `nexora.inspect/2`, with `imports`, `public`, and `qualifier`.
+- **`nex symbols` and `nex context`** now include the names and functions of imported modules, with a new `file` field at the end of each object: the file that declares it, relative to the program and using `/`. `nex inspect` stays `nexora.inspect/2` and gains, as added fields, `imports`, `public`, and `qualifier` in `TypeRef` and `RecordConstruction`.
 - **A new example**, `examples/modules/`, with a program and a module that imports it.
 
 ### Fixed
@@ -85,143 +96,451 @@ This version is tagged (`v0.10.0`) and published: the `nexora-lang` package is o
 ## 0.9.0 — Input, arguments, files, and permissions
 
 This version is tagged (`v0.9.0`) and published: the `nexora-lang` package is on PyPI and npm.
-It implements the [decision 0015](docs/decisions/0015-entrada-argumentos-archivos-y-permisos.md),
-which describes a program’s input, its arguments, and access to files with explicit permissions. The [0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) is not rewritten: its input part (D11) and effect system remain a proposal, and this version chooses another way to do the same.
+It implements [decision 0015](docs/decisions/0015-entrada-argumentos-archivos-y-permisos.md),
+which describes a program's input, its arguments, and access to files with explicit
+permissions. [0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) is not
+rewritten: its input part (D11) and its effect system are still a proposal, and this
+version decides another way of doing the same thing.
 
 ### Added
 
-- **Program arguments**: `args() -> List[Text]` returns the arguments with which the program was executed, written after `--`: `nex run program.nex -- one two`. They require no declaration.
-- **Standard input**: `input() -> Text` reads one line, without the line ending. When there is nothing left to read, the program stops with `E3009`. It requires no declaration.
-- **Files**: `read_file(path)` and `write_file(path, text)`. A program declares what it needs with `uses read "path"` or `uses write "path"`, and whoever runs it must allow it with `--allow-read=PATH` or `--allow-write=PATH`.
-- **The permissions model**: the effective capability is the intersection of what the program declares, what the runner grants, and what the environment permits. Declaring does not grant, granting does not enable, and the environment has final authority. Paths are confined to the resolved path: a `..` or a symbolic link leaving the granted scope is useless.
-- **Tools**: `nexora.context/1`
+- **Program arguments**: `args() -> List[Text]` returns the arguments the program was
+  run with, written after `--`: `nex run program.nex -- one two`. They require no declaration.
+- **Standard input**: `input() -> Text` reads one line, without the line ending. When there is
+  nothing left to read, the program stops with `E3009`. It requires no declaration.
+- **Files**: `read_file(path)` and `write_file(path, text)`. A program declares what it
+  needs with `uses read "path"` or `uses write "path"`, and whoever runs it has to allow it
+  with `--allow-read=PATH` or `--allow-write=PATH`.
+- **The permission model**: the effective capability is the intersection of what the program
+  declares, what whoever runs it grants, and what the environment allows. Declaring does not grant,
+  granting does not enable, and the environment has the last word. Paths are confined on the resolved path: a `..` or
+  a symbolic link that leaves the granted scope is of no use.
+- **Tools**: `nexora.context/1` adds the `capabilities` field, with what the program
+  declares; `nexora.inspect/2` adds the `UsesDecl` node and the `uses` field in `Program`. The format
+  numbers do not change.
 
-### Added
+### Changed
 
-- **A new built-in type**: `File`, with read/write permissions and access via `read_file` and `write_file`.
-- **A capability-based permission model**: the program, the runner, and the environment all declare what is allowed.
-- **`nex check`** now validates permission declarations and command-line flags.
-- **`nex run`** and `nex test` accept `--allow-read` and `--allow-write`.
-- **Examples** for file access and permission checks.
-
-### Fixed
-
-- The command-line interface used to accept a program even when permission flags had invalid paths; now they are validated at startup.
-- `read_file` and `write_file` no longer silently fall back to the working directory when given relative paths.
+- Only in programs that were already invalid: `uses` goes from reserved word to keyword, and
+  `read`, `write`, `args`, `input`, `read_file`, and `write_file` become predefined names.
+- The repository version becomes `0.9.0` and the specification `0.9`. The JSON schemas do not
+  change version: the new fields and nodes are additive.
 
 ### Documentation
 
-- Added a section in the language documentation describing the runtime permission model.
-- Updated the getting-started guide to cover `args()`, `input()`, and file access.
+- The [specification](docs/language-spec.md) moves to version 0.9 and documents input,
+  arguments, and files (section 8.3), with the grammar, the permissions, and the paths.
+- New [ADR 0015](docs/decisions/0015-entrada-argumentos-archivos-y-permisos.md).
+- Updated `diagnostics.md`, `limitations.md`, `cli-reference.md`, `playground.md`,
+  `architecture.md`, `roadmap.md`, `types.md`, `json-protocol.md`, `inspect-schema.md`, and `README.md`.
 
 ### Limitations
 
-- Permissions are evaluated at runtime, not statically.
-- File access is limited to the paths explicitly authorized by the runner and environment.
-- The permission model does not yet support directories with wildcard patterns.
+- Standard input cannot be read "until the end" without stopping: `input()` fails with `E3009`.
+- Only text files are read and written: there are no directories, binaries, renaming, or
+  deleting.
+- There is no network, no external processes, and no environment variables.
+- The playground and the MCP server do not allow files: the worker has no field in its
+  protocol to grant them.
 
-## 0.8.0 — Errors, diagnostics, and tooling
+## 0.8.0 — Immutable nominal records
 
-This version continues the stabilization of the command-line tools and diagnostics ecosystem. It includes improvements to the language server, formatter, and the analysis tooling.
+A repository state, not a published version: there is no tag and no package in any registry. This
+version implements [decision 0014](docs/decisions/0014-registros-nominales-inmutables.md), which
+accepts the D02 part (nominal versus structural records) of proposal
+[0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) within the scope
+actually implemented. The rest of 0012 is still a proposal and is not part of this
+version.
 
 ### Added
 
-- **New diagnostics** for syntax and analysis improvements.
-- **Language server support**: completion, hover, signature help, go-to-definition, type information, and references.
-- **Code formatter** for canonical source formatting.
-- **More examples** and test coverage for formatter and LSP output.
+- **Records**: a type the program declares, with immutable and required fields:
+  `type Point = { x: Int, y: Int }`. They are built with the fields by name
+  (`Point(x: 1, y: 2)`, in any order) and their fields are read with `p.x`, also chained
+  (`p.x.y`). A record is **nominal**: its identity is that of its declaration, not that of its name
+  nor of its fields, so two records with the same fields are different types (`E2011`) and
+  two values of the same record are compared by value.
+- **Nominal identity in the type model** (`types.py`): the `Nominal` variant and the opaque
+  `RecordIdentity` token, which the checker creates once per declaration and which travels in the
+  `CheckedProgram` to the interpreter. The interpreter does not rebuild it from the name.
+- **Tools**: `nex inspect` adds the `RecordDecl`, `FieldDecl`, `RecordConstruction`,
+  `FieldInitializer`, and `FieldAccess` nodes, the `FieldAssign` statement, and the `records` field at the end of
+  `Program`; `type` can be the name of a record. `nex context` adds the `records` field
+  (with `name`, `fields`, `valid`, `line`, and `reason`) and the value `records` in `features`. `types`
+  is still only for refined types.
+- **Diagnostics**: `E2023` (Invalid record construction, `type`), `E2024` (Invalid field access,
+  `type`), and `E2025` (Cannot reassign a field, `semantic`).
+- **Example** [`examples/records.nex`](examples/records.nex), with its output recorded in the
+  tests.
 
-### Fixed
+### Changed
 
-- Diagnostics now report better suggestions for unknown names and invalid syntax.
-- The formatter preserves language meaning while rewriting code into canonical form.
+- Only in programs that were already invalid: `p.x`, where `p` is a variable that is not a type,
+  goes from being `E1101` ("Expected '(' to call 'p.x'") to being a field access. The form of a
+  qualified call does not change: `Text.length(s)` and `name.length()` are still diagnosed the same,
+  and `Point.x` is still a qualified call, not reading a field.
+- The repository version becomes `0.8.0` and the specification `0.8`. The JSON schemas do not
+  change version: the new fields and nodes are additive.
 
 ### Documentation
 
-- Updated documentation for the language server and formatter integration with VS Code.
+- The [specification](docs/language-spec.md) moves to version 0.8 and documents records (4.6),
+  their grammar, their nominal equality, how they are printed, the table of diagnostics, and the limitations.
+- Updated `types.md`, `limitations.md`, `roadmap.md`, `architecture.md`, `index.md`,
+  `diagnostics.md`, `inspect-schema.md`, `json-protocol.md`, and `README.md`.
+- [Decision 0014](docs/decisions/0014-registros-nominales-inmutables.md) becomes accepted, with its
+  implementation. [0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md)
+  is not rewritten and is still a proposal for what is not implemented.
 
 ### Limitations
 
-- The language server and formatter are still experimental and may change.
+- A record has no methods, no functions of its own, no refinements, no recursion, and no type
+  parameters. A refined type cannot be built on a record (`E2016`).
+- A record cannot contain itself, neither directly nor through another record nor through
+  a list (`E2016`).
+- There is no `Option`, `Result`, enums, `match`, user generics, or data input.
 
-## 0.7.0 — Editor and analysis tools
+## 0.7.0 — Lists and `for` over lists
 
-This version adds the VS Code extension, language server, and static analysis outputs for IDE integration.
+A repository state, not a published version: there is no tag and no package in any registry. This
+version implements [decision 0013](docs/decisions/0013-listas-y-for.md), which accepts, within the scope
+actually implemented, parts D01 (type model), D08 (lists), and D09 (`for`) of proposal
+[0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md). The rest of
+0012 is still a proposal and is not part of this version.
 
 ### Added
 
-- **Language server** (`nexora/src/nexora/lsp.py`): supports document analysis, type information, symbol lookup, diagnostics, references, and formatting.
-- **VS Code extension**: integrates NEXORA with the editor.
-- **The language formatter** (`nexora/src/nexora/formatter.py`): rewrites a program into canonical form using the lexer tokens, so it does not change the meaning.
-- **Tests** (`tests/test_lsp.py`, `tests/test_formatter.py`, `tests/test_vscode_extension.py`): verify that the diagnostics from the server match the CLI, that the formatter does not change program semantics, and that the extension manifest and grammar stay in sync with the lexer.
+- **Immutable lists `List[T]`**: literals `[1, 2, 3]` and `[]`, inference from the first element,
+  homogeneity, nested lists, structural equality, and printing as `[1, 2, 3]`. An empty list
+  needs an expected type (`E2011`). The arguments of `List` are invariant and `Void` cannot
+  be an element.
+- **Functions of `List`**: `List.length`, `List.get`, `List.append`, `List.concat`, and
+  `List.contains`. `List.get` is partial and declares `requires 0 <= i and i < List.length(xs)`; an
+  index out of range stops the program with `E4001`. `append` and `concat` build new lists.
+- **`for` over lists**: `for x in xs { ... }`, with an immutable iterator of type `T`, a new
+  environment per iteration, `invariant` checked before each iteration and once after the last one, and
+  without `decreases` (`E2022`). The iterable is evaluated once and must be a `List[T]`. `break` and
+  `continue` still do not exist.
+- **Internal type model** (`types.py` and `type_adapter.py`): a structured representation of
+  primitives, `List[T]`, refined types, and type variables; identity, compatibility, substitution,
+  and unification. The canonical form of types is still text; the migration of the checker
+  is partial and the rules not migrated keep their strings.
+- **Tools**: `nex inspect` adds `arguments` to `TypeRef`, the `ListLiteral` node, and the
+  `For` node; `type` can be `List[...]`. `nex context` tells `while` and `for` apart in `loops.kind`.
+  `language_info()` includes `List` in `types`, so that an editor colors it like the other types.
+- **Example** [`examples/lists.nex`](examples/lists.nex), with its output recorded in the tests.
+
+### Changed
+
+- Only in programs that were already invalid: `for` and `in` go from reserved words to
+  keywords, and `[` and `]` become symbols. `List` and the names of its functions are not reserved: the
+  functions are called qualified (`List.length`).
+- The repository version becomes `0.7.0`. The JSON schemas do not change version: the new fields and
+  nodes are additive.
 
 ### Documentation
 
-- New [ADR 0017](docs/decisions/0017-un-editor-la-extension-de-vs-code.md), explaining the decision and why the language server and formatter are part of the language itself.
+- The [specification](docs/language-spec.md) moves to version 0.7 and documents lists (4.5), the
+  functions of `List` (8.2), `for` (9.6), compatibility, conversions, diagnostics, and
+  limitations.
+- New [ADR 0013](docs/decisions/0013-listas-y-for.md). [0012](docs/decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md)
+  is not rewritten and is still a proposal for what is not implemented.
+- Updated `types.md`, `limitations.md`, `roadmap.md`, `architecture.md`, `index.md`,
+  `diagnostics.md`, `inspect-schema.md`, and `README.md`.
+
+### Limitations
+
+- There is no syntactic indexing (`xs[i]`), element mutation, `List.set`, `map`, `filter`,
+  sorting, or a total variant of `List.get`.
+- All the elements of a list have the same type; `[]` and `for x in []` need an expected
+  type. A list cannot be refined (`E2016`).
+- A `for` does not count as a path that always returns: if it is the last statement of a function
+  that returns a value, a `return` is needed after it.
+- There is no `for` over ranges or `Text`, and no user generics.
+
+## Unpublished — editor
+
+An extension for Visual Studio Code, with its language server and its formatter, not yet
+published on the Visual Studio Code marketplace. They do not change the language: they only give it an editor. The
+extension is distributed separately, as a `.vsix`; the package published on PyPI and npm
+does not change.
+
+### Added
+
+- **The VS Code extension** (`vscode-nexora/`): syntax highlighting for `.nex` files, with
+  a grammar written over the real lexer, and automatic recognition of those files. It carries
+  its icon (the same mark as the site) and what the marketplace asks for, so it can be published there.
+- **The language server** (`nexora/src/nexora/lsp.py`): it speaks LSP over standard input and
+  output and answers with the same analysis the command line uses. It offers diagnostics (those
+  of `nex check`, with their code and their hint), completion, hover with the type of a value and the
+  signature of a function, go to definition, references, rename, the symbols of the document, and
+  signature help. It is run with `python -m nexora.lsp`, or the `nexora-lsp` command.
+- **The language formatter** (`nexora/src/nexora/formatter.py`): rewrites a program in its
+  canonical form, on the tokens of the lexer, so it does not change what it means. The editor uses it
+  to format the document or a selection, and optionally on save.
+- **The tests** (`tests/test_lsp.py`, `tests/test_formatter.py`, `tests/test_vscode_extension.py`):
+  that the diagnostics of the server are those of the command line, that the formatter does not change the
+  meaning of a program, and that the manifest and the grammar of the extension follow the lexer.
+
+### Documentation
+
+- New [ADR 0017](docs/decisions/0017-un-editor-la-extension-de-vs-code.md), which explains the
+  decision and why the server and the formatter belong to the language itself.
 
 ## Unpublished — server and web
 
-Changes in the web server (`server/`) and web app (`web/`) after the `v0.6.0` tag, still without a version. They are not part of 0.9.0, 0.10.0, or their packages: the language is documented above, and the server and web are deployed separately.
+Changes to the web server (`servidor/`) and the website (`web/`) after the `v0.6.0` tag, still without a
+version. They are not part of 0.9.0 or 0.10.0, nor of their packages: the language is documented
+above, and the server and the website are deployed separately.
 
 ### Added
 
-- **Anti-spam for sign-up and login** (`server/src/captcha.js`): Google reCAPTCHA v3, a honeypot field, and a strict per-client limit (5 registrations or 15 logins per hour) for every request without a token confirmed by Google. reCAPTCHA is only loaded in the browser if the person accepts it in the cookie panel; without it they can still log in, but only within that limit. The secret key goes in `RECAPTCHA_SECRET_KEY` and the site key in `web/js/consent-config.js`; at startup, the server warns if only one of the two is present.
-- **Login throttling by account** (`server/src/login-throttle.js`): after 5 failures from a client, that client waits progressively longer, up to 15 minutes; after 20 failures against an account from any client, each attempt waits up to one minute. It responds the same way for an email with an account and one without, and reserves each attempt before querying the database.
-- **Client limits with IPv6** (`server/src/rate-limits.js`): all limits count an IPv6 address by its `/56` block, and also each `/48` network with four times the quota. The `RateLimit-*` headers describe the account that was exhausted before, and each rejection includes `Retry-After`.
-- **Deletion of expired sessions** at startup and every hour, in batches, without overlapping passes (`server/src/session-cleanup.js`).
-- **Security headers on all responses** (`server/src/security-headers.js`): the content security policy (CSP) without inline code previously used by the playground and guide is applied to all pages, along with `X-Frame-Options`, `Cross-Origin-Opener-Policy`, `Permissions-Policy`, `Referrer-Policy`, and, in production and only over HTTPS, HSTS. The API has a policy that loads nothing.
-- `LISTEN_HOST`: the address the server listens on. With nginx on the same machine, `LISTEN_HOST=127.0.0.1` and `TRUST_PROXY=loopback`; at startup, the server warns if they do not match.
-- Web: fonts are served from the site itself (JetBrains Mono, with its OFL license) instead of Google Fonts, and the entire site uses JetBrains Mono; a cookie consent manager with Google Consent Mode v2; legal pages, still in draft form (see Limitations); and expanded web documentation: what NEXORA is, how it is tested, and recent changes.
+- **Anti-spam for sign-up and sign-in** (`servidor/src/captcha.js`): Google reCAPTCHA v3,
+  a honeypot field and a strict per-client limit (5 sign-ups or 15 sign-ins per hour) for
+  every request without a token that Google confirms. reCAPTCHA is only loaded in the browser if the
+  person accepts it in the cookie panel; without it you can still get in, with that limit. The secret
+  key goes in `RECAPTCHA_SECRET_KEY` and the site key in `web/js/consent-config.js`; at startup, the
+  server warns if only one of the two is set.
+- **Sign-in throttling per account** (`servidor/src/login-throttle.js`): after 5 failures from
+  a client, that client waits longer each time, up to 15 minutes; after 20 failures against an account
+  from any client, every attempt waits, at most one minute. It answers the same for an email
+  with an account and one without, and it reserves each attempt before querying the database.
+- **Per-client limits with IPv6** (`servidor/src/rate-limits.js`): all the limits count an IPv6
+  address by its /56 block, and also each /48 network with four times the quota. The
+  `RateLimit-*` headers describe the count that runs out first, and every rejection carries `Retry-After`.
+- **Deletion of expired sessions** at startup and every hour, in batches, without two passes
+  overlapping (`servidor/src/session-cleanup.js`).
+- **Security headers on every response** (`servidor/src/security-headers.js`): the
+  content security policy (CSP) without inline code that the playground and the guide had moves to every
+  page, plus `X-Frame-Options`, `Cross-Origin-Opener-Policy`, `Permissions-Policy`,
+  `Referrer-Policy` and, in production and only over HTTPS, HSTS. The API has a policy that loads
+  nothing.
+- `LISTEN_HOST`: the address the server listens on. With nginx on the same machine,
+  `LISTEN_HOST=127.0.0.1` and `TRUST_PROXY=loopback`; at startup, the server warns if they do not match.
+- Website: the fonts are served from the site itself (JetBrains Mono, with its OFL licence) instead
+  of Google Fonts, and the whole site uses JetBrains Mono; a cookie consent manager with
+  Google Consent Mode v2; the legal pages, still a draft (see Limitations); and broader web
+  documentation: what NEXORA is, how it is tested and the recent changes.
 - `GET /api/playground/status` says whether the playground is enabled (`{"enabled": true}` or `false`).
-  It also responds with the playground disabled and does not start the worker. The page checks this first: if disabled, it does not request `/info` or `/examples`.
-- Legal pages include `<meta name="robots" content="noindex, nofollow">` while they are drafts, and a test enforces it. It only tells search engines not to index them: it does not prevent opening them to anyone who has the link.
-- `GET /api/health`: says whether the process is running and responds to requests (`{"status":"ok","checks":{"http":"ok"}}`), and nothing more: it does not check MySQL, Google, GitHub, reCAPTCHA, or the playground, nor reveal the version or configuration. While shutting down it responds with 503.
-- **Graceful shutdown** (`server/src/lifecycle.js`): with `SIGTERM` or `SIGINT`, the server stops accepting new connections and responds with `Connection: close`, so a persistent connection does not keep it alive; it waits up to 10 s for in-flight requests and the batch of expired-session cleanup in MySQL (it sends none further); it closes the MySQL pool (up to another 10 s) and exits with 0, or with 1 if it had to cut something. If the other signal arrives during shutdown, it is not repeated; if the same signal arrives again, Node terminates the process immediately without waiting.
-  The timeout limit keeps the process alive until it expires: if the only pending task has no resource behind it (a pool close that never ends), the process no longer exits with 0 before the deadline without logging it; instead it waits for the limit, logs it, and exits with 1. This was tested with automated tests on Windows (Node 20.6.1, 22.23.3, and 24.21.0), without real signals: with systemd, untested.
-- **MySQL integration tests, prepared but never executed** (`server/test/integration/`).
-  `npm run test:integration` would execute the application’s real queries against an isolated test database (`nexora_test`), with one account for migrations and another for the application, which an administrator would have to create manually with `setup-admin.sql` (a pending proposed review).
-  They are not part of `npm test` or continuous integration. Before loading anything, guards reject any other environment (variables `DB_*`, another server, an enableable playground, or permissions different from those expected), and a named lock (`GET_LOCK`) prevents two executions at once.
-  The guards only accept Node 22 from 22.22.3 and Node 24 from 24.14.0 (`HOOK_MINIMUMS` in `server/test/integration/guard.js`): these are the minima measured on Windows for the module hook in `preflight.js`, not those in `engines` in `server/package.json` (`^22.23.2 || ^24.18.1`), and an `npm test` check ensures that everything accepted by `engines` falls within it. Other branches (23, 25, 26, and newer) and versions not exactly X.Y.Z are rejected until measured. In the measured versions below those minima, the hook also blocked mysql2 in the legitimate order; the cause is not confirmed. On a Node version the guards do not permit, `npm test` skips, with its reason, the 14 tests that launch `preflight.js`: this happened in the experimental Node 26 run of the 21 October 2026 CI. **None of this has run against a real MySQL**: neither the administration SQL, nor the migrations with reduced permissions, nor the lock.
+  It also answers with the playground disabled and does not start the worker. The page asks it
+  first: when disabled, it does not request `/info` nor `/examples`.
+- The legal pages carry `<meta name="robots" content="noindex, nofollow">` while they are a
+  draft, and a test requires it. It only asks search engines not to index them: it does not prevent
+  anyone with the link from opening them.
+- `GET /api/health`: says whether the process is running and answering requests
+  (`{"status":"ok","checks":{"http":"ok"}}`), and nothing else: it does not check MySQL, Google, GitHub,
+  reCAPTCHA nor the playground, nor does it reveal the version or the configuration. During shutdown it answers 503.
+- **Graceful shutdown** (`servidor/src/lifecycle.js`): on `SIGTERM` or `SIGINT`, the server stops
+  accepting connections and answers with `Connection: close`, so that a persistent connection does not
+  hold it back; it waits up to 10 s for the requests in progress and for the batch of session deletion that is
+  in MySQL (it sends no more); it closes the MySQL pool (another 10 s at most) and exits with 0, or
+  with 1 if it had to cut something. If the other signal arrives during the shutdown,
+  it is not repeated; if the same one arrives again, Node ends the process on the spot, without waiting.
+  The limit of each wait keeps the process alive until it expires: if the only thing pending has
+  no resource behind it (a pool close that does not finish), the process no longer exits with 0 ahead of
+  time without logging it, but waits for the limit, logs it and exits with 1. Tested with automated
+  tests on Windows (Node 20.6.1, 22.23.3 and 24.21.0), without real signals: with systemd, not
+  tested.
+- **Integration tests with MySQL, prepared and never run** (`servidor/test/integration/`).
+  `npm run test:integration` would run the real queries of the application against an isolated test
+  database (`nexora_test`), with one account for the migrations and another for the application, which an
+  administrator would have to create by hand with `setup-admin.sql` (a proposal pending review).
+  They are not part of `npm test` nor of continuous integration. Before loading anything, some guards
+  reject any other environment (`DB_*` variables, another server, a playground that can be enabled, or grants
+  different from the expected ones), and a named lock (`GET_LOCK`) prevents two runs at once.
+  The guards only accept Node 22 from 22.22.3 and Node 24 from 24.14.0 (`HOOK_MINIMUMS` in
+  `servidor/test/integration/guard.js`): these are the minimums measured on Windows for the module hook of
+  `preflight.js`, not those of `engines` in `servidor/package.json` (`^22.23.2 || ^24.18.1`), and a test
+  of `npm test` checks that everything `engines` accepts is inside. The other branches (23, 25, 26 and
+  later) and versions that are not exactly X.Y.Z are rejected until they are measured. In the
+  measured versions below those minimums, the hook blocked mysql2 also in the legitimate order;
+  the cause is not confirmed. On a Node the guards do not accept, `npm test` skips, with their reason, the 14 tests that launch
+  `preflight.js`: that is what happened in the experimental Node 26 run of continuous integration
+  on 21 October 2026. **None of this has been run against a real
+  MySQL**: neither the administration SQL, nor the migrations with reduced grants, nor the lock.
 
 ### Incompatible changes
 
-- **The server requires Node.js 22.23.2 or later on the 22 branch, or 24.18.1 or later on the 24 branch** (`engines` in `server/package.json`: `^22.23.2 || ^24.18.1`; previously 20.6 or later). Node 20 is unsupported as of 30 April 2026, and the minimums are the latest security versions of each branch in October 2026. Branches 23, 25, and 26 are excluded. npm only warns (`EBADENGINE`) on another version; it does not prevent installation. Within range, local Windows tests have been run on 22.23.3 and 24.21.0; the exact minimums have not. The server CI now tests 22.23.2, 24.18.1, the latest release of the 22 and 24 branches, and, without blocking, Node 26; it was first run on 21 October 2026.
-- **With `NODE_ENV=production`, `PLAYGROUND_ENABLED=true` requires the container command in `PLAYGROUND_WORKER_COMMAND`.** Without it (or with a process command), the server does not start: the process mode executes the visitors’ code with the server’s permissions. Outside production, process mode remains available for local testing. Configuring the container command does not prove that isolation works: it is still unverified with real Docker.
+- **The server requires Node.js 22.23.2 or later on the 22 branch, or 24.18.1 or later on the 24
+  branch** (`engines` in `servidor/package.json`: `^22.23.2 || ^24.18.1`; before, 20.6 or later). Node 20
+  has had no support since 30 April 2026, and the minimums are the latest security releases
+  of each branch in October 2026. Branches 23, 25 and 26 are left out. npm only warns (`EBADENGINE`)
+  with another version, it does not prevent installing. Within the range, 22.23.3 and 24.21.0 have been tested locally, on Windows;
+  the exact minimums have not. The continuous integration of the server now tests 22.23.2,
+  24.18.1, the latest of branches 22 and 24 and, without blocking, Node 26; it ran for the first time on
+  21 October 2026.
+- **With `NODE_ENV=production`, `PLAYGROUND_ENABLED=true` requires the container command** in
+  `PLAYGROUND_WORKER_COMMAND`. Without it (or with a process command), the server does not start: process
+  mode runs the visitors' code with the permissions of the server. Outside production,
+  process mode is still available for testing on your own machine. Configuring the container
+  command does not prove that the isolation works: it is still unchecked with real Docker.
 
-- **`NODE_ENV` only accepts `development`, `test`, or `production`, in lowercase.** Previously any value other than `production` (`Production`, `prod`, empty) left the server in development mode, without cookies only over HTTPS. Now those values prevent startup. If undefined, it continues to work as development, and the server warns at startup.
-- **`TRUST_PROXY` only accepts `0`, `loopback`, or an integer from 1 to 10 without leading zeros.** Before it was read with `Number()`: `true` or `nginx` gave `NaN` with no warning. Now any other value prevents startup. With nginx on the same machine, `loopback` is recommended instead of `1`.
-- `LISTEN_HOST` only accepts an IP address or empty; a host name, including `localhost`, prevents startup.
-- With `NODE_ENV=production` and `RECAPTCHA_SECRET_KEY`, a missing `RECAPTCHA_HOSTNAMES` prevents startup.
-  `RECAPTCHA_MIN_SCORE` outside the range 0 to 1, or `RECAPTCHA_HOSTNAMES` that is not a list of domains, also does.
-- **In production without `RECAPTCHA_SECRET_KEY`, all registrations and logins go through the strict limit** (5 registrations or 15 logins per client per hour). In development nothing changes.
-- The account API has new responses: `429` with `code: "login_throttled"` and `Retry-After` during login throttling; `400` with `captcha_invalid` or `captcha_expired`; and `429` with `captcha_required` under the strict limit. A `website` field with content is rejected with `400`.
+- **`NODE_ENV` only accepts `development`, `test` or `production`, in lower case.** Before, any
+  value other than `production` (`Production`, `prod`, empty) left the server in development, without
+  HTTPS-only cookies. Now those values prevent starting. Undefined still works as
+  development, and the server warns about it at startup.
+- **`TRUST_PROXY` only accepts `0`, `loopback` or an integer from 1 to 10 without leading zeros.**
+  Before, it was read with `Number()`: `true` or `nginx` gave `NaN` without any warning. Now any other
+  value prevents starting. With nginx on the same machine, `loopback` is recommended instead of `1`.
+- `LISTEN_HOST` only accepts an IP address or being empty; a name, `localhost` included, prevents
+  starting.
+- With `NODE_ENV=production` and `RECAPTCHA_SECRET_KEY`, a missing `RECAPTCHA_HOSTNAMES` prevents starting.
+  So does a `RECAPTCHA_MIN_SCORE` outside 0 to 1, or a `RECAPTCHA_HOSTNAMES` that is not a list of domains.
+- **In production without `RECAPTCHA_SECRET_KEY`, every sign-up and sign-in goes through the
+  strict limit** (5 sign-ups or 15 sign-ins per client and hour). In development nothing
+  changes.
+- The accounts API has new responses: `429` with `code: "login_throttled"` and `Retry-After`
+  during sign-in throttling; `400` with `captcha_invalid` or `captcha_expired`; and `429`
+  with `captcha_required` on the strict limit. A `website` field with content is rejected with `400`.
 
-- **The playground is disabled unless it is explicitly enabled.** Previously it was always enabled whenever `PLAYGROUND_ENABLED` was not exactly `false`: if undefined, empty, or mistyped (`False`, `0`), it remained open. Now only `PLAYGROUND_ENABLED=true` enables it; if undefined, empty, or `false`, the API responds with 503 (`playground_disabled`) and no worker starts. A local installation that wants to use the playground must add `PLAYGROUND_ENABLED=true` to its `server/.env`.
-- Any other value of `PLAYGROUND_ENABLED` (`True`, `1`, `yes`…) prevents the server from starting, with a message asking for `"true"` or `"false"`.
-- **The only container command accepted by `PLAYGROUND_WORKER_COMMAND` is the documented one.** It must begin with `"docker","run"`, include exactly once each isolation option and resource limits from `server/.env.example` with their exact value, including `"--init"`, `"--pull","never"`, `"--name","{container}"`, and end at the image. Any other container command prevents the server from starting, even if the playground is disabled, with a message naming the failure. This includes an option missing, repeated, having another value, or not on the list, such as aliases `-m`, `-u`, `--net`, or `--interactive`; the form `--option=value`; anything after the image; a path to the executable, `docker.exe`, `sudo`, Podman, `docker container run`, or global Docker options. What comes after the image is not applied by Docker, but received by the program inside the container. With the earlier validation, a `"--name","{container}"` written behind the image was accepted (confirmed with the previous validator), and according to the code the server could consider a still-running container as deleted; this has not been observed with real Docker. To update an existing configuration, copy the command from `server/.env.example`. Changing a limit requires changing the server (`server/src/playground/config.js`), not just `server/.env`.
-- **Only the local image `nexora-worker` runs, and Docker never downloads it.** The image must be `nexora-worker` or `nexora-worker:<tag>`: no other name, path, registry, or digest is allowed. `"--pull","never"` means that if the image is not on the machine, execution fails instead of downloading it. The image must be built on the server before enabling the playground and after each update (see the [playground guide](docs/playground.md#3-worker-image)). `--pull` requires Docker 20.10 or later.
-- Process-mode commands remain unvalidated except for those containing `{container}` or an executable called `docker` or `podman`: they are treated as container commands and rejected if they are not the documented one.
+- **The playground is disabled unless it is enabled explicitly.** Before, it was enabled
+  whenever `PLAYGROUND_ENABLED` was not exactly `false`: undefined, empty or with a typo
+  (`False`, `0`), it was left open. Now only `PLAYGROUND_ENABLED=true` enables it; undefined,
+  empty or `false`, the API answers 503 (`playground_disabled`) and no worker starts. A
+  local installation that wants to use the playground has to add `PLAYGROUND_ENABLED=true` to its
+  `servidor/.env`.
+- Any other value of `PLAYGROUND_ENABLED` (`True`, `1`, `yes`…) prevents the server from starting,
+  with a message that asks for `"true"` or `"false"`.
+- **The only container command `PLAYGROUND_WORKER_COMMAND` accepts is the documented one.** It has
+  to start with `"docker","run"`, carry exactly once each isolation and limit option
+  of `servidor/.env.example` with its exact value, among them `"--init"`,
+  `"--pull","never"` and `"--name","{container}"`, and end with the image. Any other container
+  command prevents the server from starting, even if the playground is disabled, with a message that
+  names what fails. That includes an option that is missing, repeated, has another value or is not in the
+  list, such as the aliases `-m`, `-u`, `--net` or `--interactive`; the `--option=value` form; anything
+  after the image; a path to the executable, `docker.exe`, `sudo`, Podman,
+  `docker container run` or global Docker options. What goes after the image is not applied by
+  Docker, but received by the program of the container. With the previous check, a
+  `"--name","{container}"` written after the image was accepted (checked with the previous
+  validator) and, according to the code, the server could take as removed a container that was still alive;
+  it has not been observed with real Docker. To update an existing configuration, copy the command
+  from `servidor/.env.example`. Changing a limit requires changing the server
+  (`servidor/src/playground/config.js`), not just `servidor/.env`.
+- **Only the local image `nexora-worker` is run, and Docker never downloads it.** The image
+  has to be `nexora-worker` or `nexora-worker:<tag>`: no other name, path,
+  registry nor digest is accepted. `"--pull","never"` makes the run fail, if the image is not on the machine,
+  instead of downloading it. The image has to be built on the server before
+  enabling the playground and on every update (see the
+  [playground guide](docs/playground.md#3-worker-image)). `--pull` needs Docker 20.10 or
+  later.
+- The process mode commands are still not checked, except those that contain `{container}` or
+  an executable called `docker` or `podman`: those are treated as container commands and are
+  rejected if they are not the documented one.
 
 ### Fixed
 
-- **A container that times out no longer keeps running with its slot released.** Previously, the server could assign the next execution to the same container slot while the previous container was still running after being killed or timing out. That race is now blocked by a lock and a “busy” state on the worker slot.
-- **The lock and cleanup of the worker lifecycle no longer leave stale containers behind when the server crashes or is killed.** The worker is tracked by name and the server deletes it if it remains after timeout or shutdown.
-- **The API `/api/playground/status` no longer returns stale state when the worker is starting or restarting.** It reports the current actual status and does not get confused by race conditions.
-- **The legal pages are no longer indexed by default** due to the `noindex` meta tag and link strategies.
-- **Security headers are now set consistently across all routes**, including API and static files.
+- **A container that times out no longer keeps running with its slot released.** Before, the
+  server killed the `docker run` client, which does not stop the container, and released the slot at that
+  moment. According to the code, that allowed more live containers than
+  `PLAYGROUND_MAX_CONCURRENT`; it has not been observed with real Docker, because container mode
+  has not been tested yet. Now each
+  container has a name generated by the server; if it does not end well, it is removed by that
+  name and the slot is only released when it is confirmed that it no longer exists. The attempts to remove it
+  are limited; if none confirms, the slot stays occupied.
+- **The Run button of the playground is visible again on mobile.** At 390 px it was cut off and at 320 and 360 px
+  it could not be seen; only the Ctrl+Enter shortcut was left. Below 440 px the four buttons now go in
+  two rows.
+- **With the playground disabled, the page no longer looks ready to run.** Before, it showed
+  «Real interpreter» with a green dot and Run and Check enabled, and every load got two 503
+  responses. Now it says «Disabled», Run and Check are disabled (their shortcuts too), the help and the footer
+  do not say that the code runs, and it sends no run request. While it waits for the
+  server's answer it says «Connecting…». If the server does not confirm whether it is enabled (it does not
+  answer or answers something the page does not understand), it says «Status unknown» and does not let you run either:
+  Run and Check are only enabled when the server confirms it. «Real interpreter» in green only
+  appears if the interpreter answered as well; otherwise, «Unavailable». When enabled, it behaves as before.
+- The sign-up form fits entirely, button included, on a 1366×768 screen. Sign-in
+  already fitted and does not change.
+- **Sign-up is atomic.** Before, the account was created and then, separately, its first session: if the
+  session could not be saved, the account was left created, the person got an error and, when trying
+  again, a 409. Now the account and the session are saved in a single transaction, the cookie is only
+  sent after confirming it, and the password hash is computed before opening it, so as not to
+  hold a pool connection during scrypt. If the `ROLLBACK` also fails, the original error is the one that counts
+  (a duplicate email still answers 409) and that connection does not go back to the pool, because it could
+  have been left with the transaction open: it is destroyed. The `ROLLBACK` failure is logged
+  with its type and its code (`auth: sign-up rollback failed (Error ER_ERROR_DURING_ROLLBACK)`), without the
+  message nor any data of the request. Tested with a simulated database; against real MySQL, the
+  test is prepared and not run.
+- Sign-in with Google or GitHub follows the same rule in its transaction: if the
+  `ROLLBACK` fails, the original error is the one that counts (for example, `account_exists` is still `account_exists`), the
+  connection is destroyed instead of going back to the pool (only once, never returned and destroyed) and a
+  line `oauth: <provider>: rollback failed (…)` without data is left. Before, a failed `ROLLBACK` replaced the
+  original error and the connection went back to the pool. Tested with a simulated database.
+- **The server log no longer copies whole errors.** An internal error of the application or
+  of sign-in with Google or GitHub wrote the complete object, which in a MySQL error
+  includes the query and the message of the server (with the email, for example). Now only the
+  type and a known code are written (`Error ER_DUP_ENTRY`, `ProviderError token_http_500`), never the message,
+  the stack, the query, the token, the authorization code nor the secret. The route is written by its
+  template (`/api/auth/:provider/callback`), never by the requested path nor its query string; without
+  a matching route, `(no route)`. The deletion of expired sessions follows the same rule: before, it
+  wrote the message of the error when it had no code.
+- Google: an account is only created or linked if `email_verified` is exactly `true`; before,
+  any value JavaScript takes as true was enough. A profile without an identifier, or a list
+  of GitHub emails that is not a list, are now a provider failure with their own code.
+- A password hash stored with extra fields (`…$extra`) is no longer accepted as valid: the
+  format has to be exactly that of `hashPassword`.
+
+### Documentation
+
+- `servidor/.env.example` leaves the playground at `false`, and the [playground guide](docs/playground.md)
+  keeps it disabled on a public server until the
+  [isolation check](docs/playground.md#checking-the-isolation) is complete. The checks
+  that need the playground enabled are done in a controlled environment, without public exposure.
+- Linux checked ([Tests](docs/testing.md#linux)): on Ubuntu 24.04 under WSL 2 the
+  automated tests of `nexora/` pass with Python 3.11, 3.12 and 3.13 (also the four POSIX ones, which
+  had never been run) and those of `npm/` and `servidor/`, and the pip and npm packages install
+  and work. No code had to change. Docker and the isolation of the playground are still
+  unchecked.
+- Deployment ([playground guide](docs/playground.md#deploying-on-your-own-server)): nginx with
+  redirection from HTTP to HTTPS, `limit_req`, `server_tokens off` and the `http2 on` syntax of
+  current versions; `TimeoutStopSec` in systemd; the health route; and MySQL backups and
+  restore. **None of it has been tested** with real nginx, systemd or MySQL: the guide
+  says so in each section.
 
 ### Limitations
 
-- Container isolation remains **unverified**: this change prevents enabling the playground by accident, but it does not make it more secure once enabled.
-- None of this has been tested with real Docker. The command tests only parse the argument list, without running Docker; lifecycle tests (deleting containers, occupied slots, missing image) use a fake Docker. If the server crashes, no one deletes the running containers it had started.
-- What counts as a container command is decided solely by the documented names. A wrapper script, another tool (`nerdctl`…), or a Docker executable with another name is outside detection: it is not an accepted way to run containers, and the server would not validate its command or delete its containers.
-- Validating the command does not guarantee the effective Docker daemon configuration or runtime.
-- The local tag (`nexora-worker` or `nexora-worker:<tag>`) is mutable: anyone with access to the Docker daemon can retag another image with that name, and the server would run it without noticing. Whether the Nexora image runs depends on access control to the machine and the Docker daemon.
-- Docker rootless mode is not supported: the command does not allow `-H` or `--context`, and the server only passes `PATH` and `SystemRoot` to the commands it launches.
-- Anti-spam, login throttling, session cleanup, and headers have been tested with the database, Google reCAPTCHA, and the browser simulated: not against a real MySQL, real reCAPTCHA keys, in a real browser, or behind nginx. The automated server tests, using the same mocked services, report 811 passing and 0 failing on Node 24.21.0 (one run, Windows 11, with integration-test guards limited to measured branches). Before this change they reported 810 passing and 0 failing with Node 24.21.0 (in each of three runs), 24.14.0, 22.23.3, and 22.22.3, and 796 passed, 14 skipped (those needing Node 22.22.3 or later on the 22 branch, or 24.14.0 or later) and 0 failed with Node 20.6.1 and 22.15.0 (one run with each version) on Windows 11. The `engines` minimums (22.23.2 and 24.18.1) have not been run. On Ubuntu 24.04 under WSL 2, they ran before the latest web fixes (567 passed, 0 failed, in each of three runs) ([Tests](docs/testing.md)).
-- Rate-limit counters and login-throttle counters are in memory: they are lost on restart and are not shared across multiple server instances.
-- In Google or GitHub login, the session is created outside the account transaction and its linkage; if it fails, the account remains linked without a session until the next attempt. During shutdown, a second `SIGTERM` or `SIGINT` terminates the process without completing cleanup, and the 503 from `/api/health` only reaches connections already open. The automated tests, on Windows with the mocked database, cover OAuth-session failure and retry, the 503 during shutdown, and rejection of new connections. They do not cover a second signal of the same type or two simultaneous first logins from the same identity, which remain untested. Real MySQL tests, real OS signals, systemd, and nginx remain pending ([Pending tasks and risks](docs/playground.md#pending-tasks-and-risks)).
-- The legal pages are still draft pages without the owner’s data or legal review: they should not be published as-is. Risks and pending decisions (Analytics and its CSP, the `409` that reveals whether an email has an account, cancellation of MySQL queries): [Pending tasks and risks](docs/playground.md#pending-tasks-and-risks).
+- Container isolation is still **unchecked**: this change prevents enabling the playground by
+  mistake, but it does not make it safer once enabled.
+- None of this has been tested with real Docker. The tests of the command only analyse the list of
+  arguments, without running any Docker; those of the life cycle (removing containers, occupied
+  slot, missing image) use a fake Docker. If the server crashes, nobody removes the
+  containers it had running.
+- What a container command is is decided only by the documented names. A wrapper
+  script, another tool (`nerdctl`…) or a Docker executable with another name are outside
+  the detection: they are not a supported way of running containers, and the server would not validate
+  their command nor remove their containers.
+- Validating the command does not guarantee the effective configuration of the Docker daemon nor of its runtimes.
+- The local tag (`nexora-worker` or `nexora-worker:<tag>`) is mutable: whoever has access
+  to the Docker daemon can re-tag another image with that name, and the server would
+  run it without noticing. That the Nexora image is the one that runs depends on the access control to the
+  machine and to the Docker daemon.
+- Docker in *rootless* mode is not supported: the command does not allow `-H` nor `--context`, and the
+  server only passes `PATH` and `SystemRoot` to the commands it launches.
+- The anti-spam, the sign-in throttling, the session deletion and the headers have been tested
+  with the database, Google reCAPTCHA and the browser simulated: not against a real MySQL, with real
+  reCAPTCHA keys, in a browser nor behind nginx. The automated tests of the server,
+  with those same simulated services, give 811 passed and 0 failures with Node 24.21.0 (one run,
+  on Windows 11, with the guards of the integration tests limited to the measured branches). Before
+  that change they gave 810 passed and 0 failures with Node 24.21.0 (in each of
+  three runs), 24.14.0, 22.23.3 and 22.22.3, and 796 passed, 14 skipped (those that need Node
+  22.22.3 or later on the 22 branch, or 24.14.0 or later) and 0 failures with Node 20.6.1 and 22.15.0 (one
+  run with each of those versions), on Windows 11. With the minimums of `engines` (22.23.2 and
+  24.18.1) they have not been run. On Ubuntu 24.04 under WSL 2 they were run before the latest fixes of the website
+  (567 passed, 0 failures, in each of three runs) ([Tests](docs/testing.md)).
+- The counters of the limits and of the sign-in throttling are in memory: they are lost on
+  restart and are not shared between several instances of the server.
+- In sign-in with Google or GitHub, the session is created outside the transaction of the account and
+  its link: if it fails, the account is left linked without a session until the next attempt. During
+  shutdown, a second `SIGTERM` or `SIGINT` ends the process without completing the cleanup, and the 503 of
+  `/api/health` only arrives over connections already open. The automated tests, on Windows and with the
+  simulated database, cover the failure of the OAuth session and the retry, the 503 during
+  shutdown and the rejection of new connections. They do not cover the second signal of the same type nor two
+  simultaneous first sign-ins with the same identity, which are still untested. Still pending are
+  tests against a real MySQL, with real operating system signals, with systemd and behind
+  nginx ([Pending tasks and risks](docs/playground.md#pending-tasks-and-risks)).
+- The legal pages are a draft without the details of the owner nor legal review: they must not be
+  published like this. Risks and pending decisions (Analytics and its CSP, the `409` that reveals whether an email
+  has an account, the cancellation of MySQL queries):
+  [Pending tasks and risks](docs/playground.md#pending-tasks-and-risks).
 
 ## 0.6.0 — Text operations that declare their requirements
 

@@ -12,7 +12,7 @@ that **today**, precisely, and what is still an intention.
 | **Structured data for tools** | Diagnostics, syntax tree, symbols and summary of the program as JSON, with [versioned schemas](json-protocol.md) | Implemented and tested |
 | **Python API** | The `nexora.tooling` module: the same outputs, without going through the command line | Implemented and tested. **Experimental**: it may change before 1.0 |
 | **MCP server** | An optional server that offers the analysis as tools to a compatible assistant ([MCP](mcp.md)) | Implemented and tested with the client of the official SDK. Checked by hand in a Claude Code session; **in no other assistant** |
-| **Language server (LSP)** | Integration with editors ([LSP](lsp.md)) | **Planned. It does not exist** |
+| **Language server (LSP)** | Integration with editors ([LSP](lsp.md)): diagnostics, completion, hover, navigation, rename and formatting | Implemented and tested (`nexora-lsp`). Used by the VS Code extension; it does not resolve imports yet |
 | **Research goal** | Finding out whether these decisions make it easier for an automated tool to understand, generate or fix code | **Not evaluated** |
 | **Integrations with AI models** | Calls to models, code generation, an assistant of its own | **They do not exist** |
 
@@ -387,7 +387,7 @@ The complete rules, the history and the JSON Schema files are in
   structured edit with a position and replacement text.
 - **Messages are in English** and their wording may change; what is stable is the code.
 - **The JSON of `nex run` only appears if there is a failure**, and it goes to the standard error.
-- **There is no language server or formatter.** The [LSP](lsp.md) is planned, not implemented.
+- **The language server does not resolve imports**, and the formatter is only reachable through it: there is no `nex` command for it ([LSP](lsp.md#limitations)).
 - **The Python API is experimental**, and the other modules are internal and may change without notice.
 - **The MCP server has only been tested in one assistant** (Claude Code, a manual session), besides
   the automated tests with the SDK client.

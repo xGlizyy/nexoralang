@@ -260,7 +260,7 @@ Notes:
 
 ### Limits
 
-- **A single file only.** There are no modules, so there is no cross-file context.
+- **Modules are included.** When the program uses `import`, the summary also describes the functions of the imported modules, each with the `file` that declares it ([decision 0018](decisions/0018-modulos-e-importaciones.md)).
 - **It does not say what the program does.** It describes its structure. To know what it prints, you must run it (`nex run`).
 - **It cannot see what depends on values.** That `ok` is `true` does not mean the program will not divide by zero or violate a contract.
 - **With syntax errors the summary is partial**, and a function whose declaration has an error disappears entirely. With lexical errors there is no structure.
@@ -881,7 +881,7 @@ How it is computed: the checker records each declaration as it processes it and,
 
 Limits:
 
-- No index and no cross-file search: the language is still single-file.
+- No index and no search beyond the program and the modules it imports: a file that nothing imports is not seen.
 - A name that could not be resolved (an `E2005` error) is not a reference to any symbol.
 - With syntax errors, the list is partial (`complete` is `false`): it only includes declarations in the code that could be analyzed.
 - `symbols` is `null` if there are lexical errors.
