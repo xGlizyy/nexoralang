@@ -5,16 +5,20 @@ and the same literals come out, only their spacing and their indentation
 change. A program that checks keeps checking, and formatting it twice gives
 the same result as formatting it once.
 
-The language is written line by line, so the formatter never joins two lines
-nor splits one: it re-indents each line and puts the canonical spaces between
-the tokens of that line. Comments are kept where they are, at the indentation
-of their line.
+The language is written line by line, so the formatter works on each line of
+the text as it is: it never joins two lines nor splits one, and the result has
+the same lines as the source, each with its own line ending. It re-indents each
+line and puts the canonical spaces between the tokens of that line. The lexer
+does not keep comments, so they are taken from the text: a comment stays on its
+line, after the code of that line, and a blank line stays blank. If a line holds
+anything that is neither a token nor a comment, the program is not formatted.
 
 This is what the language server of the editor uses (see `lsp.py`).
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from .diagnostics import Source
@@ -45,6 +49,11 @@ _SPACE_AFTER = frozenset({
 })
 # The tokens that end a statement and are followed by nothing.
 _STATEMENT_END = frozenset({TokenType.RBRACE, TokenType.RBRACKET, TokenType.RPAREN})
+# A line and its ending, with the same line breaks the lexer reads: `\r\n`, `\n` or a lone `\r`.
+_LINE = re.compile(r"([^\r\n]*)(\r\n|\n|\r|$)")
+# The tokens that open and close a group whose lines go one step further in.
+_OPEN_GROUP = frozenset({TokenType.LPAREN, TokenType.LBRACKET})
+_CLOSE_GROUP = frozenset({TokenType.RPAREN, TokenType.RBRACKET})
 
 
 @dataclass(frozen=True)
@@ -60,12 +69,16 @@ def format_source(source: str, filename: str = "program.nex") -> FormatResult:
 
     A program with lexical errors is returned unchanged: the formatter cannot
     know what the text meant, and rewriting it anyway could change what it
-    means.
+    means. So is a program with a line it cannot account for, rather than lose
+    what is on it.
     """
     tokens, diagnostics = tokenize(Source(filename, source))
     if diagnostics:
         return FormatResult(source, False)
-    return FormatResult(_render(tokens), True)
+    text = _render(source, tokens)
+    if text is None:
+        return FormatResult(source, False)
+    return FormatResult(text, True)
 
 
 def format_range(source: str, start_line: int, end_line: int, filename: str = "program.nex") -> FormatResult:
@@ -87,44 +100,60 @@ def format_range(source: str, start_line: int, end_line: int, filename: str = "p
     return FormatResult("\n".join(lines[:start_line - 1] + formatted[start_line - 1:end_line] + lines[end_line:]), True)
 
 
-def _render(tokens: list[Token]) -> str:
-    """The text with the canonical shape."""
-    lines = _lines(tokens)
-    rendered = [_render_line(line, depth) for line, depth in lines]
-    text = "\n".join(rendered)
-    if not text.endswith("\n"):
-        text += "\n"
-    return text
-
-
-def _lines(tokens: list[Token]) -> list[tuple[list[Token], int]]:
-    """The tokens of each line, with the depth of the block they belong to."""
-    grouped: list[list[Token]] = []
-    current: list[Token] = []
+def _render(source: str, tokens: list[Token]) -> str | None:
+    """The text with the canonical shape, or None if a line holds something it cannot place."""
+    by_line: dict[int, list[Token]] = {}
     for token in tokens:
-        if token.type is TokenType.NEWLINE:
-            if current:
-                grouped.append(current)
-                current = []
-            continue
-        if token.type is TokenType.EOF:
-            break
-        current.append(token)
-    if current:
-        grouped.append(current)
-    lines: list[tuple[list[Token], int]] = []
-    depth = 0
-    for line in grouped:
-        # A line that closes a block is written one step back.
+        if token.type not in (TokenType.NEWLINE, TokenType.EOF):
+            by_line.setdefault(token.span.line, []).append(token)
+
+    out: list[str] = []
+    depth = 0   # Blocks open: `{`.
+    group = 0   # Parentheses and brackets open: `(` and `[`.
+    for number, (text, ending) in enumerate(_physical_lines(source), start=1):
+        line = by_line.get(number, [])
         own = depth
         if line and line[0].type is TokenType.RBRACE:
+            # A line that closes a block is written one step back.
             own = max(0, depth - 1)
-        lines.append((line, own))
+        elif group > 0 and not (line and line[0].type in _CLOSE_GROUP):
+            # A line that continues an open group goes one step further in.
+            own = depth + 1
+        if line:
+            # Everything after the last token is whitespace or a comment: a comment
+            # runs to the end of the line, so none can be between two tokens.
+            rest = text[line[-1].span.end_column - 1:].strip()
+            if rest and not rest.startswith("//"):
+                return None
+            rendered = _render_line(line, own) + (" " + rest if rest else "")
+        else:
+            rest = text.strip()
+            if rest and not rest.startswith("//"):
+                return None
+            rendered = INDENT * own + rest if rest else ""
+        out.append(rendered + ending)
         for token in line:
             if token.type is TokenType.LBRACE:
                 depth += 1
             elif token.type is TokenType.RBRACE:
                 depth = max(0, depth - 1)
+            elif token.type in _OPEN_GROUP:
+                group += 1
+            elif token.type in _CLOSE_GROUP:
+                group = max(0, group - 1)
+
+    result = "".join(out)
+    if result and not result.endswith(("\n", "\r")):
+        result += "\n"
+    return result
+
+
+def _physical_lines(source: str) -> list[tuple[str, str]]:
+    """Each line of the text and its ending, as the lexer counts them; the last ending may be ""."""
+    lines = [(match.group(1), match.group(2)) for match in _LINE.finditer(source)]
+    # The pattern also matches the empty text after the last line ending.
+    if lines and lines[-1] == ("", ""):
+        lines.pop()
     return lines
 
 

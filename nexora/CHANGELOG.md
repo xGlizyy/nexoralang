@@ -19,6 +19,11 @@ Each version groups its changes into these sections, when they contain content:
 
 ## Unreleased
 
+### Fixed
+
+- **The formatter no longer removes comments.** It rebuilt the program from the tokens of the lexer, which has no comments, so formatting a document in the editor deleted every comment and every blank line, joined expressions written across lines inside parentheses, and turned `\r\n` and `\r` into `\n`. It now works line by line: every comment stays on its line after the code of that line, blank lines stay, every line keeps its own line ending, and a line that holds anything other than tokens and a comment leaves the program unformatted instead of losing it. An expression across lines inside parentheses or brackets keeps its lines, one step further in. One space is left before a comment at the end of a line.
+- **Formatting a selection in the editor no longer writes lines from another place.** The language server cuts the formatted text by line number, and the formatter used to remove lines; the formatted text now has the same lines as the document.
+
 ### Incompatible changes
 
 - **The specification is written in English, and `get_language_spec` moves to `nexora.spec/2`.** `language` is `"en"` (it was `"es"`), and the section ids come from the English headings (`7-functions` instead of `7-funciones`). How to update: read the ids again from the index the tool returns, or from `docs/language-spec.md`. The rest of the document does not change ([JSON protocol](docs/json-protocol.md)).

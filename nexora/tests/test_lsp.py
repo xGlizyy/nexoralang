@@ -145,6 +145,24 @@ def test_the_formatting_of_a_range_leaves_the_rest_alone():
     assert edits[0]["newText"] == "    let x = 1"
 
 
+def test_formatting_a_range_does_not_take_the_lines_of_another_place():
+    # The range is cut from the formatted text by line number, so the formatted text has
+    # to keep every line: the comment and the blank line before the range included.
+    server = _server("fn main() -> Void {\n// c\n\nlet x   = 1\nprint(x)\n}\n")
+    edits = server.range_formatting({
+        "textDocument": {"uri": "file:///p.nex"},
+        "options": {},
+        "range": {"start": _position(3, 0), "end": _position(3, 12)},
+    })
+    assert edits[0]["newText"] == "    let x = 1"
+
+
+def test_formatting_a_document_keeps_its_comments():
+    server = _server("// a program\nfn main() -> Void { // main\nlet x   = 1 // one\n}\n")
+    edits = server.formatting({"textDocument": {"uri": "file:///p.nex"}, "options": {}})
+    assert edits[0]["newText"] == "// a program\nfn main() -> Void { // main\n    let x = 1 // one\n}\n"
+
+
 def test_the_server_speaks_the_protocol():
     server = lsp.Server()
     answer = server.initialize({"capabilities": {}})
