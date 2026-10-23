@@ -13,9 +13,9 @@ name: nexora-ci
 on:
   push:
     branches: [main, feature/server-hardening]
-    paths: ["nexora/**", "npm/**", "servidor/**", "web/**", "LICENSE", "README.md", ".github/workflows/nexora-ci.yml"]
+    paths: ["nexora/**", "npm/**", "servidor/**", "web/**", "docs/**", "ejemplos/**", "deploy/**", "LICENSE", "README.md", ".github/workflows/nexora-ci.yml", ".github/workflows/nexora-deploy.yml"]
   pull_request:
-    paths: ["nexora/**", "npm/**", "servidor/**", "web/**", "LICENSE", "README.md", ".github/workflows/nexora-ci.yml"]
+    paths: ["nexora/**", "npm/**", "servidor/**", "web/**", "docs/**", "ejemplos/**", "deploy/**", "LICENSE", "README.md", ".github/workflows/nexora-ci.yml", ".github/workflows/nexora-deploy.yml"]
 
 permissions:
   contents: read

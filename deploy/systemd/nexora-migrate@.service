@@ -1,0 +1,20 @@
+# Aplica las migraciones de la versión activa del entorno (servidor/src/migrate.js, idempotente).
+# La lanza nexora-deploy antes de reiniciar nexora@<entorno>.
+[Unit]
+Description=NEXORA: migraciones (%i)
+After=mariadb.service
+Requires=mariadb.service
+
+[Service]
+Type=oneshot
+User=nexora
+Group=nexora
+WorkingDirectory=/opt/nexora/%i/current/servidor
+ExecStart=/opt/node24/bin/node --env-file=/etc/nexora/%i.env src/migrate.js
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
