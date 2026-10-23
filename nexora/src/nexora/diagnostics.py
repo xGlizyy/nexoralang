@@ -112,6 +112,10 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E2024": ("Invalid field access", TYPE),
     "E2025": ("Cannot reassign a field", SEMANTIC),
     "E2026": ("Missing capability declaration", SEMANTIC),
+    "E2027": ("Unknown module", SEMANTIC),
+    "E2028": ("Private name", SEMANTIC),
+    "E2029": ("Circular import", SEMANTIC),
+    "E2030": ("Module name clash", SEMANTIC),
 
     "E3001": ("Division by zero", RUNTIME),
     "E3002": ("Integer overflow", RUNTIME),

@@ -195,6 +195,97 @@ def _load(path: str) -> tuple[Source | None, Diagnostic | None]:
         return None, Diagnostic("E0002", f"{path} must be saved as UTF-8 text")
 
 
+def _module_path(declaration, importing_file: str) -> Path:
+    """The file an import names, resolved where the file that has the import is, and not
+    where the command was run: a program depends on where it is, not on where it is
+    started from (decision 0018, 1)."""
+    return (Path(importing_file).parent / declaration.path).resolve()
+
+
+def _shown_path(declaration, importing_shown: str) -> str:
+    """The path of a module as a report shows it: the path of the file that imports it,
+    joined with the path the import writes, with '/' on every system. It never depends on
+    the machine the command runs on, as the absolute path would (decision 0018, 1)."""
+    joined = os.path.join(os.path.dirname(importing_shown), declaration.path)
+    return os.path.normpath(joined).replace("\\", "/")
+
+
+def _read_module(declaration, path: Path, key: str, shown: str):
+    """Reads the module an import names (decision 0018, 1).
+
+    This is the one place where the analysis touches the file system: the stages of the
+    language never import `os` or `pathlib` (tests/test_security.py), so they ask here.
+    """
+    try:
+        data = path.read_bytes()
+    except OSError as error:
+        return Diagnostic(
+            "E0001", f"{error.strerror or type(error).__name__}: {shown}", declaration.path_span,
+            hint="An import names a file relative to the file that has it: "
+                 'import "app/models.nex".',
+        )
+    try:
+        # utf-8-sig also accepts files that start with a byte-order mark.
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return Diagnostic("E0002", f"{shown} is not valid UTF-8", declaration.path_span)
+    return key, path.stem, Source(shown, text)
+
+
+def _module_reader(entry: Source):
+    """The `Reader` a command analyses with: a file is read once, however many import it.
+
+    The answer is remembered with the path it was resolved to, so two imports that name
+    the same file from different files reach it once (decision 0018, 1). That path is only
+    the key: a module is shown with its path relative to the program (`_shown_path`).
+
+    The program itself is known to the loader by the path it was given, so an import that
+    reaches it answers with that same key: a module that imports the program is a cycle at
+    the first step, and the program is never read a second time (decision 0018, 4). Every
+    command gets its own reader: nothing is remembered from one command to the next.
+    """
+    entry_file = Path(entry.name).resolve()
+    read_once: dict[str, tuple[str, str, Source] | Diagnostic] = {}
+    # The path each key is shown with, so a module imported by a module is shown relative
+    # to the program and not to the machine.
+    shown = {entry.name: entry.name}
+
+    def read(declaration, importing_file: str):
+        path = _module_path(declaration, importing_file)
+        if path == entry_file:
+            return entry.name, entry_file.stem, entry
+        key = str(path)
+        if key not in read_once:
+            shown[key] = _shown_path(declaration, shown.get(importing_file, importing_file))
+            read_once[key] = _read_module(declaration, path, key, shown[key])
+        return read_once[key]
+
+    return read
+
+
+def _reports(analysis: Analysis) -> tuple[tuple[Diagnostic, Source], ...]:
+    """Every diagnostic of an analysis, each beside the file it belongs to.
+
+    An error in a module the program imports is shown with the text of that module and not
+    with the text of the program: its position belongs to the other file (decision 0018).
+    """
+    if analysis.project is not None:
+        return analysis.project.reports()
+    return tuple((diagnostic, analysis.source) for diagnostic in analysis.diagnostics)
+
+
+def _write_reports(reports) -> None:
+    for diagnostic, source in reports:
+        print(render(diagnostic, source), file=sys.stderr)
+        print(file=sys.stderr)
+
+
+def _document(path: str, reports) -> dict:
+    """The diagnostics document for a list of (diagnostic, file) pairs."""
+    return tooling.diagnostics_document(
+        path, [diagnostic for diagnostic, _ in reports], files=[source.name for _, source in reports])
+
+
 def _report(diagnostics, source: Source) -> None:
     for diagnostic in diagnostics:
         print(render(diagnostic, source), file=sys.stderr)
@@ -214,17 +305,17 @@ def _plural(count: int) -> str:
 def _check(path: str, output_format: str) -> int:
     source, failure = _load(path)
     if source is None:
-        diagnostics, code = (failure,), EXIT_UNREADABLE_FILE
-        source = Source(path, "")
+        reports, code = ((failure, Source(path, "")),), EXIT_UNREADABLE_FILE
     else:
-        diagnostics = analyze(source).diagnostics
-        code = EXIT_INVALID_PROGRAM if diagnostics else EXIT_OK
+        analysis = analyze(source, read=_module_reader(source))
+        reports = _reports(analysis)
+        code = EXIT_INVALID_PROGRAM if analysis.diagnostics else EXIT_OK
 
     if output_format == "json":
-        _print_json(tooling.diagnostics_document(path, diagnostics), sys.stdout)
-    elif diagnostics:
-        _report(diagnostics, source)
-        print(f"error: {path}: check failed with {_plural(len(diagnostics))}", file=sys.stderr)
+        _print_json(_document(path, reports), sys.stdout)
+    elif reports:
+        _write_reports(reports)
+        print(f"error: {path}: check failed with {_plural(len(reports))}", file=sys.stderr)
     else:
         print(f"✓ Check passed: {path}")
     return code
@@ -244,7 +335,7 @@ def _analysis_command(path: str, output_format: str, build, render_text=None) ->
             _report((failure,), Source(path, ""))
         return EXIT_UNREADABLE_FILE
 
-    analysis = analyze(source)
+    analysis = analyze(source, read=_module_reader(source))
     document = build(analysis)
     if output_format == "json":
         _print_json(document, sys.stdout)
@@ -255,24 +346,24 @@ def _analysis_command(path: str, output_format: str, build, render_text=None) ->
 
 def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
          allow_read: tuple[str, ...] = (), allow_write: tuple[str, ...] = ()) -> int:
-    def fail(diagnostics, source: Source, summary: str, code: int) -> int:
+    def fail(reports, summary: str, code: int) -> int:
         # Whatever the program printed before failing is shown first.
         sys.stdout.flush()
         if output_format == "json":
-            _print_json(tooling.diagnostics_document(path, diagnostics), sys.stderr)
+            _print_json(_document(path, reports), sys.stderr)
         else:
-            _report(diagnostics, source)
+            _write_reports(reports)
             print(f"error: {path}: {summary}", file=sys.stderr)
         return code
 
     source, failure = _load(path)
     if source is None:
-        return fail((failure,), Source(path, ""), "the file could not be read", EXIT_UNREADABLE_FILE)
+        return fail(((failure, Source(path, "")),), "the file could not be read", EXIT_UNREADABLE_FILE)
 
-    analysis = analyze(source)
+    analysis = analyze(source, read=_module_reader(source))
     if analysis.checked is None:
         summary = f"not run because of {_plural(len(analysis.diagnostics))}"
-        return fail(analysis.diagnostics, source, summary, EXIT_INVALID_PROGRAM)
+        return fail(_reports(analysis), summary, EXIT_INVALID_PROGRAM)
 
     host = LocalHost(
         arguments=arguments,
@@ -283,9 +374,9 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
         run(analysis.checked, sys.stdout.write, host=host)
     except NexoraRuntimeError as error:
         if error.diagnostic.category == CONTRACT:
-            return fail((error.diagnostic,), source, "the program stopped because a contract was broken",
+            return fail(((error.diagnostic, source),), "the program stopped because a contract was broken",
                         EXIT_CONTRACT_VIOLATION)
-        return fail((error.diagnostic,), source, "the program stopped because of a runtime error",
+        return fail(((error.diagnostic, source),), "the program stopped because of a runtime error",
                     EXIT_RUNTIME_ERROR)
     # Flushed here, not at interpreter exit, so that a closed pipe is handled by main().
     sys.stdout.flush()
@@ -304,7 +395,7 @@ def _test(path: str, output_format: str, function: str | None,
     if source is None:
         analysis = Analysis(Source(path, ""), (failure,))
     else:
-        analysis = analyze(source, require_main=False)
+        analysis = analyze(source, require_main=False, read=_module_reader(source))
     host = LocalHost(
         grants=Grants(read=allow_read, write=allow_write),
         declarations=analysis.checked.capabilities if analysis.checked else Capabilities(),
@@ -346,8 +437,8 @@ def _test_report_lines(report: api.TestReport, path: str) -> list[tuple[str, str
     lines: list[tuple[str, str]] = []
     source = report.analysis.source
     if report.status == api.NOT_RUN:
-        for diagnostic in report.analysis.diagnostics:
-            lines += [(_ERR, render(diagnostic, source)), (_ERR, "")]
+        for diagnostic, file in _reports(report.analysis):
+            lines += [(_ERR, render(diagnostic, file)), (_ERR, "")]
         if source.text or report.analysis.diagnostics[0].category != "file":
             lines.append((_ERR, f"error: {path}: not tested because of {_plural(len(report.analysis.diagnostics))}"))
         else:

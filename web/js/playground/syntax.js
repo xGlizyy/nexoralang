@@ -7,8 +7,8 @@
 
 export const FALLBACK_LANGUAGE = Object.freeze({
   keywords: [
-    'and', 'decreases', 'else', 'ensures', 'example', 'false', 'fn', 'for', 'if', 'in', 'invariant', 'let',
-    'not', 'or', 'requires', 'return', 'true', 'type', 'uses', 'var', 'where', 'while',
+    'and', 'decreases', 'else', 'ensures', 'example', 'false', 'fn', 'for', 'if', 'import', 'in', 'invariant',
+    'let', 'not', 'or', 'pub', 'requires', 'return', 'true', 'type', 'uses', 'var', 'where', 'while',
   ],
   types: ['Void', 'Int', 'Float', 'Bool', 'Text', 'List', 'Option', 'Result'],
   builtins: [
@@ -19,8 +19,7 @@ export const FALLBACK_LANGUAGE = Object.freeze({
     'input', 'print', 'read_file', 'to_float', 'to_int', 'to_text', 'write_file',
   ],
   reserved_words: [
-    'ai', 'assert', 'break', 'const', 'continue', 'enum', 'import', 'match', 'pub',
-    'test', 'tool', 'try',
+    'ai', 'assert', 'break', 'const', 'continue', 'enum', 'match', 'test', 'tool', 'try',
   ],
 });
 

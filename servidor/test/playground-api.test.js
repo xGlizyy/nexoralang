@@ -502,6 +502,9 @@ describe('the playground and the command line share one core', () => {
       // The examples that use files are the documented exception: the playground never
       // allows them, so the two say why in a different way (decision 0015, 6).
       if (/^\s*uses\s+(read|write)\s/m.test(code)) return;
+      // So are the ones that import modules: the playground receives the program as text, with
+      // no files beside it to import (decision 0018, 7).
+      if (/^\s*import\s+"/m.test(code)) return;
 
       const cliRun = spawnSync(python, ['-m', 'nexora', 'run', file, '--format', 'json'], { encoding: 'utf8' });
       const apiRun = (await server.run(code)).json;

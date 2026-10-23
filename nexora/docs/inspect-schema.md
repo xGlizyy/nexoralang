@@ -91,15 +91,16 @@ Los campos de cada nodo aparecen siempre, en el orden indicado. Un campo opciona
 
 | `kind` | Campos | Significado |
 |--------|--------|-------------|
-| `Program` | `types`: lista de `TypeDecl` · `functions`: lista de `Function` · `records`: lista de `RecordDecl` · `uses`: lista de `UsesDecl` | El archivo completo, con los tipos y las funciones en el orden en que aparecen. `records` y `uses` van al final |
-| `TypeDecl` | `name`: texto · `name_span`: posición · `base`: `TypeRef` · `condition`: expresión · `message`: texto o `null` | Un tipo refinado. `message` es la explicación escrita tras la coma |
-| `RecordDecl` | `name`: texto · `name_span`: posición · `fields`: lista de `FieldDecl` | Un registro: `type Point = { x: Int, y: Int }` |
+| `Program` | `types`: lista de `TypeDecl` · `functions`: lista de `Function` · `records`: lista de `RecordDecl` · `uses`: lista de `UsesDecl` · `imports`: lista de `ImportDecl` | El archivo completo, con los tipos y las funciones en el orden en que aparecen. `records`, `uses` e `imports` van al final |
+| `ImportDecl` | `path`: texto · `path_span`: posición | La declaración `import "app/models.nex"`, que solo puede aparecer al principio del archivo ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) |
+| `TypeDecl` | `name`: texto · `name_span`: posición · `base`: `TypeRef` · `condition`: expresión · `message`: texto o `null` · `public`: `true` o `false` | Un tipo refinado. `message` es la explicación escrita tras la coma; `public` es `true` cuando la declaración lleva `pub` |
+| `RecordDecl` | `name`: texto · `name_span`: posición · `fields`: lista de `FieldDecl` · `public`: `true` o `false` | Un registro: `type Point = { x: Int, y: Int }`. `public` es `true` cuando la declaración lleva `pub` |
 | `FieldDecl` | `name`: texto · `name_span`: posición · `type`: `TypeRef` | Un campo de un registro |
 | `UsesDecl` | `capability`: `"read"` o `"write"` · `path`: texto · `path_span`: posición | La capacidad que el programa declara que necesita ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
-| `Function` | `name`: texto · `name_span`: posición · `params`: lista de `Param` · `return_type`: `TypeRef` · `contracts`: lista de `Contract` · `body`: `Block` · `examples`: lista de `Example` | Una función. `examples` es el último campo |
+| `Function` | `name`: texto · `name_span`: posición · `params`: lista de `Param` · `return_type`: `TypeRef` · `contracts`: lista de `Contract` · `body`: `Block` · `examples`: lista de `Example` · `public`: `true` o `false` | Una función. `examples` es el último campo antes de `public`, que es `true` cuando la declaración lleva `pub` |
 | `Example` | `condition`: expresión · `message`: texto o `null` | Una cláusula `example`. `nex inspect` nunca la evalúa |
 | `Param` | `name`: texto · `name_span`: posición · `type`: `TypeRef` | Un parámetro |
-| `TypeRef` | `name`: texto · `arguments`: lista de `TypeRef` | Un tipo escrito en el código: `Int`, `Float`, `Bool`, `Text`, `Void`, un tipo refinado o `List[T]`. `arguments` está vacío para un nombre sin corchetes; `List[Int]` tiene un argumento `Int` |
+| `TypeRef` | `name`: texto · `arguments`: lista de `TypeRef` · `qualifier`: texto o `null` | Un tipo escrito en el código: `Int`, `Float`, `Bool`, `Text`, `Void`, un tipo refinado o `List[T]`. `arguments` está vacío para un nombre sin corchetes; `List[Int]` tiene un argumento `Int`. `qualifier` es el módulo de un tipo de otro archivo, `null` en el resto: `models.Point` tiene `qualifier` `models` y `name` `Point` |
 | `Contract` | `clause`: `"requires"` o `"ensures"` · `condition`: expresión · `message`: texto o `null` | Una cláusula de contrato. `message` es la explicación escrita tras la coma |
 | `LoopClause` | `clause`: `"invariant"` o `"decreases"` · `condition`: expresión (`Bool` en un invariante, `Int` en una medida) · `message`: texto o `null` | Una cláusula del principio del cuerpo de un `While` o un `For` |
 
@@ -139,7 +140,7 @@ nada tiene tipo `"Void"`.
 | `Binary` | `operator`: texto · `operator_span`: posición · `left`: expresión · `right`: expresión | `operator` es uno de `+ - * / == != < <= > >= and or` |
 | `Group` | `expression`: expresión | Una expresión entre paréntesis |
 | `Call` | `callee`: texto · `callee_span`: posición · `arguments`: lista de expresiones · `qualifier`: texto o `null` | Llamada a una función propia o integrada, o comprobación de un tipo refinado (`Percent(x)`), cuyo tipo es el del tipo refinado. En una llamada cualificada (`Text.length(s)`), `callee` es el nombre completo (`"Text.length"`), `callee_span` lo abarca entero y `qualifier` es el tipo (`"Text"`); en cualquier otra, `qualifier` es `null` |
-| `RecordConstruction` | `name`: texto · `name_span`: posición · `fields`: lista de `FieldInitializer` | La construcción de un registro: `Point(x: 1, y: 2)`. Los campos van en el orden en que están escritos, que no tiene que ser el de la declaración |
+| `RecordConstruction` | `name`: texto · `name_span`: posición · `fields`: lista de `FieldInitializer` · `qualifier`: texto o `null` | La construcción de un registro: `Point(x: 1, y: 2)`. Los campos van en el orden en que están escritos, que no tiene que ser el de la declaración. `qualifier` es el módulo de un registro de otro archivo, `null` en el resto |
 | `FieldInitializer` | `name`: texto · `name_span`: posición · `value`: expresión | El valor que se da a un campo en una construcción |
 | `FieldAccess` | `target`: expresión · `name`: texto · `name_span`: posición | La lectura de un campo: `p.x`. `target` es el valor del que se lee |
 
@@ -207,6 +208,7 @@ versión 2, y otra comprueba que este documento los menciona todos.
 
 | Versión | Publicada en | Cambios |
 |---------|--------------|---------|
+| `nexora.inspect/2` | `nexora` 0.11.0 | Añadidos, sin cambiar la versión: el nodo `ImportDecl` (`path`, `path_span`) para la declaración `import "app/models.nex"`, el campo `imports` al final de `Program`, el campo `public` (`true` o `false`) al final de `TypeDecl`, `RecordDecl` y `Function`, y el campo `qualifier` (texto o `null`) al final de `TypeRef` y de `RecordConstruction` para los tipos y los registros de otro módulo, `models.Point` ([decisión 0018](decisions/0018-modulos-e-importaciones.md)). Un programa sin importaciones produce el mismo documento que en la 0.10.0, más `"imports": []`, `"public": false` en cada declaración y `"qualifier": null` en cada tipo |
 | `nexora.inspect/2` | `nexora` 0.10.0 | Añadidos, sin cambiar la versión: el nodo `UsesDecl` (`capability`, `path`, `path_span`) para la declaración `uses read "ruta"`, y el campo `uses` al final de `Program` ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
 | `nexora.inspect/2` | `nexora` 0.8.0 | Añadidos, sin cambiar la versión: los nodos `RecordDecl` (`name`, `name_span`, `fields`), `FieldDecl` (`name`, `name_span`, `type`), `RecordConstruction` (`name`, `name_span`, `fields`), `FieldInitializer` (`name`, `name_span`, `value`) y `FieldAccess` (`target`, `name`, `name_span`); la sentencia `FieldAssign` (`target`, `name`, `name_span`, `value`); el campo `records` al final de `Program`; y `type` puede ser el nombre de un registro ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) |
 | `nexora.inspect/1` | `nexora` 0.2.0 | Primera versión |

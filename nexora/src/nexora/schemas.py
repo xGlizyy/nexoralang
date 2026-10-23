@@ -150,6 +150,9 @@ _SYMBOL = {
         "signature": {"type": "string", "description": "Functions only."},
         "params": {"type": "array", "items": {"$ref": "#/$defs/param"}, "description": "Functions only."},
         "return_type": {"type": "string", "description": "Functions only."},
+        "file": {"type": "string", "description": "The file that declares the name: the module it belongs to, "
+                                                   "or the file the command was given. A module is shown "
+                                                   "relative to that file, with '/' (decision 0018)."},
     },
 }
 
@@ -228,6 +231,9 @@ _CONTEXT_FUNCTION = {
                           "measure": {"oneOf": [{"$ref": "#/$defs/loop_clause"}, {"type": "null"}],
                                       "description": "The 'decreases' clause. Null for every 'for' loop and "
                                                      "in a program with errors (E2021)."}}}},
+        "file": {"type": "string", "description": "The file that declares the function: the module it belongs "
+                                                   "to, or the file the command was given. A module is shown "
+                                                   "relative to that file, with '/' (decision 0018)."},
     },
 }
 

@@ -1,0 +1,32 @@
+// Modules: a program is the file that runs plus the files it imports.
+//
+// `import` names a file, relative to the file that has the import. That file is one
+// module, bound to the name of the file without its extension: models.nex is the module
+// `models`. Its names are used with the module in front, and only the ones it marks
+// with `pub` are visible from here.
+
+import "models.nex"
+
+fn main() -> Void {
+    // The record of the module, built with its fields.
+    let rectangle = models.Point(x: 3, y: 4)
+    print(rectangle)
+    print(models.area(rectangle))
+    print(models.perimeter(rectangle))
+
+    // A record of the module is a type here: it can be written in an annotation.
+    let bigger: models.Point = models.double(rectangle)
+    print(bigger)
+
+    // A refined type of the module works as any other refined type.
+    let filled = models.Percent(75)
+    print(filled + 1)
+}
+
+// The examples of this file can call the module, like the rest of the code. `pub` marks
+// what a module makes visible: in the file that runs, its names are already its own, and
+// it only says what would be public if another program imported this file.
+pub fn ratio(part: models.Point, whole: models.Point) -> Int {
+    example ratio(models.Point(x: 2, y: 2), models.Point(x: 2, y: 1)) == 2
+    return models.area(part) / models.area(whole)
+}

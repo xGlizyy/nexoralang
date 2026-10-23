@@ -74,7 +74,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.10.0",
+  "nexora_version": "0.11.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -121,7 +121,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.inspect/2",
-  "nexora_version": "0.10.0",
+  "nexora_version": "0.11.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
@@ -161,7 +161,8 @@ fn main() -> Void {
             "end_column": 18
           },
           "name": "Void",
-          "arguments": []
+          "arguments": [],
+          "qualifier": null
         },
         "contracts": [],
         "body": {
@@ -243,11 +244,13 @@ fn main() -> Void {
             }
           ]
         },
-        "examples": []
+        "examples": [],
+        "public": false
       }
     ],
     "records": [],
-    "uses": []
+    "uses": [],
+    "imports": []
   }
 }
 ```

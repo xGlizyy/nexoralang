@@ -74,7 +74,7 @@ def test_inspect_exposes_the_type_arguments() -> None:
     document = tooling.inspect_source(in_main("let xs: List[List[Int]] = 1"))
     declared = document["program"]["functions"][0]["body"]["statements"][0]["declared_type"]
 
-    assert list(declared) == ["kind", "span", "name", "arguments"]
+    assert list(declared) == ["kind", "span", "name", "arguments", "qualifier"]
     assert declared["name"] == "List"
     (inner,) = declared["arguments"]
     assert (inner["name"], inner["arguments"][0]["name"]) == ("List", "Int")
@@ -87,14 +87,14 @@ def test_inspect_keeps_an_empty_arguments_list_for_a_plain_type() -> None:
     document = tooling.inspect_source("fn f(x: Int) -> Void {\n}\n")
     reference = document["program"]["functions"][0]["params"][0]["type"]
 
-    assert list(reference) == ["kind", "span", "name", "arguments"]
+    assert list(reference) == ["kind", "span", "name", "arguments", "qualifier"]
     assert reference["arguments"] == []
 
 
 def test_the_inspect_schema_defines_the_type_arguments() -> None:
     definition = schemas.all_schemas()["nexora-inspect.schema.json"]["$defs"]["TypeRef"]
 
-    assert definition["required"] == ["kind", "span", "name", "arguments"]
+    assert definition["required"] == ["kind", "span", "name", "arguments", "qualifier"]
     assert definition["properties"]["arguments"] == {
         "type": "array",
         "items": {"$ref": "#/$defs/TypeRef"},

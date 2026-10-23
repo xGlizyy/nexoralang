@@ -96,13 +96,36 @@ class Parser:
         types: list[ast.TypeDecl] = []
         records: list[ast.RecordDecl] = []
         uses: list[ast.UsesDecl] = []
+        imports: list[ast.ImportDecl] = []
         functions: list[ast.Function] = []
         self._skip_newlines()
         try:
             while not self._check(TokenType.EOF):
                 try:
-                    if self._check(TokenType.TYPE):
-                        declaration = self._type_declaration()
+                    public = False
+                    if self._check(TokenType.PUB):
+                        # `pub` marks a declaration as usable from another module
+                        # (decision 0018, 3). It has to be followed by one.
+                        self._advance()
+                        public = True
+                        if not (self._check(TokenType.FN) or self._check(TokenType.TYPE)):
+                            raise self._error(
+                                "E1101",
+                                f"Expected 'fn' or 'type' after 'pub', found {self._peek().describe()}",
+                                self._peek(),
+                                hint="Only a function or a type can be public: pub fn add(a: Int) -> Int { }",
+                            )
+                    if self._check(TokenType.IMPORT):
+                        if types or records or uses or functions:
+                            raise self._error(
+                                "E1101",
+                                "The imports of a program come before its other declarations",
+                                self._peek(),
+                                hint="Move the import to the top of the file, with the other imports.",
+                            )
+                        imports.append(self._import_declaration())
+                    elif self._check(TokenType.TYPE):
+                        declaration = self._type_declaration(public)
                         if isinstance(declaration, ast.RecordDecl):
                             records.append(declaration)
                         else:
@@ -110,7 +133,7 @@ class Parser:
                     elif self._check(TokenType.USES):
                         uses.append(self._uses_declaration())
                     elif self._check(TokenType.FN):
-                        functions.append(self._function())
+                        functions.append(self._function(public))
                     else:
                         raise self._top_level_error()
                 except ParseError as error:
@@ -123,7 +146,8 @@ class Parser:
 
         end = self._peek().span
         start = self._tokens[0].span
-        return ast.Program(start.to(end), tuple(types), tuple(functions), tuple(records), tuple(uses)), \
+        return ast.Program(start.to(end), tuple(types), tuple(functions), tuple(records), tuple(uses),
+                          tuple(imports)), \
             self._diagnostics
 
     def _record(self, error: ParseError) -> None:
@@ -192,10 +216,29 @@ class Parser:
         return self._expect(TokenType.IDENT, expected, hint=hint)
 
     def _type(self, expected: str, *, hint: str | None = None) -> ast.TypeRef:
-        """`Name`, or `List[Type]`, `Option[Type]` or `Result[Type, Type]` with nested arguments (I2)."""
+        """`Name`, or `List[Type]`, `Option[Type]` or `Result[Type, Type]` with nested arguments (I2).
+
+        A type of another module is written with its module in front: `models.Point`
+        (decision 0018, 5).
+        """
         name = self._expect(TokenType.IDENT, expected, hint=hint)
+        qualifier: str | None = None
+        start = name.span
+        if self._check(TokenType.DOT):
+            dot = self._advance()
+            qualified = self._expect_name("the name of the type after the module's name")
+            # The '.' touches both names, as in a call or a field access (decision 0018, 5).
+            if not (_touches(name.span, dot.span) and _touches(dot.span, qualified.span)):
+                raise self._error(
+                    "E1101",
+                    f"Write '{name.lexeme}.{qualified.lexeme}' without spaces around the '.'",
+                    span=name.span.to(qualified.span),
+                )
+            qualifier = name.lexeme
+            name = qualified
+            start = start.to(qualified.span)
         if not self._check(TokenType.LBRACKET):
-            return ast.TypeRef(name.span, name.lexeme)
+            return ast.TypeRef(start, name.lexeme, (), qualifier)
         opening = self._advance()
         self._enter(opening)
         arguments: list[ast.TypeRef] = []
@@ -209,7 +252,7 @@ class Parser:
             notes=(self._opened_bracket_at(opening),),
         )
         self._nesting -= 1
-        span = name.span.to(closing.span)
+        span = start.to(closing.span)
         arity = _TYPE_ARGUMENT_COUNTS.get(name.lexeme)
         if arity is None:
             raise self._error(
@@ -243,7 +286,7 @@ class Parser:
                     span=argument.span,
                     hint="Void means 'no value'. Use a type that has values, such as Int or Text.",
                 )
-        return ast.TypeRef(span, name.lexeme, tuple(arguments))
+        return ast.TypeRef(span, name.lexeme, tuple(arguments), qualifier)
 
     # Recovery
 
@@ -287,18 +330,19 @@ class Parser:
 
     # Declarations
 
-    def _type_declaration(self) -> ast.TypeDecl | ast.RecordDecl:
+    def _type_declaration(self, public: bool = False) -> ast.TypeDecl | ast.RecordDecl:
         """`type Name = Base where condition` with an optional `, "explanation"`.
 
         A record is declared the same way but with its fields: `type Name = { x: Int }`.
-        The two are told apart by what comes after the '='.
+        The two are told apart by what comes after the '='. A declaration can be
+        marked with `pub` to be used from another module (decision 0018, 3).
         """
         keyword = self._advance()
         name = self._expect_name("a type name after 'type'")
         self._expect(TokenType.EQUAL, f"'=' after the type name '{name.lexeme}'",
                      hint=f"A refined type is written: type {name.lexeme} = Int where value > 0")
         if self._peek_significant().type is TokenType.LBRACE:
-            return self._record_declaration(keyword, name)
+            return self._record_declaration(keyword, name, public)
         base = self._type(f"the type that '{name.lexeme}' refines, after '='")
         self._expect(
             TokenType.WHERE,
@@ -312,9 +356,9 @@ class Parser:
         condition = self._expression()
         message, end = self._explanation("where", condition.span)
         self._end_of_statement()
-        return ast.TypeDecl(keyword.span.to(end), name.lexeme, name.span, base, condition, message)
+        return ast.TypeDecl(keyword.span.to(end), name.lexeme, name.span, base, condition, message, public)
 
-    def _record_declaration(self, keyword: Token, name: Token) -> ast.RecordDecl:
+    def _record_declaration(self, keyword: Token, name: Token, public: bool = False) -> ast.RecordDecl:
         """`type Point = { x: Int, y: Int }`: a record type.
 
         The '{' goes on the same line as the '='. Inside the braces a line break is
@@ -357,7 +401,7 @@ class Parser:
         closing = self._expect(TokenType.RBRACE, "'}' to close the record declaration",
                                notes=(self._opened_at(opening),))
         self._nesting -= 1
-        return ast.RecordDecl(keyword.span.to(closing.span), name.lexeme, name.span, tuple(fields))
+        return ast.RecordDecl(keyword.span.to(closing.span), name.lexeme, name.span, tuple(fields), public)
 
     def _uses_declaration(self) -> ast.UsesDecl:
         """`uses read "ruta"`: the capability a program declares that it needs.
@@ -393,6 +437,38 @@ class Parser:
             )
         return ast.UsesDecl(keyword.span.to(path.span), capability.lexeme, path.value, path.span)
 
+    def _import_declaration(self) -> ast.ImportDecl:
+        """`import "ruta/fichero.nex"`: the module the program imports (decision 0018, 1).
+
+        The path is a text literal, with the extension of the file, and it is
+        relative to the file that imports it.
+        """
+        keyword = self._advance()
+        path = self._peek()
+        if path.type is not TokenType.STRING:
+            raise self._error(
+                "E1101",
+                f"Expected the path of the module after 'import', found {path.describe()}",
+                path,
+                hint='Write the path as a text: import "app/models.nex"',
+            )
+        self._advance()
+        if not path.value:
+            raise self._error(
+                "E1101",
+                "The path of a module cannot be empty",
+                path,
+                hint='Write the path of the file: import "app/models.nex"',
+            )
+        if not path.value.endswith(".nex"):
+            raise self._error(
+                "E1101",
+                f"The path of a module has to end in '.nex', but it is '{path.value}'",
+                path,
+                hint='Write the file with its extension: import "app/models.nex"',
+            )
+        return ast.ImportDecl(keyword.span.to(path.span), path.value, path.span)
+
     def _explanation(self, clause: str, end: Span) -> tuple[str | None, Span]:
         """The optional `, "explanation"` after a condition. Returns it and where the clause ends."""
         if not self._match(TokenType.COMMA):
@@ -422,7 +498,7 @@ class Parser:
             )
         return token.value, token.span
 
-    def _function(self) -> ast.Function:
+    def _function(self, public: bool = False) -> ast.Function:
         keyword = self._expect(TokenType.FN, "'fn'")
         name = self._expect_name("a function name after 'fn'")
         hint = None
@@ -453,7 +529,7 @@ class Parser:
         body = self._block_rest(brace, level)
         return ast.Function(
             keyword.span.to(body.span), name.lexeme, name.span, tuple(params), return_type, tuple(contracts), body,
-            tuple(examples),
+            tuple(examples), public,
         )
 
     def _param(self) -> ast.Param:
@@ -871,11 +947,13 @@ class Parser:
             target = ast.FieldAccess(span, target, name, name_span)
         return target
 
-    def _record_construction(self, name: Token) -> ast.RecordConstruction:
+    def _record_construction(self, name: Token, *, qualifier: str | None = None,
+                             start: Span | None = None) -> ast.RecordConstruction:
         """`Point(x: 1, y: 2)`: building a record value.
 
         Every field is given by name, and every name is given once. The order of the
-        text does not have to be the order of the declaration (decision 0014, 2).
+        text does not have to be the order of the declaration (decision 0014, 2). A
+        record of another module is written with its module in front (decision 0018, 5).
         """
         opening = self._advance()
         self._enter(opening)
@@ -901,11 +979,14 @@ class Parser:
         closing = self._expect(TokenType.RPAREN, "')' to close the construction",
                                notes=(self._opened_at(opening),))
         self._nesting -= 1
-        return ast.RecordConstruction(name.span.to(closing.span), name.lexeme, name.span, tuple(fields))
+        return ast.RecordConstruction((start or name.span).to(closing.span), name.lexeme, name.span,
+                                      tuple(fields), qualifier)
 
-    def _qualified_call(self, qualifier: Token) -> ast.Call:
-        """`Name.function(...)`. Only the form is checked here: whether `Name` is a type that has
-        `function` is decided by the checker (decision 0011, 3.4 and 9)."""
+    def _qualified_call(self, qualifier: Token) -> ast.Call | ast.RecordConstruction:
+        """`Name.function(...)`, or `Name.Record(...)` to build a record of a module. Only the
+        form is checked here: whether `Name` is a type that has `function` is decided by the
+        checker (decision 0011, 3.4 and 9), and whether it is a module is decided there too
+        (decision 0018, 2)."""
         dot = self._advance()
         name = self._peek()
         if name.type is not TokenType.IDENT:
@@ -923,6 +1004,10 @@ class Parser:
         if not self._check(TokenType.LPAREN):
             raise self._error("E1101", f"Expected '(' to call '{full}'",
                               hint=f"A function is not a value: call it, as in {full}(...).")
+        if self._peek(1).type is TokenType.IDENT and self._peek(2).type is TokenType.COLON:
+            # `models.Point(x: 1)`: the parentheses hold named fields, so this builds the
+            # record the module declares instead of calling a function.
+            return self._record_construction(name, qualifier=qualifier.lexeme, start=qualifier.span)
         return self._call(qualifier, name=full, name_span=qualifier.span.to(name.span), qualifier=qualifier.lexeme)
 
     def _call(self, callee: Token, *, name: str | None = None, name_span: Span | None = None,

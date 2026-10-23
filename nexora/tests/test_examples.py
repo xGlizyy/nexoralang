@@ -38,6 +38,9 @@ EXPECTED = {
     "option_result.nex": (0, 0),
     "console.nex": (0, 0),
     "files.nex": (0, 0),
+    "modules/main.nex": (0, 0),
+    # A module is not a program of its own: run alone it has no 'main' to run.
+    "modules/models.nex": (1, 1),
     # Rejected by the static analysis: never started.
     "invalid/syntax_error.nex": (1, 1),
     "invalid/name_errors.nex": (1, 1),
@@ -57,6 +60,7 @@ TESTED = {
     "checked_examples.nex": 0,
     "loops.nex": 0,
     "texts.nex": 0,
+    "modules/main.nex": 0,
 }
 
 # The standard input some examples read, and the permissions others need

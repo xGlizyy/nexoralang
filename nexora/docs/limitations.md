@@ -1,6 +1,6 @@
 # Limitaciones
 
-Lo que NEXORA **no** hace en la versión 0.10.0, y los riesgos que conviene conocer antes de usarlo.
+Lo que NEXORA **no** hace en la versión 0.11.0, y los riesgos que conviene conocer antes de usarlo.
 Nada de lo que aparece aquí como "no existe" funciona hoy, aunque se mencione en el borrador de
 diseño, en la hoja de ruta o en una decisión aceptada y pendiente de implementar.
 
@@ -38,7 +38,7 @@ NEXORA es un proyecto en una fase temprana (anterior a la versión 1.0):
 | Operador de resto (`%`) y potencias | |
 | Funciones matemáticas (raíz, redondeo, valor absoluto…) | Hay que escribirlas |
 | Entrada de datos: la red y los procesos externos | Un programa puede imprimir, leer sus argumentos y la entrada estándar, y usar los archivos que declara con `uses` y que se le permiten con `--allow-read` o `--allow-write` ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). No hay red ni procesos externos |
-| Módulos e importaciones | Un programa es un único archivo |
+| Módulos e importaciones | Módulos e importaciones están implementados en la 0.11.0 ([decisión 0018](decisions/0018-modulos-e-importaciones.md)). El playground no los admite; `nex test` solo evalúa los ejemplos del archivo que se le pasa; no hay alias ni importación selectiva. |
 | Funciones como valores, funciones anónimas, sobrecarga, valores por defecto | |
 | Avisos (*warnings*) | Todo diagnóstico es un error. Una variable sin usar no produce ningún aviso |
 | Comentarios de bloque, textos de varias líneas | |

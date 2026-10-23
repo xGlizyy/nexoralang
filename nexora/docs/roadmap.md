@@ -95,7 +95,7 @@ primero:
 3. ~~**Registros**~~: hechos en la 0.8.0, con identidad nominal y campos inmutables ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)); están descritos en la [especificación](language-spec.md), sección 4.6. Quedan los **valores opcionales** (`Option`, `Result`), para representar la ausencia de un
    valor y los errores sin excepciones.
 4. ~~**Entrada de datos**~~: hecha en la 0.9.0, con los argumentos del programa, la entrada estándar y los archivos con permisos explícitos ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). Quedan la red y los procesos externos.
-5. **Módulos e importaciones.**
+5. ~~**Módulos e importaciones**~~: hechas en la 0.11.0 ([decisión 0018](decisions/0018-modulos-e-importaciones.md)).
 6. **Avisos** (variables sin usar, `var` que nunca cambia) y convenciones de nombres.
 7. **Análisis más tolerante**: conservar las funciones cuya declaración tiene un error, y dar
    estructura también con errores léxicos. El árbol parcial con errores de sintaxis ya existe.

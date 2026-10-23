@@ -32,6 +32,8 @@ class TokenType(Enum):
     INVARIANT = "invariant"
     DECREASES = "decreases"
     USES = "uses"
+    IMPORT = "import"
+    PUB = "pub"
     # A word reserved for a future version: recognised so it can be rejected clearly.
     RESERVED = "reserved word"
 
@@ -89,6 +91,8 @@ KEYWORDS: dict[str, TokenType] = {
     "invariant": TokenType.INVARIANT,
     "decreases": TokenType.DECREASES,
     "uses": TokenType.USES,
+    "import": TokenType.IMPORT,
+    "pub": TokenType.PUB,
 }
 
 # Keywords that can only start a statement or a declaration, never appear inside parentheses.
@@ -100,8 +104,8 @@ STATEMENT_KEYWORDS: frozenset[str] = frozenset({
 # Words the language design sets aside for features that are not implemented yet.
 # Reserving them now means adding those features later cannot break existing programs.
 RESERVED_WORDS: frozenset[str] = frozenset({
-    "ai", "assert", "break", "const", "continue", "enum", "import",
-    "match", "pub", "test", "tool", "try",
+    "ai", "assert", "break", "const", "continue", "enum",
+    "match", "test", "tool", "try",
 })
 
 

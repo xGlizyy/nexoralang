@@ -219,7 +219,7 @@ def test_inspect_adds_example_nodes_at_the_end_of_function():
     document = tooling.inspect_source(TWO_EXAMPLES)
     assert document["schema"] == "nexora.inspect/2" and document["ok"]
     function = document["program"]["functions"][1]
-    assert list(function)[-2:] == ["body", "examples"]
+    assert list(function)[-2:] == ["examples", "public"]
     first, second = function["examples"]
     assert list(first) == ["kind", "span", "condition", "message"]
     assert (first["kind"], first["message"], second["message"]) == ("Example", "Two doubled", None)
@@ -251,8 +251,9 @@ def test_context_lists_examples_last_and_keeps_the_call_graph():
 
     document = tooling.get_context(TWO_EXAMPLES)
     function = next(f for f in document["functions"] if f["name"] == "double")
-    # Each field was added at the end: the examples in 0.4.0, the loops in 0.5.0 (decision 0010).
-    assert list(function)[-2:] == ["examples", "loops"]
+    # Each field was added at the end: the examples in 0.4.0, the loops in 0.5.0 (decision 0010),
+    # the file in 0.11.0 (decision 0018).
+    assert list(function)[-3:] == ["examples", "loops", "file"]
     assert function["examples"] == [
         {"condition": "double(2) == 4", "message": "Two doubled", "line": 6},
         {"condition": "double(g(1)) == 4", "message": None, "line": 7},

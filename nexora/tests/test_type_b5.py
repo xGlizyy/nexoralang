@@ -310,7 +310,7 @@ def test_binary_result_is_differentially_equivalent_on_examples(monkeypatch):
         "context": tooling.get_context,
     }
     paths = sorted(EXAMPLE_DIR.rglob("*.nex"))
-    assert len(paths) == 24
+    assert len(paths) == 26
     skipped: list[Path] = []
     for path in paths:
         text = path.read_text(encoding="utf-8")
@@ -340,7 +340,7 @@ def test_binary_result_is_differentially_equivalent_on_examples(monkeypatch):
         assert new_checked.refined == old_checked.refined, path
         assert new_checked.functions == old_checked.functions, path
         assert new_documents == old_documents, path
-    assert [path.name for path in skipped] == ["option_result.nex", "records.nex"]
+    assert [path.name for path in skipped] == ["models.nex", "option_result.nex", "records.nex"]
 
 
 # E. Public contracts and the model bridge

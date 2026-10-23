@@ -238,6 +238,9 @@ class Symbol:
     loop_variable: bool = False
     # Where the variable is given a new value. Each of these is also in `references`.
     assignments: list[Span] = field(default_factory=list)
+    # The module that declares the name, or None for the file that runs: a name of a
+    # module belongs to that file, and only its position says where it is (decision 0018).
+    module: str | None = None
 
 
 @dataclass(frozen=True)
@@ -303,6 +306,12 @@ class CheckedProgram:
     records: dict[str, RecordType] = field(default_factory=dict)
     # The capabilities the program declares it needs (decision 0015, 2).
     capabilities: Capabilities = field(default_factory=Capabilities)
+    # id(node) -> the name the analysis resolved it to, qualified with its module: a call,
+    # a refinement check or a construction of a record. Each of them is written inside a
+    # module with the bare name, and the module is what tells it apart from the same name
+    # in another module (decision 0018, 5): the interpreter looks them up with this,
+    # never with the text.
+    targets: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -447,13 +456,21 @@ class _Scope:
 
 
 class Checker:
-    def __init__(self) -> None:
+    def __init__(self, prefix: str = "", modules: tuple[str, ...] = ()) -> None:
+        # The module being checked, with its dot. The names it declares are qualified
+        # with it, so two modules can declare the same name without the analysis
+        # confusing them (decision 0018, 5). It is set for each module before that
+        # module is checked; the module the program runs has no prefix.
+        self.prefix = prefix
         self._diagnostics: list[Diagnostic] = []
         self._signatures: dict[str, Signature] = {}
         self._types: dict[int, str] = {}
         self._symbols: list[Symbol] = []
         self._function_symbols: dict[str, Symbol] = {}
         self._calls: list[tuple[str, str]] = []
+        # id(node) -> the name the analysis resolved it to, qualified with its module: a
+        # call, a refinement check or a construction of a record (decision 0018, 5).
+        self._targets: dict[int, str] = {}
         # Every declared type name, including those whose declaration has an error.
         self._type_names: dict[str, ast.TypeDecl] = {}
         self._refined: dict[str, RefinedType] = {}
@@ -486,17 +503,119 @@ class Checker:
         self._in_example: str | None = None
         # `nex test` analyses programs without 'main' (decision 0008); every other command needs one.
         self.require_main = True
+        # The names a module declares with `pub`, which another module can use
+        # (decision 0018, 3). They are qualified with the module that declares them.
+        self._public: set[str] = set()
+        # The names of the modules the program imports, so an unknown module can be
+        # reported with the ones that do exist (decision 0018, 2).
+        self._modules: tuple[str, ...] = modules
 
-    def check(self, program: ast.Program) -> tuple[CheckedProgram, list[Diagnostic]]:
-        """Checks a program. The CheckedProgram may only be run when the list is empty."""
-        declared: dict[str, ast.Function] = {}
+    def _key(self, name: str) -> str:
+        """The key a name has in the tables of the analysis.
+
+        A name written with a dot is already qualified: it names something of
+        another module (decision 0018, 2). Any other name belongs to the module
+        being checked, and is qualified with it.
+        """
+        if "." in name:
+            return name
+        return self.prefix + name
+
+    @property
+    def _module(self) -> str | None:
+        """The module the names being declared belong to, or None for the file that runs."""
+        return self.prefix.removesuffix(".") or None
+
+    def _is_public(self, name: str) -> bool:
+        """Whether a name can be used from the code being checked (decision 0018, 3).
+
+        A name of the module being checked is always usable, whether it is marked
+        with `pub` or not. A name of another module is only usable when that module
+        declares it with `pub`.
+        """
+        key = self._key(name)
+        if "." not in key:
+            # A name of the module being checked: `pub` only decides what leaves it.
+            return True
+        module = key.partition(".")[0]
+        if f"{module}." == self.prefix:
+            return True
+        return key in self._public
+
+    def _type_key(self, reference: ast.TypeRef) -> str:
+        """The key a type reference has in the tables, qualified with its module."""
+        if reference.qualifier is not None:
+            return f"{reference.qualifier}.{reference.name}"
+        return self._key(reference.name)
+
+    def _qualified(self, name: str, qualifier: str | None) -> str:
+        """The key of a name written with an optional module in front."""
+        if qualifier is not None:
+            return f"{qualifier}.{name}"
+        return self._key(name)
+
+    def _unknown_module(self, qualifier: str, span: Span | None) -> None:
+        """Reports the use of a module the program does not import (decision 0018, 2)."""
+        if self._modules:
+            close = difflib.get_close_matches(qualifier, self._modules, n=1)
+            hint = ((f"Did you mean '{close[0]}'? " if close else "")
+                    + f"The modules this program imports are: {', '.join(self._modules)}.")
+        else:
+            hint = ('This program imports no modules. Declare one at the top of the file: '
+                    'import "app/models.nex"')
+        self._report("E2027", f"There is no module named '{qualifier}'", span, hint=hint)
+
+    def _unknown_record(self, qualifier: str, name: str, span: Span | None) -> None:
+        """`models.Record(...)` where that module declares no record with that name."""
+        if qualifier not in self._modules:
+            self._unknown_module(qualifier, span)
+            return
+        public = sorted(key.partition(".")[2] for key in self._record_names
+                        if key.startswith(f"{qualifier}.") and key in self._public)
+        close = difflib.get_close_matches(name, public, n=1)
+        notes = (f"The records '{qualifier}' makes public: {', '.join(public)}.",) if public else ()
+        self._report(
+            "E2023",
+            f"The module '{qualifier}' has no record named '{name}'",
+            span,
+            hint=f"Did you mean '{qualifier}.{close[0]}'?" if close else None,
+            notes=notes,
+        )
+
+    def _visible(self, table: dict) -> list[str]:
+        """The names of `table` as a person sees them: the names of this module without
+        its prefix, and the names of the other modules qualified."""
+        return [key[len(self.prefix):] if self.prefix and key.startswith(self.prefix) else key
+                for key in table]
+
+    def _private(self, name: str, span: Span | None) -> None:
+        """Reports the use of a name that another module does not make public."""
+        module, _, own = name.partition(".")
+        self._report(
+            "E2028",
+            f"'{name}' is private: the module '{module}' does not declare it with 'pub'",
+            span,
+            hint=f"Mark it in {module}.nex: pub fn {own}(...) or "
+                 f"pub type {own[:1].upper()}{own[1:]} = ...",
+        )
+
+    def check(self, program: ast.Program,
+              declared: dict[str, ast.Function] | None = None) -> tuple[CheckedProgram, list[Diagnostic]]:
+        """Checks a program. The CheckedProgram may only be run when the list is empty.
+
+        A project of modules is checked by calling this once per module, in the order
+        they are imported, giving the same `declared` to every call: the analysis of the
+        last module then holds every function of every module, with its qualified name
+        (decision 0018, 2). The diagnostics are the ones of all the modules checked."""
+        if declared is None:
+            declared = {}
         try:
             self._check_program(program, declared)
         except _TooManyErrors:
             pass
         checked = CheckedProgram(
             program, declared, self._types, tuple(self._symbols), tuple(self._calls), dict(self._refined),
-            dict(self._records), self._capabilities,
+            dict(self._records), self._capabilities, dict(self._targets),
         )
         return checked, self._diagnostics
 
@@ -507,7 +626,7 @@ class Checker:
         self._declare_names(program.types, program.records)
         self._declare_types(program.types)
         self._declare_uses(program.uses)
-        self._function_names = {function.name for function in program.functions}
+        self._function_names.update(self._key(function.name) for function in program.functions)
         for declaration in program.types:
             self._type_condition(declaration)
         # The records come after the conditions of the refined types, for the same reason:
@@ -519,6 +638,7 @@ class Checker:
         for function in program.functions:
             signature = self._signature(function)
             own_signatures.append((function, signature))
+            key = self._key(function.name)
             if function.name in BUILTINS:
                 self._report(
                     "E2002",
@@ -526,9 +646,9 @@ class Checker:
                     function.name_span,
                     hint="Choose a different name for this function.",
                 )
-            elif function.name in self._type_names or function.name in self._record_names:
+            elif key in self._type_names or key in self._record_names:
                 hint = (f"{function.name}(x) already means: build one: {function.name}(field: value)"
-                        if function.name in self._record_names
+                        if key in self._record_names
                         else f"{function.name}(x) already means: check that x is a valid {function.name}.")
                 self._report(
                     "E2006",
@@ -536,8 +656,8 @@ class Checker:
                     function.name_span,
                     hint=hint,
                 )
-            elif function.name in declared:
-                first = declared[function.name].name_span
+            elif key in declared:
+                first = declared[key].name_span
                 self._report(
                     "E2002",
                     f"The function '{function.name}' is declared more than once",
@@ -545,14 +665,17 @@ class Checker:
                     notes=(f"It was first declared at line {first.line}, column {first.column}.",),
                 )
             else:
-                declared[function.name] = function
-                self._signatures[function.name] = signature
-                symbol = Symbol(function.name, "function", signature.return_type, function.name_span, None, None)
-                self._function_symbols[function.name] = symbol
+                declared[key] = function
+                self._signatures[key] = signature
+                symbol = Symbol(function.name, "function", signature.return_type, function.name_span, None, None,
+                                module=self._module)
+                self._function_symbols[key] = symbol
                 self._symbols.append(symbol)
+                if function.public:
+                    self._public.add(key)
 
         if self.require_main or "main" in declared:
-            self._main(declared.get("main"))
+            self._main(declared.get(self._key("main")))
         for function, signature in own_signatures:
             self._function(function, signature)
 
@@ -571,24 +694,29 @@ class Checker:
         for _, _, declaration in declarations:
             name, span = declaration.name, declaration.name_span
             record = isinstance(declaration, ast.RecordDecl)
+            key = self._key(name)
             if name in KNOWN_TYPES or (record and name == type_model.LIST.name):
                 self._report("E2016", f"'{name}' is a built-in type and cannot be declared again", span,
                              hint="Choose a different name for this type.")
             elif not name[0].isupper():
                 self._report("E2016", f"The type name '{name}' must start with a capital letter", span,
                              hint=f"Write it as: {name[0].upper()}{name[1:]}")
-            elif name in self._type_names:
-                first = self._type_names[name].name_span
+            elif key in self._type_names:
+                first = self._type_names[key].name_span
                 self._report("E2016", f"The type '{name}' is declared more than once", span,
                              notes=(f"It was first declared at line {first.line}, column {first.column}.",))
-            elif name in self._record_names:
-                first = self._record_names[name].name_span
+            elif key in self._record_names:
+                first = self._record_names[key].name_span
                 self._report("E2016", f"The type '{name}' is declared more than once", span,
                              notes=(f"It was first declared at line {first.line}, column {first.column}.",))
             elif record:
-                self._record_names[name] = declaration
+                self._record_names[key] = declaration
+                if declaration.public:
+                    self._public.add(key)
             else:
-                self._type_names[name] = declaration
+                self._type_names[key] = declaration
+                if declaration.public:
+                    self._public.add(key)
 
     def _declare_types(self, declarations: tuple[ast.TypeDecl, ...]) -> None:
         """Resolves what each refined type refines."""
@@ -612,7 +740,7 @@ class Checker:
                     hint="Refining 'List[T]' is not supported yet. Refine a built-in type such as Int or Text.",
                 )
             return None
-        if declaration.base.name in self._record_names:
+        if self._key(declaration.base.name) in self._record_names:
             if not visiting:
                 self._report(
                     "E2016",
@@ -621,7 +749,7 @@ class Checker:
                     hint="Refining a record is not supported yet. Refine a built-in type such as Int or Text.",
                 )
             return None
-        base_name = declaration.base.name
+        base_name = self._key(declaration.base.name)
         if base_name in self._type_names:
             base = self._resolve(base_name, [*visiting, name])
             if base is None:
@@ -647,19 +775,19 @@ class Checker:
 
     def _in_cycle(self, name: str) -> bool:
         seen: set[str] = set()
-        current = self._type_names[name].base.name
+        current = self._key(self._type_names[name].base.name)
         while current in self._type_names and current not in seen:
             if current == name:
                 return True
             seen.add(current)
-            current = self._type_names[current].base.name
+            current = self._key(self._type_names[current].base.name)
         return False
 
     def _type_condition(self, declaration: ast.TypeDecl) -> None:
         """Checks the condition after 'where'. Only `value` is visible in it, and it calls no
         function of the program: a refinement is a fact about one value and nothing else."""
-        refined = self._refined.get(declaration.name)
-        if refined is None or self._type_names.get(declaration.name) is not declaration:
+        refined = self._refined.get(self._key(declaration.name))
+        if refined is None or self._type_names.get(self._key(declaration.name)) is not declaration:
             return
         scope = _Scope()
         scope.span = declaration.condition.span
@@ -809,8 +937,8 @@ class Checker:
         depends on `Point` just as one of type `Point` does.
         """
         found: list[str] = []
-        if reference.name in self._record_names:
-            found.append(reference.name)
+        if self._key(reference.name) in self._record_names:
+            found.append(self._key(reference.name))
         for argument in reference.arguments:
             found.extend(self._record_dependencies(argument))
         return found
@@ -1050,7 +1178,21 @@ class Checker:
         return self._known_type(reference, declared_records=declared_records)
 
     def _known_type(self, reference: ast.TypeRef, *, declared_records: bool = False) -> str | None:
+        # A type of another module is written with its module in front, and it is looked
+        # up qualified: `models.Point` is the record `Point` of the module `models`
+        # (decision 0018, 5). The type the analysis returns is that same qualified name,
+        # so two modules can both declare a `Point` without the analysis confusing them.
+        key = self._type_key(reference)
         if reference.arguments:
+            if reference.qualifier is not None:
+                self._report(
+                    "E2012",
+                    f"'{key}' cannot take type arguments",
+                    reference.span,
+                    hint="Only 'List', 'Option' and 'Result' take type arguments, and they are "
+                         "built-in: a module does not declare them.",
+                )
+                return None
             arity = _TYPE_ARGUMENT_COUNTS.get(reference.name)
             if arity is None:
                 self._report(
@@ -1082,26 +1224,40 @@ class Checker:
             if reference.name == "Result":
                 return f"Result[{arguments[0]}, {arguments[1]}]"
             return f"List[{arguments[0]}]"
-        if reference.name in KNOWN_TYPES:
+        if reference.qualifier is None and reference.name in KNOWN_TYPES:
+            # A built-in type belongs to no module: `Int` is `Int` in every file of the
+            # program. A module cannot redeclare one; that is reported where it declares.
             return reference.name
-        if reference.name in self._type_names:
+        if key in self._type_names:
+            if not self._is_public(key):
+                self._private(key, reference.span)
+                return None
             # A declared type whose own declaration has an error: that error is already reported.
-            return reference.name if reference.name in self._refined else None
-        if reference.name in self._record_names:
+            return key if key in self._refined else None
+        if key in self._record_names:
+            if not self._is_public(key):
+                self._private(key, reference.span)
+                return None
             # A record the program declares: a type, unless its own declaration has an
             # error, which is already reported.
-            if reference.name in self._records or declared_records:
-                return reference.name
+            if key in self._records or declared_records:
+                return key
             return None
-        candidates = [*KNOWN_TYPES, *self._type_names, *self._record_names]
-        close = difflib.get_close_matches(reference.name, candidates, n=1, cutoff=0.5)
+        candidates = [*KNOWN_TYPES, *self._visible(self._type_names), *self._visible(self._record_names)]
+        written = key
+        close = difflib.get_close_matches(written, candidates, n=1, cutoff=0.5)
         if reference.name == "String":
             hint = "The text type is called Text."
+        elif reference.qualifier is not None and reference.name in KNOWN_TYPES:
+            # A built-in written with a module in front: the correction is the other way
+            # around, to drop the module (decision 0018, 2).
+            hint = (f"'{reference.name}' is a built-in type: it belongs to no module. "
+                    f"Write it as '{reference.name}'.")
         elif close:
             hint = f"Did you mean '{close[0]}'?"
         else:
             hint = "The types are Int, Float, Bool, Text and Void, and the types the program declares."
-        self._report("E2012", f"'{reference.name}' is not a type", reference.span, hint=hint)
+        self._report("E2012", f"'{written}' is not a type", reference.span, hint=hint)
         return None
 
     def _signature(self, function: ast.Function) -> Signature:
@@ -1127,7 +1283,7 @@ class Checker:
                 main.params[0].span.to(main.params[-1].span),
                 hint="Write: fn main() -> Void",
             )
-        signature = self._signatures.get("main")
+        signature = self._signatures.get(self._key("main"))
         if signature is not None and signature.return_type not in (None, VOID):
             self._report("E2004", "'main' must return Void", main.return_type.span, hint="Write: fn main() -> Void")
 
@@ -1199,11 +1355,20 @@ class Checker:
         Every field of the record is given once, with a value of its type. The order of
         the text does not matter (decision 0014, 2 and 5).
         """
-        record = self._records.get(node.name)
-        if record is None:
-            # The declaration of the record has an error, already reported where it
-            # happens. The values are still checked, so that a mistake inside one of
-            # them is not hidden.
+        key = f"{node.qualifier}.{node.name}" if node.qualifier else self._key(node.name)
+        record = self._records.get(key)
+        if record is not None:
+            # The interpreter builds it from this one; a module writes it with its own
+            # bare name, and only the analysis knows which one it is (decision 0018, 5).
+            self._targets[id(node)] = key
+        if record is None and node.qualifier is not None:
+            self._unknown_record(node.qualifier, node.name, node.span)
+        if record is None or not self._is_public(key):
+            if record is not None:
+                self._private(key, node.span)
+            # Either the declaration of the record has an error, already reported where it
+            # happens, or the module does not make it public. The values are still checked,
+            # so that a mistake inside one of them is not hidden.
             for field in node.fields:
                 self._expression(field.value, scope)
             return None
@@ -1307,7 +1472,7 @@ class Checker:
         Functions, parameters and variables share one namespace, and a visible name is never
         declared again: every name in a function means exactly one thing.
         """
-        if name in self._type_names or name in self._record_names:
+        if self._key(name) in self._type_names or self._key(name) in self._record_names:
             self._report(
                 "E2006",
                 f"'{name}' is the name of a type and cannot be used for something else",
@@ -1315,7 +1480,7 @@ class Checker:
                 hint="Choose a different name. Types start with a capital letter; values usually do not.",
             )
             return False
-        if name in BUILTINS or name in self._signatures:
+        if name in BUILTINS or self._key(name) in self._signatures:
             kind = "a built-in function" if name in BUILTINS else "a function"
             self._report(
                 "E2006",
@@ -1342,7 +1507,7 @@ class Checker:
     def _declare(self, scope: _Scope, name: str, category: str, kind: str | None, span: Span, *,
                  mutable: bool = False, loop_variable: bool = False) -> None:
         symbol = Symbol(name, category, kind, span, self._function_name, scope.span, mutable=mutable,
-                        loop_variable=loop_variable)
+                        loop_variable=loop_variable, module=self._module)
         scope.names[name] = symbol
         self._symbols.append(symbol)
 
@@ -1783,21 +1948,21 @@ class Checker:
         if found is not None:
             found.references.append(node.span)
             return found.type
-        if node.name in self._type_names:
+        if self._key(node.name) in self._type_names:
             self._report(
                 "E2011",
                 f"'{node.name}' is a type, not a value",
                 node.span,
                 hint=f"To check a value against it, call it: {node.name}(x)",
             )
-        elif node.name in self._record_names:
+        elif self._key(node.name) in self._record_names:
             self._report(
                 "E2011",
                 f"'{node.name}' is a type, not a value",
                 node.span,
                 hint=f"To build one, write it: {node.name}(field: value)",
             )
-        elif node.name in BUILTINS or node.name in self._signatures:
+        elif node.name in BUILTINS or self._key(node.name) in self._signatures:
             self._report(
                 "E2011",
                 f"'{node.name}' is a function, not a value",
@@ -1872,11 +2037,14 @@ class Checker:
         nothing. The empty list uses it to learn its element type, as in `take([])`.
         """
         missing = [None] * len(node.arguments)
-        if node.callee in self._type_names:
+        key = self._key(node.callee)
+        if key in self._type_names:
             return missing
-        if node.qualifier is not None and node.callee not in BUILTINS:
+        if (node.qualifier is not None and node.callee not in BUILTINS
+                and key not in self._signatures):
+            # A function of a type, not of a module: its arguments have no expectation.
             return missing
-        signature = BUILTINS.get(node.callee) or self._signatures.get(node.callee)
+        signature = BUILTINS.get(node.callee) or self._signatures.get(key)
         if signature is None:
             return missing
         if signature.parametric is not None:
@@ -1897,17 +2065,24 @@ class Checker:
         ]
 
     def _call(self, node: ast.Call, scope: _Scope, expected: str | None = None) -> str | None:
+        key = self._key(node.callee)
+        if (node.qualifier is not None and node.callee not in BUILTINS
+                and key not in self._signatures and key not in self._type_names):
+            # `Name.function(...)`: the name is not a function, nor a type the module
+            # declares, so it can only be a function of a type (decision 0011, 9).
+            self._unknown_qualified_call(node, scope)
+            return None
         expectations = self._argument_expectations(node)
         argument_types = [
             self._expression(argument, scope, expected)
             for argument, expected in zip(node.arguments, expectations, strict=True)
         ]
-        if node.qualifier is not None and node.callee not in BUILTINS:
-            self._unknown_qualified_call(node, scope)
-            return None
-        if node.callee in self._type_names:
+        if key in self._type_names:
+            if not self._is_public(key):
+                self._private(key, node.callee_span)
+                return None
             return self._refinement_check(node, argument_types)
-        if self._refining is not None and node.callee in self._function_names and node.callee not in BUILTINS:
+        if self._refining is not None and key in self._function_names and node.callee not in BUILTINS:
             self._report(
                 "E2018",
                 f"The condition of '{self._refining}' cannot call the function '{node.callee}'",
@@ -1916,7 +2091,7 @@ class Checker:
                      "built-in conversions. Write the rule there, or check it with 'requires'.",
             )
             return None
-        signature = BUILTINS.get(node.callee) or self._signatures.get(node.callee)
+        signature = BUILTINS.get(node.callee) or self._signatures.get(key)
 
         if signature is None:
             if scope.find(node.callee) is not None:
@@ -1925,14 +2100,22 @@ class Checker:
                 self._report("E2008", f"There is no function named '{node.callee}'", node.callee_span,
                              hint=self._function_hint(node.callee))
             return None
+        if not signature.builtin and not self._is_public(key):
+            # A function of another module that is not marked with `pub`.
+            self._private(key, node.callee_span)
+            return None
 
         # The call is resolved: it is recorded even if its arguments turn out to be wrong. A call
         # written in an example is a reference to the function, but not an edge of the call graph:
         # the function does not make that call when it runs (decision 0008, section 2).
         if self._in_example is None:
-            self._calls.append((self._function_name, signature.name))
+            # Both ends are qualified with their module: two modules can declare one
+            # function with the same name, and the call graph has to tell them apart
+            # (decision 0018, 5).
+            self._calls.append((self._key(self._function_name), key))
         if not signature.builtin:
-            self._function_symbols[signature.name].references.append(node.callee_span)
+            self._function_symbols[key].references.append(node.callee_span)
+            self._targets[id(node)] = key
 
         expected_count, count = len(signature.params), len(node.arguments)
         if count != expected_count:
@@ -2069,7 +2252,7 @@ class Checker:
 
         if qualified(callee):
             return suggest(qualified(callee))
-        plain = [*self._signatures, *(name for name in BUILTINS if "." not in name)]
+        plain = [*self._visible(self._signatures), *(name for name in BUILTINS if "." not in name)]
         close = difflib.get_close_matches(callee, plain, n=1)
         if close:
             return suggest(close)
@@ -2078,13 +2261,24 @@ class Checker:
         return suggest(qualified(close[0])) if close else None
 
     def _unknown_qualified_call(self, node: ast.Call, scope: _Scope) -> None:
-        """`Name.function(...)` where Name is not a type with that function (decision 0011, 9)."""
+        """`Name.function(...)` where Name is neither a type with that function nor a module
+        that makes one public (decisions 0011, 9 and 0018, 2)."""
         qualifier = node.qualifier
         function = node.callee.split(".", 1)[1]
         hint: str | None = None
         notes: tuple[str, ...] = ()
         symbol = scope.find(qualifier)
-        if qualifier in KNOWN_TYPES or qualifier == type_model.LIST.name:
+        if qualifier in self._modules:
+            public = sorted(key.split(".", 1)[1] for key in self._public if key.startswith(f"{qualifier}."))
+            close = difflib.get_close_matches(function, public, n=1)
+            label = f"The module '{qualifier}' has no function named '{function}'"
+            if close:
+                hint = f"Did you mean '{qualifier}.{close[0]}'?"
+            elif public:
+                notes = (f"The functions '{qualifier}' makes public: {', '.join(public)}.",)
+            else:
+                notes = (f"The module '{qualifier}' makes no function public: it declares none with 'pub'.",)
+        elif qualifier in KNOWN_TYPES or qualifier == type_model.LIST.name:
             label = f"'{qualifier}' has no function named '{function}'"
             functions = TYPE_FUNCTIONS.get(qualifier, [])
             if functions:
@@ -2093,7 +2287,7 @@ class Checker:
                 notes = (f"The functions of {qualifier}: {', '.join(functions)}.",)
             else:
                 notes = (f"{qualifier} has no functions yet.",)
-        elif qualifier in self._type_names or qualifier in self._record_names:
+        elif self._key(qualifier) in self._type_names or self._key(qualifier) in self._record_names:
             label = f"'{qualifier}' has no functions of its own"
             base = self._root(qualifier)
             if TYPE_FUNCTIONS.get(base):
@@ -2103,17 +2297,22 @@ class Checker:
             base = self._root(symbol.type) if symbol.type is not None else None
             if function in TYPE_FUNCTIONS.get(base, []):
                 hint = f"Call the function of its type: {base}.{function}({qualifier})"
-        elif qualifier in BUILTINS or qualifier in self._signatures:
+        elif qualifier in BUILTINS or self._key(qualifier) in self._signatures:
             label = f"'{qualifier}' is a function, not a type"
         else:
+            if qualifier[:1].islower():
+                # A type always starts with a capital letter, so a name before the '.' that
+                # starts with a lower case one can only be a module (decision 0018, 2).
+                self._unknown_module(qualifier, node.callee_span)
+                return
             label = f"There is no type named '{qualifier}'"
             close = difflib.get_close_matches(
-                qualifier, [*KNOWN_TYPES, type_model.LIST.name, *self._type_names, *self._record_names], n=1,
+                qualifier,
+                [*KNOWN_TYPES, type_model.LIST.name, *self._visible(self._type_names),
+                 *self._visible(self._record_names)],
+                n=1,
             )
             hint = f"Did you mean '{close[0]}'?" if close else None
-            if qualifier[:1].islower():
-                notes = ("Before the '.' goes the name of a type, such as Text. "
-                         "Modules are not part of NEXORA yet.",)
         self._report("E2008", label, node.callee_span, hint=hint, notes=notes)
 
     def _refinement_check(self, node: ast.Call, argument_types: list[str | None]) -> str | None:
@@ -2127,7 +2326,11 @@ class Checker:
                 hint=f"To build on '{name}', refine it: type {self._refining} = {name} where ...",
             )
             return None
-        refined = self._refined.get(name)
+        refined = self._refined.get(self._key(name))
+        if refined is not None:
+            # The interpreter runs the check on this one; a module writes it with its own
+            # bare name, and only the analysis knows which one it is (decision 0018, 5).
+            self._targets[id(node)] = self._key(name)
         count = len(node.arguments)
         if count != 1:
             self._report(

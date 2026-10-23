@@ -776,6 +776,7 @@
         "name",
         "name_span",
         "fields",
+        "qualifier",
         "type"
       ],
       "properties": {
@@ -796,6 +797,16 @@
           "items": {
             "$ref": "#/$defs/FieldInitializer"
           }
+        },
+        "qualifier": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": [
@@ -884,7 +895,8 @@
         "kind",
         "span",
         "name",
-        "arguments"
+        "arguments",
+        "qualifier"
       ],
       "properties": {
         "kind": {
@@ -901,6 +913,16 @@
           "items": {
             "$ref": "#/$defs/TypeRef"
           }
+        },
+        "qualifier": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -913,7 +935,8 @@
         "name_span",
         "base",
         "condition",
-        "message"
+        "message",
+        "public"
       ],
       "properties": {
         "kind": {
@@ -980,6 +1003,9 @@
               "type": "null"
             }
           ]
+        },
+        "public": {
+          "type": "boolean"
         }
       }
     },
@@ -1017,7 +1043,8 @@
         "span",
         "name",
         "name_span",
-        "fields"
+        "fields",
+        "public"
       ],
       "properties": {
         "kind": {
@@ -1037,6 +1064,9 @@
           "items": {
             "$ref": "#/$defs/FieldDecl"
           }
+        },
+        "public": {
+          "type": "boolean"
         }
       }
     },
@@ -1058,6 +1088,29 @@
         },
         "capability": {
           "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "path_span": {
+          "$ref": "#/$defs/span"
+        }
+      }
+    },
+    "ImportDecl": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "path",
+        "path_span"
+      ],
+      "properties": {
+        "kind": {
+          "const": "ImportDecl"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
         },
         "path": {
           "type": "string"
@@ -2017,7 +2070,8 @@
         "return_type",
         "contracts",
         "body",
-        "examples"
+        "examples",
+        "public"
       ],
       "properties": {
         "kind": {
@@ -2055,6 +2109,9 @@
           "items": {
             "$ref": "#/$defs/Example"
           }
+        },
+        "public": {
+          "type": "boolean"
         }
       }
     },
@@ -2066,7 +2123,8 @@
         "types",
         "functions",
         "records",
-        "uses"
+        "uses",
+        "imports"
       ],
       "properties": {
         "kind": {
@@ -2097,6 +2155,12 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/UsesDecl"
+          }
+        },
+        "imports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ImportDecl"
           }
         }
       }

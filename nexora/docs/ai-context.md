@@ -41,7 +41,7 @@ fn main() -> Void {
 `nex context program.nex` escribe:
 
 ```text
-program.nex | NEXORA 0.10.0 | 14 lines
+program.nex | NEXORA 0.11.0 | 14 lines
 Static analysis: no errors.
 The program was not run to produce this summary.
 Entry point: main
@@ -129,7 +129,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.context/1",
-  "nexora_version": "0.10.0",
+  "nexora_version": "0.11.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
@@ -168,7 +168,8 @@ fn main() -> Void {
       ],
       "recursive": false,
       "examples": [],
-      "loops": []
+      "loops": [],
+      "file": "program.nex"
     },
     {
       "name": "main",
@@ -192,7 +193,8 @@ fn main() -> Void {
       "called_by": [],
       "recursive": false,
       "examples": [],
-      "loops": []
+      "loops": [],
+      "file": "program.nex"
     }
   ],
   "features": [
@@ -244,7 +246,7 @@ fn main() -> Void {
 ```
 
 ```text
-program.nex | NEXORA 0.10.0 | 5 lines
+program.nex | NEXORA 0.11.0 | 5 lines
 Static analysis: 2 errors.
 The program was not run to produce this summary.
 Partial summary: only the code that could be parsed is described.
@@ -307,7 +309,7 @@ fn main() -> Void {
 ```json
 {
   "schema": "nexora.symbols/1",
-  "nexora_version": "0.10.0",
+  "nexora_version": "0.11.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],
@@ -334,7 +336,8 @@ fn main() -> Void {
       "assignments": [],
       "signature": "fn main() -> Void",
       "params": [],
-      "return_type": "Void"
+      "return_type": "Void",
+      "file": "program.nex"
     },
     {
       "name": "total",
@@ -362,7 +365,8 @@ fn main() -> Void {
         }
       ],
       "mutable": false,
-      "assignments": []
+      "assignments": [],
+      "file": "program.nex"
     }
   ],
   "builtins": [
