@@ -93,8 +93,9 @@ Stable since 0.3.0. Their limits, in detail, in [contracts](contracts.md#limitat
 
 - The only stable interface is the command line. The Python API (`nexora.tooling`) is
   **experimental**; the rest of the modules of `src/nexora/` are internal and may change without notice.
-- There is no formatter, debugger or editor integration. The language server (LSP) is
-  **planned, not implemented**: [LSP](lsp.md).
+- There is no debugger. The language server and the formatter exist and the VS Code extension uses
+  them, but the server does not resolve imports yet: in the editor, a file that uses `import` gets
+  `E0001` ([LSP](lsp.md#limitations)).
 - With syntax errors, `nex inspect`, `nex context` and `nex symbols` return a **partial**
   structure: the statements with errors are missing and so is, entirely, any function whose declaration has
   one; and only the syntax errors are reported. With lexical errors (an unclosed text, an

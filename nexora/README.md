@@ -221,7 +221,7 @@ nex-mcp
 ```
 
 The MCP server only analyzes: it does not run programs or open files. It has been tested with the client
-of the official SDK and, by hand, in a Claude Code session; not in other assistants. There is no language server (LSP) yet.
+of the official SDK and, by hand, in a Claude Code session; not in other assistants. The language server for editors (`nexora-lsp`) is described in [LSP](docs/lsp.md).
 
 | | |
 |-|-|
@@ -229,7 +229,7 @@ of the official SDK and, by hand, in a Claude Code session; not in other assista
 | [Structured context](docs/ai-context.md) | `nex context` and `nex symbols` |
 | [JSON protocol](docs/json-protocol.md) | Formats, versions and JSON Schema |
 | [MCP server](docs/mcp.md) | Installation, tools, configuration and security |
-| [LSP](docs/lsp.md) | Planned, not implemented |
+| [LSP](docs/lsp.md) | The language server that the VS Code extension uses |
 
 ## Examples
 

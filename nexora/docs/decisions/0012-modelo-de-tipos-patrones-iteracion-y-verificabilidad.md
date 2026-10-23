@@ -90,317 +90,388 @@ This ADR does not decide typeclasses, algebraic effects, concurrency, macros, `a
 
 #### B.2.1. D01 — Internal representation of the type model **[P]**
 
-> **Status: proposal pending approval.** Not accepted. This subsection defines D01 and does not reopen D02 (nominal vs. structural), D03 (generic scope and inference) or D04 (refinements): it only fixes how types are represented, identified, compared, presented and migrated. The names `Type`, `TypeExpr`, `type_repr`, `types.py`, etc. are provisional design names; **they do not exist today in the code** and must not be presented as implemented.
+> **Status: proposal pending approval.** Not accepted. This subsection makes D01 concrete and does not reopen D02 (nominal versus structural), D03 (scope of generics and inference) nor D04 (refinements): it only fixes how types are represented, identified, compared, presented and migrated. The names `Type`, `TypeExpr`, `type_repr`, `types.py`, etc. are provisional design names; **they do not exist in the code today** and must not be presented as implemented.
 
-**D01.1. Internal representation vs. textual presentation**
+**D01.1. Internal representation versus textual presentation**
 
-The source of truth must be a data structure, not a string. The string remains as one presentation form, never as the representation on which semantics are decided.
+The source of truth must be a data structure, not a string. The string is kept as one of the forms of presentation, never as the representation on which the semantics is decided.
 
 Responsibilities of the type model:
 
-- build a type from the AST `TypeRef` and declarations
-- compare types and decide assignability
-- represent composed and refined types
-- preserve a canonical textual form for JSON, diagnostics and tooling
-- support migration while preserving compatibility
+- building a type from the `TypeRef` of the AST and from the declarations of the program;
+- checking the arity and the names of constructors;
+- comparing types by identity and equivalence;
+- substituting type variables with arguments;
+- unifying when inference needs it;
+- computing the root type of a refinement;
+- walking the type for diagnostics, tools and serialization;
+- producing a canonical textual representation and a structured representation.
 
-The representation must be explicit, structural and versionable. The textual form is a product of the model, not its definition.
+Responsibilities of the textual presentation:
 
-**D01.2. Requirements for the model**
+- showing types readable by people (`List[Option[Int]]`, `Result[Text, Error]`);
+- keeping the current `type` field of JSON as long as it is needed for compatibility;
+- not being used to decide equality, assignability, arity nor diagnostics.
 
-- type identity, equality and order must be explicit; they are not incidental properties of strings;
-- type arguments must be first-class values in the model; e.g. `List[Int]`, `Option[Text]`;
-- refined forms must be represented as a layer around a base type and a predicate;
-- function types may be represented in the model before they become exposed as runtime values;
-- string serialization must be canonical and deterministic for stable comparisons and diagnostics.
+Conceptual examples:
 
-**D01.3. Equality and identity**
+- `List[Option[Int]]` is represented as a list constructor whose argument is an optional constructor whose argument is `Int`. The string is generated when showing it; the comparison does not walk nor parse the string.
+- `Result[Text, Error]` is represented as a result constructor with two positional arguments. The arity is checked against the declaration of the constructor, not by counting commas.
+- Two types written with different spacing (`List[ Int ]` and `List[Int]`) must be the same type if the parser accepts them; the textual representation does not take part in that decision.
 
-The model should separate:
+Type checking stops depending on `left != right` or on equivalent comparisons of strings. That dependency exists in the code today and is the main reason for D01.
 
-- structural equality: same shape and same arguments;
-- nominal identity: same declaration or same qualified name;
-- canonical rendering: deterministic text for display and JSON.
+**D01.2. Minimal types**
 
-Recommendation:
-
-- primitive and built-in types compare structurally when appropriate;
-- declared types use nominal identity with module-qualified names when modules exist;
-- refined types compare by base type + predicate identity, not by text alone;
-- composed types compare by constructor + arguments;
-- function types do not become first-class values without explicit decision.
-
-**D01.4. Canonical rendering and compatibility**
-
-The current `type` field in JSON documents remains the canonical textual representation. It is not removed or redefined.
-
-Additive rule:
-
-- keep `type` as a human-readable and compatibility string;
-- add a structured `type_repr` field when a tool needs to distinguish structure from text;
-- `type_repr` is optional and additive; it may be ignored by older consumers;
-- the exact vocabulary of `kind`, qualified names, arguments and structure is defined later, in coordination with D16 and schema versioning.
-
-**D01.5. Migration plan**
-
-The type model should be introduced in a single module without changing language syntax yet. The textual representation remains the presentation layer until the model is stable.
-
-A safe migration path:
-
-1. create a dedicated type module and representations;
-2. keep the textual string as the compatibility layer;
-3. migrate pure operations first: construction, identity, equivalence, root and display;
-4. migrate the checker and interpreter after the model is stable;
-5. add composed syntax later when the model is proven internally;
-6. extend tooling and schemas at the end with additive `type_repr` fields.
-
-**D01.6. Concrete impact areas**
-
-The current components affected are:
-
-- `values.py`: type constants and `VALUE_TYPES`; the new model must replace their use as the type table;
-- `ast_nodes.py`: `TypeRef` and `TypeDecl`;
-- `parser.py`: `_type` only accepts a single identifier; composed type syntax requires future changes;
-- `checker.py`: `Signature`, `Symbol.type`, `CheckedProgram.types`, `RefinedType`, `binary_result` and assignability checks;
-- `interpreter.py`: runtime value checks, contracts and refined checks;
-- `diagnostics.py`: messages and positions that currently assume strings;
-- `tooling.py` and `schemas.py`: `type` fields, type validation and schema documents;
-- `cli.py`, `mcp_server.py` and the playground;
-- documentation, examples and tests that refer to type strings.
-
-**D01.7. Risk reduction strategy**
-
-A low-risk migration reduces the impact of a large rewrite:
-
-1. introduce the structured model in a single type module, without changing language syntax;
-2. keep textual representation as the compatibility layer and initial value;
-3. migrate the pure model operations first;
-4. adapt the checker and interpreter afterward;
-5. add compound types and `[...]` syntax only after the model is tested internally;
-6. extend tooling and schemas last with additive `type_repr` fields.
-
-**Future tests required (not executed in this task):**
-
-- equality and difference of primitives, refinements, declarations and compounds;
-- nesting (`List[Option[Int]]`) and wrong arity;
-- canonical rendering and format stability;
-- widening of refinements and rejection of the reverse direction without explicit construction;
-- diagnosis with expected/found type and position;
-- compatibility of `type` and validation of `type_repr` against schemas;
-- regression of all existing programs and examples;
-- performance of model operations on representative programs.
-
-**D01.8. Alternatives and costs**
-
-| Alternative | Advantages | Disadvantages | Consequence |
+| Category | Examples | Proposed representation | Initial limit |
 |---|---|---|---|
-| Keep strings and parse them when needed | Apparent minimum change | Equality, arity, unification and diagnosis are ad hoc; accumulated debt | Rejected as a foundation |
-| Minimal structured algebra (`Type`/`TypeExpr`) | Correct, extensible, good for tooling | Requires migrating checker and tooling | **Recommended** |
-| Structural model by default | Flexible | Weak identity and risky refactors | Deferred to D02 |
-| Full Hindley-Milner | Fewer annotations | Complexity and difficult messages | Deferred; not an initial requirement |
-| Typeclasses from the start | More expressive generics | Early resolution and complexity | Deferred |
-| Formal verification of refinements | More guarantees | Outside the scope and current model | Not part of D01 |
+| Primitives | `Int`, `Float`, `Bool`, `Text`, `Void` | Constructor without arguments | `Void` only as the result of a function |
+| Refined | `Percent`, `Positive`, `NonEmpty` | Nominal wrapper with a name, a base and a reference to its condition | Not expanded by default; they keep their identity |
+| Declared | user records and enums (proposed in D02/D05) | Nominal type with a declaration identity and type arguments | Initially without user generics or with a simple arity |
+| Type variables | `T`, `E` in a generic declaration | Variable with an identifier and a name bound to its declaration | Only inside the declaration that introduces them |
+| Generic constructors | `List[T]`, `Option[T]`, `Result[T, E]` | Constructor with a fixed arity and positional arguments | `List` arity 1; `Option` arity 1; `Result` arity 2 |
+| Function type | signature of a function | Structure reserved for the signature, without function values | Not a first-class type in this phase |
+
+Minimal rules:
+
+- There is no `Any`, no implicit numeric conversions, and no width subtyping.
+- `Void` is not a value type: it cannot be a parameter nor an argument of a data constructor.
+- A refined type is a type distinct from its base, even if it is assignable to it in the sense of widening.
+- A declared type is distinct from another one with the same shape: identity does not depend on the fields.
+- Built-in and declared constructors share the same form of representation; there is no special case for `List` beyond its arity and its associated operations.
+
+**D01.3. Compound types**
+
+- A compound type is a constructor with a tuple of arguments, possibly nested.
+- `List[Option[Int]]` is represented as `Apply(List, (Apply(Option, (Int,)),))` in conceptual notation.
+- `Result[Text, Error]` is represented as `Apply(Result, (Text, Error))`.
+- `Option[Result[Int, Error]]`, lists of lists and equivalent combinations are represented by direct nesting, without flattening nor encoding in a string.
+- The arity is validated against the declaration of the constructor. An arity-1 constructor used with two arguments is a type error, not a string parsing error.
+- The canonical presentation uses square brackets and commas: `List[Option[Int]]`, `Result[Text, Error]`. The presentation does not need to be unique in whitespace (the parser normalizes), but it must be stable for the same structure.
+- Future records and enums use the same representation, with their own type constructors.
+
+**D01.4. Identity and equivalence**
+
+Type equality is defined structurally on the internal representation, with a nominal exception for declared types:
+
+1. **Primitives:** equal if and only if they are the same primitive.
+2. **Constructors:** equal if the constructor is the same and their arguments are equal in order. `List[Int]` and `List[Text]` are not equal.
+3. **Declared types:** equal if they are the same declaration, not if they have the same fields. `Person` and `Employee` with identical fields are not the same type.
+4. **Refined types:** equal if they are the same declared name, even if they share a base and a condition. `Percent` and `Amount` are not interchangeable.
+5. **Type variables:** equal if they are bound to the same variable; an unbound variable is not equal to a concrete type.
+6. **Functions:** equal by parameters and result when that type is incorporated; postponed until there are function values.
+
+Initial compatibility rules:
+
+- **Invariance in generic arguments:** `List[Int]` is not assignable to `List[Text]`, and `Option[Int]` is not assignable to `Option[Text]`. Covariance is postponed.
+- **Widening of refined types:** a value of `Percent` is acceptable where an `Int` is expected; the opposite requires building the refined type (`Percent(x)`) and checking the condition at run time.
+- **No structural subtyping:** two records with the same shape are not compatible if they are different declarations.
+- **Declaration identity:** in a file, the name of the declaration; when modules exist, an identity that includes the module or a stable identifier. The exact form stays open and depends on D13.
+- Types are not compared by their textual representation, by their order of declaration nor by their position in the file.
+
+**D01.5. Generics and inference**
+
+D01 only fixes how type variables are represented and how they are instantiated. The functional scope is decided in D03; D01 does not approve it.
+
+Initial recommendation:
+
+- **First-order parametric** generics, with an explicit declaration of variables (`fn f[T](x: T) -> T`, `type Box[T] = ...`).
+- No typeclasses.
+- No automatic generalization.
+- No higher-rank types, no type families and no polymorphic recursion without annotation.
+- Local inference for `let`/`var` from the initializer, as today.
+- First-order unification in calls to infer type arguments of built-ins and generic functions.
+- `let xs = []` requires an annotation (`let xs: List[Int] = []`): the model does not make up the type of the element.
+- If a type argument stays ambiguous, an annotation is asked for instead of choosing a default.
+- In the body of a generic function, a type variable can only be passed, returned or stored in a structure that accepts it. Arithmetic, field access, ordering or any operation that requires a constraint is not allowed. Comparison by equality is allowed only for value types, not for functions.
+
+Justification for not starting with Hindley-Milner nor with typeclasses:
+
+- The immediate use case —lists, `Option`, `Result` and simple generic functions— is covered by first-order unification and explicit annotations.
+- Hindley-Milner adds generalization, ambiguity and hard messages without solving any approved use case.
+- Typeclasses require a resolution mechanism and constraints that are not needed today; they can be added later without invalidating the internal representation.
+- The priority of NEXORA is the verifiability of requirements, not the maximum expressiveness of the type system.
+
+Explicitly postponed: typeclasses, higher-rank types, automatic generalization, inferred covariance/contravariance, row types, dependent types and formal verification of generics.
+
+**D01.6. Refinements and contracts**
+
+D01 represents refinements; their full semantics is decided in D04 and in decisions 0004/0007, which are not reopened.
+
+- A refined type is represented as a nominal type whose name, base and condition are data of the model. The base can be a primitive, another refined type or, in the future, a compound type.
+- The chain of refinements is kept to explain which root type it starts from and which conditions a value must meet.
+- Constants are checked statically as today; computed values enter with the explicit construction of the refined type and are checked when running (`E4003`). D01 does not change that guarantee.
+- The `requires`/`ensures` contracts are still checks at run time. D01 does not suggest that a refined predicate is proved automatically nor that the checker is a prover.
+- A refined type is assignable to its base (widening). The opposite direction requires building the refined type; there is no implicit coercion from `Int` to `Percent`.
+- When refinements are applied to lists or records, the model must be able to represent the compound base without turning the predicate into a string.
+- Exhaustiveness and diagnostics on refined types stay conservative: if the model cannot prove a property, it asks for a general case or leaves the check for run time.
+
+**D01.7. Diagnostics**
+
+Type diagnostics must be built from the values of the model, not by parsing strings.
+
+- An incompatibility diagnostic keeps at least: the expected type, the found type, the position of the expression and, when it exists, the position of the relevant declaration or parameter.
+- The explanation points at the first point of divergence: for example, "expected `List[Option[Int]]` and found `List[Int]`; the argument of the list does not match".
+- Codes are stable and specific: unknown type, wrong arity, incompatible argument, ambiguous type, duplicate/unknown/missing field, invalid pattern, etc. The exact assignment of codes is done when implementing, not in this ADR.
+- Messages do not depend on the textual format nor on the order of the declarations. The same structure produces the same message except for the position.
+- Notes and related positions ("the type was declared here", "the parameter is declared here") can be added when they help.
+- Diagnostics must be serializable with the structured type (or a stable form of it) so that a tool does not have to interpret the string again.
+
+**D01.8. Public interfaces and versioning**
+
+Compatibility with what exists:
+
+- The `type` field of the current JSON documents is still the canonical textual representation. It is neither removed nor changes meaning.
+- `Signature.describe()` and other readable forms can still exist for humans.
+- Adding a structured field is proposed, for example `type_repr`, next to the `type` field when a tool needs to tell structure apart and not only text.
+- `type_repr` must be additive: an old consumer can ignore it. It does not become required nor replace `type` in the same version.
+- A schema version change is needed if a field is removed or renamed, if its meaning changes, if `type_repr` becomes required or if its form stops being backward compatible. Adding an optional field does not require it according to the current compatibility rule.
+- The exact form of `type_repr` (vocabulary of `kind`, representation of qualified names, etc.) is coordinated with D16 and with the versioning of schemas. Until then, D01 only fixes that it must be structured, stable and additive.
+- The schemas, the documents and the tools are not modified now; this ADR only proposes the direction.
+
+**D01.9. Migration**
+
+Current components affected:
+
+- `values.py`: type constants and `VALUE_TYPES`; the new model must replace their use as a table of types.
+- `ast_nodes.py`: `TypeRef` (today only `name`) and `TypeDecl` (today only refined).
+- `parser.py`: `_type` accepts a single identifier; the syntax of compound types requires later changes.
+- `checker.py`: `Signature`, `Symbol.type`, `CheckedProgram.types`, `RefinedType`, `binary_result` and the assignability checks.
+- `interpreter.py`: checking of values, contracts and refined types at run time.
+- `diagnostics.py`: messages and positions that today assume strings.
+- `tooling.py` and `schemas.py`: `type` fields, type entries, validation and documents.
+- `cli.py`, `mcp_server.py` and the playground, which consume those forms.
+- Documentation, examples and tests that cite type strings.
+
+Strategy to reduce the risk of a massive rewrite:
+
+1. Introduce the structured model in a single type module, without changing the syntax of the language yet.
+2. Keep the textual representation as a presentation layer and as the initial compatibility value.
+3. Migrate first the pure operations of the model: construction, identity, equivalence, root and presentation.
+4. Then adapt the checker and the interpreter, replacing string comparisons with the operations of the model.
+5. Add compound types and the `[...]` syntax when the model has already been tested internally.
+6. Extend the tools and the schemas at the end, with an additive `type_repr`.
+
+Future tests needed (not run in this assignment):
+
+- equality and difference of primitives, refined, declared and compound types;
+- nesting (`List[Option[Int]]`) and wrong arity;
+- canonical presentation and stability of the format;
+- widening of refined types and rejection of the opposite direction without explicit construction;
+- diagnostic with expected/found type and position;
+- compatibility of `type` and validation of `type_repr` against the schemas;
+- regression of all the existing programs and examples;
+- performance of the operations of the model on representative programs.
+
+**D01.10. Alternatives and costs**
+
+| Alternative | Advantages | Drawbacks | Consequence |
+|---|---|---|---|
+| Keep strings and parse them when needed | Apparently minimal change | Ad hoc equality, arity, unification and diagnostics; growing debt | Rejected as a base |
+| Minimal structured algebra (`Type`/`TypeExpr`) | Correct, extensible, good for tools | Requires migrating the checker and the tooling | **Recommended** |
+| Structural model by default | Flexible | Weak identity and dangerous refactors | Postponed to D02 |
+| Full Hindley-Milner | Fewer annotations | Complexity and hard messages | Postponed; not an initial requirement |
+| Typeclasses from the start | More expressive generics | Premature resolution and complexity | Postponed |
+| Formal verification of refinements | More guarantees | Outside the scope and the current model | Not part of D01 |
 
 Cost and complexity added by the recommended model:
 
 - a type module and a deep change in `checker.py`;
-- migration of signatures, symbols, expression types and refinements;
+- migration of signatures, symbols, expression types and refined types;
 - adaptation of diagnostics, tooling and schemas;
-- risk that the first version is too limited in generics, acceptable if the model permits growth.
+- risk that the first version is too limited in generics, acceptable if the model allows growing.
 
 Open risks:
 
 - performance of comparison and substitution in large programs;
-- ergonomics of inference and quality of messages;
-- identity of declared types once modules exist;
+- ergonomics of inference and quality of the messages;
+- identity of declared types when modules exist;
 - form and versioning of `type_repr`;
-- equality of function types once they are introduced;
-- possible need for type aliases and their relationship with identity.
+- equality of function types when they are incorporated;
+- possible need for type aliases and their relation to identity.
 
-**D01.9. Open questions of D01**
+**D01.11. Open questions of D01**
 
-1. **Identity of declared types across files.** Recommendation: module-qualified name; exact form depends on D13. Open.
-2. **`Void` as a type.** Recommendation: only as a function result; not as a value. Open to confirmation.
-3. **Type alias.** Recommendation: an alias resolves to its canonical type and does not create new identity. Open; does not block D01.
-4. **`Function` in the model.** Recommendation: represent the signature internally from the beginning, but do not expose it as a value type until functions are values. Open.
-5. **`type_repr`.** Recommendation: additive, optional and versioned field; name and form are coordinated with D16. Open.
+1. **Identity of declared types across files.** Recommendation: a name qualified by module; the exact form depends on D13. Open.
+2. **`Void` as a type.** Recommendation: only as the result of a function; not as a value. Open to confirmation.
+3. **Type aliases.** Recommendation: an alias resolves to its canonical type and does not create a new identity. Open; it does not block D01.
+4. **`Function` in the model.** Recommendation: represent the signature internally from the start, but do not expose it as a value type until functions exist as values. Open.
+5. **`type_repr`.** Recommendation: an additive, optional and versioned field; name and form are coordinated with D16. Open.
 6. **Equality on type variables.** Recommendation: allow `==`/`!=` only for value types and not for functions. Open to confirmation.
-7. **Scope of composed refinements.** Recommendation: represent them from D01; limit their predicates in D04. Open.
+7. **Scope of compound refined types.** Recommendation: represent them from D01; limit their predicates in D04. Open.
 
-None of these questions prevents approving the main direction of D01; they are resolved during implementation or in decisions D02–D04 and D13/D16.
+None of these questions prevents approving the main direction of D01; they are resolved when implementing each phase or in decisions D02–D04 and D13/D16.
 
 #### B.2.2. Compound types and generic constructors
 
 - `List[T]`: built-in constructor, arity 1.
-- `Option[T]`: prelude constructor, arity 1.
-- `Result[T,E]`: prelude constructor, arity 2.
-- User-defined records and enums have arity equal to the number of type parameters declared; initially they may be non-generic.
-- Invariance by default on arguments: `List[Int]` is not assignable to `List[Text]`. Covariance is deferred until there is an explicit rule and, preferably, guaranteed immutability.
+- `Option[T]`: constructor of the prelude, arity 1.
+- `Result[T,E]`: constructor of the prelude, arity 2.
+- User-defined records and enums have an arity equal to the number of declared type parameters; initially they can be non-generic.
+- Invariance by default in the arguments: `List[Int]` is not assignable to `List[Text]`. Covariance is postponed until there is an explicit rule and, preferably, guaranteed immutability.
 - No `Any`, no width subtyping and no implicit conversions.
 
 #### B.2.3. Type variables and initial limits of genericity
 
 - Explicit declaration: `fn f[T](x: T) -> T`, `type Box[T] = { value: T }`.
 - No typeclasses in the first version.
-- In the body of a generic function, a type variable `T` may only:
-  - be passed to another function expecting `T`;
+- In the body of a generic function, a type variable `T` can only:
+  - be passed to another function that expects `T`;
   - be returned;
   - be stored in a structure that accepts `T`;
-  - be compared with `==`/`!=` only if structural equality is decided to be total for all value types. Recommendation: allow it for value types, not functions.
-- Arithmetic on `T`, field access on `T`, ordering of `T` and any operation that requires a restriction are not permitted. This is a deliberate and documentable limitation.
+  - be compared with `==`/`!=` only if it is decided that structural equality is total for all value types. Recommendation: allow it for value types, not for functions.
+- Arithmetic on `T`, access to fields of `T`, ordering of `T` or any operation that requires a constraint is not allowed. It is a deliberate and documentable limitation.
 - No higher-rank types, no Hindley-Milner generalization and no polymorphic recursion without annotation.
 
-#### B.2.4. Nominal vs. structural types
+#### B.2.4. Nominal versus structural types
 
 For records and enums, the recommendation is **nominal**:
 
-- type identity is its declaration (module + name), not the shape of its fields;
-- two records with the same fields are not interchangeable;
-- advantages: stable contracts, clear messages, controlled evolution, better base for agents and impact detection;
-- disadvantages: no width subtyping; conversion between equivalent shapes must be explicit.
+- The identity of the type is its declaration (module + name), not the shape of its fields.
+- Two records with the same fields are not interchangeable.
+- Advantages: stable contracts, clear messages, controlled evolution, a better base for agents and for impact detection.
+- Drawbacks: there is no width subtyping; a conversion between equivalent shapes must be explicit.
+- Structural types/row types can be added later as an explicit construct, not as the default.
 
-This is preferred over structural typing because NEXORA is about preserving contracts and honest evidence; weak identities complicate analysis and AI tooling.
+#### B.2.5. Inference and limits
 
-**D02.1. Synthetic representation and compatibility**
+- Local inference for `let`/`var` from the initializer, as today.
+- First-order unification in calls to infer type arguments.
+- No automatic generalization, no higher-rank types, no inference across modules.
+- `let xs = []` requires an annotation (`let xs: List[Int] = []`); the type of the element is not made up.
+- If a type argument stays ambiguous, a dedicated error with a suggestion of an annotation.
+- Generic built-ins are declared with type variables and instantiated at the call.
+- Inference must not prevent clear diagnostics: if it cannot explain why it chose a type, it must ask for an annotation.
 
-The type model must support:
+#### B.2.6. Refined types and verifiable guarantees
 
-- canonical names for declared types;
-- qualified names for modules;
-- field and constructor names;
-- type arguments in record/enum declarations;
-- `void` as a special result type and not as a value;
-- a `type_repr` representation that can be serialized without losing semantic structure.
+- A refined type can refine any value type, not only built-ins: `type NonEmpty = List[Int] where List.length(value) > 0`.
+- The condition must be `Bool`, pure and total. Initially:
+  - it can use operators and pure built-in functions;
+  - it can access fields of records and constructors of enums if the operation is total;
+  - it **cannot** call functions of the program, unless in the future there is a purity/termination analysis.
+- Constants are checked statically; computed values enter with `T(x)`, checked when running (`E4003`).
+- The checking of constants is extended to compound literals, with the same work budget (`MAX_REFINEMENT_STEPS`, `E2019`).
+- Contracts can use refined values as their base type (widening). `ensures` can return a refined type; the function must return a valid constant or `T(x)`.
+- It is not promised that a refined condition is decidable in general. The checker evaluates what it can and reports the limit.
+- Exhaustiveness on refined types is conservative: a wildcard is required unless proved; no proof is made up.
 
-**D02.2. Relationship with refining**
+#### B.2.7. Diagnostics and representation
 
-A refined type is not a new nominal type. It is a refinement of an existing type with a predicate, a label and a source span. It remains valid if the base type is valid. This still leaves open how strong the predicate language is for compound types, but it should remain a layer and not a different identity.
-
-**D02.3. Allowed and deferred decisions**
-
-- allowed in D01: type algebra, canonical names, additive `type_repr`, nominal identity for user types, type parameters, no implicit conversions;
-- deferred: methods, traits, `Any`, structural subtyping, open records, polymorphic recursion, full higher-rank types.
-
-**D02.4. Evidence pending**
-
-- no implementation yet;
-- no migration test of a project with records and enums;
-- no checked ergonomics for user-defined nominal types;
-- no final decision on `type_repr` vocabulary.
-
-#### B.2.5. Records and enums in the planned model
-
-- Records: `type Person = { name: Text, age: Int }`.
-- Enums: `enum Result[T, E] { Ok(T), Err(E) }`.
-- Constructors become ordinary values in the type system and comparison can use nominal identity.
-- Pattern matching should work on constructors and record fields.
-- No implicit widening or conversion between user-defined records and same-shape values.
-
-**Impact on diagnostics**
-
-- expected type and found type will be expressed using the new model;
-- errors about missing fields or wrong constructors refer to the nominal declaration;
-- JSON output should expose both `type` and `type_repr` so tools can compare structure without losing human readability.
+- Stable and specific codes: unknown type, wrong arity, incompatible argument, ambiguous type, duplicate/unknown/missing field, invalid pattern, etc.
+- Canonical `display`: `List[Int]`, `Result[Int, Text]`, `{name: Text, age: Int}`, `Option[Int]`.
+- JSON: keep `type` as a string and add a structured `type_repr`; do not remove existing fields.
+- Diagnostics with a position, a concrete label, notes and a suggestion only if it is well founded.
+- For tools, add `related` when it helps ("declared here", "expected type here").
 
 ### B.3. Alternatives
 
-| Alternative | Advantages | Disadvantages | Consequence |
+| Alternative | Advantages | Drawbacks | Consequence |
 |---|---|---|---|
-| Type algebra with nominal records | Clear, stable, good for tooling | Requires migration | **Recommended** |
-| Structural records by default | Less ceremony | Weaker contracts, more aliasing confusion | Deferred |
-| Simple strings + ad hoc validation | Fast start | Deep structural debt | Rejected |
-| Typeclasses from the beginning | Weaker restrictions on genericity | Complexity and semantics drift | Deferred |
+| Encoding compound types as strings (`"List[Int]"`) | Apparently minimal change | Ad hoc equality, substitution, unification and errors; high debt | Rejected as an architectural base |
+| Type algebra with constructors and variables | Correct, extensible, good for tools | Deep rewrite | **Recommended** |
+| Structural typing by default | Flexible | Weak identity, fragile contracts, dangerous refactors | Rejected as the default; a possible extension |
+| `Option`/`Result` as special cases | Less initial work | Inconsistency and hard extension | Rejected |
+| Typeclasses from the start | More expressive generics | Delays the core and adds complexity | Postponed |
+| Full Hindley-Milner inference | Fewer annotations | Complexity, hard messages, unclear limits | Postponed |
 
 ### B.4. Consequences
 
-**Positive:** better typing for compound data and tooling; clearer diagnostics; strong base for modules and requirements.
+**Positive:** expressible compound types; consistent `Option`/`Result`; better diagnostics; tools with structured types; a base for evidence and impact.
 
-**Negative:** deeper migration of checker and schemas; more AST and parser work; more decisions needed for genericity and refinements.
+**Negative:** rewrite of the checker, parser, AST, interpreter, tooling and schemas; more complexity in inference and errors; high migration cost; risk that the first version of generics is too limited.
 
 ### B.5. Evidence pending **[?]**
 
-- no implementation of user-defined records/enums;
-- no proof that nominal typing preserves the intended use of contracts;
-- no benchmark of equality and canonical rendering in large programs;
-- no evaluation of the cost of generic constructors in the checker.
+- There is no prototype of the type algebra nor a measurement of the migration cost.
+- The ergonomics of inference and of the error messages has not been validated.
+- The impact on the performance of the interpreter has not been measured.
+- The compatibility of `type_repr` with existing consumers has not been tested.
+- It has not been decided whether structural equality must be total for all value types.
 
 ---
 
-## C. Patterns, exhaustiveness and sum types
+## C. Enumerations, patterns and exhaustiveness
 
-### C.1. State of the art **[V]**
+### C.1. Current state **[V]**
 
-- There are no `match` expressions, enums or user-defined records yet.
-- `if` is present and can be used for branching.
-- There are type refinements, but not a pattern language.
-- No `break`, `continue` or `for` loops exist.
-- The language is currently built around `while`, `requires` and `ensures`.
+- There are no enums, tagged unions, `match` nor patterns.
+- `enum`, `match`, `for`, `import`, `pub`, `in`, `break` and `continue` are reserved; `for`/`enum`/`match` produce `E1103` if they are used.
+- `record` is **not** reserved; introducing it as a keyword would break existing names.
+- `Option`/`Result` do not exist; `limitations.md` says so and `language-spec.md` places them among the planned features.
+- The current refined types only refine built-ins; there are no variants.
 
-### C.2. Proposed design **[P]**
+### C.2. Proposal **[P]**
 
-#### C.2.1. Enums and constructors
+#### C.2.1. Enums and tagged unions
 
-- `enum` creates a nominal sum type with named constructors.
-- Constructor names are in the same namespace as functions and types when needed.
-- Constructor arity is explicit; `Some(T)` and `None` are ordinary enum variants.
-- Example: `enum Option[T] { Some(T), None }`.
-- Use `match` to discriminate over variants.
-
-#### C.2.2. Patterns
-
-Initial pattern grammar:
-
-- literal;
-- wildcard `_`;
-- variable;
-- constructor (`Some(x)`, `None`, `Ok(v)`, `Err(e)`);
-- record (`Person { name: n, age: a }`);
-- list (`[]`, `[x, ...rest]`, `[a, b]`);
-- blocks and expressions in pattern positions are deferred.
-
-`match` expression:
+Use the existing type declaration, without introducing `record` as a global keyword:
 
 ```text
-match value {
-    Some(x) => ...
-    None => ...
+type Option[T] = enum {
+    None,
+    Some(value: T),
+}
+
+type Result[T, E] = enum {
+    Ok(value: T),
+    Err(error: E),
 }
 ```
 
-Rules:
+- `enum` is used as a contextual word inside `type`; it is already reserved.
+- Named constructors, possibly empty (`None`) and with fields.
+- Constructors namespaced by the type; unqualified resolution if there is no ambiguity, or qualified (`Option.Some(x)`) if there is.
+- No methods nor `self` initially; operations are functions.
+- Structural equality; order not defined.
+- `to_text`/`print` with a documented canonical representation.
 
-- `match` is an expression, not just a statement;
-- each arm is a block or single expression;
-- the expression must return a single result type overall;
-- patterns are linear and not repeated;
-- only one binding per variable path, unless the language later allows aliases;
-- constructors, records and lists are patterns, not values;
-- the first version should avoid guard clauses; guards are deferred.
+#### C.2.2. Pattern matching
+
+`match` as an expression, and therefore also in statement position:
+
+```text
+let value = match outcome {
+    Ok(v) => v,
+    Err(e) => 0,
+}
+```
+
+- Arms with an expression or a block; `return` allowed inside a block.
+- Initial patterns:
+  - literal;
+  - wildcard `_`;
+  - variable;
+  - constructor (`Some(x)`, `None`, `Ok(v)`, `Err(e)`);
+  - record (`Person { name: n, age: a }`);
+  - list (`[]`, `[x, ...rest]`, `[a, b]`).
+- Postponed: guards (`if` in the pattern), or-patterns (`p | q`), range patterns, map patterns.
+- `_` must be treated as a pattern, not as a bound variable; if today it is allowed as an identifier, it has to be decided whether it is reserved or restricted contextually.
 
 #### C.2.3. Exhaustiveness and uncovered cases
 
 - `match` as an expression requires exhaustiveness.
-- Utility algorithm (Maranget style) over constructors:
+- Usefulness algorithm (Maranget style) over constructors:
   - `Bool`: `true`/`false`;
-  - enums: all constructors;
-  - records: all fields;
+  - enums: all the constructors;
+  - records: all the fields;
   - lists: `[]` and `cons`;
-  - `Int`/`Text`: require wildcard;
-  - refinements: require wildcard unless proven;
-  - nested cases: recurse.
-- Diagnosis with **witness**: “missing `None`”, “missing `Err(_)`”, “missing `[]`”.
-- Pattern unreachable or redundant: decide between error and warning. Initial recommendation: error, because warnings infrastructure does not exist yet; revisit once available.
-- If the checker accepts a `match`, the interpreter must not encounter an unmanaged case; if it does, it is an internal error.
+  - `Int`/`Text`: require a wildcard;
+  - refined types: require a wildcard unless proved;
+  - nested: it descends.
+- Diagnostic with a **witness**: "`None` is missing", "`Err(_)` is missing", "`[]` is missing".
+- Unreachable or redundant pattern: decide between an error and a warning. Initial recommendation: an error, because today there is no warning infrastructure; review it when there is.
+- If the checker accepts a `match`, the interpreter must not find an unhandled case; if it finds one, it is an internal error.
 
 #### C.2.4. `Option` and `Result`
 
 They must be built on enums and `match`, not as exceptions of the language:
 
-- `Option[T]` and `Result[T,E]` are ordinary enums in the prelude.
-- There is no implicit `unwrap` and no exceptions.
-- `?` for error propagation is deferred; first use `match`.
-- Partial functions (`List.get`, `List.head`) declare `requires` and follow the current contract model; when `Option` exists, total variants may be added (`List.get_option`) without changing the semantics of partial functions.
-- Contracts may use `Option`/`Result` as types; `ensures` may return `Ok(...)`/`Err(...)`.
+- `Option[T]` and `Result[T,E]` are ordinary enums of the prelude.
+- There is no implicit `unwrap` nor exceptions.
+- `?` for error propagation is postponed; `match` is used first.
+- Partial functions (`List.get`, `List.head`) declare `requires` and follow the current contract model; when `Option` exists, total variants are added (`List.get_option`), without changing the semantics of the partial ones.
+- Contracts can use `Option`/`Result` as types; `ensures` can return `Ok(...)`/`Err(...)`.
 
 ### C.3. Alternatives
 
@@ -693,7 +764,7 @@ For each new feature, the change must pass through these layers:
 | Documentation | `language-spec.md`, topical docs, ADR | Semantics and limits |
 | Examples | `examples/`, docs | Executable and with expected output |
 | Tests | `tests/` | Positive, negative, boundary and regression |
-| Playground | `worker.py`, `server/src/playground/` | Same semantics, same limits, same security |
+| Playground | `worker.py`, `servidor/src/playground/` | Same semantics, same limits, same security |
 
 ### G.2. Definition of “finished”
 

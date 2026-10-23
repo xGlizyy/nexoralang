@@ -97,9 +97,9 @@ first:
 6. **Warnings** (unused variables, a `var` that never changes) and naming conventions.
 7. **More tolerant analysis**: keeping the functions whose declaration has an error, and giving
    structure also with lexical errors. The partial tree with syntax errors already exists.
-8. **Language server (LSP)**, starting with diagnostics. The evaluation and the requirements
-   that remain are in [LSP](lsp.md). It does not exist today.
-9. **Formatter.**
+8. ~~**Language server (LSP)** and **formatter**~~: done with the VS Code extension
+   ([decision 0017](decisions/0017-un-editor-la-extension-de-vs-code.md)). What remains, resolving
+   imports and positions in UTF-16, is in [LSP](lsp.md#limitations).
 
 ## Under research
 
@@ -124,7 +124,7 @@ Ideas from the original design whose value or form is not decided:
 | 2 | Type system, functions, contracts, JSON outputs | Completed (version 0.2.0); contracts remain experimental |
 | 3 | Documentation, tests and quality | Completed as far as can be checked locally; continuous integration and other platforms, pending a run |
 | 4 | Playground: web editor that runs with the real interpreter | Implemented and tested locally; not deployed, and with the container isolation unverified |
-| 5 | Tools for agents: JSON protocol, `nex context`, `nex symbols`, Python API, MCP server | Implemented and tested locally; the LSP remains planned and no AI model has been evaluated |
+| 5 | Tools for agents: JSON protocol, `nex context`, `nex symbols`, Python API, MCP server | Implemented and tested locally, also the language server of the editor; no AI model has been evaluated |
 | 6 | Verifiable requirements: stable contracts, explanation of the rules and refined types | Completed (version 0.3.0). Examples (step 3) arrived in 0.4.0; steps 4 and 6 of the [main line](#main-line-verifiable-requirements) remain |
 | 7 | Repetition without recursion: `var` and loops that declare why they end and what they keep true | Completed (version 0.5.0) |
 
