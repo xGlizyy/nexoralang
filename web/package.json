@@ -1,6 +1,0 @@
-{
-  "name": "nexora-web",
-  "private": true,
-  "type": "module",
-  "description": "Static site of NEXORA. No build step: this file only tells Node that the scripts in js/ are ES modules, so the tests can import them."
-}

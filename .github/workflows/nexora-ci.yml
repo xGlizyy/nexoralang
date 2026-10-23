@@ -1,5 +1,5 @@
-# Integración continua de NEXORA: el núcleo (nexora/), el paquete de npm (npm/) y el servidor del
-# playground con la web (servidor/, web/).
+# Integración continua de NEXORA: el núcleo (nexora/) y el paquete de npm (npm/). El servidor y la
+# web están en un repositorio privado aparte, con su propia integración continua.
 #
 # ESTADO: activo. Se ejecuta en cada cambio de `main` que toque los caminos de abajo.
 #
@@ -13,9 +13,9 @@ name: nexora-ci
 on:
   push:
     branches: [main, feature/server-hardening]
-    paths: ["nexora/**", "npm/**", "servidor/**", "web/**", "docs/**", "ejemplos/**", "deploy/**", "LICENSE", "README.md", ".github/workflows/nexora-ci.yml", ".github/workflows/nexora-deploy.yml"]
+    paths: ["nexora/**", "npm/**", "vscode-nexora/**", "docs/**", "ejemplos/**", "LICENSE", "README.md", ".github/workflows/nexora-ci.yml"]
   pull_request:
-    paths: ["nexora/**", "npm/**", "servidor/**", "web/**", "docs/**", "ejemplos/**", "deploy/**", "LICENSE", "README.md", ".github/workflows/nexora-ci.yml", ".github/workflows/nexora-deploy.yml"]
+    paths: ["nexora/**", "npm/**", "vscode-nexora/**", "docs/**", "ejemplos/**", "LICENSE", "README.md", ".github/workflows/nexora-ci.yml"]
 
 permissions:
   contents: read
@@ -121,50 +121,3 @@ jobs:
           npm install -g ./nexora-lang-*.tgz
           nex --version
           nex run ../nexora/examples/hello.nex
-
-  servidor:
-    name: Servidor y web · Node ${{ matrix.node }} · ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    # Node 26 es una prueba no bloqueante (experimental): si falla, el flujo no falla.
-    continue-on-error: ${{ matrix.experimental == true }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        # servidor/package.json admite "^22.23.2 || ^24.18.1".
-        # 22.23.2 y 24.18.1: los mínimos, fijos (las últimas versiones de seguridad de cada rama en
-        # octubre de 2026).
-        # "22" y "24": la última versión de cada rama, para detectar regresiones de versiones nuevas.
-        node: ["22.23.2", "24.18.1", "22", "24"]
-        include:
-          # Node 26, fuera de engines hasta validarlo: solo en Linux y sin bloquear.
-          - os: ubuntu-latest
-            node: "26"
-            experimental: true
-    defaults:
-      run:
-        working-directory: servidor
-    steps:
-      - uses: actions/checkout@v4
-
-      - id: python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node }}
-
-      # El playground ejecuta el intérprete con `python -I -m nexora.worker`. NEXORA_PYTHON le dice
-      # cuál: sin él buscaría nexora/.venv, que en el CI no existe.
-      - name: Instalar el intérprete
-        run: python -m pip install -e ../nexora
-
-      - name: Instalar las dependencias del servidor
-        run: npm ci
-
-      - name: Pruebas del servidor y la web
-        env:
-          NEXORA_PYTHON: ${{ steps.python.outputs.python-path }}
-        run: npm test

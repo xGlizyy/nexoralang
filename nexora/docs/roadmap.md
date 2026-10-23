@@ -130,5 +130,5 @@ Ideas del diseño original cuyo valor o cuya forma no están decididos:
 | 6 | Requisitos verificables: contratos estables, explicación de las reglas y tipos refinados | Completada (versión 0.3.0). Los ejemplos (paso 3) llegaron en la 0.4.0; quedan los pasos 4 y 6 de la [línea principal](#línea-principal-requisitos-verificables) |
 | 7 | Repetición sin recursividad: `var` y bucles que declaran por qué terminan y qué mantienen | Completada (versión 0.5.0) |
 
-La web del proyecto (`web/`, en la raíz del repositorio) muestra una versión resumida de esta hoja
-de ruta. Este documento es la referencia.
+La web del proyecto (<https://nexoralang.org>, cuyo código está en un repositorio privado aparte)
+muestra una versión resumida de esta hoja de ruta. Este documento es la referencia.

@@ -3,6 +3,11 @@
 Cómo se comprueba que NEXORA hace lo que dice su documentación, cómo ejecutar esas comprobaciones
 y qué **no** cubren.
 
+> Desde el 23 de octubre de 2026, el servidor (`servidor/`) y la web (`web/`) están en un repositorio
+> privado aparte, con su propia integración continua. Lo que este documento cuenta de ellos (las
+> pruebas de `npm test` en `servidor/`, las de integración, la revisión de la web) es el registro de
+> las mediciones hechas cuando vivían aquí.
+
 ## Ejecutar las comprobaciones
 
 Con el entorno virtual activado y las herramientas de desarrollo instaladas
