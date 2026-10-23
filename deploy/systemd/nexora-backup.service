@@ -1,0 +1,9 @@
+# Copia de la base de producción (y de staging) en /var/backups/nexora; se guardan 14 días.
+[Unit]
+Description=NEXORA: copia de seguridad de las bases
+After=mariadb.service
+Requires=mariadb.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/nexora/bin/nexora-backup
