@@ -1,96 +1,96 @@
 # NEXORA Playground
 
-El playground permite escribir, comprobar y ejecutar código NEXORA desde el navegador. El código
-se envía al servidor, que lo entrega al **mismo intérprete que usa la orden `nex`**, y la página
-muestra lo que el intérprete responde. No hay ninguna ejecución simulada ni una segunda
-implementación del lenguaje en JavaScript.
+The playground lets you write, check and run NEXORA code from the browser. The code
+is sent to the server, which hands it to the **same interpreter used by the `nex` command**, and the page
+shows what the interpreter answers. There is no simulated execution nor a second
+implementation of the language in JavaScript.
 
-Esta página describe la arquitectura, la API, los límites, el aislamiento real que existe, cómo
-ejecutarlo en local y cómo desplegarlo en un servidor propio.
+This page describes the architecture, the API, the limits, the real isolation that exists, how to
+run it locally and how to deploy it on your own server.
 
-> El código del servidor (`servidor/`) y de la web (`web/`) que se cita aquí está, desde el 23 de
-> octubre de 2026, en un repositorio privado aparte. Esta página sigue describiendo su diseño y su
-> aislamiento; el intérprete y el worker (`nexora.worker`) siguen en este repositorio.
+> The code of the server (`servidor/`) and of the website (`web/`) cited here is, since 23
+> October 2026, in a separate private repository. This page still describes its design and its
+> isolation; the interpreter and the worker (`nexora.worker`) are still in this repository.
 
-## Estado
+## Status
 
-| Parte | Estado |
+| Part | Status |
 |-------|--------|
-| Interfaz del núcleo (`nexora.api`) y proceso worker | Implementado y probado |
-| API del servidor (`/api/playground`) | Implementada y probada |
-| Página (`web/playground.html`) | Implementada. Lógica probada de forma automática; el dibujado, comprobado a mano en Chrome |
-| Límites de tiempo, tamaño, salida, concurrencia y peticiones | Implementados y probados |
-| Límites de memoria y CPU del sistema operativo | Implementados para Linux y macOS, pero solo los cumple el sistema operativo donde existen: el de CPU en los dos, el de memoria solo en Linux (en macOS, el kernel acepta el límite del espacio de direcciones y no lo aplica). Probados en Linux (Ubuntu 24.04 sobre WSL 2) con `tests/test_worker.py`, que lanza el worker como proceso, sin contenedor; en macOS, solo el de CPU. En Windows no existen |
-| Aislamiento en contenedor (Docker) | Configuración preparada. **No probada**: no había Docker en el equipo de desarrollo |
-| Despliegue en un servidor público | **No realizado** |
+| Core interface (`nexora.api`) and worker process | Implemented and tested |
+| Server API (`/api/playground`) | Implemented and tested |
+| Page (`web/playground.html`) | Implemented. Logic tested automatically; the drawing, checked by hand in Chrome |
+| Limits of time, size, output, concurrency and requests | Implemented and tested |
+| Operating system memory and CPU limits | Implemented for Linux and macOS, but they are only enforced by the operating system where they exist: the CPU one on both, the memory one only on Linux (on macOS, the kernel accepts the address space limit and does not apply it). Tested on Linux (Ubuntu 24.04 on WSL 2) with `tests/test_worker.py`, which launches the worker as a process, without a container; on macOS, only the CPU one. On Windows they do not exist |
+| Container isolation (Docker) | Configuration prepared. **Not tested**: there was no Docker on the development machine |
+| Deployment on a public server | **Not done** |
 
-**Conclusión práctica:** el playground está listo para usarse en local y en un entorno de confianza.
-Antes de abrirlo en Internet hay que construir la imagen del worker, activar el modo contenedor y
-completar la lista de [comprobación del aislamiento](#comprobar-el-aislamiento). Hasta entonces, en
-un servidor público debe permanecer desactivado (`PLAYGROUND_ENABLED=false`).
+**Practical conclusion:** the playground is ready to be used locally and in a trusted environment.
+Before opening it on the Internet you have to build the worker image, enable container mode and
+complete the [isolation checklist](#checking-the-isolation). Until then, on
+a public server it must stay disabled (`PLAYGROUND_ENABLED=false`).
 
-## Arquitectura
+## Architecture
 
 ```text
-  Navegador                          Servidor web (Node, Express)               Worker (Python)
+  Browser                            Web server (Node, Express)                 Worker (Python)
   ---------                          ----------------------------               ---------------
   web/playground.html
   web/js/playground/
-    view.js        editor y paneles
-    controller.js  estado            POST /api/playground/run
+    view.js        editor and panels
+    controller.js  state             POST /api/playground/run
     client.js  ───────────────────►  servidor/src/playground/
-                                       router.js   valida la petición,
-                                                   límites, origen, cupo
-                                       limiter.js  concurrencia y cola
-                                       worker.js   lanza un proceso  ─────────►  python -I -m nexora.worker
-                                                   por petición,                   nexora/worker.py
-                                                   lo mata si tarda                  límites del sistema operativo
+                                       router.js   validates the request,
+                                                   limits, origin, quota
+                                       limiter.js  concurrency and queue
+                                       worker.js   launches a process ─────────►  python -I -m nexora.worker
+                                                   per request,                    nexora/worker.py
+                                                   kills it if slow                  operating system limits
                                                                                    nexora/api.py
                                                                                      check_source / run_source
                                                                                    pipeline.analyze   (lexer, parser, checker)
                                                                                    interpreter.run
-                   ◄───────────────────  respuesta JSON  ◄──────────────────────  resultado JSON
+                   ◄───────────────────  JSON response  ◄──────────────────────  JSON result
 ```
 
-Puntos clave:
+Key points:
 
-- **Un solo núcleo.** `nexora.api` llama a `pipeline.analyze` y a `interpreter.run`, las mismas
-  funciones que usa `nex`. Una prueba ejecuta cada ejemplo por la línea de comandos y por la API y
-  compara salida y diagnósticos.
-- **El código del visitante nunca se ejecuta dentro del servidor web.** Cada petición arranca un
-  proceso nuevo, que atiende esa petición y termina. Si tarda demasiado, el servidor lo mata.
-- **El servidor solo hace transporte.** No conoce la gramática ni decide si un programa es válido.
-- **El navegador solo presenta.** El resaltado de sintaxis es coloreado, no análisis; las listas de
-  palabras clave se piden al propio núcleo.
+- **A single core.** `nexora.api` calls `pipeline.analyze` and `interpreter.run`, the same
+  functions that `nex` uses. A test runs each example through the command line and through the API and
+  compares output and diagnostics.
+- **The visitor's code is never run inside the web server.** Each request starts a
+  new process, which serves that request and ends. If it takes too long, the server kills it.
+- **The server only does transport.** It does not know the grammar nor decide whether a program is valid.
+- **The browser only presents.** Syntax highlighting is colouring, not analysis; the lists of
+  keywords are requested from the core itself.
 
 ### Editor
 
-El editor es deliberadamente sencillo: un `<textarea>` sobre una copia resaltada del mismo texto,
-con una columna de números de línea. No se usa CodeMirror ni ninguna otra biblioteca, porque la web
-no tiene paso de compilación ni dependencias de JavaScript, y se quiso mantener así.
+The editor is deliberately simple: a `<textarea>` over a highlighted copy of the same text,
+with a column of line numbers. Neither CodeMirror nor any other library is used, because the website
+has no build step nor JavaScript dependencies, and we wanted to keep it that way.
 
-Lo que ofrece: edición, selección y deshacer normales del navegador, resaltado de la sintaxis real,
-sangría automática, marca de las líneas con error y salto a la posición de un diagnóstico.
+What it offers: the browser's normal editing, selection and undo, highlighting of the real syntax,
+automatic indentation, marking of the lines with errors and jumping to the position of a diagnostic.
 
-Lo que **no** ofrece: autocompletado, emparejado de llaves, varios cursores, plegado de código ni
-búsqueda propia.
+What it does **not** offer: autocompletion, bracket matching, multiple cursors, code folding nor
+its own search.
 
 ## API
 
-Todas las rutas están bajo `/api/playground`. Las respuestas son siempre JSON.
+All the routes are under `/api/playground`. Responses are always JSON.
 
-| Ruta | Método | Función |
+| Route | Method | Function |
 |------|--------|---------|
-| `/check` | `POST` | Analiza el programa **sin ejecutarlo** |
-| `/run` | `POST` | Analiza el programa y, si no tiene errores, lo ejecuta |
-| `/status` | `GET` | Si el playground está activado (`{"enabled": true}` o `false`). Responde siempre, también desactivado, y no arranca el worker |
-| `/info` | `GET` | Versión del lenguaje, palabras del lenguaje y límites del servicio |
-| `/examples` | `GET` | Los programas de ejemplo |
+| `/check` | `POST` | Analyses the program **without running it** |
+| `/run` | `POST` | Analyses the program and, if it has no errors, runs it |
+| `/status` | `GET` | Whether the playground is enabled (`{"enabled": true}` or `false`). It always answers, also when disabled, and does not start the worker |
+| `/info` | `GET` | Language version, words of the language and limits of the service |
+| `/examples` | `GET` | The example programs |
 
-La página pregunta primero `/status`. Con el playground desactivado no pide `/info` ni `/examples`:
-muestra «Disabled» y deja Run y Check desactivados.
+The page asks `/status` first. With the playground disabled it does not request `/info` nor `/examples`:
+it shows «Disabled» and leaves Run and Check disabled.
 
-### Petición
+### Request
 
 `Content-Type: application/json`.
 
@@ -101,15 +101,15 @@ muestra «Disabled» y deja Run y Check desactivados.
 }
 ```
 
-| Campo | Obligatorio | Regla |
+| Field | Required | Rule |
 |-------|-------------|-------|
-| `code` | Sí | Texto. Como máximo 64 KiB en UTF-8 |
-| `filename` | No | Nombre **virtual**: solo aparece en los diagnósticos. Letras, dígitos, `_` y `-`, terminado en `.nex`, hasta 64 caracteres. Nunca se usa como ruta ni se abre ningún archivo |
+| `code` | Yes | Text. At most 64 KiB in UTF-8 |
+| `filename` | No | **Virtual** name: it only appears in the diagnostics. Letters, digits, `_` and `-`, ending in `.nex`, up to 64 characters. It is never used as a path and no file is opened |
 
-### Respuesta de un programa (HTTP 200)
+### Response for a program (HTTP 200)
 
-Esquema `nexora.result/1`. Se devuelve siempre que el intérprete haya podido dar una respuesta,
-tenga o no errores el programa.
+Schema `nexora.result/1`. It is returned whenever the interpreter could give an answer,
+whether the program has errors or not.
 
 ```json
 {
@@ -124,32 +124,32 @@ tenga o no errores el programa.
 }
 ```
 
-| Campo | Significado |
+| Field | Meaning |
 |-------|-------------|
-| `schema` | Nombre y versión del formato |
-| `action` | `"check"` o `"run"` |
-| `status` | Ver la tabla siguiente |
-| `output` | Lo que escribió el programa. Vacío en `check` y cuando el programa no llegó a iniciarse |
-| `diagnostics` | Los diagnósticos del intérprete, con el formato `nexora.diagnostics/1` ([especificación, sección 11.4](language-spec.md#114-formato-json)): categoría, código, mensaje, archivo, línea, columna y sugerencia |
-| `message` | Explicación cuando el estado no es un diagnóstico (un límite alcanzado). `null` en los demás casos |
-| `duration_ms` | Tiempo medido por el servidor, incluido el arranque del worker |
-| `version` | Versión de NEXORA que respondió |
+| `schema` | Name and version of the format |
+| `action` | `"check"` or `"run"` |
+| `status` | See the following table |
+| `output` | What the program wrote. Empty in `check` and when the program did not get to start |
+| `diagnostics` | The diagnostics of the interpreter, in the `nexora.diagnostics/1` format ([specification, section 11.4](language-spec.md#114-json-format)): category, code, message, file, line, column and suggestion |
+| `message` | Explanation when the state is not a diagnostic (a limit reached). `null` otherwise |
+| `duration_ms` | Time measured by the server, including the start of the worker |
+| `version` | Version of NEXORA that answered |
 
-| `status` | Significado | `output` |
+| `status` | Meaning | `output` |
 |----------|-------------|----------|
-| `success` | `check`: sin errores. `run`: el programa terminó | Salida completa |
-| `invalid` | Errores léxicos, sintácticos, semánticos o de tipos. **El programa no se inició** | Vacío |
-| `runtime_error` | El programa falló al ejecutarse | Lo escrito hasta el fallo |
-| `contract_violation` | Una condición `requires` o `ensures` fue falsa | Lo escrito hasta el fallo |
-| `timeout` | Superó el tiempo máximo y se detuvo | Vacío: el proceso se mató |
-| `output_limit` | Escribió más de lo permitido y se detuvo | Los primeros bytes, hasta el límite |
-| `memory_limit` | Necesitó más memoria de la permitida (solo donde el sistema operativo la limita). Si la memoria se agotó mientras el programa se ejecutaba, `diagnostics` contiene el `E3007` | Lo escrito hasta entonces |
+| `success` | `check`: no errors. `run`: the program finished | Full output |
+| `invalid` | Lexical, syntax, semantic or type errors. **The program was not started** | Empty |
+| `runtime_error` | The program failed while running | What was written until the failure |
+| `contract_violation` | A `requires` or `ensures` condition was false | What was written until the failure |
+| `timeout` | It exceeded the maximum time and was stopped | Empty: the process was killed |
+| `output_limit` | It wrote more than allowed and was stopped | The first bytes, up to the limit |
+| `memory_limit` | It needed more memory than allowed (only where the operating system limits it). If memory ran out while the program was running, `diagnostics` contains the `E3007` | What was written until then |
 
-Un programa con errores **no** es un error HTTP: la petición se atendió correctamente.
+A program with errors is **not** an HTTP error: the request was served correctly.
 
-### Respuesta de error (HTTP 4xx y 5xx)
+### Error response (HTTP 4xx and 5xx)
 
-Cuando la petición no es válida o el servicio no puede atenderla:
+When the request is not valid or the service cannot serve it:
 
 ```json
 {
@@ -159,152 +159,152 @@ Cuando la petición no es válida o el servicio no puede atenderla:
 }
 ```
 
-| HTTP | `error.code` | Cuándo |
+| HTTP | `error.code` | When |
 |------|--------------|--------|
-| 400 | `invalid_json` | El cuerpo no es JSON válido |
-| 400 | `invalid_request` | El cuerpo no es un objeto JSON |
-| 400 | `missing_code` | Falta el campo `code` |
-| 400 | `invalid_code_type` | `code` no es un texto |
-| 400 | `invalid_filename` | `filename` no es un nombre simple terminado en `.nex` |
-| 403 | `origin_not_allowed` | La petición viene de otro sitio web |
-| 404 | `not_found` | Ruta o método inexistente |
-| 413 | `code_too_large` | El programa supera el tamaño máximo |
-| 415 | `unsupported_media_type` | La petición no es `application/json` |
-| 429 | `rate_limited` | Demasiadas peticiones desde el mismo cliente |
-| 503 | `busy` | Todos los workers están ocupados y la cola está llena. Incluye `Retry-After` |
-| 503 | `runtime_unavailable` | El worker no arrancó o no dio una respuesta válida |
-| 503 | `playground_disabled` | El playground está desactivado en este servidor |
-| 500 | `internal_error` | Fallo inesperado del servicio |
+| 400 | `invalid_json` | The body is not valid JSON |
+| 400 | `invalid_request` | The body is not a JSON object |
+| 400 | `missing_code` | The `code` field is missing |
+| 400 | `invalid_code_type` | `code` is not a text |
+| 400 | `invalid_filename` | `filename` is not a simple name ending in `.nex` |
+| 403 | `origin_not_allowed` | The request comes from another website |
+| 404 | `not_found` | Non-existent route or method |
+| 413 | `code_too_large` | The program exceeds the maximum size |
+| 415 | `unsupported_media_type` | The request is not `application/json` |
+| 429 | `rate_limited` | Too many requests from the same client |
+| 503 | `busy` | All the workers are busy and the queue is full. Includes `Retry-After` |
+| 503 | `runtime_unavailable` | The worker did not start or did not give a valid answer |
+| 503 | `playground_disabled` | The playground is disabled on this server |
+| 500 | `internal_error` | Unexpected failure of the service |
 
-Las respuestas de error nunca contienen trazas, rutas del servidor ni el código enviado.
+Error responses never contain traces, server paths nor the code sent.
 
-La página distingue tres situaciones y las presenta de forma distinta: **el programa** tiene un
-problema (diagnósticos), **el servicio** rechaza o no puede atender la petición (el mensaje de
-`error`), o **no hay conexión** con el servidor ("Unable to reach the NEXORA runtime. Your code is
+The page tells three situations apart and presents them differently: **the program** has a
+problem (diagnostics), **the service** rejects or cannot serve the request (the message of
+`error`), or **there is no connection** with the server ("Unable to reach the NEXORA runtime. Your code is
 still available in the editor.").
 
-## Límites
+## Limits
 
-Todos se configuran en `servidor/.env` (ver `servidor/.env.example`). Cambiarlos requiere reiniciar
-el servidor.
+They are all configured in `servidor/.env` (see `servidor/.env.example`). Changing them requires restarting
+the server.
 
-| Límite | Valor inicial | Variable | Qué ocurre al superarlo |
+| Limit | Initial value | Variable | What happens when exceeded |
 |--------|---------------|----------|-------------------------|
-| Tamaño del programa | 64 KiB | `PLAYGROUND_MAX_CODE_BYTES` | HTTP 413 |
-| Tiempo de ejecución | 2 s | `PLAYGROUND_TIMEOUT_MS` | El proceso se mata; estado `timeout` |
-| Salida | 64 KiB | `PLAYGROUND_MAX_OUTPUT_BYTES` | El programa se detiene; estado `output_limit` |
-| Longitud de un texto | 262 144 caracteres | `PLAYGROUND_MAX_TEXT_CHARS` | Error de ejecución `E3006` |
-| Memoria del worker | 512 MiB | `PLAYGROUND_MEMORY_MB` | Estado `memory_limit`. **Solo en Linux**: en macOS, el sistema operativo acepta el límite pero no lo aplica |
-| Programas a la vez | 4 | `PLAYGROUND_MAX_CONCURRENT` | Los siguientes esperan en la cola |
-| Peticiones en espera | 8 | `PLAYGROUND_MAX_QUEUE` | HTTP 503 `busy` |
-| Peticiones por cliente | 30 por minuto | `PLAYGROUND_RATE_LIMIT`, `PLAYGROUND_RATE_WINDOW_MS` | HTTP 429 |
-| Llamadas anidadas | 1000 | (del lenguaje) | Error de ejecución `E3004` |
+| Program size | 64 KiB | `PLAYGROUND_MAX_CODE_BYTES` | HTTP 413 |
+| Execution time | 2 s | `PLAYGROUND_TIMEOUT_MS` | The process is killed; state `timeout` |
+| Output | 64 KiB | `PLAYGROUND_MAX_OUTPUT_BYTES` | The program is stopped; state `output_limit` |
+| Length of a text | 262 144 characters | `PLAYGROUND_MAX_TEXT_CHARS` | Runtime error `E3006` |
+| Worker memory | 512 MiB | `PLAYGROUND_MEMORY_MB` | State `memory_limit`. **Only on Linux**: on macOS, the operating system accepts the limit but does not apply it |
+| Programs at once | 4 | `PLAYGROUND_MAX_CONCURRENT` | The following ones wait in the queue |
+| Waiting requests | 8 | `PLAYGROUND_MAX_QUEUE` | HTTP 503 `busy` |
+| Requests per client | 30 per minute | `PLAYGROUND_RATE_LIMIT`, `PLAYGROUND_RATE_WINDOW_MS` | HTTP 429 |
+| Nested calls | 1000 | (of the language) | Runtime error `E3004` |
 
-El tiempo se mide desde que arranca el worker, así que incluye el arranque de Python (del orden de
-una décima de segundo) o del contenedor (más lento: mídelo en tu servidor y ajusta el límite).
+Time is measured from when the worker starts, so it includes the start of Python (in the order of
+a tenth of a second) or of the container (slower: measure it on your server and adjust the limit).
 
-## Seguridad y aislamiento
+## Security and isolation
 
-El playground acepta código de cualquier visitante. Esto es lo que lo protege, por capas, y lo que
-cada capa **no** cubre.
+The playground accepts code from any visitor. This is what protects it, by layers, and what
+each layer does **not** cover.
 
-### 1. El lenguaje
+### 1. The language
 
-Un programa NEXORA solo puede calcular y escribir texto. No existe ninguna construcción para usar
-la red, ejecutar otros programas ni acceder a variables de entorno, y el intérprete no usa `eval`
-ni `exec`. Está comprobado por `tests/test_security.py`.
+A NEXORA program can only compute and write text. There is no construct to use
+the network, run other programs nor access environment variables, and the interpreter does not use `eval`
+nor `exec`. It is checked by `tests/test_security.py`.
 
-Los archivos existen en el lenguaje, pero **el playground no los admite**: el worker no tiene
-ningún campo en su protocolo para concederlos y el entorno del worker no los permite, así que un
-programa que los use se detiene con `E3008` aunque declare la capacidad
-([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). Lo mismo pasa con la
-entrada estándar y con los argumentos: el protocolo no los lleva.
+Files exist in the language, but **the playground does not allow them**: the worker has no
+field in its protocol to grant them and the environment of the worker does not allow them, so a
+program that uses them stops with `E3008` even if it declares the capability
+([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). The same happens with
+standard input and with arguments: the protocol does not carry them.
 
-*No cubre:* un defecto del intérprete, ni el consumo de tiempo y memoria.
+*Does not cover:* a defect of the interpreter, nor the consumption of time and memory.
 
-### 2. El proceso worker
+### 2. The worker process
 
-- Proceso aparte por petición, con **entorno vacío**: no recibe ninguna variable del servidor
-  (ni contraseñas de base de datos ni secretos de OAuth). En Windows el sistema añade por su cuenta
-  unas pocas variables básicas del usuario; ninguna procede del servidor.
-- Arranca en un directorio temporal vacío, con Python en modo aislado (`-I`).
-- El servidor lo mata al superar el tiempo máximo y descarta una respuesta demasiado grande.
-- El worker limita la salida y la longitud de los textos.
-- En Linux y macOS pide al sistema operativo límites de CPU, de creación de archivos y de creación de
-  procesos, y un temporizador que termina el proceso aunque el servidor no lo haga. El límite de
-  memoria (el espacio de direcciones del proceso) solo se pide y se cumple en Linux: en macOS, el
-  kernel lo acepta y no lo aplica.
+- A separate process per request, with an **empty environment**: it receives no variable from the server
+  (neither database passwords nor OAuth secrets). On Windows the system adds on its own
+  a few basic user variables; none comes from the server.
+- It starts in an empty temporary directory, with Python in isolated mode (`-I`).
+- The server kills it when it exceeds the maximum time and discards a response that is too large.
+- The worker limits the output and the length of texts.
+- On Linux and macOS it asks the operating system for limits on CPU, file creation and process
+  creation, and a timer that ends the process even if the server does not. The memory
+  limit (the address space of the process) is only requested and enforced on Linux: on macOS, the
+  kernel accepts it and does not apply it.
 
-*No cubre:* **esto no es una sandbox.** El worker se ejecuta con el mismo usuario y los mismos
-permisos que el servidor web: si el intérprete tuviera un defecto explotable, ese proceso podría
-leer lo que el usuario del servidor puede leer. En Windows, además, no hay límite de memoria; en
-macOS, el límite de memoria existe pero no lo hace cumplir el sistema operativo: solo lo frenan el
-tiempo máximo y, en un contenedor, sus límites.
+*Does not cover:* **this is not a sandbox.** The worker runs with the same user and the same
+permissions as the web server: if the interpreter had an exploitable defect, that process could
+read whatever the server user can read. On Windows, moreover, there is no memory limit; on
+macOS, the memory limit exists but the operating system does not enforce it: only the maximum
+time and, in a container, its limits hold it back.
 
-### 3. El contenedor (necesario para un servicio público)
+### 3. The container (required for a public service)
 
-Con `PLAYGROUND_WORKER_COMMAND`, cada petición se ejecuta en un contenedor Docker de un solo uso:
-sin red (`--network none`), con el sistema de archivos de solo lectura, sin capacidades, sin poder
-ganar privilegios, como usuario sin privilegios, y con límites de memoria, CPU y número de procesos.
-Solo se usa la imagen local `nexora-worker`, que Docker no descarga nunca (`--pull never`).
+With `PLAYGROUND_WORKER_COMMAND`, each request runs in a single-use Docker container:
+without network (`--network none`), with a read-only file system, without capabilities, unable to
+gain privileges, as an unprivileged user, and with limits on memory, CPU and number of processes.
+Only the local image `nexora-worker` is used, which Docker never downloads (`--pull never`).
 
-*No cubre:* un fallo del propio Docker o del núcleo del sistema. Y **no está probado todavía**.
+*Does not cover:* a failure of Docker itself or of the system kernel. And **it is not tested yet**.
 
-### 4. El servicio
+### 4. The service
 
-- Solo se aceptan peticiones del propio sitio (cabecera `Origin`); no se envían cabeceras CORS
-  salvo para los orígenes de `PLAYGROUND_ALLOWED_ORIGINS`.
-- Cupo de peticiones por cliente, tamaño máximo de petición, concurrencia y cola limitadas.
-- La salida de un programa se trata siempre como texto: la API la devuelve dentro de un JSON y la
-  página la escribe con `textContent`. Además, la página del playground se sirve con una política
-  de seguridad de contenido que impide ejecutar scripts que no sean los del sitio.
-- **No se guarda nada.** El código no se almacena ni se escribe en los registros del servidor; los
-  registros solo anotan el tipo de fallo. El código se conserva en la pestaña del navegador
-  (`sessionStorage`) mientras está abierta. No hay analítica.
+- Only requests from the site itself are accepted (`Origin` header); no CORS headers are sent
+  except for the origins of `PLAYGROUND_ALLOWED_ORIGINS`.
+- Request quota per client, maximum request size, limited concurrency and queue.
+- The output of a program is always treated as text: the API returns it inside a JSON and the
+  page writes it with `textContent`. In addition, the playground page is served with a content
+  security policy that prevents running scripts other than those of the site.
+- **Nothing is stored.** The code is neither stored nor written to the server logs; the
+  logs only record the type of failure. The code is kept in the browser tab
+  (`sessionStorage`) while it is open. There is no analytics.
 
-### Resumen honesto
+### Honest summary
 
-| Nivel de exposición | ¿Es adecuado el aislamiento actual? |
+| Exposure level | Is the current isolation adequate? |
 |---------------------|-------------------------------------|
-| En tu equipo, para desarrollar | Sí |
-| En una red interna o con usuarios de confianza | Sí, en Linux, con el modo de proceso |
-| Público en Internet | **Solo con el modo contenedor, y después de comprobarlo.** El modo de proceso por sí solo no es suficiente |
+| On your machine, for development | Yes |
+| On an internal network or with trusted users | Yes, on Linux, with process mode |
+| Public on the Internet | **Only with container mode, and after checking it.** Process mode on its own is not enough |
 
-## Ejecutarlo en local
+## Running it locally
 
-Requisitos: Node.js 22.23.2 o posterior en la rama 22, o 24.18.1 o posterior en la rama 24; Python
-3.11 o superior y, para las cuentas de usuario de la web, MySQL o MariaDB (el playground en sí no usa
-la base de datos).
+Requirements: Node.js 22.23.2 or later on the 22 branch, or 24.18.1 or later on the 24 branch; Python
+3.11 or newer and, for the user accounts of the website, MySQL or MariaDB (the playground itself does not use
+the database).
 
 ```bash
-# 1. El intérprete
+# 1. The interpreter
 cd nexora
 python -m venv .venv
 .venv/bin/python -m pip install -e .          # Windows: .venv\Scripts\python.exe -m pip install -e .
 
-# 2. El servidor
+# 2. The server
 cd ../servidor
 npm install
-cp .env.example .env                          # rellena la base de datos y pon PLAYGROUND_ENABLED=true
+cp .env.example .env                          # fill in the database and set PLAYGROUND_ENABLED=true
 npm run migrate
 npm start
 ```
 
-El playground solo se activa con `PLAYGROUND_ENABLED=true`. `.env.example` lo deja desactivado
-(`PLAYGROUND_ENABLED=false`), y también queda desactivado si la variable no está definida o está
-vacía: la API responde 503 (`playground_disabled`) en todas las rutas salvo `/status`. Cualquier
-otro valor (`True`, `1`…) impide arrancar el servidor. **Una instalación local que ya tenga su `servidor/.env` y quiera usar el
-playground tiene que añadir `PLAYGROUND_ENABLED=true` de forma explícita**: antes bastaba con no
-definirla. Escríbela en tu `servidor/.env` y reinicia el servidor. Úsalo solo para pruebas locales
-controladas: el servidor escucha en todas las interfaces del equipo, así que, si tu cortafuegos deja
-entrar conexiones al puerto 3000, otros equipos de tu red también podrán usarlo.
+The playground is only enabled with `PLAYGROUND_ENABLED=true`. `.env.example` leaves it disabled
+(`PLAYGROUND_ENABLED=false`), and it also stays disabled if the variable is not defined or is
+empty: the API answers 503 (`playground_disabled`) on every route except `/status`. Any
+other value (`True`, `1`…) prevents the server from starting. **A local installation that already has its `servidor/.env` and wants to use the
+playground has to add `PLAYGROUND_ENABLED=true` explicitly**: before, it was enough not to
+define it. Write it in your `servidor/.env` and restart the server. Use it only for controlled local
+tests: the server listens on all the interfaces of the machine, so, if your firewall lets
+connections in to port 3000, other machines on your network will also be able to use it.
 
-Abre <http://localhost:3000/playground>.
+Open <http://localhost:3000/playground>.
 
-El servidor busca el intérprete en `nexora/.venv`. Si está en otro lugar, indícalo con
+The server looks for the interpreter in `nexora/.venv`. If it is somewhere else, point to it with
 `NEXORA_PYTHON`.
 
-Comprobación rápida de la API, sin navegador:
+Quick check of the API, without a browser:
 
 ```bash
 curl -s http://localhost:3000/api/playground/info
@@ -313,119 +313,119 @@ curl -s -X POST http://localhost:3000/api/playground/run \
   --data '{"code": "fn main() -> Void {\n    print(6 * 7)\n}"}'
 ```
 
-La segunda orden tiene que devolver `"status":"success"` y `"output":"42\n"`.
+The second command has to return `"status":"success"` and `"output":"42\n"`.
 
-## Pruebas
+## Tests
 
 ```bash
 cd nexora   && python -m pytest tests/test_api.py tests/test_worker.py
 cd servidor && npm test
 ```
 
-| Archivo | Qué comprueba |
+| File | What it checks |
 |---------|---------------|
-| `nexora/tests/test_api.py` | `check_source` y `run_source`; límites de salida y de texto; que la API y `nex` dan el mismo resultado en todos los ejemplos |
-| `nexora/tests/test_worker.py` | El proceso worker: protocolo, peticiones malformadas, modo aislado. Los límites del sistema operativo se ejecutan en Linux y macOS; el de memoria, solo en Linux |
-| `servidor/test/playground-api.test.js` | La API por HTTP contra el intérprete real: validación, códigos HTTP, esquema, límites, tiempo agotado, concurrencia, fallos del worker, entorno del worker, orígenes, y paridad con la línea de comandos |
-| `servidor/test/playground-containers.test.js` | El ciclo de vida de los contenedores con un Docker falso (`test/fixtures/fake-docker.js`), sin Docker: nombre único por petición, eliminación y confirmación tras tiempo agotado, respuesta excesiva o error, hueco ocupado hasta confirmar, intentos limitados, ningún intento si la herramienta no arranca, y el [formato de la orden de contenedor](#formato-de-la-orden-de-contenedor): la orden documentada en `.env.example`, esta guía y el `Dockerfile`, opciones ausentes, repetidas, con otro valor o desconocidas, y elementos después de la imagen |
-| `servidor/test/playground-config.test.js` | La activación con la configuración real: desactivado sin `PLAYGROUND_ENABLED`, vacía o `false`; activado solo con `true`; error al arrancar con cualquier otro valor; `/status` y 503 en las demás rutas sin arrancar el worker, y un programa real con `true`; en producción, que el playground activado sin la orden de contenedor impide arrancar |
-| `servidor/test/playground-frontend.test.js` | La lógica de la página (cliente, estado, resaltado) contra un servidor real y con fallos simulados |
-| `servidor/test/web-guide.test.js` | Los ejemplos de la guía web y los enlaces entre páginas |
+| `nexora/tests/test_api.py` | `check_source` and `run_source`; output and text limits; that the API and `nex` give the same result on every example |
+| `nexora/tests/test_worker.py` | The worker process: protocol, malformed requests, isolated mode. The operating system limits run on Linux and macOS; the memory one, only on Linux |
+| `servidor/test/playground-api.test.js` | The API over HTTP against the real interpreter: validation, HTTP codes, schema, limits, timeout, concurrency, worker failures, worker environment, origins, and parity with the command line |
+| `servidor/test/playground-containers.test.js` | The life cycle of the containers with a fake Docker (`test/fixtures/fake-docker.js`), without Docker: a unique name per request, removal and confirmation after a timeout, an excessive response or an error, slot occupied until confirmed, limited attempts, no attempt if the tool does not start, and the [container command format](#container-command-format): the command documented in `.env.example`, this guide and the `Dockerfile`, options missing, repeated, with another value or unknown, and elements after the image |
+| `servidor/test/playground-config.test.js` | Enabling with the real configuration: disabled without `PLAYGROUND_ENABLED`, empty or `false`; enabled only with `true`; error at startup with any other value; `/status` and 503 on the other routes without starting the worker, and a real program with `true`; in production, that the playground enabled without the container command prevents starting |
+| `servidor/test/playground-frontend.test.js` | The logic of the page (client, state, highlighting) against a real server and with simulated failures |
+| `servidor/test/web-guide.test.js` | The examples of the web guide and the links between pages |
 
-### Comprobado a mano en el navegador
+### Checked by hand in the browser
 
-La parte de la página que dibuja y recibe el teclado (`view.js`) no tiene pruebas automáticas: el
-proyecto no incluye un navegador de pruebas. Se comprobó en Chrome, el 14 de octubre de 2026:
+The part of the page that draws and receives the keyboard (`view.js`) has no automatic tests: the
+project does not include a test browser. It was checked in Chrome, on 14 October 2026:
 
-| Comprobación | Resultado |
+| Check | Result |
 |--------------|-----------|
-| Carga inicial: ejemplo, versión, lista de ejemplos, sin errores en la consola | Correcto |
-| Escribir con el teclado: sangría automática, resaltado, números de línea | Correcto |
-| Run: botón desactivado e indicador mientras se ejecuta; salida real | Correcto |
-| Check con errores: pestaña de diagnósticos, contador, línea marcada, salto a la posición | Correcto |
-| Atajos Ctrl+Enter y Ctrl+Shift+Enter | Correcto |
-| Salida con HTML (`<img onerror=…>`): se muestra como texto, no se interpreta | Correcto |
-| Cargar ejemplo con cambios sin guardar: aviso y Deshacer | Correcto |
-| Reset con y sin cambios | Correcto |
-| Copy | Correcto |
-| El código sobrevive a recargar la página | Correcto |
-| Sin conexión con el servidor: mensaje propio, el código se conserva | Correcto |
-| Ancho de móvil (390 px): paneles apilados, sin desbordamiento, todos los botones visibles | Correcto |
-| La página no puede incrustarse en otro sitio (política `frame-ancestors`) | Correcto |
+| Initial load: example, version, list of examples, no errors in the console | Correct |
+| Typing with the keyboard: automatic indentation, highlighting, line numbers | Correct |
+| Run: button disabled and indicator while it runs; real output | Correct |
+| Check with errors: diagnostics tab, counter, marked line, jump to the position | Correct |
+| Shortcuts Ctrl+Enter and Ctrl+Shift+Enter | Correct |
+| Output with HTML (`<img onerror=…>`): it is shown as text, not interpreted | Correct |
+| Loading an example with unsaved changes: warning and Undo | Correct |
+| Reset with and without changes | Correct |
+| Copy | Correct |
+| The code survives reloading the page | Correct |
+| Without connection to the server: its own message, the code is kept | Correct |
+| Mobile width (390 px): stacked panels, no overflow, all buttons visible | Correct |
+| The page cannot be embedded in another site (`frame-ancestors` policy) | Correct |
 
-No se probó en Firefox ni en Safari, ni con lectores de pantalla.
+It was not tested in Firefox nor in Safari, nor with screen readers.
 
-## Despliegue en un servidor propio
+## Deploying on your own server
 
-Estas instrucciones **no se han ejecutado**: no se dispuso de acceso al servidor. Describen un
-despliegue en un VPS con Linux, con software gratuito. Adapta rutas y nombres.
+These instructions **have not been run**: there was no access to the server. They describe a
+deployment on a Linux VPS, with free software. Adapt paths and names.
 
-### 1. Dependencias
+### 1. Dependencies
 
-- Node.js 22.23.2 o posterior en la rama 22, o 24.18.1 o posterior en la rama 24 (`engines` en
-  `servidor/package.json`). Instala la última versión de la rama.
-- Python 3.11 o superior.
-- MySQL o MariaDB (para las cuentas de la web).
-- nginx como proxy inverso, con un certificado TLS (por ejemplo, de Let's Encrypt).
-- Docker, para aislar la ejecución.
+- Node.js 22.23.2 or later on the 22 branch, or 24.18.1 or later on the 24 branch (`engines` in
+  `servidor/package.json`). Install the latest version of the branch.
+- Python 3.11 or newer.
+- MySQL or MariaDB (for the accounts of the website).
+- nginx as a reverse proxy, with a TLS certificate (for example, from Let's Encrypt).
+- Docker, to isolate execution.
 
-### 2. Instalar
+### 2. Installing
 
 ```bash
 sudo useradd --system --create-home --home-dir /srv/nexora nexora
-sudo -u nexora git clone <tu-repositorio> /srv/nexora/app
+sudo -u nexora git clone <your-repository> /srv/nexora/app
 cd /srv/nexora/app
 
-# Intérprete (para el modo de proceso y para las comprobaciones)
+# Interpreter (for process mode and for the checks)
 python3 -m venv nexora/.venv
 nexora/.venv/bin/python -m pip install ./nexora
 
-# Servidor
+# Server
 cd servidor && npm ci --omit=dev
-cp .env.example .env && chmod 600 .env        # rellena la base de datos, PUBLIC_URL, etc.
+cp .env.example .env && chmod 600 .env        # fill in the database, PUBLIC_URL, etc.
 npm run migrate
 ```
 
-Los secretos (contraseña de la base de datos, credenciales de OAuth) van solo en `servidor/.env`,
-que no se sube al repositorio.
+The secrets (database password, OAuth credentials) only go in `servidor/.env`,
+which is not uploaded to the repository.
 
-### 3. Imagen del worker
+### 3. Worker image
 
-El playground solo ejecuta la imagen local `nexora-worker`. La orden lleva `--pull never`, así que
-Docker nunca la descarga de un registro: la construye el operador en el propio servidor, a partir
-del código que despliega.
+The playground only runs the local image `nexora-worker`. The command carries `--pull never`, so
+Docker never downloads it from a registry: the operator builds it on the server itself, from
+the code being deployed.
 
 ```bash
 cd /srv/nexora/app
 docker build -f servidor/playground/Dockerfile -t nexora-worker .
-docker image inspect nexora-worker --format '{{.Id}} {{.Created}}'   # existe, y cuál es
+docker image inspect nexora-worker --format '{{.Id}} {{.Created}}'   # it exists, and which one it is
 ```
 
-- Constrúyela antes de activar el playground y vuelve a construirla en cada actualización (paso 8):
-  contiene su propia copia del intérprete. Cada petición crea un contenedor nuevo, así que la
-  siguiente petición ya usa la imagen reconstruida.
-- Para fijar una versión, constrúyela también con etiqueta (`-t nexora-worker:0.11.0`) y escribe esa
-  etiqueta al final de la orden (`"nexora-worker:0.11.0"`). Para volver a una versión anterior que
-  conserves, cambia la etiqueta de la orden y reinicia el servicio. La etiqueta es lo único de la
-  orden que se puede cambiar.
-- Si la imagen no está en el equipo (no se construyó, o se borró con `docker image rm` o
-  `docker image prune -a`), cada ejecución falla sin ejecutar nada. Según el manual de Docker, con
-  `--pull never` responde `No such image` y no crea el contenedor, y entonces la API devuelve 503
-  `runtime_unavailable`. Ese camino está probado con un Docker falso que rechaza la orden con el
-  código 125, no con Docker real.
-- `--pull` existe desde Docker 20.10.0 (notas de esa versión). El manual de Docker lo escribe
-  `--pull=never`; la orden de Nexora usa dos elementos (`"--pull","never"`), que según el código
-  fuente del cliente de Docker es equivalente, porque `--pull` es una opción de texto sin valor por
-  defecto implícito. Con una versión anterior a la 20.10, Docker debería rechazar la opción y no
-  ejecutar nada. Ninguna de las dos cosas se ha comprobado con la versión instalada.
-- No la subas a un registro para usarla aquí: el servidor no la descargaría.
-- **La etiqueta es mutable.** `nexora-worker` y `nexora-worker:<etiqueta>` son nombres locales, no
-  una huella de su contenido. Quien tenga acceso al demonio Docker de ese equipo puede volver a
-  etiquetar otra imagen con ese nombre (`docker tag`, `docker build -t`), y el servidor la ejecutaría
-  sin notar el cambio: no comprueba qué imagen hay detrás del nombre. Que se ejecute la imagen de
-  Nexora depende, por tanto, de controlar quién accede al equipo y al demonio Docker.
+- Build it before enabling the playground and build it again on every update (step 8):
+  it contains its own copy of the interpreter. Each request creates a new container, so the
+  next request already uses the rebuilt image.
+- To pin a version, build it also with a tag (`-t nexora-worker:0.11.0`) and write that
+  tag at the end of the command (`"nexora-worker:0.11.0"`). To go back to a previous version that
+  you keep, change the tag of the command and restart the service. The tag is the only thing in the
+  command that can be changed.
+- If the image is not on the machine (it was not built, or it was deleted with `docker image rm` or
+  `docker image prune -a`), every execution fails without running anything. According to the Docker manual, with
+  `--pull never` it answers `No such image` and does not create the container, and then the API returns 503
+  `runtime_unavailable`. That path is tested with a fake Docker that rejects the command with
+  code 125, not with real Docker.
+- `--pull` exists since Docker 20.10.0 (release notes of that version). The Docker manual writes it
+  `--pull=never`; the Nexora command uses two elements (`"--pull","never"`), which according to the source
+  code of the Docker client is equivalent, because `--pull` is a text option without an implicit default
+  value. With a version earlier than 20.10, Docker should reject the option and not
+  run anything. Neither of the two things has been checked with the installed version.
+- Do not upload it to a registry to use it here: the server would not download it.
+- **The tag is mutable.** `nexora-worker` and `nexora-worker:<tag>` are local names, not
+  a fingerprint of their content. Whoever has access to the Docker daemon of that machine can re-tag
+  another image with that name (`docker tag`, `docker build -t`), and the server would run it
+  without noticing the change: it does not check which image is behind the name. That the Nexora
+  image is the one that runs depends, therefore, on controlling who accesses the machine and the Docker daemon.
 
-En `servidor/.env`:
+In `servidor/.env`:
 
 ```bash
 NODE_ENV=production
@@ -437,83 +437,83 @@ PLAYGROUND_WORKER_COMMAND=["docker","run","--rm","-i","--init","--pull","never",
 PLAYGROUND_TIMEOUT_MS=4000
 ```
 
-**El playground queda desactivado** hasta completar la
-[comprobación del aislamiento](#comprobar-el-aislamiento). Solo el valor exacto `true` lo activa;
-`false`, un valor vacío o no definir la variable lo dejan desactivado, y cualquier otro valor
-(`True`, `1`…) impide arrancar el servidor. No la definas tampoco en el entorno del servicio
-(`Environment=` en systemd o una variable exportada): ese valor tiene prioridad sobre
-`servidor/.env`, y un `PLAYGROUND_ENABLED=true` olvidado ahí lo activaría.
+**The playground stays disabled** until the
+[isolation check](#checking-the-isolation) is complete. Only the exact value `true` enables it;
+`false`, an empty value or not defining the variable leave it disabled, and any other value
+(`True`, `1`…) prevents the server from starting. Do not define it in the environment of the service either
+(`Environment=` in systemd or an exported variable): that value takes precedence over
+`servidor/.env`, and a forgotten `PLAYGROUND_ENABLED=true` there would enable it.
 
-Notas:
+Notes:
 
-- El usuario que ejecuta el servidor tiene que poder usar Docker. **Pertenecer al grupo `docker`
-  equivale a tener permisos de administrador en esa máquina.** Es el compromiso de este diseño: el
-  código del visitante queda encerrado, a cambio de que el servidor web pueda lanzar contenedores.
-- **Docker en modo *rootless* no está admitido por ahora.** Para encontrar su demonio, la orden
-  `docker` necesitaría `DOCKER_HOST`, o las opciones `-H` o `--context`. Pero la orden admitida no
-  permite opciones globales, y el servidor solo pasa `PATH` y `SystemRoot` a las órdenes que lanza,
-  así que la orden `docker` usa el demonio por defecto del sistema. Admitirlo exigiría cambiar el
-  contrato y el entorno del worker, y es una decisión pendiente.
-- Arrancar un contenedor por petición es más lento que arrancar un proceso. Mide cuánto tarda en tu
-  servidor y ajusta `PLAYGROUND_TIMEOUT_MS`; con el valor inicial de 2 s puede no bastar.
-- Matar la orden `docker run` no detiene el contenedor. Por eso la orden lleva
-  `"--name","{container}"`: el servidor pone en el marcador un nombre nuevo en cada petición
-  (`nexora-pg-` y un UUID) y, si el contenedor no terminó bien (tiempo agotado, respuesta demasiado
-  grande o ilegible, error del cliente), lo elimina con `docker rm -f` y comprueba con `docker ps`
-  que ya no existe. El hueco del worker no se libera hasta esa confirmación. Lo intenta hasta seis
-  veces, separadas por esperas de 1, 2, 4, 8 y 16 s (31 s de espera en total). Cada intento ejecuta
-  dos órdenes, y cada orden se mata si tarda más de 10 s; si todas llegan a ese límite, se añaden
-  hasta 120 s más, sin contar lo que tarde en terminar una orden ya matada. Si ningún intento
-  confirma, el hueco queda ocupado hasta reiniciar el servidor y el registro anota
+- The user that runs the server has to be able to use Docker. **Belonging to the `docker` group
+  is equivalent to having administrator permissions on that machine.** It is the trade-off of this design: the
+  visitor's code is locked in, in exchange for the web server being able to launch containers.
+- **Docker in *rootless* mode is not supported for now.** To find its daemon, the `docker`
+  command would need `DOCKER_HOST`, or the `-H` or `--context` options. But the accepted command does not
+  allow global options, and the server only passes `PATH` and `SystemRoot` to the commands it launches,
+  so the `docker` command uses the default daemon of the system. Supporting it would require changing the
+  contract and the environment of the worker, and it is a pending decision.
+- Starting a container per request is slower than starting a process. Measure how long it takes on your
+  server and adjust `PLAYGROUND_TIMEOUT_MS`; the initial value of 2 s may not be enough.
+- Killing the `docker run` command does not stop the container. That is why the command carries
+  `"--name","{container}"`: the server puts a new name in the placeholder on every request
+  (`nexora-pg-` and a UUID) and, if the container did not end well (timeout, response too
+  large or unreadable, client error), it removes it with `docker rm -f` and checks with `docker ps`
+  that it no longer exists. The worker slot is not released until that confirmation. It tries up to six
+  times, separated by waits of 1, 2, 4, 8 and 16 s (31 s of waiting in total). Each attempt runs
+  two commands, and each command is killed if it takes more than 10 s; if all of them reach that limit, up
+  to 120 s more are added, without counting how long a command that was already killed takes to end. If no attempt
+  confirms, the slot stays occupied until the server is restarted and the log records
   `container not confirmed stopped`.
-- **Si el servidor se cae** (un fallo, un `kill`, un corte de la máquina), no hay ninguna limpieza
-  automática garantizada de los contenedores que tuviera en marcha: el servidor solo elimina los de
-  las peticiones que está atendiendo, y al arrancar no busca los que quedaron. Según el código,
-  además, esos contenedores no cuentan para `PLAYGROUND_MAX_CONCURRENT` después de reiniciar el
-  servidor. Para ver los que puedan quedar:
+- **If the server crashes** (a failure, a `kill`, a power cut of the machine), there is no guaranteed automatic
+  cleanup of the containers it had running: the server only removes those of
+  the requests it is serving, and at startup it does not look for those that were left. According to the code,
+  moreover, those containers do not count towards `PLAYGROUND_MAX_CONCURRENT` after restarting the
+  server. To see the ones that may be left:
 
   ```bash
   docker ps -a --filter name=nexora-pg- --format '{{.Names}}  {{.Status}}  {{.CreatedAt}}'
   ```
 
-  Ese filtro también lista contenedores de peticiones en curso, si el servidor ya está en marcha.
-  Antes de eliminar uno, compruébalo: que el nombre sea `nexora-pg-` seguido de un UUID, que sea de
-  la imagen `nexora-worker` y que se creara antes de la caída (`docker inspect -f '{{.Config.Image}}
-  {{.Created}} {{.State.Status}}' <nombre>`). Solo entonces elimínalo a mano con `docker rm -f
-  <nombre>`. Ni esto ni la caída se han comprobado con Docker real.
-- `--init` hace que el proceso 1 del contenedor sea el init de Docker y no Python, que como proceso
-  1 ignoraría las señales sin manejador, como la del temporizador del worker. **Sin comprobar con
-  Docker real todavía.**
-- `TRUST_PROXY=loopback` es necesario detrás de nginx para que el cupo por cliente use la dirección
-  real del visitante y no la del proxy. Con `loopback`, `X-Forwarded-For` solo se tiene en cuenta si
-  la conexión llega desde el propio equipo: una conexión directa desde otro equipo no puede
-  inventarse su dirección. **Pero confía en cualquier proceso del propio equipo** que pueda conectar
-  con el servidor, no solo en nginx: no protege por sí solo frente a un proceso local malicioso.
-  `TRUST_PROXY=1` también funciona detrás de nginx, pero confía en cualquier conexión, venga de donde
-  venga. Los límites cuentan las direcciones IPv6 por bloque /56 y, además, por bloque /48.
-- `LISTEN_HOST=127.0.0.1` hace que el servidor escuche solo en el propio equipo: aunque el
-  cortafuegos dejara abierto el puerto 3000, no se podría llegar a él desde fuera. Sin ella escucha
-  en todas las interfaces, como en desarrollo. Solo admite una dirección IP: `localhost` detiene el
-  servidor al arrancar, porque Node puede resolverlo a `::1` (así ocurre en Windows 11 con Node 24) y
-  entonces no atendería a un nginx que apunte a `127.0.0.1`. Al arrancar, el servidor escribe en qué dirección
-  escucha y avisa si `TRUST_PROXY` y `LISTEN_HOST` no casan. **Sin comprobar en un VPS real.**
-- Con `NODE_ENV=production`, el servidor envía HSTS solo en las peticiones que llegan por HTTPS
-  (nginx las marca con `X-Forwarded-Proto`, y `TRUST_PROXY` hace que el servidor lo crea).
+  That filter also lists containers of requests in progress, if the server is already running.
+  Before removing one, check it: that the name is `nexora-pg-` followed by a UUID, that it is from
+  the image `nexora-worker` and that it was created before the crash (`docker inspect -f '{{.Config.Image}}
+  {{.Created}} {{.State.Status}}' <name>`). Only then remove it by hand with `docker rm -f
+  <name>`. Neither this nor the crash have been checked with real Docker.
+- `--init` makes process 1 of the container the Docker init and not Python, which as process
+  1 would ignore signals without a handler, such as the one of the worker timer. **Not checked with
+  real Docker yet.**
+- `TRUST_PROXY=loopback` is required behind nginx so that the per-client quota uses the real
+  address of the visitor and not that of the proxy. With `loopback`, `X-Forwarded-For` is only taken into account if
+  the connection comes from the machine itself: a direct connection from another machine cannot
+  make up its address. **But it trusts any process of the machine itself** that can connect
+  to the server, not only nginx: on its own it does not protect against a malicious local process.
+  `TRUST_PROXY=1` also works behind nginx, but it trusts any connection, wherever it
+  comes from. The limits count IPv6 addresses per /56 block and, in addition, per /48 block.
+- `LISTEN_HOST=127.0.0.1` makes the server listen only on the machine itself: even if the
+  firewall left port 3000 open, it could not be reached from outside. Without it, it listens
+  on all the interfaces, as in development. It only accepts an IP address: `localhost` stops the
+  server at startup, because Node can resolve it to `::1` (that happens on Windows 11 with Node 24) and
+  then it would not serve an nginx pointing to `127.0.0.1`. At startup, the server writes on which address
+  it listens and warns if `TRUST_PROXY` and `LISTEN_HOST` do not match. **Not checked on a real VPS.**
+- With `NODE_ENV=production`, the server sends HSTS only on the requests that arrive over HTTPS
+  (nginx marks them with `X-Forwarded-Proto`, and `TRUST_PROXY` makes the server believe it).
 
-#### Formato de la orden de contenedor
+#### Container command format
 
-`PLAYGROUND_WORKER_COMMAND` admite una sola orden de contenedor: la de arriba. El servidor la
-comprueba al arrancar y, si no la cumple, no arranca y dice qué falla. Las reglas son:
+`PLAYGROUND_WORKER_COMMAND` accepts a single container command: the one above. The server
+checks it at startup and, if it does not comply, it does not start and says what fails. The rules are:
 
-1. Empieza por `"docker","run"`: `docker` sin ruta y `run` justo después.
-2. Después van las opciones de la tabla, **cada una exactamente una vez y con ese valor exacto**,
-   en cualquier orden. Una opción con valor va en dos elementos (`"--memory","256m"`).
-3. El último elemento es la imagen local: `nexora-worker` o `nexora-worker:<etiqueta>`. La
-   etiqueta sigue la gramática de Docker: letras, cifras, `_`, `.` y `-`, sin empezar por `.` ni
-   por `-`, y hasta 128 caracteres. No se admite otro nombre, una ruta, un registro ni un digest.
-   La etiqueta es lo único que se puede cambiar.
+1. It starts with `"docker","run"`: `docker` without a path and `run` right after.
+2. Then come the options of the table, **each one exactly once and with that exact value**,
+   in any order. An option with a value goes in two elements (`"--memory","256m"`).
+3. The last element is the local image: `nexora-worker` or `nexora-worker:<tag>`. The
+   tag follows the Docker grammar: letters, digits, `_`, `.` and `-`, not starting with `.` nor
+   with `-`, and up to 128 characters. No other name, path, registry nor digest is accepted.
+   The tag is the only thing that can be changed.
 
-| Opción | Valor |
+| Option | Value |
 |--------|-------|
 | `--rm` | — |
 | `-i` | — |
@@ -531,43 +531,43 @@ comprueba al arrancar y, si no la cumple, no arranca y dice qué falla. Las regl
 | `--user` | `65534:65534` |
 | `--tmpfs` | `/tmp:rw,size=1m,noexec` |
 
-Las opciones van antes de la imagen porque el cliente de Docker deja de leer opciones al llegar a
-ella y pasa lo que sigue al programa del contenedor (`SetInterspersed(false)` en su código fuente).
-Según eso, un `"--name","{container}"` escrito después de la imagen dejaría al contenedor con un
-nombre aleatorio, y el servidor no podría eliminarlo. No se ha observado con Docker real: está en
-la [comprobación del aislamiento](#comprobar-el-aislamiento).
+The options go before the image because the Docker client stops reading options when it reaches
+it and passes what follows to the program of the container (`SetInterspersed(false)` in its source code).
+According to that, a `"--name","{container}"` written after the image would leave the container with a
+random name, and the server could not remove it. It has not been observed with real Docker: it is in
+the [isolation check](#checking-the-isolation).
 
-**No se admite:**
-- otra opción de `docker run`, ni los alias de las de la tabla (`-m`, `-u`, `--net`,
+**Not accepted:**
+- another `docker run` option, nor the aliases of those in the table (`-m`, `-u`, `--net`,
   `--interactive`…);
-- la forma `--opción=valor`, tampoco `--pull=never`, aunque sea la que muestra el manual de Docker;
-- banderas combinadas (`-it`) ni `--`;
-- nada después de la imagen, ni otra imagen;
-- una ruta al ejecutable, `docker.exe`, `sudo`, Podman, `docker container run` ni opciones
-  globales de Docker.
+- the `--option=value` form, not even `--pull=never`, although it is the one shown in the Docker manual;
+- combined flags (`-it`) nor `--`;
+- anything after the image, nor another image;
+- a path to the executable, `docker.exe`, `sudo`, Podman, `docker container run` nor global
+  Docker options.
 
-**Qué es una orden de contenedor se decide solo por nombres.** Si algún elemento contiene
-`{container}`, o es un ejecutable llamado `docker` o `podman` (con ruta o `.exe`, en mayúsculas o
-minúsculas), la orden se trata como de contenedor y tiene que ser exactamente la de arriba, aunque
-el playground esté desactivado. Así, una orden de proceso que cumpla esa condición se rechaza. Las
-demás órdenes son el modo de proceso y no se comprueban. Quedan fuera de esa detección un script
-envoltorio, otra herramienta (`nerdctl`, `docker.cmd`…) o un ejecutable de Docker con otro nombre.
-Ninguno es una forma admitida de ejecutar contenedores: el servidor no validaría su orden ni
-eliminaría sus contenedores.
+**What a container command is is decided only by names.** If any element contains
+`{container}`, or is an executable called `docker` or `podman` (with a path or `.exe`, in upper or
+lower case), the command is treated as a container command and has to be exactly the one above, even if
+the playground is disabled. So a process command that meets that condition is rejected. The
+other commands are process mode and are not checked. A wrapper script, another tool
+(`nerdctl`, `docker.cmd`…) or a Docker executable with another name are outside that detection.
+None of them is a supported way of running containers: the server would not validate their command nor
+remove their containers.
 
-Los valores de la tabla y la imagen son fijos a propósito: cambiar un límite, el aislamiento o la
-imagen es una decisión que se toma en el código (`CONTAINER_OPTIONS` y `CONTAINER_IMAGE` en
-`servidor/src/playground/config.js`), con sus pruebas, y no una variación de `servidor/.env`.
+The values of the table and the image are fixed on purpose: changing a limit, the isolation or the
+image is a decision taken in the code (`CONTAINER_OPTIONS` and `CONTAINER_IMAGE` in
+`servidor/src/playground/config.js`), with its tests, and not a variation of `servidor/.env`.
 
-Las pruebas de esta comprobación (`servidor/test/playground-containers.test.js`) solo analizan la
-lista de argumentos y no ejecutan ningún Docker. Las del ciclo de vida del mismo archivo usan un
-Docker falso. Ninguna usa Docker real.
+The tests of this check (`servidor/test/playground-containers.test.js`) only analyse the
+list of arguments and do not run any Docker. Those of the life cycle in the same file use a
+fake Docker. None uses real Docker.
 
-Validar la orden tampoco garantiza por sí solo el aislamiento efectivo, que depende también de la
-configuración del demonio Docker (`daemon.json`, el runtime por defecto, los espacios de nombres
-de usuario) y de la versión instalada. El servidor no comprueba nada de eso.
+Validating the command does not, on its own, guarantee effective isolation either, which also depends on the
+configuration of the Docker daemon (`daemon.json`, the default runtime, user
+namespaces) and on the installed version. The server checks none of that.
 
-### 4. Servicio (systemd)
+### 4. Service (systemd)
 
 `/etc/systemd/system/nexora.service`:
 
@@ -581,9 +581,9 @@ User=nexora
 WorkingDirectory=/srv/nexora/app/servidor
 ExecStart=/usr/bin/node --env-file=.env src/index.js
 Restart=on-failure
-# El servidor se apaga solo al recibir SIGTERM: espera hasta 10 s a las peticiones en curso y otros
-# 10 s al pool de MySQL (unos 20 s en el peor caso). Este margen debería dejarle terminar antes de que
-# systemd lo mate con SIGKILL; no se ha probado con systemd.
+# The server shuts itself down on SIGTERM: it waits up to 10 s for the requests in progress and another
+# 10 s for the MySQL pool (about 20 s in the worst case). This margin should let it finish before
+# systemd kills it with SIGKILL; it has not been tested with systemd.
 TimeoutStopSec=30
 NoNewPrivileges=true
 PrivateTmp=true
@@ -600,42 +600,42 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now nexora
 ```
 
-El servidor escucha en el puerto de `PORT` (3000). **No lo expongas directamente a Internet**:
-ciérralo en el cortafuegos y deja que solo nginx llegue a él. El worker no escucha en ningún
-puerto: solo se comunica con el servidor por su entrada y salida estándar.
+The server listens on the port of `PORT` (3000). **Do not expose it directly to the Internet**:
+close it in the firewall and let only nginx reach it. The worker does not listen on any
+port: it only communicates with the server through its standard input and output.
 
-Al recibir `SIGTERM` (`systemctl stop` o `restart`), el servidor deja de aceptar conexiones y
-`/api/health` pasa a responder 503 a las peticiones que llegan por conexiones que ya estaban abiertas.
-Una conexión nueva no recibe ese 503: tras `server.close()` el servidor ya no la acepta, y quien la
-abre ve la conexión rechazada. Las pruebas automatizadas lo comprueban en Windows con un servidor local
-(`ECONNREFUSED`); detrás de nginx lo normal sería un 502, pero no se ha probado con nginx ni con un
-balanceador. Desde ese momento cada respuesta lleva `Connection: close`, para que una conexión
-persistente no lo retenga. Espera, como mucho 10 s, a las peticiones en curso y a la tanda de borrado
-de sesiones que esté en MySQL (no se envía ninguna más); después cierra el pool de MySQL, otros 10 s
-como mucho. Si el borrado no termina a tiempo, el pool se cierra igualmente;
-según el código de mysql2 3.24.6, cada conexión se cierra detrás de su consulta en curso, sin
-cortarla (sin comprobar todavía contra un MySQL real). Sale con código 0 si todo
-terminó a tiempo y con 1 si tuvo que cortar algo; el registro dice qué.
+On `SIGTERM` (`systemctl stop` or `restart`), the server stops accepting connections and
+`/api/health` starts answering 503 to the requests that arrive over connections that were already open.
+A new connection does not get that 503: after `server.close()` the server no longer accepts it, and whoever
+opens it sees the connection refused. The automated tests check it on Windows with a local server
+(`ECONNREFUSED`); behind nginx the normal thing would be a 502, but it has not been tested with nginx nor with a
+load balancer. From that moment every response carries `Connection: close`, so that a persistent
+connection does not hold it back. It waits, at most 10 s, for the requests in progress and for the batch of session
+deletion that is in MySQL (no more are sent); then it closes the MySQL pool, another 10 s
+at most. If the deletion does not finish in time, the pool is closed anyway;
+according to the code of mysql2 3.24.6, each connection is closed after its query in progress, without
+cutting it (not yet checked against a real MySQL). It exits with code 0 if everything
+finished in time and with 1 if it had to cut something; the log says what.
 
-Cada señal se atiende una sola vez (`process.once`). Un segundo `SIGTERM`, o un segundo `SIGINT`,
-durante el apagado ya no lo recibe el servidor: Node aplica su comportamiento por defecto y termina el
-proceso en el acto, sin esperar a las peticiones en curso ni cerrar el pool de MySQL. Esto se deduce del
-código y de la documentación de Node; no se ha probado. Un `SIGINT` después de un `SIGTERM` (o al
-revés) no lo interrumpe: devuelve el mismo apagado en curso (las pruebas lo comprueban llamando dos
-veces al apagado, sin señales del sistema). Al vencer `TimeoutStopSec`, systemd no envía otro
-`SIGTERM`, sino `SIGKILL`, que tampoco permite limpiar nada.
+Each signal is handled only once (`process.once`). A second `SIGTERM`, or a second `SIGINT`,
+during the shutdown is no longer received by the server: Node applies its default behaviour and ends the
+process on the spot, without waiting for the requests in progress nor closing the MySQL pool. This is deduced from the
+code and from the Node documentation; it has not been tested. A `SIGINT` after a `SIGTERM` (or the other way
+round) does not interrupt it: it returns the same shutdown in progress (the tests check it by calling the
+shutdown twice, without system signals). When `TimeoutStopSec` expires, systemd does not send another
+`SIGTERM`, but `SIGKILL`, which does not allow cleaning anything up either.
 
-**Probado solo con pruebas automatizadas en Windows**: la señal real, con systemd, sigue sin probar.
+**Tested only with automated tests on Windows**: the real signal, with systemd, is still untested.
 
-### 5. Proxy inverso (nginx)
+### 5. Reverse proxy (nginx)
 
-**Sin probar**: esta configuración no se ha usado con un nginx real. Es un punto de partida que hay
-que comprobar en un servidor de pruebas antes de publicar. Los valores de los límites son una
-propuesta, no una medición.
+**Untested**: this configuration has not been used with a real nginx. It is a starting point that has
+to be checked on a test server before publishing. The values of the limits are a
+proposal, not a measurement.
 
 ```nginx
-# En el bloque http (por ejemplo, /etc/nginx/conf.d/nexora-limits.conf): un cupo por cliente para
-# la API, además de los límites del propio servidor.
+# In the http block (for example, /etc/nginx/conf.d/nexora-limits.conf): a per-client quota for
+# the API, in addition to the limits of the server itself.
 limit_req_zone $binary_remote_addr zone=nexora_api:10m rate=10r/s;
 
 server {
@@ -656,7 +656,7 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     server_tokens off;
 
-    # El cuerpo más grande que acepta el servidor es el del playground (unos 385 KiB).
+    # The largest body the server accepts is that of the playground (about 385 KiB).
     client_max_body_size 512k;
 
     location /api/ {
@@ -679,67 +679,67 @@ server {
 }
 ```
 
-- `http2 on;` es la forma de nginx 1.25.1 y posteriores. Con una versión anterior, quita esa línea y
-  escribe `listen 443 ssl http2;` (y lo mismo para `[::]:443`).
-- `proxy_set_header Host $host` es necesario: el servidor compara la cabecera `Origin` con `Host`
-  para rechazar peticiones de otros sitios.
-- `X-Forwarded-Proto` es lo que permite al servidor saber que la petición llegó por HTTPS (con
-  `TRUST_PROXY=loopback`) y enviar HSTS. El servidor envía también la CSP y las demás cabeceras de
-  seguridad: no hace falta repetirlas en nginx.
-- `limit_req` frena a un mismo cliente antes de que llegue al servidor. Los límites del servidor
-  siguen actuando detrás (y están en memoria: se pierden al reiniciar).
-- Las páginas de error de nginx (502 si el servidor no responde, 413 si el cuerpo es demasiado
-  grande, 429 del límite) no dicen nada del servidor. Las del servidor tampoco: un error interno
-  responde `{"error":"Internal server error."}` y deja en el registro solo el tipo y un código.
-- `/api/health` puede quedarse abierto (no revela nada) o limitarse a la red del monitor con
-  `allow` y `deny` en un `location = /api/health` propio.
+- `http2 on;` is the form of nginx 1.25.1 and later. With an earlier version, remove that line and
+  write `listen 443 ssl http2;` (and the same for `[::]:443`).
+- `proxy_set_header Host $host` is required: the server compares the `Origin` header with `Host`
+  to reject requests from other sites.
+- `X-Forwarded-Proto` is what lets the server know that the request arrived over HTTPS (with
+  `TRUST_PROXY=loopback`) and send HSTS. The server also sends the CSP and the other security
+  headers: there is no need to repeat them in nginx.
+- `limit_req` slows down a single client before it reaches the server. The limits of the server
+  still act behind it (and they are in memory: they are lost on restart).
+- The nginx error pages (502 if the server does not answer, 413 if the body is too
+  large, 429 of the limit) say nothing about the server. Neither do those of the server: an internal error
+  answers `{"error":"Internal server error."}` and leaves in the log only the type and a code.
+- `/api/health` can stay open (it reveals nothing) or be restricted to the network of the monitor with
+  `allow` and `deny` in a `location = /api/health` of its own.
 
-El certificado puede obtenerse con Let's Encrypt (por ejemplo, `certbot --nginx`), que además lo
-renueva. Comprueba después la renovación con `certbot renew --dry-run`.
+The certificate can be obtained with Let's Encrypt (for example, `certbot --nginx`), which also
+renews it. Then check the renewal with `certbot renew --dry-run`.
 
-### 6. Registros
+### 6. Logs
 
 ```bash
 journalctl -u nexora -f
 ```
 
-El servidor escribe una línea por cada fallo del playground, con el tipo de fallo
-(`playground: worker failed`, `playground: worker unavailable`…). Nunca escribe el código enviado.
+The server writes one line for each failure of the playground, with the type of failure
+(`playground: worker failed`, `playground: worker unavailable`…). It never writes the code sent.
 
-### 7. Verificar el despliegue
+### 7. Verifying the deployment
 
-Primero, que el proceso responde:
+First, that the process answers:
 
 ```bash
 curl -s https://tu-dominio.example/api/health
 ```
 
-Tiene que responder `{"status":"ok","checks":{"http":"ok"}}`. Solo dice que el proceso está en marcha
-y atiende peticiones: **no comprueba MySQL, Google, GitHub, reCAPTCHA ni el playground**. Durante un
-apagado responde 503 con `{"status":"shutting_down"}`, pero solo por conexiones que ya estaban abiertas:
-las nuevas se rechazan ([Servicio](#4-servicio-systemd)). Comprueba también que `http://` redirige a
-`https://` (`curl -sI http://tu-dominio.example/` devuelve 301).
+It has to answer `{"status":"ok","checks":{"http":"ok"}}`. It only says that the process is running
+and serving requests: **it does not check MySQL, Google, GitHub, reCAPTCHA nor the playground**. During a
+shutdown it answers 503 with `{"status":"shutting_down"}`, but only over connections that were already open:
+new ones are rejected ([Service](#4-service-systemd)). Also check that `http://` redirects to
+`https://` (`curl -sI http://tu-dominio.example/` returns 301).
 
-Mientras el playground esté desactivado, comprueba que de verdad lo está:
-
-```bash
-curl -s https://tu-dominio.example/api/playground/info
-```
-
-Tiene que responder con el estado HTTP 503 y el código `playground_disabled`.
-
-Las comprobaciones siguientes, y las de la sección siguiente que usan la página o la API, necesitan
-el playground activado. **Hazlas en un entorno controlado, sin exposición pública**: un servidor de
-pruebas al que no se pueda llegar desde Internet, o este mismo servidor antes de abrir el sitio
-(con el nombre de dominio sin publicar o el proxy cerrado al exterior). Usa en ese entorno su propia
-dirección en lugar de `https://tu-dominio.example`.
+While the playground is disabled, check that it really is:
 
 ```bash
 curl -s https://tu-dominio.example/api/playground/info
 ```
 
-Tiene que responder `"available": true` y la versión. Si responde `"available": false`, el worker no
-arranca: revisa `PLAYGROUND_WORKER_COMMAND`, que la imagen exista y que el usuario pueda usar Docker.
+It has to answer with HTTP status 503 and the code `playground_disabled`.
+
+The following checks, and those of the next section that use the page or the API, need
+the playground enabled. **Do them in a controlled environment, without public exposure**: a test
+server that cannot be reached from the Internet, or this same server before opening the site
+(with the domain name unpublished or the proxy closed to the outside). In that environment use its own
+address instead of `https://tu-dominio.example`.
+
+```bash
+curl -s https://tu-dominio.example/api/playground/info
+```
+
+It has to answer `"available": true` and the version. If it answers `"available": false`, the worker does not
+start: review `PLAYGROUND_WORKER_COMMAND`, that the image exists and that the user can use Docker.
 
 ```bash
 curl -s -X POST https://tu-dominio.example/api/playground/run \
@@ -747,34 +747,34 @@ curl -s -X POST https://tu-dominio.example/api/playground/run \
   --data '{"code": "fn main() -> Void {\n    print(6 * 7)\n}"}'
 ```
 
-Tiene que devolver `"output":"42\n"`. Después abre `/playground` en el navegador y ejecuta el
-ejemplo inicial.
+It has to return `"output":"42\n"`. Then open `/playground` in the browser and run the
+initial example.
 
-### Comprobar el aislamiento
+### Checking the isolation
 
-Antes de anunciar el playground, comprueba **en el servidor real** cada punto. Ninguno se ha
-comprobado todavía. Las filas que usan la página o la API necesitan el playground activado: hazlas
-en un entorno controlado, sin exposición pública (ver el paso 7). Solo cuando todas den el resultado
-esperado, cambia `PLAYGROUND_ENABLED` a `true` en `servidor/.env` del servidor público y reinicia el
-servicio.
+Before announcing the playground, check each point **on the real server**. None has been
+checked yet. The rows that use the page or the API need the playground enabled: do them
+in a controlled environment, without public exposure (see step 7). Only when all of them give the expected
+result, change `PLAYGROUND_ENABLED` to `true` in `servidor/.env` of the public server and restart the
+service.
 
-| Comprobación | Cómo | Resultado esperado |
+| Check | How | Expected result |
 |--------------|------|--------------------|
-| El worker funciona en el contenedor | La orden de `PLAYGROUND_WORKER_COMMAND`, escrita a mano como en el comentario de `servidor/playground/Dockerfile`, con un nombre propio en lugar de `{container}` (por ejemplo `--name nexora-prueba`: el marcador solo lo sustituye el servidor, y Docker no lo acepta como nombre), y con `{"action":"run","code":"fn main() -> Void {\n    print(1)\n}"}` por la entrada estándar | Un JSON con `"output":"1\n"` |
-| Sin red | `docker run --rm --pull never --network none --entrypoint python nexora-worker -c "import socket; socket.create_connection(('1.1.1.1', 53), 2)"` | Falla |
-| Sistema de archivos de solo lectura | Añade `--read-only --entrypoint python … -c "open('/x','w')"` | Falla |
-| Usuario sin privilegios | `… --entrypoint id nexora-worker` | `uid=65534` |
-| Límite de tiempo | Ejecuta desde la página un programa lento (por ejemplo `fib(40)`) | Estado `timeout`; con `docker ps` no queda ningún contenedor pasados unos segundos |
-| Límite de memoria | Un programa que duplica un texto muchas veces | `E3006` o `memory_limit` (en Linux); el servidor sigue respondiendo |
-| Las pruebas del sistema operativo | `python -m pytest tests/test_worker.py` en el servidor | Las dos pruebas marcadas como POSIX pasan en Linux y macOS; la del límite de memoria, solo en Linux |
-| Concurrencia | Varias peticiones lentas a la vez | Las que no caben reciben 503 `busy`; nunca hay más contenedores que `PLAYGROUND_MAX_CONCURRENT` |
-| *Pendiente:* el nombre identifica un solo contenedor | Con una petición lenta en marcha, toma su nombre de `docker ps --filter name=nexora-pg-`. Ejecuta `docker ps -aq --filter name=^<nombre>$`, y lo mismo con el nombre sin su último carácter. Repite el primero cuando la petición haya terminado | El primero devuelve un identificador; el del nombre recortado, nada; el primero, repetido al final, nada |
-| *Pendiente:* `--init` está activo | Con una petición lenta en marcha, `docker inspect -f '{{.HostConfig.Init}}' <nombre>` y `docker top <nombre>` | `HostConfig.Init` es `true`, y el primer proceso que muestra `docker top` es `docker-init`. `docker top` muestra los procesos desde fuera del contenedor: indica que `docker-init` es el primero, no lo demuestra como proceso 1 dentro del contenedor. La fila «Límite de tiempo» comprueba además que el temporizador interno del worker termina el programa |
-| *Pendiente:* lo que va después de la imagen no es una opción de Docker | `docker run --rm --pull never --entrypoint python nexora-worker -c "import sys; print(sys.argv)" --name x` | Imprime `['-c', '--name', 'x']`, y `docker ps -a --filter name=^x$` no lista nada |
-| *Pendiente:* un nombre ya en uso | `docker run -d --rm --pull never --name nexora-prueba --entrypoint sleep nexora-worker 30`, dos veces seguidas | La segunda falla por conflicto de nombre y no crea otro contenedor |
-| *Pendiente:* sin la imagen no se descarga nada | `docker run --rm --pull never nexora-worker:no-existe` | Falla con `No such image`, sin descargar nada (`docker image ls` no cambia) |
+| The worker works in the container | The command of `PLAYGROUND_WORKER_COMMAND`, written by hand as in the comment of `servidor/playground/Dockerfile`, with a name of your own instead of `{container}` (for example `--name nexora-prueba`: only the server replaces the placeholder, and Docker does not accept it as a name), and with `{"action":"run","code":"fn main() -> Void {\n    print(1)\n}"}` on the standard input | A JSON with `"output":"1\n"` |
+| No network | `docker run --rm --pull never --network none --entrypoint python nexora-worker -c "import socket; socket.create_connection(('1.1.1.1', 53), 2)"` | It fails |
+| Read-only file system | Add `--read-only --entrypoint python … -c "open('/x','w')"` | It fails |
+| Unprivileged user | `… --entrypoint id nexora-worker` | `uid=65534` |
+| Time limit | Run a slow program from the page (for example `fib(40)`) | State `timeout`; with `docker ps` no container is left after a few seconds |
+| Memory limit | A program that doubles a text many times | `E3006` or `memory_limit` (on Linux); the server keeps answering |
+| The operating system tests | `python -m pytest tests/test_worker.py` on the server | The two tests marked as POSIX pass on Linux and macOS; the memory limit one, only on Linux |
+| Concurrency | Several slow requests at once | Those that do not fit get 503 `busy`; there are never more containers than `PLAYGROUND_MAX_CONCURRENT` |
+| *Pending:* the name identifies a single container | With a slow request running, take its name from `docker ps --filter name=nexora-pg-`. Run `docker ps -aq --filter name=^<name>$`, and the same with the name without its last character. Repeat the first one when the request has finished | The first one returns an identifier; the one with the cut name, nothing; the first one, repeated at the end, nothing |
+| *Pending:* `--init` is active | With a slow request running, `docker inspect -f '{{.HostConfig.Init}}' <name>` and `docker top <name>` | `HostConfig.Init` is `true`, and the first process shown by `docker top` is `docker-init`. `docker top` shows the processes from outside the container: it indicates that `docker-init` is the first one, it does not prove it as process 1 inside the container. The row «Time limit» also checks that the internal timer of the worker ends the program |
+| *Pending:* what goes after the image is not a Docker option | `docker run --rm --pull never --entrypoint python nexora-worker -c "import sys; print(sys.argv)" --name x` | It prints `['-c', '--name', 'x']`, and `docker ps -a --filter name=^x$` lists nothing |
+| *Pending:* a name already in use | `docker run -d --rm --pull never --name nexora-prueba --entrypoint sleep nexora-worker 30`, twice in a row | The second one fails because of a name conflict and does not create another container |
+| *Pending:* without the image nothing is downloaded | `docker run --rm --pull never nexora-worker:no-existe` | It fails with `No such image`, without downloading anything (`docker image ls` does not change) |
 
-### 8. Actualizar
+### 8. Updating
 
 ```bash
 cd /srv/nexora/app && sudo -u nexora git pull
@@ -782,43 +782,43 @@ nexora/.venv/bin/python -m pip install ./nexora
 docker build -f servidor/playground/Dockerfile -t nexora-worker .
 cd servidor && npm ci --omit=dev && npm run migrate
 sudo systemctl restart nexora
-curl -s https://tu-dominio.example/api/playground/info     # activado: la versión nueva; desactivado: 503
+curl -s https://tu-dominio.example/api/playground/info     # enabled: the new version; disabled: 503
 ```
 
-La imagen del worker hay que reconstruirla en cada actualización del lenguaje: contiene su propia
-copia del intérprete. Si la orden usa una etiqueta (`nexora-worker:0.11.0`), construye la imagen con
-la etiqueta nueva, cámbiala en `PLAYGROUND_WORKER_COMMAND` y reinicia el servicio; ver
-[Imagen del worker](#3-imagen-del-worker).
+The worker image has to be rebuilt on every update of the language: it contains its own
+copy of the interpreter. If the command uses a tag (`nexora-worker:0.11.0`), build the image with
+the new tag, change it in `PLAYGROUND_WORKER_COMMAND` and restart the service; see
+[Worker image](#3-worker-image).
 
-### 9. Copias de seguridad de MySQL
+### 9. MySQL backups
 
-**Sin probar**: ningún paso de esta sección se ha ejecutado todavía, ni la copia ni la restauración.
-Hasta comprobar una restauración completa en un servidor de pruebas, no hay que dar por buena
-ninguna copia.
+**Untested**: no step of this section has been run yet, neither the backup nor the restore.
+Until a full restore has been checked on a test server, no backup should be taken
+as good.
 
-La base de datos guarda cuentas (nombres, emails y resúmenes de contraseñas), sesiones y enlaces con
-Google y GitHub: cada copia contiene datos personales. Guárdala cifrada, fuera del servidor, con
-acceso restringido, y bórrala cuando pase el plazo que fije la política de privacidad.
+The database stores accounts (names, emails and password hashes), sessions and links with
+Google and GitHub: every backup contains personal data. Store it encrypted, outside the server, with
+restricted access, and delete it when the period set by the privacy policy has passed.
 
-Las credenciales van en un archivo de opciones, nunca en la línea de órdenes (se verían en `ps`):
+The credentials go in an options file, never on the command line (they would be visible in `ps`):
 
 ```ini
-# /home/nexora-backup/.my.cnf  (chmod 600, propiedad del usuario que hace la copia)
+# /home/nexora-backup/.my.cnf  (chmod 600, owned by the user that makes the backup)
 [client]
 user=nexora_backup
 password=...
 ```
 
-El usuario de la copia solo necesita leer: `GRANT SELECT, SHOW VIEW, LOCK TABLES ON nexora.* TO
-'nexora_backup'@'localhost';`. La copia, coherente sin bloquear las tablas (todas son InnoDB):
+The backup user only needs to read: `GRANT SELECT, SHOW VIEW, LOCK TABLES ON nexora.* TO
+'nexora_backup'@'localhost';`. The backup, consistent without locking the tables (they are all InnoDB):
 
 ```bash
 mysqldump --single-transaction --quick --default-character-set=utf8mb4 nexora \
   | gzip > nexora-$(date +%F).sql.gz
 ```
 
-En MariaDB la orden se llama también `mariadb-dump`. Para restaurar, **primero en una base de datos
-distinta** y comprueba que las tablas y el número de filas coinciden:
+In MariaDB the command is also called `mariadb-dump`. To restore, **first into a different
+database**, and check that the tables and the number of rows match:
 
 ```bash
 mysql -e 'CREATE DATABASE nexora_restore CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
@@ -826,85 +826,85 @@ gunzip -c nexora-AAAA-MM-DD.sql.gz | mysql nexora_restore
 mysql -e 'SELECT COUNT(*) FROM nexora_restore.users; SELECT COUNT(*) FROM nexora_restore.oauth_accounts'
 ```
 
-Solo después, con el servicio parado (`systemctl stop nexora`), se restaura sobre la base de datos de
-producción. Las sesiones de la copia que ya hayan caducado se borran solas al arrancar.
+Only afterwards, with the service stopped (`systemctl stop nexora`), is it restored over the production
+database. The sessions in the backup that have already expired are deleted on their own at startup.
 
-### Sin Docker
+### Without Docker
 
-Si no puedes usar Docker, el modo de proceso (sin `PLAYGROUND_WORKER_COMMAND`) funciona en tu
-equipo, y en Linux aplica los límites del sistema operativo. **No es una sandbox**: ejecuta el código
-de los visitantes con los permisos del servidor. Por eso, con `NODE_ENV=production`, el servidor no
-arranca con `PLAYGROUND_ENABLED=true` sin la orden de contenedor admitida: dice por qué y termina. Que
-la orden de contenedor esté configurada tampoco demuestra que el aislamiento funcione: hay que
-completar antes [Comprobar el aislamiento](#comprobar-el-aislamiento).
+If you cannot use Docker, process mode (without `PLAYGROUND_WORKER_COMMAND`) works on your
+machine, and on Linux it applies the operating system limits. **It is not a sandbox**: it runs the code
+of the visitors with the permissions of the server. That is why, with `NODE_ENV=production`, the server does not
+start with `PLAYGROUND_ENABLED=true` without the accepted container command: it says why and ends. That
+the container command is configured does not prove that the isolation works either: you first have to
+complete [Checking the isolation](#checking-the-isolation).
 
-## Tareas pendientes y riesgos
+## Pending tasks and risks
 
-- Construir y probar la imagen del worker, y completar la tabla de comprobación del aislamiento.
-- Probar en un servidor de pruebas la configuración de nginx (redirección a HTTPS, `limit_req`,
-  certificado), el apagado con `systemctl stop` y una copia de MySQL restaurada de principio a fin.
-- En el modo contenedor, el usuario del servidor web tiene que poder usar Docker, y eso equivale a
-  tener permisos de administrador en el equipo: quien comprometiera el servidor web controlaría el
-  equipo. Antes de activar el playground en público hay que decidir cómo separarlos (por ejemplo,
-  un servicio aparte, con su propio usuario, que sea el único que lanza contenedores).
-- Comprobar los límites del sistema operativo dentro del contenedor. En Linux ya pasan con el worker
-  lanzado como proceso, sin contenedor ([Pruebas](testing.md#linux)).
-- Medir el tiempo de arranque de un contenedor por petición. Si es demasiado, la alternativa es un
-  grupo de workers ya arrancados, que no se ha implementado.
-- El cupo de peticiones y el freno del inicio de sesión se guardan en la memoria del servidor: se
-  pierden al reiniciar y no se comparten entre varias instancias.
-- El borrado de sesiones caducadas usa `DELETE … LIMIT`, que es inseguro con la replicación basada en
-  sentencias (`binlog_format=STATEMENT`). Con `ROW` (el valor por defecto de MySQL 8) o `MIXED` no hay
-  problema. Si el MySQL de producción usa `STATEMENT`, hay que cambiarlo por un borrado por clave
-  primaria; está pendiente de conocer ese servidor.
-- El tiempo máximo de cada consulta del borrado de sesiones es del cliente (mysql2): la promesa falla
-  a los 30 s, pero la sentencia sigue en MySQL y la conexión no vuelve al pool hasta que termina. Una
-  sentencia bloqueada retendría una conexión del pool, el mismo que usan el registro y el inicio de
-  sesión. Para no acumularlas, una pasada no empieza mientras las consultas de la anterior no hayan
-  terminado para mysql2: se omite y se anota en el registro. Una pasada que supera su tiempo máximo
-  (5 minutos) deja de enviar tandas nuevas, pero no cancela la que tiene en curso; el registro lo dice,
-  y anota cuántas sesiones borró en total esa pasada o con qué error acabó cuando por fin termina. Pero mysql2 da una consulta por terminada
-  al vencer su tope aunque siga en MySQL, así que una sentencia que durase más que el intervalo (una
-  hora) podría sumar otra conexión en la pasada siguiente. Pendiente de probar con un MySQL de pruebas
-  una cancelación real (`KILL QUERY` desde otra conexión, o destruir la conexión al vencer el tiempo).
-- El freno del inicio de sesión reserva cada intento antes de consultar la base de datos, así que las
-  peticiones simultáneas no lo sortean. Su estado está en memoria: se pierde al reiniciar y no se
-  comparte entre varias instancias del servidor.
-- El playground no tiene CAPTCHA: sus peticiones solo tienen el cupo por cliente y por red IPv6 /48,
-  que no frena un abuso repartido entre muchas direcciones. El registro y el inicio de sesión sí
-  tienen un antispam (`servidor/src/captcha.js`): Google reCAPTCHA v3, que solo se carga si la persona
-  lo acepta, un campo trampa y un límite estricto por cliente. **Sin probar con claves reales de
-  Google**: las pruebas simulan sus respuestas.
-- Inicio de sesión con Google o GitHub (`servidor/src/oauth.js`): la cuenta y su enlace con el
-  proveedor se crean en una transacción, pero la sesión se crea después, fuera de ella. Si guardar la
-  sesión falla, la cuenta queda creada y enlazada sin sesión, y la persona ve `oauth_failed`; según el
-  código, el siguiente intento encuentra el enlace y crea la sesión. Las pruebas cubren esos dos
-  caminos por separado, con una base de datos simulada, no contra MySQL. **Sin probar**: dos primeros
-  inicios simultáneos con la misma identidad pueden chocar (por la clave primaria del enlace o por un
-  bloqueo mutuo de MySQL), y uno de ellos recibiría `oauth_failed`. El registro con contraseña, en
-  cambio, crea la cuenta y su primera sesión en una sola transacción.
-- Apagado (`servidor/src/lifecycle.js`): un segundo `SIGTERM` o `SIGINT` termina el proceso en el acto,
-  sin completar la limpieza (sin probar); y el 503 de `/api/health` solo llega por conexiones ya
-  abiertas, porque las nuevas se rechazan una vez iniciado `server.close()`. Ver
-  [Servicio](#4-servicio-systemd). Sin probar con señales reales del sistema operativo, systemd ni
+- Build and test the worker image, and complete the isolation checklist.
+- Test on a test server the nginx configuration (redirection to HTTPS, `limit_req`,
+  certificate), the shutdown with `systemctl stop` and a MySQL backup restored from start to finish.
+- In container mode, the web server user has to be able to use Docker, and that is equivalent to
+  having administrator permissions on the machine: whoever compromised the web server would control the
+  machine. Before enabling the playground in public it has to be decided how to separate them (for example,
+  a separate service, with its own user, that is the only one launching containers).
+- Check the operating system limits inside the container. On Linux they already pass with the worker
+  launched as a process, without a container ([Tests](testing.md#linux)).
+- Measure the start time of a container per request. If it is too much, the alternative is a
+  pool of already started workers, which has not been implemented.
+- The request quota and the sign-in throttle are kept in the memory of the server: they are
+  lost on restart and are not shared between several instances.
+- The deletion of expired sessions uses `DELETE … LIMIT`, which is unsafe with statement-based
+  replication (`binlog_format=STATEMENT`). With `ROW` (the default value of MySQL 8) or `MIXED` there is no
+  problem. If the production MySQL uses `STATEMENT`, it has to be changed to a deletion by primary
+  key; it is pending until that server is known.
+- The maximum time of each query of the session deletion is the client's (mysql2): the promise fails
+  after 30 s, but the statement continues in MySQL and the connection does not go back to the pool until it ends. A
+  blocked statement would hold a connection of the pool, the same one used by sign-up and sign-in.
+  So as not to pile them up, a pass does not start while the queries of the previous one have not
+  finished for mysql2: it is skipped and recorded in the log. A pass that exceeds its maximum time
+  (5 minutes) stops sending new batches, but does not cancel the one in progress; the log says so,
+  and records how many sessions that pass deleted in total or with what error it ended when it finally finishes. But mysql2 considers a query finished
+  when its cap expires even if it continues in MySQL, so a statement that lasted longer than the interval (one
+  hour) could add another connection in the next pass. Pending to test with a test MySQL
+  a real cancellation (`KILL QUERY` from another connection, or destroying the connection when the time expires).
+- The sign-in throttle reserves each attempt before querying the database, so
+  simultaneous requests do not get around it. Its state is in memory: it is lost on restart and is not
+  shared between several instances of the server.
+- The playground has no CAPTCHA: its requests only have the quota per client and per IPv6 /48 network,
+  which does not stop an abuse spread across many addresses. Sign-up and sign-in do
+  have an antispam (`servidor/src/captcha.js`): Google reCAPTCHA v3, which is only loaded if the person
+  accepts it, a honeypot field and a strict limit per client. **Not tested with real Google
+  keys**: the tests simulate its responses.
+- Sign-in with Google or GitHub (`servidor/src/oauth.js`): the account and its link with the
+  provider are created in a transaction, but the session is created afterwards, outside it. If saving the
+  session fails, the account is left created and linked without a session, and the person sees `oauth_failed`; according to the
+  code, the next attempt finds the link and creates the session. The tests cover those two
+  paths separately, with a simulated database, not against MySQL. **Untested**: two simultaneous first
+  sign-ins with the same identity can collide (because of the primary key of the link or a
+  MySQL deadlock), and one of them would get `oauth_failed`. Sign-up with a password, on the
+  other hand, creates the account and its first session in a single transaction.
+- Shutdown (`servidor/src/lifecycle.js`): a second `SIGTERM` or `SIGINT` ends the process on the spot,
+  without completing the cleanup (untested); and the 503 of `/api/health` only arrives over connections already
+  open, because new ones are rejected once `server.close()` has started. See
+  [Service](#4-service-systemd). Not tested with real operating system signals, systemd nor
   nginx.
-- Decisión pendiente: el registro responde 409 a un email que ya tiene cuenta, y eso revela qué
-  emails están registrados. Evitarlo exige confirmar el email por correo, que el sitio no envía.
-- Decisión pendiente de producto y privacidad: el gestor de consentimiento (`web/js/consent.js`) sabe
-  cargar Google Analytics, Tag Manager y Ads tras el consentimiento, pero ninguno está configurado y la
-  política de seguridad de las páginas (CSP, `servidor/src/security-headers.js`) solo admite scripts y
-  conexiones del propio sitio: el navegador los bloquearía aun con consentimiento. Las pruebas del
-  servidor fallan mientras haya uno configurado. Si se decide usar alguno, la propuesta es que el
-  servidor añada a la CSP solo los dominios del servicio configurado, tal como los documente Google en
-  ese momento, y solo en scripts externos: los scripts escritos dentro de la página seguirían
-  prohibidos. Antes habría que actualizar la política de cookies y la de privacidad.
-- Las páginas legales (`web/aviso-legal.html`, `privacidad.html`, `cookies.html` y `terminos.html`)
-  son un borrador: les faltan los datos del titular y otros datos, marcados entre corchetes (como
-  `[NIF O CIF]` o `[DOMINIO]`), y no tienen revisión jurídica. No deben publicarse así. Esos
-  marcadores solo pueden aparecer en las páginas legales, que avisan arriba de que son un borrador
-  (`servidor/test/web-guide.test.js` lo comprueba). El aviso del formulario de registro
-  (`web/signup.html`) no nombra al responsable del tratamiento: remite a la política de privacidad,
-  donde está pendiente. La revisión jurídica debe confirmar si esa primera capa de información basta
-  o si el formulario tiene que nombrarlo.
-- La página no se ha probado en Firefox, en Safari ni con lectores de pantalla.
-- No se puede compartir un programa mediante un enlace.
+- Pending decision: sign-up answers 409 to an email that already has an account, and that reveals which
+  emails are registered. Avoiding it requires confirming the email by mail, which the site does not send.
+- Pending product and privacy decision: the consent manager (`web/js/consent.js`) knows how to
+  load Google Analytics, Tag Manager and Ads after consent, but none is configured and the
+  security policy of the pages (CSP, `servidor/src/security-headers.js`) only allows scripts and
+  connections from the site itself: the browser would block them even with consent. The tests of the
+  server fail while one is configured. If it is decided to use one, the proposal is that the
+  server adds to the CSP only the domains of the configured service, as documented by Google at
+  that moment, and only for external scripts: scripts written inside the page would still be
+  forbidden. Before that, the cookie and privacy policies would have to be updated.
+- The legal pages (`web/aviso-legal.html`, `privacidad.html`, `cookies.html` and `terminos.html`)
+  are a draft: they lack the details of the owner and other data, marked in square brackets (such as
+  `[NIF O CIF]` or `[DOMINIO]`), and they have no legal review. They must not be published like this. Those
+  placeholders can only appear in the legal pages, which warn at the top that they are a draft
+  (`servidor/test/web-guide.test.js` checks it). The notice of the sign-up form
+  (`web/signup.html`) does not name the data controller: it refers to the privacy policy,
+  where it is pending. The legal review must confirm whether that first layer of information is enough
+  or whether the form has to name them.
+- The page has not been tested in Firefox, in Safari nor with screen readers.
+- A program cannot be shared through a link.

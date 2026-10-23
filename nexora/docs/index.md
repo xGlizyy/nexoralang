@@ -1,61 +1,60 @@
-# Documentación de NEXORA
+# NEXORA documentation
 
-NEXORA es un lenguaje de programación nuevo, en una fase temprana de desarrollo. Esta
-documentación describe lo que la versión actual hace de verdad: cada programa de ejemplo y cada
-salida que aparece en estas páginas se ejecuta en las pruebas automatizadas y se compara con el
-resultado real del intérprete.
+NEXORA is a new programming language, at an early stage of development. This documentation
+describes what the current version really does: every example program and every output shown on
+these pages is run by the automated tests and compared against the real output of the interpreter.
 
-## Por dónde empezar
+## Where to start
 
-| Si quieres… | Lee |
-|-------------|-----|
-| Instalar NEXORA | [Instalación](installation.md) |
-| Escribir y ejecutar tu primer programa | [Primeros pasos](getting-started.md) |
-| Ver programas completos | [`examples/`](../examples/README.md) |
-| Saber qué **no** hace todavía | [Limitaciones](limitations.md) |
+| If you want to… | Read |
+|-----------------|------|
+| Install NEXORA | [Installation](installation.md) |
+| Write and run your first program | [Getting started](getting-started.md) |
+| Read complete programs | [`examples/`](../examples/README.md) |
+| Know what it **cannot** do yet | [Limitations](limitations.md) |
 
-## Guías del lenguaje
+## Language guides
 
-| Guía | Contenido |
-|------|-----------|
-| [Tipos](types.md) | Los tipos, listas `List[T]`, inferencia, anotaciones, operadores, conversiones, tipos refinados (`where`) y registros |
-| [Funciones](functions.md) | Parámetros, `return`, rutas de retorno, `if` / `else`, recursividad |
-| [Contratos](contracts.md) | `requires` y `ensures`, con la explicación de cada regla |
+| Guide | Contents |
+|-------|----------|
+| [Types](types.md) | Types, `List[T]` lists, inference, annotations, operators, conversions, refined types (`where`) and records |
+| [Functions](functions.md) | Parameters, `return`, return paths, `if` / `else`, recursion |
+| [Contracts](contracts.md) | `requires` and `ensures`, with the explanation of each rule |
 
-## Referencia
+## Reference
 
-| Documento | Contenido |
-|-----------|-----------|
-| [Especificación del lenguaje](language-spec.md) | La referencia formal: léxico, gramática EBNF, tipos, ámbitos, semántica y errores |
-| [Referencia de la CLI](cli-reference.md) | Comandos, opciones, formatos de salida y códigos de salida de `nex` |
-| [Diagnósticos](diagnostics.md) | Cómo leer un error, categorías y todos los códigos |
-| [Herramientas automáticas e IA](ai-tooling.md) | Qué ofrece NEXORA a una herramienta o a un agente, la API de Python y qué no existe |
-| [Contexto estructurado](ai-context.md) | `nex context` y `nex symbols`: resumen y símbolos de un programa, sin ejecutarlo |
-| [Protocolo JSON](json-protocol.md) | Todos los formatos JSON, sus versiones, sus reglas y sus JSON Schema |
-| [Servidor MCP](mcp.md) | Servidor opcional para asistentes de IA compatibles: instalación, herramientas y seguridad |
-| [LSP](lsp.md) | Integración con editores: **planificada, no implementada** |
-| [Esquema de `nex inspect`](inspect-schema.md) | Todos los nodos y campos del árbol de sintaxis en JSON |
-| [Playground](playground.md) | Ejecutar NEXORA desde el navegador: arquitectura, API, límites, aislamiento y despliegue |
+| Document | Contents |
+|----------|----------|
+| [Language specification](language-spec.md) | The formal reference: lexical grammar, EBNF grammar, types, scopes, semantics and errors |
+| [CLI reference](cli-reference.md) | Commands, options, output formats and exit codes of `nex` |
+| [Diagnostics](diagnostics.md) | How to read an error, categories and every code |
+| [Automated tools and AI](ai-tooling.md) | What NEXORA offers a tool or an agent, the Python API and what does not exist |
+| [Structured context](ai-context.md) | `nex context` and `nex symbols`: a summary and the symbols of a program, without running it |
+| [JSON protocol](json-protocol.md) | Every JSON format, its versions, its rules and its JSON Schemas |
+| [MCP server](mcp.md) | Optional server for compatible AI assistants: installation, tools and security |
+| [LSP](lsp.md) | Editor integration: **planned, not implemented** |
+| [`nex inspect` schema](inspect-schema.md) | Every node and field of the syntax tree in JSON |
+| [Playground](playground.md) | Run NEXORA from the browser: architecture, API, limits, isolation and deployment |
 
-## Proyecto
+## Project
 
-| Documento | Contenido |
-|-----------|-----------|
-| [Arquitectura](architecture.md) | Las etapas del intérprete, los módulos y dónde añadir funcionalidades |
-| [Pruebas](testing.md) | Qué se prueba, cómo ejecutarlo y cobertura |
-| [Decisiones técnicas](decisions/README.md) | Por qué el lenguaje es como es, y los cambios incompatibles |
-| [Hoja de ruta](roadmap.md) | Qué está hecho y verificado, y qué está pendiente |
-| [Limitaciones](limitations.md) | Lo que no existe y los riesgos conocidos |
-| [Cambios](../CHANGELOG.md) | Qué ha cambiado en cada versión |
-| [Cómo contribuir](../CONTRIBUTING.md) | Entorno de desarrollo y comprobaciones antes de proponer un cambio |
-| [Seguridad](../SECURITY.md) | Alcance real de las protecciones y cómo avisar de un problema |
+| Document | Contents |
+|----------|----------|
+| [Architecture](architecture.md) | The stages of the interpreter, the modules and where to add features |
+| [Testing](testing.md) | What is tested, how to run it and coverage |
+| [Technical decisions](decisions/README.md) | Why the language is the way it is, and the incompatible changes |
+| [Roadmap](roadmap.md) | What is done and verified, and what is pending |
+| [Limitations](limitations.md) | What does not exist and the known risks |
+| [Changelog](../CHANGELOG.md) | What changed in each version |
+| [Contributing](../CONTRIBUTING.md) | Development environment and checks before proposing a change |
+| [Security](../SECURITY.md) | The real scope of the protections and how to report a problem |
 
-## Estado de cada parte
+## Status of each part
 
-| Estado | Significado en esta documentación |
-|--------|-----------------------------------|
-| Sin marca | Implementado y cubierto por pruebas |
-| **Experimental** | Implementado y probado, pero puede cambiar de forma incompatible (la API de Python, el servidor MCP y el playground; ninguna parte del lenguaje) |
-| **Previsto** | No existe. Solo aparece en [Limitaciones](limitations.md) y en la [hoja de ruta](roadmap.md) |
+| Status | What it means in this documentation |
+|--------|-------------------------------------|
+| No mark | Implemented and covered by tests |
+| **Experimental** | Implemented and tested, but it may change incompatibly (the Python API, the MCP server and the playground; no part of the language) |
+| **Planned** | Does not exist. It only appears in [Limitations](limitations.md) and in the [roadmap](roadmap.md) |
 
-La documentación está en español. Las palabras del lenguaje y los mensajes de error están en inglés.
+The documentation is in English, like the words of the language and the error messages.

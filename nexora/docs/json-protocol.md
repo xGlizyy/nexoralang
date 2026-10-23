@@ -1,108 +1,108 @@
-# Protocolo JSON
+# JSON protocol
 
-NEXORA entrega el resultado de su análisis como datos, en JSON, para que un programa no tenga que
-interpretar texto escrito para personas ni deducir nada con expresiones regulares.
+NEXORA delivers the result of its analysis as data, in JSON, so that a program does not have to
+interpret text written for people or deduce anything with regular expressions.
 
-Esta página define los formatos, sus versiones y las reglas que cumplen. Cada formato tiene además
-un **JSON Schema** en [`schemas/`](schemas/), y las pruebas validan con él la salida real.
+This page defines the formats, their versions and the rules they follow. Every format also has
+a **JSON Schema** in [`schemas/`](schemas/), and the tests validate the real output with it.
 
-## Formatos
+## Formats
 
-| `schema` | Qué es | Lo produce | JSON Schema |
-|----------|--------|------------|-------------|
-| `nexora.diagnostics/1` | El resultado del análisis estático | `nex check --format json`, `nex run --format json`, `tooling.check_source` | [`nexora-diagnostics.schema.json`](schemas/nexora-diagnostics.schema.json) |
-| `nexora.inspect/2` | El árbol de sintaxis, con tipos | `nex inspect`, `tooling.inspect_source` | [`nexora-inspect.schema.json`](schemas/nexora-inspect.schema.json) |
-| `nexora.symbols/1` | Los nombres declarados y sus usos | `nex symbols --format json`, `tooling.get_symbols` | [`nexora-symbols.schema.json`](schemas/nexora-symbols.schema.json) |
-| `nexora.context/1` | Un resumen técnico del programa | `nex context --format json`, `tooling.get_context` | [`nexora-context.schema.json`](schemas/nexora-context.schema.json) |
-| `nexora.spec/1` | La especificación del lenguaje, o una sección | `tooling.get_language_spec` | [`nexora-spec.schema.json`](schemas/nexora-spec.schema.json) |
-| `nexora.capabilities/1` | Qué es esta versión de NEXORA | `tooling.get_capabilities` | [`nexora-capabilities.schema.json`](schemas/nexora-capabilities.schema.json) |
-| `nexora.result/1` | El resultado de comprobar o **ejecutar** un programa | `nexora.api`, el [playground](playground.md) | [`nexora-result.schema.json`](schemas/nexora-result.schema.json) |
-| `nexora.test/1` | El resultado de **evaluar** los ejemplos de un programa | `nex test --format json`, `nexora.api.test_source` | [`nexora-test.schema.json`](schemas/nexora-test.schema.json) |
+| `schema` | What it is | Produced by | JSON Schema |
+|----------|------------|-------------|-------------|
+| `nexora.diagnostics/1` | The result of the static analysis | `nex check --format json`, `nex run --format json`, `tooling.check_source` | [`nexora-diagnostics.schema.json`](schemas/nexora-diagnostics.schema.json) |
+| `nexora.inspect/2` | The syntax tree, with types | `nex inspect`, `tooling.inspect_source` | [`nexora-inspect.schema.json`](schemas/nexora-inspect.schema.json) |
+| `nexora.symbols/1` | The declared names and their uses | `nex symbols --format json`, `tooling.get_symbols` | [`nexora-symbols.schema.json`](schemas/nexora-symbols.schema.json) |
+| `nexora.context/1` | A technical summary of the program | `nex context --format json`, `tooling.get_context` | [`nexora-context.schema.json`](schemas/nexora-context.schema.json) |
+| `nexora.spec/2` | The specification of the language, or a section | `tooling.get_language_spec` | [`nexora-spec.schema.json`](schemas/nexora-spec.schema.json) |
+| `nexora.capabilities/1` | What this version of NEXORA is | `tooling.get_capabilities` | [`nexora-capabilities.schema.json`](schemas/nexora-capabilities.schema.json) |
+| `nexora.result/1` | The result of checking or **running** a program | `nexora.api`, the [playground](playground.md) | [`nexora-result.schema.json`](schemas/nexora-result.schema.json) |
+| `nexora.test/1` | The result of **evaluating** the examples of a program | `nex test --format json`, `nexora.api.test_source` | [`nexora-test.schema.json`](schemas/nexora-test.schema.json) |
 
-Los seis primeros son de **análisis**: producirlos nunca ejecuta el programa. Los dos últimos son
-los únicos que pueden proceder de una ejecución, y no los usa ninguna herramienta de análisis.
-`nexora.test/1` está definido en la [decisión 0008](decisions/0008-ejemplos-y-nex-test.md), sección 6.
+The first six are **analysis** formats: producing them never runs the program. The last two are
+the only ones that can come from a run, and no analysis tool uses them.
+`nexora.test/1` is defined in [decision 0008](decisions/0008-ejemplos-y-nex-test.md), section 6.
 
-Todas las herramientas del servidor [MCP](mcp.md) devuelven estos mismos documentos.
+All the tools of the [MCP](mcp.md) server return these same documents.
 
-## Reglas comunes
+## Common rules
 
-### Cabecera
+### Header
 
-Los documentos que se refieren a un programa empiezan con los mismos cinco campos, en este orden:
+The documents that refer to a program start with the same five fields, in this order:
 
-| Campo | Tipo | Significado |
-|-------|------|-------------|
-| `schema` | texto | Nombre y versión del formato |
-| `nexora_version` | texto | Versión de NEXORA que produjo el documento |
-| `file` | texto | El nombre que se dio al código. Es una etiqueta: no tiene por qué ser una ruta |
-| `ok` | booleano | `true` si el análisis estático no encontró errores |
-| `diagnostics` | lista | Los diagnósticos, en el orden en que se encontraron |
+| Field | Type | Meaning |
+|-------|------|---------|
+| `schema` | text | Name and version of the format |
+| `nexora_version` | text | Version of NEXORA that produced the document |
+| `file` | text | The name given to the code. It is a label: it does not have to be a path |
+| `ok` | boolean | `true` if the static analysis found no errors |
+| `diagnostics` | list | The diagnostics, in the order in which they were found |
 
-`ok: true` significa "sin errores estáticos". **No** significa que el programa vaya a ejecutarse sin
-fallos: una división por cero o un contrato incumplido solo aparecen al ejecutar.
+`ok: true` means "no static errors". It does **not** mean that the program will run without
+failures: a division by zero or a broken contract only appears when running.
 
-### JSON limpio
+### Clean JSON
 
-Cuando se pide JSON (`--format json`):
+When JSON is asked for (`--format json`):
 
-- La salida estándar contiene **un único documento JSON** y nada más: ni avisos, ni mensajes
-  decorativos, ni bloques de Markdown.
-- Vale para cualquier entrada: un archivo inexistente, vacío, binario o que no es NEXORA produce
-  igualmente un documento válido, con el error dentro de `diagnostics`.
-- La codificación es UTF-8.
-- El orden de los campos es estable y la salida es determinista: el mismo archivo produce siempre
-  exactamente los mismos bytes.
-- La salida de error queda vacía. La única excepción es `nex run --format json`, que escribe el
-  documento **en la salida de error** (y solo si hay un fallo), porque la salida estándar pertenece
-  al programa que se ejecuta.
-- Un error interno de NEXORA no produce JSON: escribe `internal error: …` en la salida de error y
-  termina con el código `70`. Un consumidor debe tratar "la salida no es JSON" como fallo de la
-  herramienta, no del programa.
+- The standard output contains **a single JSON document** and nothing else: no warnings, no
+  decorative messages, no Markdown blocks.
+- It holds for any input: a missing, empty or binary file, or one that is not NEXORA, still produces
+  a valid document, with the error inside `diagnostics`.
+- The encoding is UTF-8.
+- The order of the fields is stable and the output is deterministic: the same file always produces
+  exactly the same bytes.
+- The standard error stays empty. The only exception is `nex run --format json`, which writes the
+  document **to the standard error** (and only if there is a failure), because the standard output belongs
+  to the program that runs.
+- An internal error of NEXORA produces no JSON: it writes `internal error: …` to the standard error and
+  ends with code `70`. A consumer must treat "the output is not JSON" as a failure of the
+  tool, not of the program.
 
-### Códigos de salida
+### Exit codes
 
-| Código | Significado | ¿Hay documento JSON? |
-|--------|-------------|----------------------|
-| `0` | El programa no tiene errores estáticos | Sí, con `ok: true` |
-| `1` | El programa tiene errores estáticos | Sí, con `ok: false` |
-| `2` | Uso incorrecto del comando | No |
-| `4` | El archivo no pudo leerse | Sí, con un diagnóstico `E0001` o `E0002` |
-| `70` | Error interno de NEXORA | No |
+| Code | Meaning | Is there a JSON document? |
+|------|---------|---------------------------|
+| `0` | The program has no static errors | Yes, with `ok: true` |
+| `1` | The program has static errors | Yes, with `ok: false` |
+| `2` | Wrong use of the command | No |
+| `4` | The file could not be read | Yes, with an `E0001` or `E0002` diagnostic |
+| `70` | Internal error of NEXORA | No |
 
-(`3` y `5` solo los produce `nex run`: el programa falló o incumplió un contrato al ejecutarse.)
+(`3` and `5` are only produced by `nex run`: the program failed or broke a contract while running.)
 
-### Posiciones
+### Positions
 
-Una posición es un objeto con `line`, `column`, `end_line` y `end_column`.
+A position is an object with `line`, `column`, `end_line` and `end_column`.
 
-- Las líneas y las columnas empiezan en **1**.
-- El final es **exclusivo**: `column: 5, end_column: 8` cubre las columnas 5, 6 y 7.
-- La columna cuenta **caracteres Unicode** (puntos de código), no bytes ni unidades UTF-16. Una
-  tabulación cuenta como una columna.
-- En un diagnóstico, los cuatro valores son `null` si el problema no se refiere a un punto del
-  archivo. Nunca se inventa una posición.
+- Lines and columns start at **1**.
+- The end is **exclusive**: `column: 5, end_column: 8` covers columns 5, 6 and 7.
+- The column counts **Unicode characters** (code points), not bytes or UTF-16 units. A
+  tab counts as one column.
+- In a diagnostic, the four values are `null` if the problem does not refer to a point in the
+  file. A position is never made up.
 
-### Lo desconocido es `null`
+### What is unknown is `null`
 
-Cuando el análisis no pudo establecer un dato, el campo vale `null`. No se rellena con una
-suposición. Por ejemplo: el tipo de una expresión que contiene un error, el árbol de un programa con
-errores léxicos, o el tipo de un parámetro cuyo tipo está mal escrito.
+When the analysis could not establish a piece of data, the field is `null`. It is not filled with a
+guess. For example: the type of an expression that contains an error, the tree of a program with
+lexical errors, or the type of a parameter whose type is badly written.
 
-### Análisis parcial: `complete`
+### Partial analysis: `complete`
 
-Los documentos de inspección, símbolos y contexto llevan el campo `complete`.
+The inspection, symbols and context documents carry the `complete` field.
 
-| `complete` | Significa |
-|------------|-----------|
-| `true` | El análisis cubre todo el archivo (tenga o no errores de nombres o de tipos) |
-| `false` | Hay errores de sintaxis y el documento describe **solo el código que pudo analizarse**; o no hay estructura (errores léxicos, archivo ilegible) |
+| `complete` | Means |
+|------------|-------|
+| `true` | The analysis covers the whole file (whether or not it has name or type errors) |
+| `false` | There are syntax errors and the document describes **only the code that could be analyzed**; or there is no structure (lexical errors, unreadable file) |
 
-Con un análisis parcial faltan las sentencias que tienen un error y las funciones cuya declaración
-lo tiene, y `diagnostics` contiene solo los errores de sintaxis. No se rellena ningún hueco: lo que
-falta, falta. Los detalles están en [el esquema de `nex inspect`](inspect-schema.md#documento).
+With a partial analysis the statements that have an error and the functions whose declaration
+has one are missing, and `diagnostics` contains only the syntax errors. No gap is filled: what is
+missing, is missing. The details are in [the `nex inspect` schema](inspect-schema.md#document).
 
-## Diagnósticos
+## Diagnostics
 
 <!-- nex:check-json -->
 ```nex
@@ -144,93 +144,95 @@ fn main() -> Void {
 }
 ```
 
-| Campo | Tipo | Significado |
-|-------|------|-------------|
-| `severity` | texto | Siempre `"error"`: en esta versión no existen avisos |
-| `category` | texto | `file`, `lexical`, `syntax`, `semantic`, `type`, `runtime` o `contract` |
-| `code` | texto | Identificador estable: `E` y cuatro cifras. Nunca cambia de significado |
-| `message` | texto | Título fijo asociado al código |
-| `label` | texto | Explicación de este caso concreto |
-| `hint` | texto o `null` | Corrección sugerida |
-| `notes` | lista de textos | Información relacionada |
-| `file` | texto | El archivo |
-| `line`, `column`, `end_line`, `end_column` | número o `null` | El fragmento afectado |
+| Field | Type | Meaning |
+|-------|------|---------|
+| `severity` | text | Always `"error"`: in this version there are no warnings |
+| `category` | text | `file`, `lexical`, `syntax`, `semantic`, `type`, `runtime` or `contract` |
+| `code` | text | Stable identifier: `E` and four digits. It never changes its meaning |
+| `message` | text | Fixed title associated with the code |
+| `label` | text | Explanation of this concrete case |
+| `hint` | text or `null` | Suggested fix |
+| `notes` | list of texts | Related information |
+| `file` | text | The file |
+| `line`, `column`, `end_line`, `end_column` | number or `null` | The affected fragment |
 
-Correspondencia con nombres habituales en otras herramientas: `hint` es lo que a veces se llama
-*suggestion*, y `notes` lo que se llama *related information*. Se conservan los nombres con los que
-nació el formato para no romper la compatibilidad.
+Correspondence with names common in other tools: `hint` is what is sometimes called
+*suggestion*, and `notes` what is called *related information*. The names the format
+was born with are kept so as not to break compatibility.
 
-Garantías sobre el contenido:
+Guarantees about the content:
 
-- **Los códigos son reales.** Todo código que puede aparecer está en el registro del lenguaje
-  ([lista completa](diagnostics.md#todos-los-códigos)) y `tooling.get_capabilities` los enumera.
-- **Una sugerencia no es una corrección garantizada.** `hint` es un texto para personas, y solo
-  aparece cuando una regla del lenguaje lo respalda (existe esa conversión, hay un nombre declarado
-  parecido). Si es `null`, NEXORA no tiene nada fundamentado que sugerir. No hay ediciones
-  automáticas: ninguna herramienta modifica un archivo.
-- **Los errores del programa y los fallos de NEXORA no se mezclan.** Un diagnóstico describe siempre
-  el programa analizado. Un defecto de la herramienta no es un diagnóstico (ver "JSON limpio").
-- Lo estable es `code`, `category` y las posiciones. La redacción de `message`, `label`, `hint` y
-  `notes` está en inglés y puede mejorar entre versiones: no la compares como texto.
+- **The codes are real.** Every code that can appear is in the registry of the language
+  ([full list](diagnostics.md#all-the-codes)) and `tooling.get_capabilities` lists them.
+- **A suggestion is not a guaranteed fix.** `hint` is a text for people, and it only
+  appears when a rule of the language backs it (that conversion exists, there is a declared name
+  that is similar). If it is `null`, NEXORA has nothing well-founded to suggest. There are no automatic
+  edits: no tool modifies a file.
+- **Errors of the program and failures of NEXORA do not mix.** A diagnostic always describes
+  the analyzed program. A defect of the tool is not a diagnostic (see "Clean JSON").
+- What is stable is `code`, `category` and the positions. The wording of `message`, `label`, `hint` and
+  `notes` is in English and may improve between versions: do not compare it as text.
 
-## Versiones y compatibilidad
+## Versions and compatibility
 
-Cada formato lleva su versión en el propio nombre: `nexora.context/1`.
+Every format carries its version in its own name: `nexora.context/1`.
 
-| Cambio | ¿Cambia el número? | Qué debe hacer quien lo consume |
-|--------|--------------------|---------------------------------|
-| Se añade un campo a un objeto | No | Ignorar los campos que no conozca |
-| Se añade un tipo de nodo al árbol, un valor a `features`, un código de error o una categoría | No | Tratar los valores desconocidos sin fallar |
-| Se elimina o se renombra un campo | **Sí** | Adaptarse a la nueva versión |
-| Un campo cambia de tipo o de significado | **Sí** | Adaptarse a la nueva versión |
+| Change | Does the number change? | What whoever consumes it must do |
+|--------|-------------------------|----------------------------------|
+| A field is added to an object | No | Ignore the fields it does not know |
+| A node kind is added to the tree, a value to `features`, an error code or a category | No | Handle unknown values without failing |
+| A field is removed or renamed | **Yes** | Adapt to the new version |
+| A field changes its type or its meaning | **Yes** | Adapt to the new version |
 
-Los esquemas reflejan esta regla: no prohíben campos adicionales.
+The schemas reflect this rule: they do not forbid additional fields.
 
-Historial:
+History:
 
-| Formato | Desde | Cambios |
-|---------|-------|---------|
-| `nexora.diagnostics/1` | 0.1.0 | 0.2.0: campo `category` y campo `schema`. Versión actual: campo `nexora_version` |
-| `nexora.inspect/1` | 0.2.0 | Campos `nexora_version` y `complete`; con errores de sintaxis, `program` es un árbol parcial en vez de `null` |
-| `nexora.inspect/2` | 0.3.0 | El campo `type` de una expresión puede ser el nombre de un tipo refinado (antes era una lista cerrada de cinco tipos). Nodo nuevo `TypeDecl`, campo `types` en `Program` y campo `message` en `Contract` |
-| `nexora.inspect/2` | 0.8.0 | Nodos nuevos `RecordDecl`, `FieldDecl`, `RecordConstruction`, `FieldInitializer` y `FieldAccess`, la sentencia `FieldAssign`, el campo `records` al final de `Program`, y `type` puede ser el nombre de un registro ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) |
-| `nexora.context/1` | 0.8.0 | Campo nuevo `records`: los registros que declara el programa, con `name`, `fields`, `valid`, `line` y `reason`. `types` sigue siendo solo de tipos refinados ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) |
-| `nexora.context/1` | 0.10.0 | Campo nuevo `capabilities`: las capacidades que el programa declara con `uses`, con `capability` y `path`. `types` sigue siendo solo de tipos refinados y `records` solo de registros ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
-| `nexora.inspect/2` | 0.11.0 | Campo nuevo `imports` en `Program` (con el nodo `ImportDecl`), campo `public` en `Function`, en `TypeDecl` y en `RecordDecl`, y campo `qualifier` en `TypeRef` y en `RecordConstruction`: un programa puede estar hecho de varios archivos ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) |
-| `nexora.context/1` | 0.11.0 | Campo nuevo `file` en cada función de `functions`: el archivo que la declara, relativo al programa y con `/` ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) |
-| `nexora.symbols/1` | 0.11.0 | Campo nuevo `file` en cada símbolo: el archivo que lo declara, relativo al programa y con `/` ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) |
-| `nexora.result/1` | Versión actual | |
-| `nexora.test/1` | 0.4.0 | Primera versión |
-| `nexora.symbols/1`, `nexora.context/1`, `nexora.spec/1`, `nexora.capabilities/1` | Versión actual | |
+| Format | Since | Changes |
+|--------|-------|---------|
+| `nexora.diagnostics/1` | 0.1.0 | 0.2.0: `category` field and `schema` field. Current version: `nexora_version` field |
+| `nexora.inspect/1` | 0.2.0 | `nexora_version` and `complete` fields; with syntax errors, `program` is a partial tree instead of `null` |
+| `nexora.inspect/2` | 0.3.0 | The `type` field of an expression can be the name of a refined type (before, it was a closed list of five types). New `TypeDecl` node, `types` field in `Program` and `message` field in `Contract` |
+| `nexora.inspect/2` | 0.8.0 | New nodes `RecordDecl`, `FieldDecl`, `RecordConstruction`, `FieldInitializer` and `FieldAccess`, the `FieldAssign` statement, the `records` field at the end of `Program`, and `type` can be the name of a record ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) |
+| `nexora.context/1` | 0.8.0 | New `records` field: the records the program declares, with `name`, `fields`, `valid`, `line` and `reason`. `types` is still only for refined types ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) |
+| `nexora.context/1` | 0.10.0 | New `capabilities` field: the capabilities the program declares with `uses`, with `capability` and `path`. `types` is still only for refined types and `records` only for records ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
+| `nexora.inspect/2` | 0.11.0 | New `imports` field in `Program` (with the `ImportDecl` node), `public` field in `Function`, in `TypeDecl` and in `RecordDecl`, and `qualifier` field in `TypeRef` and in `RecordConstruction`: a program can be made of several files ([decision 0018](decisions/0018-modulos-e-importaciones.md)) |
+| `nexora.context/1` | 0.11.0 | New `file` field in every function of `functions`: the file that declares it, relative to the program and with `/` ([decision 0018](decisions/0018-modulos-e-importaciones.md)) |
+| `nexora.symbols/1` | 0.11.0 | New `file` field in every symbol: the file that declares it, relative to the program and with `/` ([decision 0018](decisions/0018-modulos-e-importaciones.md)) |
+| `nexora.spec/2` | Unreleased | **Incompatible change:** the specification is now written in English. `language` is `"en"` (it was `"es"`), and the section ids come from the English headings (`7-functions` instead of `7-funciones`). The rest of the document does not change |
+| `nexora.result/1` | Current version | |
+| `nexora.test/1` | 0.4.0 | First version |
+| `nexora.symbols/1`, `nexora.context/1`, `nexora.capabilities/1` | Current version | |
 
-Casi todos los cambios han sido campos añadidos. La excepción es `program` en `nexora.inspect/1`:
-su tipo no cambia (árbol o `null`), pero con errores de sintaxis antes era `null` y ahora es un árbol
-parcial. Se ha mantenido el número porque el formato solo existía en la 0.2.0, que no se ha
-publicado, y porque el tipo del campo es el mismo; aun así es un **cambio de comportamiento**, y
-está registrado como tal en el [historial de cambios](../CHANGELOG.md). Una herramienta que dedujera
-"sintaxis correcta" de que `program` no fuera `null` debe pasar a mirar `ok` o `complete`.
+Almost all the changes have been added fields. The exceptions are `nexora.spec/2`, which changes the
+value of `language` and the section ids and therefore changes the number, and `program` in `nexora.inspect/1`:
+its type does not change (tree or `null`), but with syntax errors it used to be `null` and now it is a partial
+tree. The number was kept because the format only existed in 0.2.0, which has not been
+published, and because the type of the field is the same; even so it is a **change of behaviour**, and
+it is recorded as such in the [change history](../CHANGELOG.md). A tool that deduced
+"correct syntax" from `program` not being `null` must switch to looking at `ok` or `complete`.
 
-## Los esquemas
+## The schemas
 
-Los archivos de [`schemas/`](schemas/) son JSON Schema (borrador 2020-12).
+The files of [`schemas/`](schemas/) are JSON Schema (draft 2020-12).
 
-- **Se generan desde el código** (`src/nexora/schemas.py`); una prueba falla si un archivo no
-  coincide con lo que el código define.
-- La parte del esquema que describe el árbol de sintaxis se deriva de las propias clases de los
-  nodos: un nodo no puede cambiar sin que cambie su esquema.
-- Las pruebas validan con ellos los documentos reales de todos los ejemplos, y también los de
-  entradas incorrectas (archivo vacío, texto que no es NEXORA, código truncado).
-- El campo `$id` de cada esquema es solo un identificador: no hay nada publicado en esa dirección.
+- **They are generated from the code** (`src/nexora/schemas.py`); a test fails if a file does not
+  match what the code defines.
+- The part of the schema that describes the syntax tree is derived from the classes of the
+  nodes themselves: a node cannot change without its schema changing.
+- The tests validate with them the real documents of all the examples, and also those of
+  wrong inputs (empty file, text that is not NEXORA, truncated code).
+- The `$id` field of each schema is only an identifier: nothing is published at that address.
 
-Para regenerarlos tras un cambio intencionado:
+To regenerate them after an intended change:
 
 ```bash
 NEXORA_UPDATE_SCHEMAS=1 python -m pytest tests/test_tooling.py
 ```
 
-(En PowerShell: `$env:NEXORA_UPDATE_SCHEMAS = "1"; python -m pytest tests/test_tooling.py; $env:NEXORA_UPDATE_SCHEMAS = $null`.)
+(In PowerShell: `$env:NEXORA_UPDATE_SCHEMAS = "1"; python -m pytest tests/test_tooling.py; $env:NEXORA_UPDATE_SCHEMAS = $null`.)
 
-Validar un documento con un esquema, en Python:
+Validating a document with a schema, in Python:
 
 ```python
 import json, jsonschema
@@ -239,13 +241,14 @@ schema = json.load(open("docs/schemas/nexora-diagnostics.schema.json", encoding=
 jsonschema.validate(document, schema)
 ```
 
-`jsonschema` es una dependencia de desarrollo, no del lenguaje.
+`jsonschema` is a development dependency, not one of the language.
 
-## Limitaciones
+## Limitations
 
-- No hay un formato para ediciones (posición y texto de reemplazo): las sugerencias son texto.
-- Los diagnósticos de `nex run` en JSON van a la salida de error, no a la estándar.
-- El árbol no existe si el programa tiene errores léxicos, y es parcial si tiene errores de sintaxis.
-- Un programa es un único archivo: ningún formato describe relaciones entre archivos.
-- Los textos para personas (`label`, `hint`, `notes`, las notas del contexto) están en inglés, y la
-  especificación que devuelve `nexora.spec/1`, en español.
+- There is no format for edits (position and replacement text): suggestions are text.
+- The diagnostics of `nex run` in JSON go to the standard error, not to the standard output.
+- The tree does not exist if the program has lexical errors, and it is partial if it has syntax errors.
+- The documents describe the entry file of a program; of the files it imports, they only give the `file`
+  of each function and symbol.
+- The texts for people (`label`, `hint`, `notes`, the notes of the context) and the specification
+  returned by `nexora.spec/2` are in English.

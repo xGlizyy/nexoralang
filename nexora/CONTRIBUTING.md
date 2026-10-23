@@ -1,42 +1,42 @@
-# Cómo contribuir a NEXORA
+# How to contribute to NEXORA
 
-Gracias por tu interés. Esta guía explica cómo preparar el entorno, qué comprobaciones tiene que
-pasar un cambio y cómo mantener sincronizados el código, la especificación y los ejemplos.
+Thank you for your interest. This guide explains how to set up the environment, which checks a
+change has to pass and how to keep the code, the specification and the examples in sync.
 
-## Antes de empezar
+## Before you start
 
-- **El proyecto se distribuye con la licencia MIT** ([`LICENSE`](LICENSE)). Al proponer un cambio
-  aceptas que tu contribución se publique con esa misma licencia.
-- **El repositorio es público** (<https://github.com/xGlizyy/nexoralang>) y su [rastreador de
-  incidencias](https://github.com/xGlizyy/nexoralang/issues) es el canal de contacto. Los pasos de
-  esta guía que mencionan *pull requests* describen el flujo previsto.
-- El proyecto está en una fase temprana: la sintaxis puede cambiar. Antes de dedicar tiempo a una
-  funcionalidad nueva, consulta la [hoja de ruta](docs/roadmap.md) y las
-  [decisiones técnicas](docs/decisions/README.md).
+- **The project is distributed under the MIT licence** ([`LICENSE`](LICENSE)). By proposing a change
+  you agree that your contribution is published under that same licence.
+- **The repository is public** (<https://github.com/xGlizyy/nexoralang>) and its [issue
+  tracker](https://github.com/xGlizyy/nexoralang/issues) is the contact channel. The steps of
+  this guide that mention *pull requests* describe the intended flow.
+- The project is at an early stage: the syntax may change. Before spending time on a
+  new feature, check the [roadmap](docs/roadmap.md) and the
+  [technical decisions](docs/decisions/README.md).
 
-## Preparar el entorno
+## Setting up the environment
 
-Necesitas Python 3.11 o superior. Desde el directorio `nexora/`:
+You need Python 3.11 or newer. From the `nexora/` directory:
 
 ```bash
 python -m venv .venv
 ```
 
-Activa el entorno (`.venv\Scripts\Activate.ps1` en Windows, `source .venv/bin/activate` en Linux y
-macOS) e instala el proyecto con las herramientas de desarrollo:
+Activate the environment (`.venv\Scripts\Activate.ps1` on Windows, `source .venv/bin/activate` on Linux and
+macOS) and install the project with the development tools:
 
 ```bash
 python -m pip install -e ".[dev]"
 ```
 
-Esto instala `pytest`, `pytest-cov` y `ruff`. Son las únicas dependencias de desarrollo; el
-intérprete no tiene ninguna dependencia en ejecución, y debe seguir así.
+This installs `pytest`, `pytest-cov` and `ruff`. They are the only development dependencies; the
+interpreter has no runtime dependency at all, and it must stay that way.
 
-Más detalle y solución de problemas: [Instalación](docs/installation.md).
+More detail and troubleshooting: [Installation](docs/installation.md).
 
-## Comprobaciones que tienen que pasar
+## Checks that have to pass
 
-Antes de proponer un cambio, las tres tienen que terminar sin errores:
+Before proposing a change, all three have to finish without errors:
 
 ```bash
 python -m ruff check src tests
@@ -44,37 +44,37 @@ python -m pytest
 python -m pytest --cov
 ```
 
-| Comando | Qué comprueba |
-|---------|---------------|
-| `python -m ruff check src tests` | Errores y descuidos en el código Python |
-| `python -m pytest` | Todas las pruebas: lenguaje, CLI, ejemplos, documentación, seguridad y robustez |
-| `python -m pytest --cov` | Lo mismo, y falla si la cobertura baja del umbral configurado en `pyproject.toml` |
+| Command | What it checks |
+|---------|----------------|
+| `python -m ruff check src tests` | Errors and oversights in the Python code |
+| `python -m pytest` | All the tests: language, CLI, examples, documentation, security and robustness |
+| `python -m pytest --cov` | The same, and it fails if coverage drops below the threshold set in `pyproject.toml` |
 
-Las mismas comprobaciones están definidas en el flujo de integración continua
-(`.github/workflows/nexora-ci.yml`, en la raíz del repositorio).
+The same checks are defined in the continuous integration workflow
+(`.github/workflows/nexora-ci.yml`, at the root of the repository).
 
-Qué cubre cada archivo de pruebas: [Pruebas](docs/testing.md).
+What each test file covers: [Testing](docs/testing.md).
 
-## Mantener todo sincronizado
+## Keeping everything in sync
 
-En NEXORA el código, la especificación, los ejemplos y la documentación tienen que decir lo mismo.
-No se confía en la disciplina: **las pruebas fallan si se desincronizan**.
+In NEXORA the code, the specification, the examples and the documentation have to say the same thing.
+Discipline is not trusted: **the tests fail if they get out of sync**.
 
-| Si cambias… | Tienes que actualizar… | Lo vigila |
-|-------------|------------------------|-----------|
-| El comportamiento del lenguaje | `docs/language-spec.md` y la guía correspondiente | `tests/test_docs.py` ejecuta todos los programas de la documentación y compara su salida |
-| La salida de un ejemplo | Los archivos de `tests/golden/examples/` | `tests/test_examples.py` |
-| Un código de error | `_REGISTRY` en `diagnostics.py`, y las tablas de `docs/language-spec.md` y `docs/diagnostics.md` | `tests/test_diagnostics.py`, `tests/test_docs.py` |
-| Un nodo del árbol de sintaxis | `docs/inspect-schema.md` y la lista de `tests/test_inspect.py` | `tests/test_inspect.py` |
-| Un comando, una opción o un código de salida | `docs/cli-reference.md` | `tests/test_docs.py` |
-| Una palabra clave o una función integrada | Un ejemplo válido de `examples/` que la use | `tests/test_examples.py` |
-| La versión | Solo `src/nexora/version.py` | `tests/test_docs.py`, `tests/test_cli.py` |
-| Un enlace o un título de la documentación | Los enlaces que apuntan a él | `tests/test_docs.py` |
+| If you change… | You have to update… | Watched by |
+|----------------|---------------------|------------|
+| The behaviour of the language | `docs/language-spec.md` and the corresponding guide | `tests/test_docs.py` runs every program of the documentation and compares its output |
+| The output of an example | The files of `tests/golden/examples/` | `tests/test_examples.py` |
+| An error code | `_REGISTRY` in `diagnostics.py`, and the tables of `docs/language-spec.md` and `docs/diagnostics.md` | `tests/test_diagnostics.py`, `tests/test_docs.py` |
+| A node of the syntax tree | `docs/inspect-schema.md` and the list in `tests/test_inspect.py` | `tests/test_inspect.py` |
+| A command, an option or an exit code | `docs/cli-reference.md` | `tests/test_docs.py` |
+| A keyword or a built-in function | A valid example in `examples/` that uses it | `tests/test_examples.py` |
+| The version | Only `src/nexora/version.py` | `tests/test_docs.py`, `tests/test_cli.py` |
+| A link or a heading of the documentation | The links that point to it | `tests/test_docs.py` |
 
-### Programas en la documentación
+### Programs in the documentation
 
-Un bloque de código NEXORA en un archivo Markdown se comprueba si lleva delante un comentario
-marcador. Por ejemplo:
+A NEXORA code block in a Markdown file is checked if it is preceded by a marker
+comment. For example:
 
 ````markdown
 <!-- nex:run -->
@@ -89,17 +89,17 @@ Hello
 ```
 ````
 
-Los marcadores disponibles (`nex:run`, `nex:fails`, `nex:check-fails`, `nex:check-json`,
-`nex:inspect`, `nex:valid`, `nex:body`, `nex:body-fails`) están descritos al principio de
-`tests/test_docs.py`. Un bloque que contenga `fn main` y no tenga marcador hace fallar las pruebas.
+The available markers (`nex:run`, `nex:fails`, `nex:check-fails`, `nex:check-json`,
+`nex:inspect`, `nex:valid`, `nex:body`, `nex:body-fails`) are described at the beginning of
+`tests/test_docs.py`. A block that contains `fn main` and has no marker makes the tests fail.
 
-### Actualizar salidas registradas
+### Updating recorded outputs
 
-Si un cambio modifica **a propósito** la salida de un ejemplo o de un programa de la documentación,
-regenera los archivos y **revisa las diferencias una a una** antes de aceptarlas:
+If a change modifies **on purpose** the output of an example or of a program of the documentation,
+regenerate the files and **review the differences one by one** before accepting them:
 
 ```bash
-# Linux y macOS
+# Linux and macOS
 NEXORA_UPDATE_GOLDEN=1 python -m pytest tests/test_examples.py
 NEXORA_UPDATE_DOCS=1 python -m pytest tests/test_docs.py
 ```
@@ -110,101 +110,101 @@ $env:NEXORA_UPDATE_GOLDEN = "1"; python -m pytest tests/test_examples.py; $env:N
 $env:NEXORA_UPDATE_DOCS = "1"; python -m pytest tests/test_docs.py; $env:NEXORA_UPDATE_DOCS = $null
 ```
 
-Después ejecuta `python -m pytest` sin esas variables. Regenerar no es una forma de "arreglar" una
-prueba que falla: si la salida cambió sin que lo pretendieras, has encontrado un error.
+Then run `python -m pytest` without those variables. Regenerating is not a way to "fix" a
+failing test: if the output changed without you meaning it to, you have found a bug.
 
-## Añadir una funcionalidad al lenguaje
+## Adding a feature to the language
 
-Sigue este orden. Cada paso deja algo comprobable.
+Follow this order. Every step leaves something that can be checked.
 
-1. **Decide y documenta.** Si es una decisión de diseño o un cambio incompatible, añade un
-   documento a `docs/decisions/` (siguiente número libre) con el motivo, las alternativas
-   descartadas y el efecto sobre programas existentes.
-2. **Escribe la especificación.** Añade la sintaxis a la gramática EBNF de `docs/language-spec.md`
-   y describe su significado: tipos, errores posibles, y qué se comprueba antes y durante la
-   ejecución.
-3. **Implementa por etapas**, en este orden: `tokens.py` y `lexer.py`, `ast_nodes.py`, `parser.py`,
-   `checker.py`, `interpreter.py`. La tabla "Dónde añadir cosas" de
-   [Arquitectura](docs/architecture.md#dónde-añadir-cosas) indica qué tocar en cada caso.
-4. **Respeta la separación de etapas.** Las reglas de nombres y tipos van **solo** en `checker.py`.
-   El intérprete no las repite; solo comprueba lo que depende de los valores.
-5. **Escribe las pruebas** junto con cada etapa: casos válidos, casos inválidos y casos límite.
-6. **Añade un ejemplo** en `examples/` y regístralo en `tests/test_examples.py` y en
+1. **Decide and document.** If it is a design decision or an incompatible change, add a
+   document to `docs/decisions/` (next free number) with the reason, the alternatives
+   ruled out and the effect on existing programs.
+2. **Write the specification.** Add the syntax to the EBNF grammar of `docs/language-spec.md`
+   and describe its meaning: types, possible errors, and what is checked before and while
+   running.
+3. **Implement by stages**, in this order: `tokens.py` and `lexer.py`, `ast_nodes.py`, `parser.py`,
+   `checker.py`, `interpreter.py`. The table "Where to add things" of
+   [Architecture](docs/architecture.md#where-to-add-things) says what to touch in each case.
+4. **Respect the separation of stages.** The rules for names and types go **only** in `checker.py`.
+   The interpreter does not repeat them; it only checks what depends on the values.
+5. **Write the tests** together with each stage: valid cases, invalid cases and edge cases.
+6. **Add an example** in `examples/` and register it in `tests/test_examples.py` and in
    `examples/README.md`.
-7. **Actualiza las guías** (`docs/`), el `CHANGELOG.md` y, si procede, `docs/limitations.md` y
+7. **Update the guides** (`docs/`), the `CHANGELOG.md` and, where applicable, `docs/limitations.md` and
    `docs/roadmap.md`.
 
-Una funcionalidad no está terminada hasta que funciona, tiene pruebas y su documentación describe
-su comportamiento real. No documentes como existente algo que solo está previsto.
+A feature is not finished until it works, has tests and its documentation describes
+its real behaviour. Do not document as existing something that is only planned.
 
-## Modificar la especificación
+## Modifying the specification
 
-- `docs/language-spec.md` describe **lo que el intérprete hace hoy**. Lo previsto va en su sección
-  14 y en `docs/roadmap.md`.
-- Un cambio de la especificación sin cambio de código solo es válido si corrige un texto que no
-  describía bien el comportamiento real.
-- La gramática EBNF tiene que corresponder al parser. Si añades una regla a la gramática, añade una
-  prueba del parser que la ejerza.
-- Mantén las tres marcas de estado: implementado, **experimental** y **previsto**.
+- `docs/language-spec.md` describes **what the interpreter does today**. What is planned goes in its section
+  14 and in `docs/roadmap.md`.
+- A change of the specification without a change of code is only valid if it corrects a text that did not
+  describe the real behaviour well.
+- The EBNF grammar has to correspond to the parser. If you add a rule to the grammar, add a
+  parser test that exercises it.
+- Keep the three status marks: implemented, **experimental** and **planned**.
 
-## Añadir un diagnóstico
+## Adding a diagnostic
 
-1. Elige el siguiente código libre de su rango: `E10xx` léxico, `E11xx` sintáctico, `E2xxx`
-   semántico o de tipos, `E3xxx` de ejecución, `E4xxx` de contrato.
-2. **Nunca reutilices un código**, tampoco uno retirado (`E1104`, `E2003`).
-3. Añádelo a `_REGISTRY` en `src/nexora/diagnostics.py`, con su título y su categoría.
-4. Documéntalo en las tablas de `docs/language-spec.md` (sección 11.3) y de `docs/diagnostics.md`.
-5. Escribe una prueba que lo provoque y compruebe código, posición y mensaje.
+1. Choose the next free code of its range: `E10xx` lexical, `E11xx` syntax, `E2xxx`
+   semantic or type, `E3xxx` runtime, `E4xxx` contract.
+2. **Never reuse a code**, not even a retired one (`E1104`, `E2003`).
+3. Add it to `_REGISTRY` in `src/nexora/diagnostics.py`, with its title and its category.
+4. Document it in the tables of `docs/language-spec.md` (section 11.3) and of `docs/diagnostics.md`.
+5. Write a test that triggers it and checks code, position and message.
 
-Criterios para el mensaje:
+Criteria for the message:
 
-- El título (`CODES`) es fijo y corto. La explicación concreta va en `label`.
-- Di qué se esperaba y qué se encontró.
-- Señala el fragmento más pequeño que identifica el problema.
-- Añade una sugerencia (`hint`) **solo si hay una regla que la respalde**. Una sugerencia que puede
-  ser incorrecta es peor que ninguna.
-- Un error del usuario nunca debe mostrarse como una traza de Python, y un defecto del intérprete
-  nunca debe mostrarse como un error del usuario.
+- The title (`CODES`) is fixed and short. The concrete explanation goes in `label`.
+- Say what was expected and what was found.
+- Point at the smallest fragment that identifies the problem.
+- Add a suggestion (`hint`) **only if there is a rule that backs it**. A suggestion that can
+  be wrong is worse than none.
+- A user error must never be shown as a Python traceback, and a defect of the interpreter
+  must never be shown as a user error.
 
-## Estilo del código
+## Code style
 
-- Python 3.11, sin dependencias externas en `src/`.
-- Lo que `ruff` acepta con la configuración de `pyproject.toml`. No hay formateador obligatorio.
-- Nombres y comentarios del código en inglés, como los mensajes del lenguaje. La documentación, en
-  español.
-- Los comentarios explican el porqué, no lo que el código ya dice.
-- Módulos pequeños con una responsabilidad. Solo `cli.py` toca el sistema operativo.
-- No uses `eval`, `exec` ni nada que ejecute código a partir de texto: hay una prueba que lo impide.
+- Python 3.11, without external dependencies in `src/`.
+- Whatever `ruff` accepts with the configuration of `pyproject.toml`. There is no required formatter.
+- Names and comments of the code in English, like the messages of the language. The documentation, in
+  English too.
+- Comments explain the why, not what the code already says.
+- Small modules with one responsibility. Only `cli.py` touches the operating system.
+- Do not use `eval`, `exec` or anything that runs code from text: there is a test that prevents it.
 
-## Pruebas
+## Tests
 
-- Cada prueba comprueba un comportamiento: un resultado, un diagnóstico o un código de salida.
-  No escribas pruebas que solo recorran código.
-- Si corriges un defecto, añade antes una prueba que lo reproduzca (las de regresión están en
+- Every test checks one behaviour: a result, a diagnostic or an exit code.
+  Do not write tests that only walk through code.
+- If you fix a defect, first add a test that reproduces it (the regression ones are in
   `tests/test_robustness.py`).
-- Prueba también lo que tiene que **fallar**, y que falla con el diagnóstico correcto.
-- El comportamiento de la CLI se prueba a través del comando real, en un proceso aparte, además de
-  mediante llamadas directas.
+- Also test what has to **fail**, and that it fails with the right diagnostic.
+- The behaviour of the CLI is tested through the real command, in a separate process, as well as
+  through direct calls.
 
-## Proponer el cambio
+## Proposing the change
 
-En el repositorio público:
+In the public repository:
 
-1. Crea una rama a partir de la principal.
-2. Haz cambios pequeños y relacionados entre sí.
-3. Comprueba que las tres comprobaciones pasan en local.
-4. Describe en la propuesta qué cambia, por qué, y cómo lo has probado.
-5. Añade una entrada en `CHANGELOG.md`, en la sección "Sin publicar".
+1. Create a branch from the main one.
+2. Make small, related changes.
+3. Check that the three checks pass locally.
+4. Describe in the proposal what changes, why, and how you tested it.
+5. Add an entry in `CHANGELOG.md`, in the "Unreleased" section.
 
-## Avisar de un error
+## Reporting a bug
 
-Incluye la versión (`nex --version`), el sistema operativo, el programa `.nex` más pequeño que
-reproduzca el problema, lo que esperabas y lo que ocurrió. Si el mensaje empieza por
-`internal error:`, vuelve a ejecutar con la variable de entorno `NEXORA_DEBUG=1` y adjunta la traza.
+Include the version (`nex --version`), the operating system, the smallest `.nex` program that
+reproduces the problem, what you expected and what happened. If the message starts with
+`internal error:`, run again with the environment variable `NEXORA_DEBUG=1` and attach the traceback.
 
-Los problemas de seguridad se comunican como indica [`SECURITY.md`](SECURITY.md), no en un aviso
-público.
+Security problems are reported as [`SECURITY.md`](SECURITY.md) says, not in a public
+issue.
 
-## Conducta
+## Conduct
 
-La participación en el proyecto se rige por el [código de conducta](CODE_OF_CONDUCT.md).
+Taking part in the project is governed by the [code of conduct](CODE_OF_CONDUCT.md).

@@ -1,134 +1,132 @@
-# Hoja de ruta
+# Roadmap
 
-Qué está hecho, qué se está haciendo y qué queda. No hay fechas: cada cosa empieza cuando la
-anterior es sólida.
+What is done, what is being done and what is left. There are no dates: each thing starts when the
+previous one is solid.
 
-## Criterios
+## Criteria
 
-| Estado | Significa que… |
+| Status | It means that… |
 |--------|----------------|
-| **Completado y verificado** | Funciona, tiene pruebas automatizadas que pasan y su documentación describe su comportamiento real |
-| **En desarrollo** | Existe en parte; lo que falta se indica |
-| **Planificado** | No existe. Hay una idea clara de qué construir |
-| **En investigación** | No existe y no está decidido cómo debería ser, o si debería existir |
+| **Completed and verified** | It works, it has automated tests that pass and its documentation describes its real behaviour |
+| **In development** | It partly exists; what is missing is stated |
+| **Planned** | It does not exist. There is a clear idea of what to build |
+| **Under research** | It does not exist and it is not decided what it should be like, or whether it should exist |
 
-Que un archivo exista no cuenta. Una característica solo está "completada" si se puede ejecutar y
-hay una prueba que falla si deja de funcionar.
+A file existing does not count. A feature is only "completed" if it can be run and
+there is a test that fails if it stops working.
 
-## Completado y verificado
+## Completed and verified
 
-| Elemento | Cómo se verifica |
-|----------|------------------|
-| Analizador léxico y sintáctico, con recuperación de errores | `tests/test_lexer.py`, `tests/test_parser.py` |
-| Tipos `Int`, `Float`, `Bool`, `Text`, `Void`; inferencia y anotaciones | `tests/test_types.py` |
-| **Listas** `List[T]` inmutables, con literales, igualdad y `List.length`, `List.get`, `List.append`, `List.concat` y `List.contains` | `tests/test_type_lists_syntax.py`, `tests/test_type_lists_values.py`, `tests/test_type_lists_functions.py` |
-| Aritmética, comparaciones y operadores lógicos | `tests/test_types.py`, `tests/test_interpreter.py` |
-| Conversiones explícitas (`to_float`, `to_int`, `to_text`) | `tests/test_types.py` |
-| Variables inmutables (`let`) y reasignables (`var`), bloques y ámbitos | `tests/test_checker.py`, `tests/test_loops.py` |
-| **Bucles** `while` con su medida (`decreases`) e invariantes (`invariant`), comprobados en cada vuelta | `tests/test_loops.py` |
-| **`for` sobre listas**, con iterador inmutable, invariantes y ámbitos por vuelta | `tests/test_for.py` |
-| **Operaciones sobre textos**: `Text.length`, `Text.slice`, búsqueda, orden entre textos y lectura de números (`Int.parse`, `Float.parse`), con sus requisitos comprobados en cada llamada | `tests/test_text_operations.py` |
-| Funciones con parámetros, `return`, rutas de retorno, recursividad | `tests/test_functions.py` |
+| Item | How it is verified |
+|------|--------------------|
+| Lexer and parser, with error recovery | `tests/test_lexer.py`, `tests/test_parser.py` |
+| Types `Int`, `Float`, `Bool`, `Text`, `Void`; inference and annotations | `tests/test_types.py` |
+| Immutable **lists** `List[T]`, with literals, equality and `List.length`, `List.get`, `List.append`, `List.concat` and `List.contains` | `tests/test_type_lists_syntax.py`, `tests/test_type_lists_values.py`, `tests/test_type_lists_functions.py` |
+| Arithmetic, comparisons and logical operators | `tests/test_types.py`, `tests/test_interpreter.py` |
+| Explicit conversions (`to_float`, `to_int`, `to_text`) | `tests/test_types.py` |
+| Immutable (`let`) and reassignable (`var`) variables, blocks and scopes | `tests/test_checker.py`, `tests/test_loops.py` |
+| **`while` loops** with their measure (`decreases`) and invariants (`invariant`), checked on every iteration | `tests/test_loops.py` |
+| **`for` over lists**, with an immutable iterator, invariants and per-iteration scopes | `tests/test_for.py` |
+| **Operations on texts**: `Text.length`, `Text.slice`, searching, ordering between texts and reading numbers (`Int.parse`, `Float.parse`), with their requirements checked on every call | `tests/test_text_operations.py` |
+| Functions with parameters, `return`, return paths, recursion | `tests/test_functions.py` |
 | `if` / `else if` / `else` | `tests/test_functions.py` |
-| **Contratos** (`requires`, `ensures`), estables desde la 0.3.0 | `tests/test_contracts.py` |
-| **Explicación de cada regla**, mostrada en el diagnóstico cuando se incumple | `tests/test_contracts.py`, `tests/test_refined_types.py` |
-| **Tipos refinados** (`type ... where ...`): constantes comprobadas sin ejecutar, `Tipo(x)` al ejecutar, cadenas de tipos | `tests/test_refined_types.py` |
-| **Ejemplos en las funciones** (`example`), evaluados con `nex test` | `tests/test_example_clauses.py`, `tests/test_nex_test.py` |
-| Memoria agotada al ejecutar como error del programa (`E3007`) | `tests/test_out_of_memory.py` |
-| Ningún bucle se queda repitiendo para siempre: se detiene con `E4006`, también en `nex test` | `tests/test_loops.py` |
-| Análisis estático separado de la ejecución | `tests/test_checker.py`, `tests/test_security.py` |
-| Intérprete | `tests/test_interpreter.py` |
-| Diagnósticos con código, categoría y posición, en texto y JSON | `tests/test_diagnostics.py`, `tests/test_cli.py` |
-| Comandos `nex run`, `nex check`, `nex inspect` | `tests/test_cli.py` |
-| Representación JSON del programa (`nexora.inspect/2`) | `tests/test_inspect.py` |
-| Símbolos y referencias (`nex symbols`) y resumen del programa (`nex context`) | `tests/test_tooling.py` |
-| Formatos JSON versionados, con JSON Schema generados desde el código | `tests/test_tooling.py` valida con ellos la salida real |
-| Árbol, símbolos y resumen parciales cuando el programa tiene errores de sintaxis | `tests/test_tooling.py`, incluido el programa cortado en cada carácter |
-| Tareas de referencia para las herramientas de análisis | `tests/test_tooling_tasks.py` |
-| Ejemplos ejecutables con salida registrada | `tests/test_examples.py` |
-| Documentación sincronizada con la implementación | `tests/test_docs.py` |
-| Resistencia ante entradas incorrectas, enormes o truncadas | `tests/test_robustness.py` |
-| Empaquetado instalable en local | Comprobado a mano en Windows; ver [pruebas](testing.md#empaquetado) |
+| **Contracts** (`requires`, `ensures`), stable since 0.3.0 | `tests/test_contracts.py` |
+| **Explanation of every rule**, shown in the diagnostic when it is broken | `tests/test_contracts.py`, `tests/test_refined_types.py` |
+| **Refined types** (`type ... where ...`): constants checked without running, `Type(x)` when running, chains of types | `tests/test_refined_types.py` |
+| **Examples in functions** (`example`), evaluated with `nex test` | `tests/test_example_clauses.py`, `tests/test_nex_test.py` |
+| Running out of memory while running as an error of the program (`E3007`) | `tests/test_out_of_memory.py` |
+| No loop keeps repeating forever: it stops with `E4006`, also in `nex test` | `tests/test_loops.py` |
+| Static analysis separate from execution | `tests/test_checker.py`, `tests/test_security.py` |
+| Interpreter | `tests/test_interpreter.py` |
+| Diagnostics with code, category and position, as text and JSON | `tests/test_diagnostics.py`, `tests/test_cli.py` |
+| Commands `nex run`, `nex check`, `nex inspect` | `tests/test_cli.py` |
+| JSON representation of the program (`nexora.inspect/2`) | `tests/test_inspect.py` |
+| Symbols and references (`nex symbols`) and summary of the program (`nex context`) | `tests/test_tooling.py` |
+| Versioned JSON formats, with JSON Schemas generated from the code | `tests/test_tooling.py` validates the real output with them |
+| Partial tree, symbols and summary when the program has syntax errors | `tests/test_tooling.py`, including the program cut at every character |
+| Reference tasks for the analysis tools | `tests/test_tooling_tasks.py` |
+| Runnable examples with recorded output | `tests/test_examples.py` |
+| Documentation in sync with the implementation | `tests/test_docs.py` |
+| Resistance to wrong, huge or truncated inputs | `tests/test_robustness.py` |
+| Package installable locally | Checked by hand on Windows; see [testing](testing.md#packaging) |
 
-## En desarrollo
+## In development
 
-| Elemento | Qué hay | Qué falta |
-|----------|---------|-----------|
-| **API de Python** (`nexora.tooling`) | Implementada y probada (`tests/test_tooling.py`) | Declararla estable. Hoy es experimental y puede cambiar |
-| **Servidor MCP** (opcional) | Siete herramientas de análisis, probadas con el cliente del SDK oficial (`tests/test_mcp.py`). Comprobado a mano una vez en Claude Code. No ejecuta código | Probarlo en otros asistentes. Incluir la especificación en el paquete instalable |
-| **Playground** (web) | Editor, API y ejecución en un proceso aparte con límites; probado en local ([Playground](playground.md)) | Desplegarlo. Verificar el aislamiento con contenedor y los límites POSIX, que no se han podido probar en Windows |
-| **Integración continua** | Flujo de GitHub Actions en marcha: se ejecuta en cada cambio a `main`, en Linux, Windows y macOS | Ampliar la matriz a más versiones de Node |
-| **Valores opcionales y resultados** | `Option[T]` y `Result[T, E]`, con `Some`, `None`, `Ok` y `Err`, y las funciones que reconocen la variante y leen el valor. Sin `match` ni `?` | `match`, `if let` y el operador `?`, cuando haya enums del usuario |
-| **Valores opcionales y resultados** | `Option[T]` y `Result[T, E]`, con `Some`, `None`, `Ok` y `Err`, y las funciones que reconocen la variante y leen el valor. Sin `match` ni `?` | `match`, `if let` y el operador `?`, cuando haya enums del usuario |
-| **Valores opcionales y resultados** | `Option[T]` y `Result[T, E]`, con `Some`, `None`, `Ok` y `Err`, y las funciones que reconocen la variante y leen el valor. Sin `match` ni `?` | `match`, `if let` y el operador `?`, cuando haya enums del usuario |
-| **Verificación en otras plataformas** | Comprobado en Windows 11 con Python 3.12; ejecutado en Linux, Windows y macOS con Python 3.11, 3.12 y 3.13 por la integración continua | Comprobarlo en macOS y en Linux con un equipo, no solo en los ejecutores |
-| **Preparación para colaboradores** | Licencia MIT, guía de contribución, política de seguridad, código de conducta, repositorio público con su rastreador de incidencias | Definir un canal de contacto privado |
+| Item | What there is | What is missing |
+|------|---------------|-----------------|
+| **Python API** (`nexora.tooling`) | Implemented and tested (`tests/test_tooling.py`) | Declaring it stable. Today it is experimental and may change |
+| **MCP server** (optional) | Seven analysis tools, tested with the client of the official SDK (`tests/test_mcp.py`). Checked by hand once in Claude Code. It does not run code | Testing it in other assistants. Including the specification in the installable package |
+| **Playground** (web) | Editor, API and execution in a separate process with limits; tested locally ([Playground](playground.md)) | Deploying it. Verifying the isolation with containers and the POSIX limits, which could not be tested on Windows |
+| **Continuous integration** | GitHub Actions workflow running: it runs on every change to `main`, on Linux, Windows and macOS | Widening the matrix to more Node versions |
+| **Optional values and results** | `Option[T]` and `Result[T, E]`, with `Some`, `None`, `Ok` and `Err`, and the functions that recognize the variant and read the value. No `match` or `?` | `match`, `if let` and the `?` operator, when there are user enums |
+| **Verification on other platforms** | Checked on Windows 11 with Python 3.12; run on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13 by the continuous integration | Checking it on macOS and on Linux on a real machine, not only on the runners |
+| **Readiness for contributors** | MIT licence, contribution guide, security policy, code of conduct, public repository with its issue tracker | Defining a private contact channel |
 
-## Línea principal: requisitos verificables
+## Main line: verifiable requirements
 
-La característica que distingue a NEXORA es que los requisitos de una función forman parte
-verificable del programa ([decisión 0006](decisions/0006-requisitos-verificables.md)). Es la
-prioridad del proyecto. Su trabajo va en este orden, y cada paso empieza cuando el anterior es
-sólido:
+The feature that distinguishes NEXORA is that the requirements of a function are a verifiable part
+of the program ([decision 0006](decisions/0006-requisitos-verificables.md)). It is the
+priority of the project. Its work goes in this order, and each step starts when the previous one is
+solid:
 
-| # | Paso | Estado |
+| # | Step | Status |
 |---|------|--------|
-| 1 | **Estabilizar los contratos** (`requires`, `ensures`): fijar su posición en el código y el nombre `result`, y dejar de marcarlos como experimentales | **Completado en la 0.3.0** ([decisión 0007](decisions/0007-contratos-estables-y-tipos-refinados.md)) |
-| 2 | **Una explicación en lenguaje natural unida a cada condición**, que aparece en el diagnóstico cuando la condición se incumple | **Completado en la 0.3.0**, en contratos y en tipos refinados |
-| 3 | **Casos concretos en la función (`example`)** y un comando que los ejecute sin escribir `main` | **Completado en la 0.4.0** ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
-| 4 | **Avisar cuando una edición elimina o debilita un requisito** | En investigación: no está decidido cómo detectar que una condición es más débil que otra |
-| 5 | **Tipos refinados** (`type Percent = Int where ...`) | **Completado en la 0.3.0** sobre los tipos integrados. Falta refinar registros: no está implementado |
-| 5b | **Requisitos de los bucles**: la medida (`decreases`) y los invariantes (`invariant`), con su explicación, comprobados en cada vuelta | **Completado en la 0.5.0** ([decisión 0010](decisions/0010-var-y-while.md)) |
-| 6 | **Evaluar si los requisitos en el código ayudan a un agente de IA** a no romperlos | Planificado; ver la última fila de [En investigación](#en-investigación) |
+| 1 | **Stabilizing contracts** (`requires`, `ensures`): fixing their position in the code and the name `result`, and no longer marking them as experimental | **Completed in 0.3.0** ([decision 0007](decisions/0007-contratos-estables-y-tipos-refinados.md)) |
+| 2 | **A natural-language explanation attached to every condition**, which appears in the diagnostic when the condition is broken | **Completed in 0.3.0**, in contracts and in refined types |
+| 3 | **Concrete cases in the function (`example`)** and a command that runs them without writing `main` | **Completed in 0.4.0** ([decision 0008](decisions/0008-ejemplos-y-nex-test.md)) |
+| 4 | **Warning when an edit removes or weakens a requirement** | Under research: it is not decided how to detect that a condition is weaker than another one |
+| 5 | **Refined types** (`type Percent = Int where ...`) | **Completed in 0.3.0** over the built-in types. Refining records is missing: it is not implemented |
+| 5b | **Loop requirements**: the measure (`decreases`) and the invariants (`invariant`), with their explanation, checked on every iteration | **Completed in 0.5.0** ([decision 0010](decisions/0010-var-y-while.md)) |
+| 6 | **Evaluating whether requirements in the code help an AI agent** not to break them | Planned; see the last row of [Under research](#under-research) |
 
-Hasta que el paso 6 dé resultados, la característica es una hipótesis y no se presenta como una
-ventaja demostrada.
+Until step 6 gives results, the feature is a hypothesis and is not presented as a
+proven advantage.
 
-## Planificado
+## Planned
 
-El resto del lenguaje, en el orden en que tendría sentido abordarlo. Avanza junto a la línea
-principal; cuando un punto de esta lista es necesario para un paso de la línea principal, va
-primero:
+The rest of the language, in the order in which it would make sense to tackle it. It moves forward together with the main
+line; when a point of this list is needed for a step of the main line, it goes
+first:
 
-1. ~~**Operaciones sobre textos**~~: hechas en la 0.6.0 ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)).
-2. ~~**Un primer tipo compuesto: listas**~~: hechas en la 0.7.0, con `for` sobre listas ([decisión 0013](decisions/0013-listas-y-for.md)). El modelo de tipos y las listas están descritos en la [especificación](language-spec.md), secciones 4.5, 8.2 y 9.6.
-3. ~~**Registros**~~: hechos en la 0.8.0, con identidad nominal y campos inmutables ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)); están descritos en la [especificación](language-spec.md), sección 4.6. Quedan los **valores opcionales** (`Option`, `Result`), para representar la ausencia de un
-   valor y los errores sin excepciones.
-4. ~~**Entrada de datos**~~: hecha en la 0.9.0, con los argumentos del programa, la entrada estándar y los archivos con permisos explícitos ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). Quedan la red y los procesos externos.
-5. ~~**Módulos e importaciones**~~: hechas en la 0.11.0 ([decisión 0018](decisions/0018-modulos-e-importaciones.md)).
-6. **Avisos** (variables sin usar, `var` que nunca cambia) y convenciones de nombres.
-7. **Análisis más tolerante**: conservar las funciones cuya declaración tiene un error, y dar
-   estructura también con errores léxicos. El árbol parcial con errores de sintaxis ya existe.
-8. **Servidor de lenguaje (LSP)**, empezando por los diagnósticos. La evaluación y los requisitos
-   que quedan están en [LSP](lsp.md). Hoy no existe.
-9. **Formateador.**
+1. ~~**Operations on texts**~~: done in 0.6.0 ([decision 0011](decisions/0011-operaciones-sobre-textos.md)).
+2. ~~**A first compound type: lists**~~: done in 0.7.0, with `for` over lists ([decision 0013](decisions/0013-listas-y-for.md)). The type model and lists are described in the [specification](language-spec.md), sections 4.5, 8.2 and 9.6.
+3. ~~**Records**~~: done in 0.8.0, with nominal identity and immutable fields ([decision 0014](decisions/0014-registros-nominales-inmutables.md)); they are described in the [specification](language-spec.md), section 4.6. What remains is **optional values** (`Option`, `Result`), to represent the absence of a
+   value and errors without exceptions.
+4. ~~**Data input**~~: done in 0.9.0, with the arguments of the program, the standard input and files with explicit permissions ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). The network and external processes remain.
+5. ~~**Modules and imports**~~: done in 0.11.0 ([decision 0018](decisions/0018-modulos-e-importaciones.md)).
+6. **Warnings** (unused variables, a `var` that never changes) and naming conventions.
+7. **More tolerant analysis**: keeping the functions whose declaration has an error, and giving
+   structure also with lexical errors. The partial tree with syntax errors already exists.
+8. **Language server (LSP)**, starting with diagnostics. The evaluation and the requirements
+   that remain are in [LSP](lsp.md). It does not exist today.
+9. **Formatter.**
 
-## En investigación
+## Under research
 
-Ideas del diseño original cuyo valor o cuya forma no están decididos:
+Ideas from the original design whose value or form is not decided:
 
-| Idea | Pregunta abierta |
-|------|------------------|
-| Verificación estática de contratos | ¿Qué parte puede demostrarse sin un demostrador completo, y sin dar falsas garantías? |
-| Requisitos debilitados entre dos versiones de una función | ¿Cómo saber, sin un demostrador, que una condición nueva es más débil que la anterior? ¿Basta con avisar cuando una condición desaparece o cambia? |
-| Efectos declarados (`uses`) | ¿Compensa la carga de anotarlos? |
-| Funciones resueltas por un modelo de IA (`ai fn`, `tool fn`) | ¿Puede un lenguaje determinista incorporar una operación que no lo es, y cómo se prueba? |
-| Ediciones estructuradas en los diagnósticos | ¿Qué formato permitiría aplicar una corrección automáticamente con seguridad? |
-| **La hipótesis central del proyecto** | Cuando una IA modifica una función, ¿se detectan más incumplimientos si los requisitos están escritos en el código que si solo están en la instrucción? **No se ha evaluado.** El experimento está descrito en la [decisión 0006](decisions/0006-requisitos-verificables.md#cómo-se-sabrá-si-funciona); las [tareas de referencia](ai-tooling.md#tareas-de-referencia) son su punto de partida |
-| Ejecución de programas a través de MCP | ¿Con qué aislamiento y bajo qué activación explícita? Hoy el servidor solo analiza |
-| Compilación a JavaScript o WebAssembly | El borrador original lo proponía; hoy solo existe un intérprete, y el playground ejecuta en el servidor |
+| Idea | Open question |
+|------|---------------|
+| Static verification of contracts | Which part can be proven without a full prover, and without giving false guarantees? |
+| Weakened requirements between two versions of a function | How to know, without a prover, that a new condition is weaker than the previous one? Is it enough to warn when a condition disappears or changes? |
+| Declared effects (`uses`) | Is the burden of annotating them worth it? |
+| Functions resolved by an AI model (`ai fn`, `tool fn`) | Can a deterministic language incorporate an operation that is not, and how is it tested? |
+| Structured edits in diagnostics | Which format would allow applying a fix automatically and safely? |
+| **The central hypothesis of the project** | When an AI modifies a function, are more violations detected if the requirements are written in the code than if they are only in the instruction? **It has not been evaluated.** The experiment is described in [decision 0006](decisions/0006-requisitos-verificables.md#how-we-will-know-whether-it-works); the [reference tasks](ai-tooling.md#reference-tasks) are its starting point |
+| Running programs through MCP | With which isolation and under which explicit activation? Today the server only analyzes |
+| Compilation to JavaScript or WebAssembly | The original draft proposed it; today only an interpreter exists, and the playground runs on the server |
 
-## Historial de fases
+## History of phases
 
-| Fase | Objetivo | Resultado |
-|------|----------|-----------|
-| 1 | Núcleo: lexer, parser, intérprete, CLI, diagnósticos | Completada (versión 0.1.0) |
-| 2 | Sistema de tipos, funciones, contratos, salidas JSON | Completada (versión 0.2.0); los contratos quedan como experimentales |
-| 3 | Documentación, pruebas y calidad | Completada en lo que puede comprobarse en local; integración continua y otras plataformas, pendientes de ejecutar |
-| 4 | Playground: editor web que ejecuta con el intérprete real | Implementada y probada en local; sin desplegar, y con el aislamiento por contenedor sin verificar |
-| 5 | Herramientas para agentes: protocolo JSON, `nex context`, `nex symbols`, API de Python, servidor MCP | Implementada y probada en local; el LSP queda planificado y ningún modelo de IA se ha evaluado |
-| 6 | Requisitos verificables: contratos estables, explicación de las reglas y tipos refinados | Completada (versión 0.3.0). Los ejemplos (paso 3) llegaron en la 0.4.0; quedan los pasos 4 y 6 de la [línea principal](#línea-principal-requisitos-verificables) |
-| 7 | Repetición sin recursividad: `var` y bucles que declaran por qué terminan y qué mantienen | Completada (versión 0.5.0) |
+| Phase | Goal | Result |
+|-------|------|--------|
+| 1 | Core: lexer, parser, interpreter, CLI, diagnostics | Completed (version 0.1.0) |
+| 2 | Type system, functions, contracts, JSON outputs | Completed (version 0.2.0); contracts remain experimental |
+| 3 | Documentation, tests and quality | Completed as far as can be checked locally; continuous integration and other platforms, pending a run |
+| 4 | Playground: web editor that runs with the real interpreter | Implemented and tested locally; not deployed, and with the container isolation unverified |
+| 5 | Tools for agents: JSON protocol, `nex context`, `nex symbols`, Python API, MCP server | Implemented and tested locally; the LSP remains planned and no AI model has been evaluated |
+| 6 | Verifiable requirements: stable contracts, explanation of the rules and refined types | Completed (version 0.3.0). Examples (step 3) arrived in 0.4.0; steps 4 and 6 of the [main line](#main-line-verifiable-requirements) remain |
+| 7 | Repetition without recursion: `var` and loops that declare why they end and what they keep true | Completed (version 0.5.0) |
 
-La web del proyecto (<https://nexoralang.org>, cuyo código está en un repositorio privado aparte)
-muestra una versión resumida de esta hoja de ruta. Este documento es la referencia.
+The website of the project (<https://nexoralang.org>, whose code is in a separate private repository)
+shows a summarized version of this roadmap. This document is the reference.

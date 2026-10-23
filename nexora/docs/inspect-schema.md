@@ -1,21 +1,21 @@
-# Esquema de `nex inspect`
+# `nex inspect` schema
 
-- **Nombre y versión del esquema:** `nexora.inspect/2`
-- **Disponible desde:** `nexora` 0.3.0 (la versión 1 existió en la 0.2.0; los cambios están en el
-  [historial](#historial))
+- **Name and version of the schema:** `nexora.inspect/2`
+- **Available since:** `nexora` 0.3.0 (version 1 existed in 0.2.0; the changes are in the
+  [history](#history))
 
-`nex inspect archivo.nex` escribe en la salida estándar un único documento JSON con la estructura
-del programa: tipos refinados, funciones, parámetros, contratos, sentencias y expresiones, cada una con su posición
-y, cuando se conoce, su tipo.
+`nex inspect file.nex` writes to the standard output a single JSON document with the structure
+of the program: refined types, functions, parameters, contracts, statements and expressions, each one with its position
+and, when it is known, its type.
 
-El comando **no ejecuta el programa**. Realiza el análisis léxico, sintáctico y estático, igual que
-`nex check`. La salida solo contiene lo que está escrito en el archivo y lo que el análisis deduce
-de él: no incluye rutas absolutas, variables de entorno ni ningún dato de la máquina.
+The command **does not run the program**. It performs the lexical, syntax and static analysis, like
+`nex check`. The output only contains what is written in the file and what the analysis deduces
+from it: it includes no absolute paths, no environment variables and no data about the machine.
 
-Esta representación está pensada para que la consuman herramientas (editores, analizadores,
-asistentes de IA). NEXORA no incluye ninguna de esas herramientas: solo proporciona los datos.
+This representation is meant to be consumed by tools (editors, analyzers,
+AI assistants). NEXORA includes none of those tools: it only provides the data.
 
-## Documento
+## Document
 
 ```json
 {
@@ -28,125 +28,125 @@ asistentes de IA). NEXORA no incluye ninguna de esas herramientas: solo proporci
 }
 ```
 
-| Campo | Tipo | Significado |
-|-------|------|-------------|
-| `schema` | texto | Nombre y versión de este formato |
-| `nexora_version` | texto | Versión de NEXORA que produjo el documento. Campo añadido después de la 0.2.0 |
-| `file` | texto | El archivo analizado, tal como se pasó al comando |
-| `ok` | booleano | `true` si el programa no tiene errores estáticos |
-| `diagnostics` | lista | Los errores encontrados, con el formato de la sección 11.4 de la [especificación](language-spec.md) |
-| `complete` | booleano | `true` si el árbol cubre todo el archivo. `false` si es parcial o no existe. Campo añadido después de la 0.2.0 |
-| `program` | nodo `Program` o `null` | El árbol de sintaxis |
+| Field | Type | Meaning |
+|-------|------|---------|
+| `schema` | text | Name and version of this format |
+| `nexora_version` | text | Version of NEXORA that produced the document. Field added after 0.2.0 |
+| `file` | text | The analyzed file, as it was passed to the command |
+| `ok` | boolean | `true` if the program has no static errors |
+| `diagnostics` | list | The errors found, with the format of section 11.4 of the [specification](language-spec.md) |
+| `complete` | boolean | `true` if the tree covers the whole file. `false` if it is partial or does not exist. Field added after 0.2.0 |
+| `program` | `Program` node or `null` | The syntax tree |
 
-El JSON Schema de este documento, generado desde el código, está en
-[`schemas/nexora-inspect.schema.json`](schemas/nexora-inspect.schema.json); las reglas comunes a
-todos los formatos, en [Protocolo JSON](json-protocol.md).
+The JSON Schema of this document, generated from the code, is in
+[`schemas/nexora-inspect.schema.json`](schemas/nexora-inspect.schema.json); the rules common to
+all formats, in [JSON protocol](json-protocol.md).
 
-Cuándo está disponible `program`:
+When `program` is available:
 
-| Situación | `ok` | `complete` | `program` | Código de salida |
-|-----------|------|------------|-----------|------------------|
-| Programa válido | `true` | `true` | El árbol, con todos los tipos | `0` |
-| Errores semánticos o de tipos | `false` | `true` | El árbol; las expresiones que no pudieron tiparse tienen `"type": null` | `1` |
-| Errores de sintaxis | `false` | `false` | Un árbol **parcial** | `1` |
-| Errores léxicos | `false` | `false` | `null` | `1` |
-| El archivo no pudo leerse | `false` | `false` | `null` | `4` |
+| Situation | `ok` | `complete` | `program` | Exit code |
+|-----------|------|------------|-----------|-----------|
+| Valid program | `true` | `true` | The tree, with all the types | `0` |
+| Semantic or type errors | `false` | `true` | The tree; the expressions that could not be typed have `"type": null` | `1` |
+| Syntax errors | `false` | `false` | A **partial** tree | `1` |
+| Lexical errors | `false` | `false` | `null` | `1` |
+| The file could not be read | `false` | `false` | `null` | `4` |
 
-Un árbol parcial contiene lo que pudo analizarse:
+A partial tree contains what could be analyzed:
 
-- Falta cada **sentencia** que tiene un error de sintaxis; las demás sentencias de su bloque están.
-- Falta cada **función** cuya declaración (nombre, parámetros o tipo de retorno) tiene un error.
-- Un bloque que queda sin cerrar al final del archivo se conserva con las sentencias escritas; su
-  posición termina donde termina el archivo.
-- Los tipos se calculan igual, pero lo que dependa de una pieza que falta tiene `"type": null`.
-- `diagnostics` contiene **solo los errores de sintaxis**. Los errores de nombres y de tipos no se
-  comunican mientras la sintaxis sea incorrecta.
+- Every **statement** that has a syntax error is missing; the other statements of its block are there.
+- Every **function** whose declaration (name, parameters or return type) has an error is missing.
+- A block left unclosed at the end of the file is kept with the statements written; its
+  position ends where the file ends.
+- Types are computed the same way, but what depends on a missing piece has `"type": null`.
+- `diagnostics` contains **only the syntax errors**. Name and type errors are not
+  reported while the syntax is wrong.
 
-Todos los nodos de un árbol parcial están completos y cumplen este esquema: no hay nodos de error ni
-campos a medias. Un programa con errores de sintaxis **nunca se ejecuta**, tenga o no árbol.
+All the nodes of a partial tree are complete and meet this schema: there are no error nodes or
+half-filled fields. A program with syntax errors **never runs**, whether it has a tree or not.
 
-Hasta este cambio, `program` era `null` también con errores de sintaxis. Para saber si un programa
-es válido hay que mirar `ok`, no si `program` existe.
+Until this change, `program` was `null` also with syntax errors. To know whether a program
+is valid, look at `ok`, not at whether `program` exists.
 
-Que `ok` sea `true` significa que el programa supera el análisis estático. No dice nada sobre lo
-que ocurrirá al ejecutarlo: divisiones por cero, desbordamientos, contratos incumplidos y valores
-comprobados con `Tipo(x)` que no cumplen su condición solo se detectan con `nex run`.
+`ok` being `true` means that the program passes the static analysis. It says nothing about what
+will happen when it runs: divisions by zero, overflows, broken contracts and values
+checked with `Type(x)` that do not meet their condition are only detected with `nex run`.
 
-## Nodos
+## Nodes
 
-Todo nodo es un objeto con estos dos campos, siempre los primeros:
+Every node is an object with these two fields, always the first ones:
 
-| Campo | Tipo | Significado |
-|-------|------|-------------|
-| `kind` | texto | El tipo de nodo, uno de los listados abajo |
-| `span` | posición | El fragmento de código del que procede |
+| Field | Type | Meaning |
+|-------|------|---------|
+| `kind` | text | The kind of node, one of those listed below |
+| `span` | position | The fragment of code it comes from |
 
-Una **posición** es un objeto `{"line", "column", "end_line", "end_column"}`. Líneas y columnas
-empiezan en 1; la columna cuenta caracteres y la posición final queda excluida.
+A **position** is an object `{"line", "column", "end_line", "end_column"}`. Lines and columns
+start at 1; the column counts characters and the end position is excluded.
 
-Los campos de cada nodo aparecen siempre, en el orden indicado. Un campo opcional sin valor es
-`null`, nunca se omite.
+The fields of each node always appear, in the order given. An optional field without a value is
+`null`, it is never omitted.
 
-### Declaraciones
+### Declarations
 
-| `kind` | Campos | Significado |
-|--------|--------|-------------|
-| `Program` | `types`: lista de `TypeDecl` · `functions`: lista de `Function` · `records`: lista de `RecordDecl` · `uses`: lista de `UsesDecl` · `imports`: lista de `ImportDecl` | El archivo completo, con los tipos y las funciones en el orden en que aparecen. `records`, `uses` e `imports` van al final |
-| `ImportDecl` | `path`: texto · `path_span`: posición | La declaración `import "app/models.nex"`, que solo puede aparecer al principio del archivo ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) |
-| `TypeDecl` | `name`: texto · `name_span`: posición · `base`: `TypeRef` · `condition`: expresión · `message`: texto o `null` · `public`: `true` o `false` | Un tipo refinado. `message` es la explicación escrita tras la coma; `public` es `true` cuando la declaración lleva `pub` |
-| `RecordDecl` | `name`: texto · `name_span`: posición · `fields`: lista de `FieldDecl` · `public`: `true` o `false` | Un registro: `type Point = { x: Int, y: Int }`. `public` es `true` cuando la declaración lleva `pub` |
-| `FieldDecl` | `name`: texto · `name_span`: posición · `type`: `TypeRef` | Un campo de un registro |
-| `UsesDecl` | `capability`: `"read"` o `"write"` · `path`: texto · `path_span`: posición | La capacidad que el programa declara que necesita ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
-| `Function` | `name`: texto · `name_span`: posición · `params`: lista de `Param` · `return_type`: `TypeRef` · `contracts`: lista de `Contract` · `body`: `Block` · `examples`: lista de `Example` · `public`: `true` o `false` | Una función. `examples` es el último campo antes de `public`, que es `true` cuando la declaración lleva `pub` |
-| `Example` | `condition`: expresión · `message`: texto o `null` | Una cláusula `example`. `nex inspect` nunca la evalúa |
-| `Param` | `name`: texto · `name_span`: posición · `type`: `TypeRef` | Un parámetro |
-| `TypeRef` | `name`: texto · `arguments`: lista de `TypeRef` · `qualifier`: texto o `null` | Un tipo escrito en el código: `Int`, `Float`, `Bool`, `Text`, `Void`, un tipo refinado o `List[T]`. `arguments` está vacío para un nombre sin corchetes; `List[Int]` tiene un argumento `Int`. `qualifier` es el módulo de un tipo de otro archivo, `null` en el resto: `models.Point` tiene `qualifier` `models` y `name` `Point` |
-| `Contract` | `clause`: `"requires"` o `"ensures"` · `condition`: expresión · `message`: texto o `null` | Una cláusula de contrato. `message` es la explicación escrita tras la coma |
-| `LoopClause` | `clause`: `"invariant"` o `"decreases"` · `condition`: expresión (`Bool` en un invariante, `Int` en una medida) · `message`: texto o `null` | Una cláusula del principio del cuerpo de un `While` o un `For` |
+| `kind` | Fields | Meaning |
+|--------|--------|---------|
+| `Program` | `types`: list of `TypeDecl` · `functions`: list of `Function` · `records`: list of `RecordDecl` · `uses`: list of `UsesDecl` · `imports`: list of `ImportDecl` | The whole file, with the types and the functions in the order in which they appear. `records`, `uses` and `imports` go at the end |
+| `ImportDecl` | `path`: text · `path_span`: position | The declaration `import "app/models.nex"`, which can only appear at the beginning of the file ([decision 0018](decisions/0018-modulos-e-importaciones.md)) |
+| `TypeDecl` | `name`: text · `name_span`: position · `base`: `TypeRef` · `condition`: expression · `message`: text or `null` · `public`: `true` or `false` | A refined type. `message` is the explanation written after the comma; `public` is `true` when the declaration carries `pub` |
+| `RecordDecl` | `name`: text · `name_span`: position · `fields`: list of `FieldDecl` · `public`: `true` or `false` | A record: `type Point = { x: Int, y: Int }`. `public` is `true` when the declaration carries `pub` |
+| `FieldDecl` | `name`: text · `name_span`: position · `type`: `TypeRef` | A field of a record |
+| `UsesDecl` | `capability`: `"read"` or `"write"` · `path`: text · `path_span`: position | The capability that the program declares it needs ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
+| `Function` | `name`: text · `name_span`: position · `params`: list of `Param` · `return_type`: `TypeRef` · `contracts`: list of `Contract` · `body`: `Block` · `examples`: list of `Example` · `public`: `true` or `false` | A function. `examples` is the last field before `public`, which is `true` when the declaration carries `pub` |
+| `Example` | `condition`: expression · `message`: text or `null` | An `example` clause. `nex inspect` never evaluates it |
+| `Param` | `name`: text · `name_span`: position · `type`: `TypeRef` | A parameter |
+| `TypeRef` | `name`: text · `arguments`: list of `TypeRef` · `qualifier`: text or `null` | A type written in the code: `Int`, `Float`, `Bool`, `Text`, `Void`, a refined type or `List[T]`. `arguments` is empty for a name without square brackets; `List[Int]` has one argument `Int`. `qualifier` is the module of a type from another file, `null` otherwise: `models.Point` has `qualifier` `models` and `name` `Point` |
+| `Contract` | `clause`: `"requires"` or `"ensures"` · `condition`: expression · `message`: text or `null` | A contract clause. `message` is the explanation written after the comma |
+| `LoopClause` | `clause`: `"invariant"` or `"decreases"` · `condition`: expression (`Bool` in an invariant, `Int` in a measure) · `message`: text or `null` | A clause at the beginning of the body of a `While` or a `For` |
 
-### Sentencias
+### Statements
 
-| `kind` | Campos | Significado |
-|--------|--------|-------------|
-| `Block` | `statements`: lista de sentencias | Un bloque `{ }` |
-| `Let` | `name`: texto · `name_span`: posición · `declared_type`: `TypeRef` o `null` · `value`: expresión | Declaración de variable inmutable. `declared_type` es `null` si el tipo se infiere |
-| `Var` | Los mismos que `Let` | Declaración de una variable que puede cambiar de valor (`var`). Es un nodo distinto de `Let` para que una herramienta que no lo conoce lo note, en vez de tomarla por inmutable |
-| `Return` | `value`: expresión o `null` | `return`, con o sin valor |
-| `If` | `condition`: expresión · `then_block`: `Block` · `else_branch`: `Block`, `If` o `null` | Condicional. `else_branch` es otro `If` en un `else if` |
-| `While` | `condition`: expresión · `clauses`: lista de `LoopClause`, en el orden del código · `body`: `Block` | Un bucle. `body` contiene las sentencias, sin las cláusulas |
-| `For` | `name`: texto · `name_span`: posición · `iterable`: expresión · `clauses`: lista de `LoopClause`, en el orden del código · `body`: `Block` | Un `for` sobre una `List[T]`. El iterador y su posición van primero; `body` contiene las sentencias, sin las cláusulas |
-| `ExprStatement` | `expression`: expresión | Una llamada usada como sentencia |
-| `Assign` | `name`: texto · `name_span`: posición · `value`: expresión | Una asignación. Solo es válida sobre una variable `var`; sobre una `let` o un parámetro va acompañada del error `E2007` |
-| `FieldAssign` | `target`: expresión · `name`: texto · `name_span`: posición · `value`: expresión | Una asignación a un campo de un registro. Un registro es inmutable, así que siempre va acompañada del error `E2025` |
+| `kind` | Fields | Meaning |
+|--------|--------|---------|
+| `Block` | `statements`: list of statements | A `{ }` block |
+| `Let` | `name`: text · `name_span`: position · `declared_type`: `TypeRef` or `null` · `value`: expression | Declaration of an immutable variable. `declared_type` is `null` if the type is inferred |
+| `Var` | The same as `Let` | Declaration of a variable that can change its value (`var`). It is a node different from `Let` so that a tool that does not know it notices, instead of taking it for immutable |
+| `Return` | `value`: expression or `null` | `return`, with or without a value |
+| `If` | `condition`: expression · `then_block`: `Block` · `else_branch`: `Block`, `If` or `null` | Conditional. `else_branch` is another `If` in an `else if` |
+| `While` | `condition`: expression · `clauses`: list of `LoopClause`, in the order of the code · `body`: `Block` | A loop. `body` contains the statements, without the clauses |
+| `For` | `name`: text · `name_span`: position · `iterable`: expression · `clauses`: list of `LoopClause`, in the order of the code · `body`: `Block` | A `for` over a `List[T]`. The iterator and its position go first; `body` contains the statements, without the clauses |
+| `ExprStatement` | `expression`: expression | A call used as a statement |
+| `Assign` | `name`: text · `name_span`: position · `value`: expression | An assignment. It is only valid on a `var` variable; on a `let` or a parameter it comes with the error `E2007` |
+| `FieldAssign` | `target`: expression · `name`: text · `name_span`: position · `value`: expression | An assignment to a field of a record. A record is immutable, so it always comes with the error `E2025` |
 
-### Expresiones
+### Expressions
 
-Además de sus campos, toda expresión termina con el campo `type`: el tipo que el análisis estático
-le asigna (`"Int"`, `"Float"`, `"Bool"`, `"Text"`, `"Void"`, un tipo de lista como `"List[Int]"`,
-el nombre de un tipo refinado que declara el programa, como `"Percent"`, o el nombre de un
-registro, como `"Point"`), o `null` si no pudo
-determinarlo porque la expresión contiene un error. Una llamada a una función que no devuelve
-nada tiene tipo `"Void"`.
+Besides its fields, every expression ends with the `type` field: the type that the static analysis
+assigns to it (`"Int"`, `"Float"`, `"Bool"`, `"Text"`, `"Void"`, a list type such as `"List[Int]"`,
+the name of a refined type that the program declares, such as `"Percent"`, or the name of a
+record, such as `"Point"`), or `null` if it could not
+determine it because the expression contains an error. A call to a function that returns
+nothing has type `"Void"`.
 
-| `kind` | Campos (antes de `type`) | Significado |
-|--------|--------------------------|-------------|
-| `IntLiteral` | `value`: número entero | |
-| `FloatLiteral` | `value`: número decimal | |
-| `TextLiteral` | `value`: texto, con los escapes ya resueltos | |
-| `BoolLiteral` | `value`: booleano | |
-| `ListLiteral` | `elements`: lista de expresiones | Un literal de lista: `[1, 2, 3]` o `[]` |
-| `Name` | `name`: texto | Uso de una variable, un parámetro, `result` (en `ensures`) o `value` (en la condición de un tipo refinado) |
-| `Unary` | `operator`: `"-"` o `"not"` · `operand`: expresión | |
-| `Binary` | `operator`: texto · `operator_span`: posición · `left`: expresión · `right`: expresión | `operator` es uno de `+ - * / == != < <= > >= and or` |
-| `Group` | `expression`: expresión | Una expresión entre paréntesis |
-| `Call` | `callee`: texto · `callee_span`: posición · `arguments`: lista de expresiones · `qualifier`: texto o `null` | Llamada a una función propia o integrada, o comprobación de un tipo refinado (`Percent(x)`), cuyo tipo es el del tipo refinado. En una llamada cualificada (`Text.length(s)`), `callee` es el nombre completo (`"Text.length"`), `callee_span` lo abarca entero y `qualifier` es el tipo (`"Text"`); en cualquier otra, `qualifier` es `null` |
-| `RecordConstruction` | `name`: texto · `name_span`: posición · `fields`: lista de `FieldInitializer` · `qualifier`: texto o `null` | La construcción de un registro: `Point(x: 1, y: 2)`. Los campos van en el orden en que están escritos, que no tiene que ser el de la declaración. `qualifier` es el módulo de un registro de otro archivo, `null` en el resto |
-| `FieldInitializer` | `name`: texto · `name_span`: posición · `value`: expresión | El valor que se da a un campo en una construcción |
-| `FieldAccess` | `target`: expresión · `name`: texto · `name_span`: posición | La lectura de un campo: `p.x`. `target` es el valor del que se lee |
+| `kind` | Fields (before `type`) | Meaning |
+|--------|------------------------|---------|
+| `IntLiteral` | `value`: integer number | |
+| `FloatLiteral` | `value`: decimal number | |
+| `TextLiteral` | `value`: text, with the escapes already resolved | |
+| `BoolLiteral` | `value`: boolean | |
+| `ListLiteral` | `elements`: list of expressions | A list literal: `[1, 2, 3]` or `[]` |
+| `Name` | `name`: text | Use of a variable, a parameter, `result` (in `ensures`) or `value` (in the condition of a refined type) |
+| `Unary` | `operator`: `"-"` or `"not"` · `operand`: expression | |
+| `Binary` | `operator`: text · `operator_span`: position · `left`: expression · `right`: expression | `operator` is one of `+ - * / == != < <= > >= and or` |
+| `Group` | `expression`: expression | An expression in parentheses |
+| `Call` | `callee`: text · `callee_span`: position · `arguments`: list of expressions · `qualifier`: text or `null` | Call to a user or built-in function, or check of a refined type (`Percent(x)`), whose type is that of the refined type. In a qualified call (`Text.length(s)`), `callee` is the full name (`"Text.length"`), `callee_span` covers it entirely and `qualifier` is the type (`"Text"`); in any other, `qualifier` is `null` |
+| `RecordConstruction` | `name`: text · `name_span`: position · `fields`: list of `FieldInitializer` · `qualifier`: text or `null` | The construction of a record: `Point(x: 1, y: 2)`. The fields go in the order in which they are written, which does not have to be that of the declaration. `qualifier` is the module of a record from another file, `null` otherwise |
+| `FieldInitializer` | `name`: text · `name_span`: position · `value`: expression | The value given to a field in a construction |
+| `FieldAccess` | `target`: expression · `name`: text · `name_span`: position | Reading a field: `p.x`. `target` is the value it is read from |
 
-## Ejemplo
+## Example
 
-Para este programa:
+For this program:
 
 ```nex
 fn double(n: Int) -> Int {
@@ -155,7 +155,7 @@ fn double(n: Int) -> Int {
 }
 ```
 
-el nodo de la función es (se omiten las posiciones interiores para abreviar):
+the node of the function is (the inner positions are omitted for brevity):
 
 ```json
 {
@@ -189,31 +189,31 @@ el nodo de la función es (se omiten las posiciones interiores para abreviar):
 }
 ```
 
-## Estabilidad y evolución
+## Stability and evolution
 
-El esquema lleva un nombre y un número de versión en el campo `schema`.
+The schema carries a name and a version number in the `schema` field.
 
-- **El número de versión cambia** cuando un campo o un tipo de nodo se elimina, se renombra o
-  cambia de significado. Un programa que lea la versión 1 puede dejar de funcionar con la 2.
-- **El número de versión no cambia** cuando se añade un campo a un nodo o un tipo de nodo nuevo
-  (por ejemplo, al añadir una construcción al lenguaje). Las herramientas deben ignorar los campos
-  y los tipos de nodo que no conozcan.
-- El orden de los campos es estable dentro de una versión, y la salida es determinista: el mismo
-  archivo produce siempre el mismo documento.
+- **The version number changes** when a field or a node kind is removed, renamed or
+  changes its meaning. A program that reads version 1 may stop working with version 2.
+- **The version number does not change** when a field is added to a node or a new node kind is added
+  (for example, when a construct is added to the language). Tools must ignore the fields
+  and node kinds they do not know.
+- The order of the fields is stable within a version, and the output is deterministic: the same
+  file always produces the same document.
 
-Una prueba automatizada (`tests/test_inspect.py`) fija la lista exacta de nodos y campos de la
-versión 2, y otra comprueba que este documento los menciona todos.
+An automated test (`tests/test_inspect.py`) pins the exact list of nodes and fields of
+version 2, and another one checks that this document mentions all of them.
 
-### Historial
+### History
 
-| Versión | Publicada en | Cambios |
+| Version | Published in | Changes |
 |---------|--------------|---------|
-| `nexora.inspect/2` | `nexora` 0.11.0 | Añadidos, sin cambiar la versión: el nodo `ImportDecl` (`path`, `path_span`) para la declaración `import "app/models.nex"`, el campo `imports` al final de `Program`, el campo `public` (`true` o `false`) al final de `TypeDecl`, `RecordDecl` y `Function`, y el campo `qualifier` (texto o `null`) al final de `TypeRef` y de `RecordConstruction` para los tipos y los registros de otro módulo, `models.Point` ([decisión 0018](decisions/0018-modulos-e-importaciones.md)). Un programa sin importaciones produce el mismo documento que en la 0.10.0, más `"imports": []`, `"public": false` en cada declaración y `"qualifier": null` en cada tipo |
-| `nexora.inspect/2` | `nexora` 0.10.0 | Añadidos, sin cambiar la versión: el nodo `UsesDecl` (`capability`, `path`, `path_span`) para la declaración `uses read "ruta"`, y el campo `uses` al final de `Program` ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
-| `nexora.inspect/2` | `nexora` 0.8.0 | Añadidos, sin cambiar la versión: los nodos `RecordDecl` (`name`, `name_span`, `fields`), `FieldDecl` (`name`, `name_span`, `type`), `RecordConstruction` (`name`, `name_span`, `fields`), `FieldInitializer` (`name`, `name_span`, `value`) y `FieldAccess` (`target`, `name`, `name_span`); la sentencia `FieldAssign` (`target`, `name`, `name_span`, `value`); el campo `records` al final de `Program`; y `type` puede ser el nombre de un registro ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) |
-| `nexora.inspect/1` | `nexora` 0.2.0 | Primera versión |
-| `nexora.inspect/2` | `nexora` 0.7.0 | Añadidos, sin cambiar la versión: `arguments` (lista de `TypeRef`) en `TypeRef`, que es `[]` cuando el tipo no lleva corchetes y tiene un argumento cuando el tipo es `List[Int]`; el nodo `ListLiteral` (`elements`: lista de expresiones) para `[a, b]` y `[]`; el nodo `For` (`name`, `name_span`, `iterable`, `clauses`, `body`) para `for x in xs`; y `type` puede ser `List[...]` ([decisión 0013](decisions/0013-listas-y-for.md)) |
-| `nexora.inspect/2` | `nexora` 0.6.0 | Añadido, sin cambiar la versión: campo `qualifier` en `Call`, en todas las llamadas (`null` si no hay cualificador), después de `arguments` y antes de `type` ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)). `callee` puede contener un punto (`"Text.length"`) en las llamadas cualificadas. Un programa sin ellas produce el mismo documento que en la 0.5.1, más `"qualifier": null` en cada `Call`; el documento valida también con el esquema de la 0.5.1 |
-| `nexora.inspect/2` | `nexora` 0.5.0 | Añadidos, sin cambiar la versión: nodos `Var`, `While` y `LoopClause` ([decisión 0010](decisions/0010-var-y-while.md)). `Assign` aparece también en programas válidos. Un programa sin `var` ni bucles produce el mismo documento que en la 0.4.0 |
-| `nexora.inspect/2` | `nexora` 0.4.0 | Añadidos, sin cambiar la versión: nodo `Example` y campo `examples` al final de `Function` ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)) |
-| `nexora.inspect/2` | `nexora` 0.3.0 | **Cambio incompatible:** el campo `type` de las expresiones deja de ser una lista cerrada (`Int`, `Float`, `Bool`, `Text`, `Void`) y puede ser el nombre de un tipo refinado. Añadidos: nodo `TypeDecl`, campo `types` en `Program`, campo `message` en `Contract` |
+| `nexora.inspect/2` | `nexora` 0.11.0 | Added, without changing the version: the `ImportDecl` node (`path`, `path_span`) for the declaration `import "app/models.nex"`, the `imports` field at the end of `Program`, the `public` field (`true` or `false`) at the end of `TypeDecl`, `RecordDecl` and `Function`, and the `qualifier` field (text or `null`) at the end of `TypeRef` and of `RecordConstruction` for the types and records of another module, `models.Point` ([decision 0018](decisions/0018-modulos-e-importaciones.md)). A program without imports produces the same document as in 0.10.0, plus `"imports": []`, `"public": false` in every declaration and `"qualifier": null` in every type |
+| `nexora.inspect/2` | `nexora` 0.10.0 | Added, without changing the version: the `UsesDecl` node (`capability`, `path`, `path_span`) for the declaration `uses read "path"`, and the `uses` field at the end of `Program` ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
+| `nexora.inspect/2` | `nexora` 0.8.0 | Added, without changing the version: the nodes `RecordDecl` (`name`, `name_span`, `fields`), `FieldDecl` (`name`, `name_span`, `type`), `RecordConstruction` (`name`, `name_span`, `fields`), `FieldInitializer` (`name`, `name_span`, `value`) and `FieldAccess` (`target`, `name`, `name_span`); the statement `FieldAssign` (`target`, `name`, `name_span`, `value`); the `records` field at the end of `Program`; and `type` can be the name of a record ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) |
+| `nexora.inspect/1` | `nexora` 0.2.0 | First version |
+| `nexora.inspect/2` | `nexora` 0.7.0 | Added, without changing the version: `arguments` (list of `TypeRef`) in `TypeRef`, which is `[]` when the type has no square brackets and has one argument when the type is `List[Int]`; the `ListLiteral` node (`elements`: list of expressions) for `[a, b]` and `[]`; the `For` node (`name`, `name_span`, `iterable`, `clauses`, `body`) for `for x in xs`; and `type` can be `List[...]` ([decision 0013](decisions/0013-listas-y-for.md)) |
+| `nexora.inspect/2` | `nexora` 0.6.0 | Added, without changing the version: the `qualifier` field in `Call`, in all calls (`null` if there is no qualifier), after `arguments` and before `type` ([decision 0011](decisions/0011-operaciones-sobre-textos.md)). `callee` can contain a dot (`"Text.length"`) in qualified calls. A program without them produces the same document as in 0.5.1, plus `"qualifier": null` in every `Call`; the document also validates with the schema of 0.5.1 |
+| `nexora.inspect/2` | `nexora` 0.5.0 | Added, without changing the version: the nodes `Var`, `While` and `LoopClause` ([decision 0010](decisions/0010-var-y-while.md)). `Assign` also appears in valid programs. A program without `var` or loops produces the same document as in 0.4.0 |
+| `nexora.inspect/2` | `nexora` 0.4.0 | Added, without changing the version: the `Example` node and the `examples` field at the end of `Function` ([decision 0008](decisions/0008-ejemplos-y-nex-test.md)) |
+| `nexora.inspect/2` | `nexora` 0.3.0 | **Incompatible change:** the `type` field of expressions stops being a closed list (`Int`, `Float`, `Bool`, `Text`, `Void`) and can be the name of a refined type. Added: the `TypeDecl` node, the `types` field in `Program`, the `message` field in `Contract` |

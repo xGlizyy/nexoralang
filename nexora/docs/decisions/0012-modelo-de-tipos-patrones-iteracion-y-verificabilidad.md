@@ -1,527 +1,456 @@
-# 0012 — Modelo de tipos, patrones, iteración y evidencia verificable
+# 0012 — Type model, patterns, iteration and verifiable evidence
 
-- **Estado:** propuesta para revisión. **No aceptada todavía.**
-- **Fecha:** 2026-10-19.
-- **Rama de trabajo:** `feature/server-hardening`.
-- **Relacionada con:** [0001](0001-tipos-estaticos-sin-conversiones-implicitas.md), [0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md), [0004](0004-contratos-en-ejecucion.md), [0005](0005-diagnosticos-y-esquemas-json.md), [0006](0006-requisitos-verificables.md), [0007](0007-contratos-estables-y-tipos-refinados.md), [0008](0008-ejemplos-y-nex-test.md), [0010](0010-var-y-while.md) y [0011](0011-operaciones-sobre-textos.md).
-- **Sustituye a:** ninguna.
-- **Implementación:** ninguna. Este documento no modifica el lenguaje, la hoja de ruta ni las limitaciones oficiales.
+- **Status:** proposal under review. **Not accepted yet.**
+- **Date:** 2026-10-19.
+- **Work branch:** `feature/server-hardening`.
+- **Related to:** [0001](0001-tipos-estaticos-sin-conversiones-implicitas.md), [0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md), [0004](0004-contratos-en-ejecucion.md), [0005](0005-diagnosticos-y-esquemas-json.md), [0006](0006-requisitos-verificables.md), [0007](0007-contratos-estables-y-tipos-refinados.md), [0008](0008-ejemplos-y-nex-test.md), [0010](0010-var-y-while.md) and [0011](0011-operaciones-sobre-textos.md).
+- **Replaces:** none.
+- **Implementation:** none. This document does not change the language, roadmap or official constraints.
 
-## Convenciones de evidencia
+## Evidence conventions
 
-Este ADR se apoya en lectura de código y documentación. **No se ha ejecutado ningún programa, prueba, build, instalación, migración ni consulta.** Las marcas siguientes separan lo observado de lo propuesto:
+This ADR relies on code reading and documentation review. **No program, test, build, installation, migration or query has been executed.** The following markers separate what has been observed from what is proposed:
 
-- **[V]** observado en el código o en la documentación del repositorio.
-- **[D]** afirmación de la documentación, coherente con el código leído, pero no comprobada por ejecución.
-- **[I]** inferencia técnica.
-- **[P]** propuesta sujeta a aprobación.
-- **[?]** cuestión pendiente de evidencia o de decisión.
+- **[V]** observed in the code or in the repository documentation.
+- **[D]** documentation claim, consistent with the code read, but not checked by execution.
+- **[I]** technical inference.
+- **[P]** proposal subject to approval.
+- **[?]** open issue pending evidence or decision.
 
 ---
 
-## A. Contexto, objetivos y principios
+## A. Context, goals and principles
 
-### A.1. Propósito diferencial
+### A.1. Differential purpose
 
-La [decisión 0006](0006-requisitos-verificables.md) fija la propuesta de NEXORA: los requisitos, restricciones y condiciones de validación de una función forman parte verificable del programa, no solo de una instrucción, un ticket o un comentario. La [decisión 0007](0007-contratos-estables-y-tipos-refinados.md) estabilizó los contratos, las explicaciones y los tipos refinados; la [0008](0008-ejemplos-y-nex-test.md) añadió ejemplos ejecutables y `nex test`; la [0010](0010-var-y-while.md) añadió bucles con `invariant` y `decreases`; la [0011](0011-operaciones-sobre-textos.md) añadió funciones de tipo con contratos.
+The [decision 0006](0006-requisitos-verificables.md) establishes the NEXORA proposal: requirements, constraints and validation conditions of a function are a verifiable part of the program, not merely a ticket, comment or instruction. [Decision 0007](0007-contratos-estables-y-tipos-refinados.md) stabilized contracts, explanations and refined types; [0008](0008-ejemplos-y-nex-test.md) added executable examples and `nex test`; [0010](0010-var-y-while.md) added loops with `invariant` and `decreases`; [0011](0011-operaciones-sobre-textos.md) added type functions with contracts.
 
-NEXORA no debe presentarse como un lenguaje que demuestra programas correctos. Su propuesta defendible es más concreta:
+NEXORA should not be presented as a language that proves programs are correct. Its defensible proposal is more concrete:
 
-> Los requisitos verificables son datos explícitos del programa y del análisis; las herramientas deterministas indican qué pueden comprobar, qué han comprobado y qué no; y una edición que elimina o relaja un requisito se señala como un cambio visible.
+> Verifiable requirements are explicit data of the program and of the analysis; deterministic tools indicate what they can check, what they have checked and what they have not; and an edit that removes or relaxes a requirement is marked as a visible change.
 
-### A.2. Cómo ayuda a una IA
+### A.2. How it helps an AI
 
-Una IA que trabaja sobre código necesita responder preguntas que hoy no puede responder solo leyendo el texto:
+An AI working on code needs to answer questions that it cannot answer by reading text alone:
 
-1. ¿Qué requisitos tiene esta función antes de tocarla?
-2. ¿Qué tipos, contratos, restricciones y dependencias son relevantes?
-3. ¿Qué requisitos pueden verse afectados por el cambio?
-4. ¿La modificación propuesta respeta las restricciones conocidas?
-5. ¿Qué comprobaciones se han ejecutado y con qué resultado?
-6. ¿Qué queda sin comprobar o es incierto?
-7. ¿Puede demostrar que no ha roto un requisito, o solo afirmarlo?
+1. What requirements does this function have before touching it?
+2. What types, contracts, constraints and dependencies are relevant?
+3. What requirements may be affected by the change?
+4. Does the proposed modification respect the known constraints?
+5. What checks have been executed and with what result?
+6. What remains unchecked or uncertain?
+7. Can it demonstrate that it has not broken a requirement, or only assert it?
 
-NEXORA puede ayudar con las preguntas 1, 2, 3, 5 y 6 mediante datos estructurados y herramientas deterministas. La pregunta 4 es responsabilidad del agente que escribe el cambio. Las preguntas 6 y 7 exigen un contrato de evidencia explícito: **no basta con “no hay diagnósticos”**. La pregunta 7 no autoriza a decir “verificado” si solo se comprobó en algunas ejecuciones.
+NEXORA can help with questions 1, 2, 3, 5 and 6 through structured data and deterministic tools. Question 4 is the responsibility of the agent writing the change. Questions 6 and 7 require an explicit evidence contract: **“there are no diagnostics” is not enough**. Question 7 does not authorize saying “verified” if only some executions were checked.
 
-### A.3. Capacidades actuales, propuestas e hipótesis
+### A.3. Current capabilities, proposals and hypotheses
 
-| Categoría | Qué incluye | Estado |
+| Category | What it includes | Status |
 |---|---|---|
-| **Capacidad actual** | Tipos estáticos `Int`, `Float`, `Bool`, `Text`, `Void`; contratos `requires`/`ensures` comprobados al ejecutar; tipos refinados sobre builtins; `example`; `while` con `invariant`/`decreases`; `nex check`, `inspect`, `context`, `symbols`, `test`; JSON; MCP de solo lectura; playground con worker | Implementado y documentado **[V]/[D]** |
-| **Propuesta de este ADR** | Álgebra de tipos; listas; registros; enums; `match`; exhaustividad; `Option`/`Result`; entrada explícita; módulos; evidencia e impacto de requisitos | Diseño, no implementado **[P]** |
-| **Hipótesis de investigación** | Que los requisitos en el código y las herramientas de NEXORA hacen que una IA detecte más incumplimientos, debilite menos requisitos y necesite menos correcciones | **No medida** **[?]** |
+| **Current capability** | Static types `Int`, `Float`, `Bool`, `Text`, `Void`; contracts `requires`/`ensures` checked on execution; refined types over builtins; `example`; `while` with `invariant`/`decreases`; `nex check`, `inspect`, `context`, `symbols`, `test`; JSON; read-only MCP; playground with worker | Implemented and documented **[V]/[D]** |
+| **Proposal in this ADR** | Type algebra; lists; records; enums; `match`; exhaustiveness; `Option`/`Result`; explicit input; modules; evidence and impact of requirements | Design, not implemented **[P]** |
+| **Research hypothesis** | That requirements in code and NEXORA tools cause an AI to detect more violations, weaken fewer requirements and require fewer corrections | **Not measured** **[?]** |
 
-La distinción importa: una capacidad propuesta no debe describirse como existente; una hipótesis no debe presentarse como resultado.
+The distinction matters: a proposed capability must not be described as if it already exists; a hypothesis must not be presented as a result.
 
-### A.4. Principios que deben mantenerse
+### A.4. Principles that must be preserved
 
-1. **Semántica explícita.** Cada construcción tiene una regla escrita y comprobable; no se introducen conversiones, mutaciones o efectos ocultos.
-2. **Diagnósticos útiles y estables.** Código estable, posición exacta, etiqueta concreta, notas y sugerencia solo cuando existe una regla que la fundamente.
-3. **Verificabilidad honesta.** Se distingue lo comprobado estáticamente, lo comprobado en ejecución, lo inferido y lo no comprobado. Nunca se afirma más de lo que se ha comprobado.
-4. **Seguridad por capas.** Las garantías del lenguaje no son las garantías del entorno. El playground no es una sandbox por sí mismo.
-5. **Coherencia lenguaje-herramientas-documentación.** Una funcionalidad no está terminada si el lexer, el parser, el checker, el intérprete, los diagnósticos, la CLI, JSON/MCP, la documentación, los ejemplos, los tests y el playground no la reflejan.
-6. **Compatibilidad incremental.** Los programas existentes deben seguir funcionando; los esquemas JSON crecen de forma aditiva salvo que se decida lo contrario.
-7. **Una sola forma de escribir cada cosa.** Sin azúcar redundante ni casos especiales innecesarios; `Option`/`Result` no deben ser excepciones del compilador.
+1. **Explicit semantics.** Every construct has a written and checkable rule; no hidden conversions, mutations or effects are introduced.
+2. **Useful and stable diagnostics.** Stable code, exact position, concrete label, notes and suggestion only when a rule exists to justify it.
+3. **Honest verifiability.** Distinguish what has been checked statically, what has been checked at runtime, what has been inferred and what has not been checked. Never assert more than what has been checked.
+4. **Defense in depth.** The guarantees of the language are not the guarantees of the environment. The playground is not a sandbox by itself.
+5. **Language-tooling-documentation coherence.** A feature is not finished if the lexer, parser, checker, interpreter, diagnostics, CLI, JSON/MCP, documentation, examples, tests and playground do not reflect it.
+6. **Incremental compatibility.** Existing programs must keep working; JSON schemas grow additively unless a different decision is made.
+7. **One single way to write things.** No redundant sugar or unnecessary special cases; `Option`/`Result` must not be compiler exceptions.
 
-### A.5. Fuera de alcance
+### A.5. Out of scope
 
-Este ADR no decide typeclasses, efectos algebraicos, concurrencia, macros, `ai fn`, `tool fn`, compilación a JavaScript/WebAssembly, registro de paquetes, optimización ni una fecha para 1.0. Tampoco implementa ninguna decisión.
+This ADR does not decide typeclasses, algebraic effects, concurrency, macros, `ai fn`, `tool fn`, compilation to JavaScript/WebAssembly, package registry, optimization or a date for 1.0. It also does not implement any decision.
 
 ---
 
-## B. Modelo de tipos
+## B. Type model
 
-### B.1. Estado actual **[V]**
+### B.1. Current state **[V]**
 
-- Los tipos son cadenas: `INT = "Int"`, `FLOAT`, `BOOL`, `TEXT`, `VOID`; `VALUE_TYPES = (INT, FLOAT, BOOL, TEXT)` en `nexora/src/nexora/values.py`.
-- `TypeRef` solo guarda `name: str` en `ast_nodes.py`; no tiene argumentos de tipo.
-- `TypeDecl` solo representa tipos refinados: `name`, `base: TypeRef`, `condition: Expr`, `message`.
-- `Signature` usa `params: tuple[tuple[str, str | None], ...]` y `return_type: str | None` en `checker.py`.
-- `BUILTINS` es un diccionario de `Signature` con cadenas.
-- `Symbol.type` es `str | None`; `CheckedProgram.types` es `dict[int, str]`.
-- `RefinedType` guarda `base: str`, `root: str` y `chain`.
-- `binary_result(operator, left: str, right: str)` decide la aritmética comparando cadenas.
-- `parser._type` exige un único `IDENT`; el lexer no tiene tokens `[` ni `]`.
-- No hay `types.py`: la lógica de tipos vive en `checker.py`.
+- Types are strings: `INT = "Int"`, `FLOAT`, `BOOL`, `TEXT`, `VOID`; `VALUE_TYPES = (INT, FLOAT, BOOL, TEXT)` in `nexora/src/nexora/values.py`.
+- `TypeRef` only stores `name: str` in `ast_nodes.py`; it has no type arguments.
+- `TypeDecl` only represents refined types: `name`, `base: TypeRef`, `condition: Expr`, `message`.
+- `Signature` uses `params: tuple[tuple[str, str | None], ...]` and `return_type: str | None` in `checker.py`.
+- `BUILTINS` is a dictionary of `Signature` with strings.
+- `Symbol.type` is `str | None`; `CheckedProgram.types` is `dict[int, str]`.
+- `RefinedType` stores `base: str`, `root: str` and `chain`.
+- `binary_result(operator, left: str, right: str)` decides arithmetic by comparing strings.
+- `parser._type` requires a single `IDENT`; the lexer has no `[` or `]` tokens.
+- There is no `types.py`: type logic lives in `checker.py`.
 
-**Consecuencia observada [I]:** `List[T]`, `Option[T]`, `Result[T,E]`, los registros y los enums no se pueden representar sin cambiar las interfaces anteriores. La propia `architecture.md` reconoce que los tipos compuestos exigirán una representación propia y que es el cambio más profundo del comprobador.
+**Observed consequence [I]:** `List[T]`, `Option[T]`, `Result[T,E]`, records and enums cannot be represented without changing the previous interfaces. The architecture document itself recognizes that compound types will require their own representation and that this is the deepest change in the checker.
 
-### B.2. Propuesta **[P]**
+### B.2. Proposal **[P]**
 
-#### B.2.1. D01 — Representación interna del modelo de tipos **[P]**
+#### B.2.1. D01 — Internal representation of the type model **[P]**
 
-> **Estado: propuesta pendiente de aprobación.** No aceptada. Esta subsección concreta D01 y no reabre D02 (nominal frente a estructural), D03 (alcance de genéricos e inferencia) ni D04 (refinamientos): fija únicamente cómo se representan, identifican, comparan, presentan y migran los tipos. Los nombres `Type`, `TypeExpr`, `type_repr`, `types.py`, etc. son nombres provisionales de diseño; **no existen hoy en el código** y no deben presentarse como implementados.
+> **Status: proposal pending approval.** Not accepted. This subsection defines D01 and does not reopen D02 (nominal vs. structural), D03 (generic scope and inference) or D04 (refinements): it only fixes how types are represented, identified, compared, presented and migrated. The names `Type`, `TypeExpr`, `type_repr`, `types.py`, etc. are provisional design names; **they do not exist today in the code** and must not be presented as implemented.
 
-**D01.1. Representación interna frente a presentación textual**
+**D01.1. Internal representation vs. textual presentation**
 
-La fuente de verdad debe ser una estructura de datos, no una cadena. La cadena se conserva como una de las formas de presentación, nunca como la representación sobre la que se decide la semántica.
+The source of truth must be a data structure, not a string. The string remains as one presentation form, never as the representation on which semantics are decided.
 
-Responsabilidades del modelo de tipos:
+Responsibilities of the type model:
 
-- construir un tipo a partir del `TypeRef` del AST y de las declaraciones del programa;
-- comprobar aridad y nombres de constructores;
-- comparar tipos por identidad y equivalencia;
-- sustituir variables de tipo por argumentos;
-- unificar cuando la inferencia lo necesite;
-- calcular el tipo raíz de un refinamiento;
-- recorrer el tipo para diagnósticos, herramientas y serialización;
-- producir una representación textual canónica y una representación estructurada.
+- build a type from the AST `TypeRef` and declarations
+- compare types and decide assignability
+- represent composed and refined types
+- preserve a canonical textual form for JSON, diagnostics and tooling
+- support migration while preserving compatibility
 
-Responsabilidades de la presentación textual:
+The representation must be explicit, structural and versionable. The textual form is a product of the model, not its definition.
 
-- mostrar tipos legibles para personas (`List[Option[Int]]`, `Result[Text, Error]`);
-- mantener el campo `type` actual de JSON mientras sea necesario para compatibilidad;
-- no usarse para decidir igualdad, asignabilidad, aridad ni diagnóstico.
+**D01.2. Requirements for the model**
 
-Ejemplos conceptuales:
+- type identity, equality and order must be explicit; they are not incidental properties of strings;
+- type arguments must be first-class values in the model; e.g. `List[Int]`, `Option[Text]`;
+- refined forms must be represented as a layer around a base type and a predicate;
+- function types may be represented in the model before they become exposed as runtime values;
+- string serialization must be canonical and deterministic for stable comparisons and diagnostics.
 
-- `List[Option[Int]]` se representa como un constructor de lista cuyo argumento es un constructor opcional cuyo argumento es `Int`. La cadena se genera al mostrar; la comparación no recorre ni analiza la cadena.
-- `Result[Text, Error]` se representa como un constructor de resultado con dos argumentos posicionales. La aridad se comprueba con la declaración del constructor, no contando comas.
-- Dos tipos escritos con espacios distintos (`List[ Int ]` y `List[Int]`) deben ser el mismo tipo si el parser los acepta; la representación textual no participa en esa decisión.
+**D01.3. Equality and identity**
 
-La verificación de tipos deja de depender de `left != right` o de comparaciones equivalentes sobre cadenas. Esa dependencia existe hoy en el código y es la razón principal de D01.
+The model should separate:
 
-**D01.2. Tipos mínimos**
+- structural equality: same shape and same arguments;
+- nominal identity: same declaration or same qualified name;
+- canonical rendering: deterministic text for display and JSON.
 
-| Categoría | Ejemplos | Representación propuesta | Límite inicial |
+Recommendation:
+
+- primitive and built-in types compare structurally when appropriate;
+- declared types use nominal identity with module-qualified names when modules exist;
+- refined types compare by base type + predicate identity, not by text alone;
+- composed types compare by constructor + arguments;
+- function types do not become first-class values without explicit decision.
+
+**D01.4. Canonical rendering and compatibility**
+
+The current `type` field in JSON documents remains the canonical textual representation. It is not removed or redefined.
+
+Additive rule:
+
+- keep `type` as a human-readable and compatibility string;
+- add a structured `type_repr` field when a tool needs to distinguish structure from text;
+- `type_repr` is optional and additive; it may be ignored by older consumers;
+- the exact vocabulary of `kind`, qualified names, arguments and structure is defined later, in coordination with D16 and schema versioning.
+
+**D01.5. Migration plan**
+
+The type model should be introduced in a single module without changing language syntax yet. The textual representation remains the presentation layer until the model is stable.
+
+A safe migration path:
+
+1. create a dedicated type module and representations;
+2. keep the textual string as the compatibility layer;
+3. migrate pure operations first: construction, identity, equivalence, root and display;
+4. migrate the checker and interpreter after the model is stable;
+5. add composed syntax later when the model is proven internally;
+6. extend tooling and schemas at the end with additive `type_repr` fields.
+
+**D01.6. Concrete impact areas**
+
+The current components affected are:
+
+- `values.py`: type constants and `VALUE_TYPES`; the new model must replace their use as the type table;
+- `ast_nodes.py`: `TypeRef` and `TypeDecl`;
+- `parser.py`: `_type` only accepts a single identifier; composed type syntax requires future changes;
+- `checker.py`: `Signature`, `Symbol.type`, `CheckedProgram.types`, `RefinedType`, `binary_result` and assignability checks;
+- `interpreter.py`: runtime value checks, contracts and refined checks;
+- `diagnostics.py`: messages and positions that currently assume strings;
+- `tooling.py` and `schemas.py`: `type` fields, type validation and schema documents;
+- `cli.py`, `mcp_server.py` and the playground;
+- documentation, examples and tests that refer to type strings.
+
+**D01.7. Risk reduction strategy**
+
+A low-risk migration reduces the impact of a large rewrite:
+
+1. introduce the structured model in a single type module, without changing language syntax;
+2. keep textual representation as the compatibility layer and initial value;
+3. migrate the pure model operations first;
+4. adapt the checker and interpreter afterward;
+5. add compound types and `[...]` syntax only after the model is tested internally;
+6. extend tooling and schemas last with additive `type_repr` fields.
+
+**Future tests required (not executed in this task):**
+
+- equality and difference of primitives, refinements, declarations and compounds;
+- nesting (`List[Option[Int]]`) and wrong arity;
+- canonical rendering and format stability;
+- widening of refinements and rejection of the reverse direction without explicit construction;
+- diagnosis with expected/found type and position;
+- compatibility of `type` and validation of `type_repr` against schemas;
+- regression of all existing programs and examples;
+- performance of model operations on representative programs.
+
+**D01.8. Alternatives and costs**
+
+| Alternative | Advantages | Disadvantages | Consequence |
 |---|---|---|---|
-| Primitivos | `Int`, `Float`, `Bool`, `Text`, `Void` | Constructor sin argumentos | `Void` solo como resultado de función |
-| Refinados | `Percent`, `Positive`, `NonEmpty` | Envoltorio nominal con nombre, base y referencia a su condición | No se expanden por defecto; conservan su identidad |
-| Declarados | registros y enums de usuario (propuestos en D02/D05) | Tipo nominal con identidad de declaración y argumentos de tipo | Inicialmente sin genéricos de usuario o con aridad sencilla |
-| Variables de tipo | `T`, `E` en una declaración genérica | Variable con un identificador y un nombre ligado a su declaración | Solo dentro de la declaración que las introduce |
-| Constructores genéricos | `List[T]`, `Option[T]`, `Result[T, E]` | Constructor con aridad fija y argumentos posicionales | `List` aridad 1; `Option` aridad 1; `Result` aridad 2 |
-| Tipo de función | firma de una función | Estructura reservada para la firma, sin valores función | No es un tipo de primera clase en esta fase |
+| Keep strings and parse them when needed | Apparent minimum change | Equality, arity, unification and diagnosis are ad hoc; accumulated debt | Rejected as a foundation |
+| Minimal structured algebra (`Type`/`TypeExpr`) | Correct, extensible, good for tooling | Requires migrating checker and tooling | **Recommended** |
+| Structural model by default | Flexible | Weak identity and risky refactors | Deferred to D02 |
+| Full Hindley-Milner | Fewer annotations | Complexity and difficult messages | Deferred; not an initial requirement |
+| Typeclasses from the start | More expressive generics | Early resolution and complexity | Deferred |
+| Formal verification of refinements | More guarantees | Outside the scope and current model | Not part of D01 |
 
-Reglas mínimas:
+Cost and complexity added by the recommended model:
 
-- No hay `Any`, ni conversiones numéricas implícitas, ni subtipado por anchura.
-- `Void` no es un tipo de valor: no puede ser parámetro ni argumento de un constructor de datos.
-- Un refinado es un tipo distinto de su base, aunque sea asignable a ella en el sentido de ensanchamiento (`widening`).
-- Un tipo declarado es distinto de otro con la misma forma: la identidad no depende de los campos.
-- Los constructores integrados y los declarados comparten la misma forma de representación; no hay un caso especial para `List` más allá de su aridad y de sus operaciones asociadas.
+- a type module and a deep change in `checker.py`;
+- migration of signatures, symbols, expression types and refinements;
+- adaptation of diagnostics, tooling and schemas;
+- risk that the first version is too limited in generics, acceptable if the model permits growth.
 
-**D01.3. Tipos compuestos**
+Open risks:
 
-- Un tipo compuesto es un constructor con una tupla de argumentos, posiblemente anidados.
-- `List[Option[Int]]` se representa como `Apply(List, (Apply(Option, (Int,)),))` en notación conceptual.
-- `Result[Text, Error]` se representa como `Apply(Result, (Text, Error))`.
-- `Option[Result[Int, Error]]`, listas de listas y combinaciones equivalentes se representan por anidamiento directo, sin aplanar ni codificar en una cadena.
-- La aridad se valida contra la declaración del constructor. Un constructor de aridad 1 usado con dos argumentos es un error de tipo, no un error de análisis de cadena.
-- La presentación canónica usa corchetes y comas: `List[Option[Int]]`, `Result[Text, Error]`. La presentación no necesita ser única en el espacio en blanco (el parser normaliza), pero sí estable para una misma estructura.
-- Los futuros registros y enums usan la misma representación, con sus propios constructores de tipo.
+- performance of comparison and substitution in large programs;
+- ergonomics of inference and quality of messages;
+- identity of declared types once modules exist;
+- form and versioning of `type_repr`;
+- equality of function types once they are introduced;
+- possible need for type aliases and their relationship with identity.
 
-**D01.4. Identidad y equivalencia**
+**D01.9. Open questions of D01**
 
-La igualdad de tipos se define estructuralmente sobre la representación interna, con una excepción nominal para los tipos declarados:
+1. **Identity of declared types across files.** Recommendation: module-qualified name; exact form depends on D13. Open.
+2. **`Void` as a type.** Recommendation: only as a function result; not as a value. Open to confirmation.
+3. **Type alias.** Recommendation: an alias resolves to its canonical type and does not create new identity. Open; does not block D01.
+4. **`Function` in the model.** Recommendation: represent the signature internally from the beginning, but do not expose it as a value type until functions are values. Open.
+5. **`type_repr`.** Recommendation: additive, optional and versioned field; name and form are coordinated with D16. Open.
+6. **Equality on type variables.** Recommendation: allow `==`/`!=` only for value types and not for functions. Open to confirmation.
+7. **Scope of composed refinements.** Recommendation: represent them from D01; limit their predicates in D04. Open.
 
-1. **Primitivos:** iguales si y solo si son el mismo primitivo.
-2. **Constructores:** iguales si el constructor es el mismo y sus argumentos son iguales en orden. `List[Int]` y `List[Text]` no son iguales.
-3. **Tipos declarados:** iguales si son la misma declaración, no si tienen los mismos campos. `Persona` y `Empleado` con campos idénticos no son el mismo tipo.
-4. **Refinados:** iguales si son el mismo nombre declarado, incluso si comparten base y condición. `Percent` y `Cantidad` no son intercambiables.
-5. **Variables de tipo:** iguales si están ligadas a la misma variable; una variable sin ligar no es igual a un tipo concreto.
-6. **Funciones:** iguales por parámetros y resultado cuando ese tipo se incorpore; aplazado hasta que haya valores función.
+None of these questions prevents approving the main direction of D01; they are resolved during implementation or in decisions D02–D04 and D13/D16.
 
-Reglas de compatibilidad iniciales:
+#### B.2.2. Compound types and generic constructors
 
-- **Invariancia en argumentos genéricos:** `List[Int]` no es asignable a `List[Text]`, y `Option[Int]` no es asignable a `Option[Text]`. La covarianza se aplaza.
-- **Ensanchamiento de refinados:** un valor de `Percent` es aceptable donde se espera `Int`; lo contrario exige construir el refinado (`Percent(x)`) y comprobar la condición en ejecución.
-- **Sin subtipado estructural:** dos registros con la misma forma no son compatibles si son declaraciones distintas.
-- **Identidad de declaración:** en un archivo, el nombre de la declaración; cuando existan módulos, una identidad que incluya el módulo o un identificador estable. La forma exacta queda abierta y depende de D13.
-- No se comparan tipos por su representación textual, por su orden de declaración ni por la posición en el archivo.
+- `List[T]`: built-in constructor, arity 1.
+- `Option[T]`: prelude constructor, arity 1.
+- `Result[T,E]`: prelude constructor, arity 2.
+- User-defined records and enums have arity equal to the number of type parameters declared; initially they may be non-generic.
+- Invariance by default on arguments: `List[Int]` is not assignable to `List[Text]`. Covariance is deferred until there is an explicit rule and, preferably, guaranteed immutability.
+- No `Any`, no width subtyping and no implicit conversions.
 
-**D01.5. Genéricos e inferencia**
+#### B.2.3. Type variables and initial limits of genericity
 
-D01 solo fija cómo se representan las variables de tipo y cómo se instancian. El alcance funcional se decide en D03; D01 no lo aprueba.
+- Explicit declaration: `fn f[T](x: T) -> T`, `type Box[T] = { value: T }`.
+- No typeclasses in the first version.
+- In the body of a generic function, a type variable `T` may only:
+  - be passed to another function expecting `T`;
+  - be returned;
+  - be stored in a structure that accepts `T`;
+  - be compared with `==`/`!=` only if structural equality is decided to be total for all value types. Recommendation: allow it for value types, not functions.
+- Arithmetic on `T`, field access on `T`, ordering of `T` and any operation that requires a restriction are not permitted. This is a deliberate and documentable limitation.
+- No higher-rank types, no Hindley-Milner generalization and no polymorphic recursion without annotation.
 
-Recomendación inicial:
+#### B.2.4. Nominal vs. structural types
 
-- Genéricos **paramétricos de primer orden**, con declaración explícita de variables (`fn f[T](x: T) -> T`, `type Caja[T] = ...`).
-- Sin typeclasses.
-- Sin generalización automática.
-- Sin tipos de rango superior, sin familias de tipos y sin recursión polimórfica sin anotación.
-- Inferencia local para `let`/`var` a partir del inicializador, como hoy.
-- Unificación de primer orden en llamadas para inferir argumentos de tipo de builtins y funciones genéricas.
-- `let xs = []` exige anotación (`let xs: List[Int] = []`): el modelo no inventa el tipo del elemento.
-- Si un argumento de tipo queda ambiguo, se pide una anotación en lugar de elegir por defecto.
-- En el cuerpo de una función genérica, una variable de tipo solo se puede pasar, devolver o almacenar en una estructura que la acepte. No se permite aritmética, acceso a campos, ordenación ni ninguna operación que requiera una restricción. La comparación por igualdad se permite solo para tipos de valor, no para funciones.
+For records and enums, the recommendation is **nominal**:
 
-Justificación de no empezar por Hindley-Milner ni por typeclasses:
+- type identity is its declaration (module + name), not the shape of its fields;
+- two records with the same fields are not interchangeable;
+- advantages: stable contracts, clear messages, controlled evolution, better base for agents and impact detection;
+- disadvantages: no width subtyping; conversion between equivalent shapes must be explicit.
 
-- El caso de uso inmediato —listas, `Option`, `Result` y funciones genéricas simples— se cubre con unificación de primer orden y anotaciones explícitas.
-- Hindley-Milner añade generalización, ambigüedad y mensajes difíciles sin resolver ningún caso de uso aprobado.
-- Las typeclasses exigen un mecanismo de resolución y restricciones que hoy no hacen falta; pueden añadirse después sin invalidar la representación interna.
-- La prioridad de NEXORA es la verificabilidad de requisitos, no la expresividad máxima del sistema de tipos.
+This is preferred over structural typing because NEXORA is about preserving contracts and honest evidence; weak identities complicate analysis and AI tooling.
 
-Aplazado de forma explícita: typeclasses, tipos de rango superior, generalización automática, covarianza/contravarianza inferida, row types, tipos dependientes y verificación formal de genéricos.
+**D02.1. Synthetic representation and compatibility**
 
-**D01.6. Refinamientos y contratos**
+The type model must support:
 
-D01 representa los refinamientos; su semántica completa se decide en D04 y en las decisiones 0004/0007, que no se reabren.
+- canonical names for declared types;
+- qualified names for modules;
+- field and constructor names;
+- type arguments in record/enum declarations;
+- `void` as a special result type and not as a value;
+- a `type_repr` representation that can be serialized without losing semantic structure.
 
-- Un refinado se representa como un tipo nominal cuyo nombre, base y condición son datos del modelo. La base puede ser un primitivo, otro refinado o, en el futuro, un tipo compuesto.
-- La cadena de refinamientos se conserva para explicar de qué tipo raíz se parte y qué condiciones debe cumplir un valor.
-- Las constantes se comprueban estáticamente como hoy; los valores calculados entran con la construcción explícita del refinado y se comprueban al ejecutar (`E4003`). D01 no cambia esa garantía.
-- Los contratos `requires`/`ensures` siguen siendo comprobaciones en ejecución. D01 no insinúa que un predicado refinado quede demostrado automáticamente ni que el checker sea un demostrador.
-- Un refinado es asignable a su base (ensanchamiento). La dirección contraria requiere construir el refinado; no hay coerción implícita de `Int` a `Percent`.
-- Cuando los refinados se apliquen a listas o registros, el modelo debe poder representar la base compuesta sin convertir el predicado en una cadena.
-- La exhaustividad y los diagnósticos sobre refinados siguen siendo conservadores: si el modelo no puede probar una propiedad, pide un caso general o deja la comprobación para ejecución.
+**D02.2. Relationship with refining**
 
-**D01.7. Diagnósticos**
+A refined type is not a new nominal type. It is a refinement of an existing type with a predicate, a label and a source span. It remains valid if the base type is valid. This still leaves open how strong the predicate language is for compound types, but it should remain a layer and not a different identity.
 
-Los diagnósticos de tipos deben construirse a partir de los valores del modelo, no analizando cadenas.
+**D02.3. Allowed and deferred decisions**
 
-- Un diagnóstico de incompatibilidad guarda al menos: tipo esperado, tipo encontrado, posición de la expresión y, cuando exista, posición de la declaración o del parámetro relevante.
-- La explicación señala el primer punto de divergencia: por ejemplo, “se esperaba `List[Option[Int]]` y se encontró `List[Int]`; el argumento de la lista no coincide”.
-- Los códigos son estables y específicos: tipo desconocido, aridad incorrecta, argumento incompatible, tipo ambiguo, campo duplicado/desconocido/faltante, patrón inválido, etc. La asignación exacta de códigos se hace al implementar, no en este ADR.
-- Los mensajes no dependen del formato textual ni del orden de las declaraciones. La misma estructura produce el mismo mensaje salvo posición.
-- Se pueden añadir notas y posiciones relacionadas (“el tipo se declaró aquí”, “el parámetro se declara aquí”) cuando aporten.
-- Los diagnósticos deben poder serializarse con el tipo estructurado (o una forma estable de él) para que una herramienta no tenga que volver a interpretar la cadena.
+- allowed in D01: type algebra, canonical names, additive `type_repr`, nominal identity for user types, type parameters, no implicit conversions;
+- deferred: methods, traits, `Any`, structural subtyping, open records, polymorphic recursion, full higher-rank types.
 
-**D01.8. Interfaces públicas y versionado**
+**D02.4. Evidence pending**
 
-Compatibilidad con lo existente:
+- no implementation yet;
+- no migration test of a project with records and enums;
+- no checked ergonomics for user-defined nominal types;
+- no final decision on `type_repr` vocabulary.
 
-- El campo `type` de los documentos JSON actuales sigue siendo la representación textual canónica. No se elimina ni cambia de significado.
-- `Signature.describe()` y otras formas legibles pueden seguir existiendo para humanos.
-- Se propone añadir un campo estructurado, por ejemplo `type_repr`, junto al campo `type` cuando una herramienta necesite distinguir estructura y no solo texto.
-- `type_repr` debe ser aditivo: un consumidor antiguo puede ignorarlo. No se convierte en obligatorio ni sustituye a `type` en la misma versión.
-- Un cambio de versión de esquema es necesario si se elimina o renombra un campo, si cambia su significado, si `type_repr` pasa a ser obligatorio o si su forma deja de ser compatible hacia atrás. Añadir un campo opcional no lo exige según la regla de compatibilidad vigente.
-- La forma exacta de `type_repr` (vocabulario de `kind`, representación de nombres cualificados, etc.) se coordina con D16 y con el versionado de esquemas. Hasta entonces, D01 solo fija que debe ser estructurado, estable y aditivo.
-- No se modifican ahora los esquemas, los documentos ni las herramientas; este ADR solo propone la dirección.
+#### B.2.5. Records and enums in the planned model
 
-**D01.9. Migración**
+- Records: `type Person = { name: Text, age: Int }`.
+- Enums: `enum Result[T, E] { Ok(T), Err(E) }`.
+- Constructors become ordinary values in the type system and comparison can use nominal identity.
+- Pattern matching should work on constructors and record fields.
+- No implicit widening or conversion between user-defined records and same-shape values.
 
-Componentes actuales afectados:
+**Impact on diagnostics**
 
-- `values.py`: constantes de tipos y `VALUE_TYPES`; el modelo nuevo debe sustituir su uso como tabla de tipos.
-- `ast_nodes.py`: `TypeRef` (hoy solo `name`) y `TypeDecl` (hoy solo refinado).
-- `parser.py`: `_type` acepta un único identificador; la sintaxis de tipos compuestos requiere cambios posteriores.
-- `checker.py`: `Signature`, `Symbol.type`, `CheckedProgram.types`, `RefinedType`, `binary_result` y las comprobaciones de asignabilidad.
-- `interpreter.py`: comprobación de valores, contratos y refinados en ejecución.
-- `diagnostics.py`: mensajes y posiciones que hoy asumen cadenas.
-- `tooling.py` y `schemas.py`: campos `type`, entradas de tipos, validación y documentos.
-- `cli.py`, `mcp_server.py` y el playground, que consumen esas formas.
-- Documentación, ejemplos y pruebas que citan cadenas de tipo.
+- expected type and found type will be expressed using the new model;
+- errors about missing fields or wrong constructors refer to the nominal declaration;
+- JSON output should expose both `type` and `type_repr` so tools can compare structure without losing human readability.
 
-Estrategia para reducir el riesgo de una reescritura masiva:
+### B.3. Alternatives
 
-1. Introducir el modelo estructurado en un único módulo de tipos, sin cambiar todavía la sintaxis del lenguaje.
-2. Mantener la representación textual como capa de presentación y como valor inicial de compatibilidad.
-3. Migrar primero las operaciones puras del modelo: construcción, identidad, equivalencia, raíz y presentación.
-4. Adaptar después el checker y el intérprete, sustituyendo comparaciones de cadenas por las operaciones del modelo.
-5. Añadir los tipos compuestos y la sintaxis `[...]` cuando el modelo ya esté probado internamente.
-6. Extender las herramientas y los esquemas al final, con `type_repr` aditivo.
-
-Pruebas futuras necesarias (no ejecutadas en este encargo):
-
-- igualdad y diferencia de primitivos, refinados, declarados y compuestos;
-- anidamiento (`List[Option[Int]]`) y aridad incorrecta;
-- presentación canónica y estabilidad del formato;
-- ensanchamiento de refinados y rechazo de la dirección contraria sin construcción explícita;
-- diagnóstico con tipo esperado/encontrado y posición;
-- compatibilidad de `type` y validación de `type_repr` contra los esquemas;
-- regresión de todos los programas y ejemplos existentes;
-- rendimiento de las operaciones del modelo en programas representativos.
-
-**D01.10. Alternativas y costes**
-
-| Alternativa | Ventajas | Inconvenientes | Consecuencia |
+| Alternative | Advantages | Disadvantages | Consequence |
 |---|---|---|---|
-| Mantener cadenas y analizarlas cuando haga falta | Cambio aparente mínimo | Igualdad, aridad, unificación y diagnóstico ad hoc; deuda creciente | Rechazada como base |
-| Álgebra estructurada mínima (`Type`/`TypeExpr`) | Correcta, extensible, buena para herramientas | Requiere migrar checker y tooling | **Recomendada** |
-| Modelo estructural por defecto | Flexible | Identidad débil y refactors peligrosos | Aplazada a D02 |
-| Hindley-Milner completo | Menos anotaciones | Complejidad y mensajes difíciles | Aplazada; no es requisito inicial |
-| Typeclasses desde el inicio | Genéricos más expresivos | Resolución y complejidad prematuras | Aplazadas |
-| Verificación formal de refinados | Más garantías | Fuera del alcance y del modelo actual | No forma parte de D01 |
+| Type algebra with nominal records | Clear, stable, good for tooling | Requires migration | **Recommended** |
+| Structural records by default | Less ceremony | Weaker contracts, more aliasing confusion | Deferred |
+| Simple strings + ad hoc validation | Fast start | Deep structural debt | Rejected |
+| Typeclasses from the beginning | Weaker restrictions on genericity | Complexity and semantics drift | Deferred |
 
-Coste y complejidad que añade el modelo recomendado:
+### B.4. Consequences
 
-- un módulo de tipos y un cambio profundo en `checker.py`;
-- migración de firmas, símbolos, tipos de expresiones y refinados;
-- adaptación de diagnósticos, tooling y esquemas;
-- riesgo de que la primera versión sea demasiado limitada en genéricos, aceptable si el modelo permite crecer.
+**Positive:** better typing for compound data and tooling; clearer diagnostics; strong base for modules and requirements.
 
-Riesgos abiertos:
+**Negative:** deeper migration of checker and schemas; more AST and parser work; more decisions needed for genericity and refinements.
 
-- rendimiento de la comparación y de la sustitución en programas grandes;
-- ergonomía de la inferencia y calidad de los mensajes;
-- identidad de tipos declarados cuando existan módulos;
-- forma y versionado de `type_repr`;
-- igualdad de tipos de función cuando se incorporen;
-- posible necesidad de alias de tipo y su relación con la identidad.
+### B.5. Evidence pending **[?]**
 
-**D01.11. Cuestiones abiertas de D01**
-
-1. **Identidad de tipos declarados entre archivos.** Recomendación: nombre cualificado por módulo; la forma exacta depende de D13. Abierta.
-2. **`Void` como tipo.** Recomendación: solo como resultado de función; no como valor. Abierta a confirmación.
-3. **Alias de tipo.** Recomendación: un alias se resuelve a su tipo canónico y no crea identidad nueva. Abierta; no bloquea D01.
-4. **`Function` en el modelo.** Recomendación: representar la firma internamente desde el principio, pero no exponerla como tipo de valor hasta que existan funciones como valores. Abierta.
-5. **`type_repr`.** Recomendación: campo aditivo, opcional y versionado; nombre y forma se coordinan con D16. Abierta.
-6. **Igualdad sobre variables de tipo.** Recomendación: permitir `==`/`!=` solo para tipos de valor y no para funciones. Abierta a confirmación.
-7. **Alcance de los refinados compuestos.** Recomendación: representarlos desde D01; limitar sus predicados en D04. Abierta.
-
-Ninguna de estas cuestiones impide aprobar la dirección principal de D01; se resuelven al implementar cada fase o en las decisiones D02–D04 y D13/D16.
-
-#### B.2.2. Tipos compuestos y constructores genéricos
-
-- `List[T]`: constructor integrado, aridad 1.
-- `Option[T]`: constructor de la prelude, aridad 1.
-- `Result[T,E]`: constructor de la prelude, aridad 2.
-- Los registros y enums definidos por el usuario tienen aridad igual al número de parámetros de tipo declarados; inicialmente pueden ser no genéricos.
-- Invariancia por defecto en los argumentos: `List[Int]` no es asignable a `List[Text]`. La covarianza se aplaza hasta que exista una regla explícita y, preferiblemente, inmutabilidad garantizada.
-- Sin `Any`, sin subtipado por anchura y sin conversiones implícitas.
-
-#### B.2.3. Variables de tipo y límites iniciales de la genericidad
-
-- Declaración explícita: `fn f[T](x: T) -> T`, `type Caja[T] = { valor: T }`.
-- Sin typeclasses en la primera versión.
-- En el cuerpo de una función genérica, una variable de tipo `T` solo puede:
-  - pasarse a otra función que espere `T`;
-  - devolverse;
-  - almacenarse en una estructura que acepte `T`;
-  - compararse con `==`/`!=` solo si se decide que la igualdad estructural es total para todos los tipos de valor. Recomendación: permitirla para tipos de valor, no para funciones.
-- No se permite aritmética sobre `T`, acceso a campos de `T`, ordenación de `T` ni ninguna operación que exija una restricción. Es una limitación deliberada y documentable.
-- Sin tipos de rango superior, sin generalización Hindley-Milner y sin recursión polimórfica sin anotación.
-
-#### B.2.4. Tipos nominales frente a estructurales
-
-Para registros y enums, la recomendación es **nominal**:
-
-- La identidad del tipo es su declaración (módulo + nombre), no la forma de sus campos.
-- Dos registros con los mismos campos no son intercambiables.
-- Ventajas: contratos estables, mensajes claros, evolución controlada, mejor base para agentes y para detección de impacto.
-- Inconvenientes: no hay subtipado por anchura; una conversión entre formas equivalentes debe ser explícita.
-- Los tipos estructurales/row types pueden añadirse después como construcción explícita, no como defecto.
-
-#### B.2.5. Inferencia y límites
-
-- Inferencia local para `let`/`var` a partir del inicializador, como hoy.
-- Unificación de primer orden en llamadas para inferir argumentos de tipo.
-- Sin generalización automática, sin tipos de rango superior, sin inferencia a través de módulos.
-- `let xs = []` exige anotación (`let xs: List[Int] = []`); no se inventa el tipo del elemento.
-- Si un argumento de tipo queda ambiguo, error dedicado con sugerencia de anotación.
-- Los builtins genéricos se declaran con variables de tipo y se instancian en la llamada.
-- La inferencia no debe impedir diagnósticos claros: si no puede explicar por qué eligió un tipo, debe pedir una anotación.
-
-#### B.2.6. Tipos refinados y garantías verificables
-
-- Un tipo refinado puede refinar cualquier tipo de valor, no solo builtins: `type NonEmpty = List[Int] where List.length(value) > 0`.
-- La condición debe ser `Bool`, pura y total. Inicialmente:
-  - puede usar operadores y funciones builtin puras;
-  - puede acceder a campos de registros y a constructores de enums si la operación es total;
-  - **no** puede llamar a funciones del programa, salvo que en el futuro exista un análisis de pureza/terminación.
-- Las constantes se comprueban estáticamente; los valores calculados entran con `T(x)`, comprobado al ejecutar (`E4003`).
-- Se amplía la comprobación de constantes a literales compuestos, con el mismo presupuesto de trabajo (`MAX_REFINEMENT_STEPS`, `E2019`).
-- Los contratos pueden usar valores refinados como su tipo base (widening). `ensures` puede devolver un tipo refinado; la función debe devolver una constante válida o `T(x)`.
-- No se promete que una condición refinada sea decidible en general. El checker evalúa lo que puede y reporta el límite.
-- La exhaustividad sobre tipos refinados es conservadora: se exige comodín salvo prueba; no se inventa una demostración.
-
-#### B.2.7. Diagnósticos y representación
-
-- Códigos estables y específicos: tipo desconocido, aridad incorrecta, argumento incompatible, tipo ambiguo, campo duplicado/desconocido/faltante, patrón inválido, etc.
-- `display` canónico: `List[Int]`, `Result[Int, Text]`, `{nombre: Text, edad: Int}`, `Option[Int]`.
-- JSON: mantener `type` como cadena y añadir `type_repr` estructurado; no eliminar campos existentes.
-- Diagnósticos con posición, etiqueta concreta, notas y sugerencia solo si está fundamentada.
-- Para herramientas, añadir `related` cuando aporte (“declarado aquí”, “tipo esperado aquí”).
-
-### B.3. Alternativas
-
-| Alternativa | Ventajas | Inconvenientes | Consecuencia |
-|---|---|---|---|
-| Codificar tipos compuestos como cadenas (`"List[Int]"`) | Cambio aparente mínimo | Igualdad, sustitución, unificación y errores ad hoc; deuda alta | Rechazada como base arquitectónica |
-| Álgebra de tipos con constructores y variables | Correcta, extensible, buena para herramientas | Reescritura profunda | **Recomendada** |
-| Tipado estructural por defecto | Flexible | Identidad débil, contratos frágiles, refactors peligrosos | Rechazada como defecto; posible extensión |
-| `Option`/`Result` como casos especiales | Menos trabajo inicial | Inconsistencia y difícil extensión | Rechazada |
-| Typeclasses desde el inicio | Genéricos más expresivos | Retrasa el núcleo y añade complejidad | Aplazada |
-| Inferencia Hindley-Milner completa | Menos anotaciones | Complejidad, mensajes difíciles, límites poco claros | Aplazada |
-
-### B.4. Consecuencias
-
-**Positivas:** tipos compuestos expresables; `Option`/`Result` consistentes; mejores diagnósticos; herramientas con tipos estructurados; base para evidencia e impacto.
-
-**Negativas:** reescritura de checker, parser, AST, intérprete, tooling y esquemas; más complejidad en inferencia y errores; coste de migración alto; riesgo de que la primera versión de genéricos sea demasiado limitada.
-
-### B.5. Evidencia pendiente **[?]**
-
-- No hay prototipo del álgebra de tipos ni medición del coste de migración.
-- No se ha validado la ergonomía de la inferencia ni de los mensajes de error.
-- No se ha medido el impacto en rendimiento del intérprete.
-- No se ha probado la compatibilidad de `type_repr` con consumidores existentes.
-- No se ha decidido si la igualdad estructural debe ser total para todos los tipos de valor.
+- no implementation of user-defined records/enums;
+- no proof that nominal typing preserves the intended use of contracts;
+- no benchmark of equality and canonical rendering in large programs;
+- no evaluation of the cost of generic constructors in the checker.
 
 ---
 
-## C. Enumeraciones, patrones y exhaustividad
+## C. Patterns, exhaustiveness and sum types
 
-### C.1. Estado actual **[V]**
+### C.1. State of the art **[V]**
 
-- No hay enums, uniones etiquetadas, `match` ni patrones.
-- `enum`, `match`, `for`, `import`, `pub`, `in`, `break` y `continue` están reservadas; `for`/`enum`/`match` producen `E1103` si se usan.
-- `record` **no** está reservada; introducirla como palabra clave rompería nombres existentes.
-- `Option`/`Result` no existen; `limitations.md` lo declara y `language-spec.md` los sitúa entre las funcionalidades previstas.
-- Los tipos refinados actuales solo refinan builtins; no hay variantes.
+- There are no `match` expressions, enums or user-defined records yet.
+- `if` is present and can be used for branching.
+- There are type refinements, but not a pattern language.
+- No `break`, `continue` or `for` loops exist.
+- The language is currently built around `while`, `requires` and `ensures`.
 
-### C.2. Propuesta **[P]**
+### C.2. Proposed design **[P]**
 
-#### C.2.1. Enums y uniones etiquetadas
+#### C.2.1. Enums and constructors
 
-Usar la declaración de tipo existente, sin introducir `record` como palabra clave global:
+- `enum` creates a nominal sum type with named constructors.
+- Constructor names are in the same namespace as functions and types when needed.
+- Constructor arity is explicit; `Some(T)` and `None` are ordinary enum variants.
+- Example: `enum Option[T] { Some(T), None }`.
+- Use `match` to discriminate over variants.
+
+#### C.2.2. Patterns
+
+Initial pattern grammar:
+
+- literal;
+- wildcard `_`;
+- variable;
+- constructor (`Some(x)`, `None`, `Ok(v)`, `Err(e)`);
+- record (`Person { name: n, age: a }`);
+- list (`[]`, `[x, ...rest]`, `[a, b]`);
+- blocks and expressions in pattern positions are deferred.
+
+`match` expression:
 
 ```text
-type Option[T] = enum {
-    None,
-    Some(valor: T),
-}
-
-type Result[T, E] = enum {
-    Ok(valor: T),
-    Err(error: E),
+match value {
+    Some(x) => ...
+    None => ...
 }
 ```
 
-- `enum` se usa como palabra contextual dentro de `type`; ya está reservada.
-- Constructores con nombre, posibles nulos (`None`) y campos.
-- Constructores namespaced por el tipo; resolución sin cualificar si no hay ambigüedad, o cualificada (`Option.Some(x)`) si la hay.
-- Sin métodos ni `self` inicialmente; las operaciones son funciones.
-- Igualdad estructural; orden no definido.
-- `to_text`/`print` con representación canónica documentada.
+Rules:
 
-#### C.2.2. Pattern matching
+- `match` is an expression, not just a statement;
+- each arm is a block or single expression;
+- the expression must return a single result type overall;
+- patterns are linear and not repeated;
+- only one binding per variable path, unless the language later allows aliases;
+- constructors, records and lists are patterns, not values;
+- the first version should avoid guard clauses; guards are deferred.
 
-`match` como expresión, y por tanto también en posición de sentencia:
+#### C.2.3. Exhaustiveness and uncovered cases
 
-```text
-let valor = match resultado {
-    Ok(v) => v,
-    Err(e) => 0,
-}
-```
-
-- Brazos con expresión o bloque; `return` permitido dentro de un bloque.
-- Patrones iniciales:
-  - literal;
-  - comodín `_`;
-  - variable;
-  - constructor (`Some(x)`, `None`, `Ok(v)`, `Err(e)`);
-  - registro (`Persona { nombre: n, edad: e }`);
-  - lista (`[]`, `[x, ...resto]`, `[a, b]`).
-- Se aplazan: guardas (`if` en el patrón), or-patterns (`p | q`), patrones de rango, patrones de mapas.
-- `_` debe tratarse como patrón, no como variable ligada; si hoy se permite como identificador, hay que decidir si se reserva o se restringe contextualmente.
-
-#### C.2.3. Exhaustividad y casos no cubiertos
-
-- `match` como expresión exige exhaustividad.
-- Algoritmo de utilidad (estilo Maranget) sobre constructores:
+- `match` as an expression requires exhaustiveness.
+- Utility algorithm (Maranget style) over constructors:
   - `Bool`: `true`/`false`;
-  - enums: todos los constructores;
-  - registros: todos los campos;
-  - listas: `[]` y `cons`;
-  - `Int`/`Text`: exigen comodín;
-  - refinados: exigen comodín salvo prueba;
-  - anidados: se desciende.
-- Diagnóstico con **testigo**: “falta `None`”, “falta `Err(_)`”, “falta `[]`”.
-- Patrón inalcanzable o redundante: decidir entre error y warning. Recomendación inicial: error, porque hoy no existe infraestructura de warnings; revisar cuando exista.
-- Si el checker acepta un `match`, el intérprete no debe encontrar un caso sin gestionar; si lo encuentra, es un error interno.
+  - enums: all constructors;
+  - records: all fields;
+  - lists: `[]` and `cons`;
+  - `Int`/`Text`: require wildcard;
+  - refinements: require wildcard unless proven;
+  - nested cases: recurse.
+- Diagnosis with **witness**: “missing `None`”, “missing `Err(_)`”, “missing `[]`”.
+- Pattern unreachable or redundant: decide between error and warning. Initial recommendation: error, because warnings infrastructure does not exist yet; revisit once available.
+- If the checker accepts a `match`, the interpreter must not encounter an unmanaged case; if it does, it is an internal error.
 
-#### C.2.4. `Option` y `Result`
+#### C.2.4. `Option` and `Result`
 
-Deben construirse sobre enums y `match`, no como excepciones del lenguaje:
+They must be built on enums and `match`, not as exceptions of the language:
 
-- `Option[T]` y `Result[T,E]` son enums ordinarios de la prelude.
-- No hay `unwrap` implícito ni excepciones.
-- `?` para propagación de errores se aplaza; primero se usa `match`.
-- Las funciones parciales (`List.get`, `List.head`) declaran `requires` y siguen el modelo actual de contratos; cuando `Option` exista, se añaden variantes totales (`List.get_option`), sin cambiar la semántica de las parciales.
-- Los contratos pueden usar `Option`/`Result` como tipos; `ensures` puede devolver `Ok(...)`/`Err(...)`.
+- `Option[T]` and `Result[T,E]` are ordinary enums in the prelude.
+- There is no implicit `unwrap` and no exceptions.
+- `?` for error propagation is deferred; first use `match`.
+- Partial functions (`List.get`, `List.head`) declare `requires` and follow the current contract model; when `Option` exists, total variants may be added (`List.get_option`) without changing the semantics of partial functions.
+- Contracts may use `Option`/`Result` as types; `ensures` may return `Ok(...)`/`Err(...)`.
 
-### C.3. Alternativas
+### C.3. Alternatives
 
-| Alternativa | Ventajas | Inconvenientes | Consecuencia |
+| Alternative | Advantages | Disadvantages | Consequence |
 |---|---|---|---|
-| Enums + `match` + exhaustividad | General, consistente, base para `Option`/`Result` | Más trabajo inicial | **Recomendada** |
-| `Option`/`Result` especiales | Menos trabajo inicial | Inconsistencia, difícil de extender | Rechazada |
-| `match` como sentencia solamente | Más cerca del `if` actual | Peor ergonomía para `Option`/`Result` | Aplazada; se prefiere expresión |
-| Exhaustividad opcional | Menos errores al principio | Deja casos sin gestionar | Rechazada para `match` expresión |
-| Guardas/or-patterns desde el inicio | Más expresivo | Complica exhaustividad y alcanzabilidad | Aplazadas |
+| Enums + `match` + exhaustiveness | General, consistent, base for `Option`/`Result` | More initial work | **Recommended** |
+| Special `Option`/`Result` | Less initial work | Inconsistent and hard to extend | Rejected |
+| `match` as a statement only | Closer to current `if` | Worse ergonomics for `Option`/`Result` | Deferred; expression preferred |
+| Optional exhaustiveness | Fewer initial errors | Leaves cases unmanaged | Rejected for `match` expression |
+| Guards/or-patterns from the start | More expressive | Complicates exhaustiveness and reachability | Deferred |
 
-### C.4. Consecuencias
+### C.4. Consequences
 
-**Positivas:** `Option`/`Result` sin casos especiales; código más seguro; diagnósticos de casos faltantes; base para evidencia de cobertura de variantes.
+**Positive:** `Option`/`Result` without special cases; safer code; diagnostics for missing cases; strong base for evidence of variant coverage.
 
-**Negativas:** complejidad del algoritmo de exhaustividad; necesidad de nuevos nodos AST, tokens y diagnósticos; riesgo de mensajes difíciles; `match` expresión exige decidir la relación con `if` sentencia.
+**Negative:** complexity of the exhaustiveness algorithm; need for new AST nodes, tokens and diagnostics; risk of difficult messages; `match` as expression requires deciding its relationship with `if` statements.
 
-### C.5. Evidencia pendiente **[?]**
+### C.5. Evidence pending **[?]**
 
-- No hay implementación ni prueba del algoritmo de exhaustividad.
-- No se ha validado la ergonomía de `match` expresión frente a `match` sentencia.
-- No se ha decidido el tratamiento de `_` si hoy puede ser identificador.
-- No se ha medido el coste de los patrones anidados.
-- No se ha probado la calidad de los testigos de no exhaustividad.
+- no implementation or proof of the exhaustiveness algorithm;
+- no validation of the ergonomics of `match` expression versus statement form;
+- no decision on how `_` should be treated if it is still allowed as an identifier today;
+- no measurement of the cost of nested patterns;
+- no proof of the quality of witness messages for non-exhaustiveness.
 
 ---
 
-## D. Colecciones e iteración
+## D. Collections and iteration
 
-### D.1. Estado actual **[V]**
+### D.1. Current state **[V]**
 
-- No hay listas, mapas, tuplas ni registros.
-- No hay `for`; se usa `while` con contador.
-- Todo `while` exige `decreases` (`E2021`) y puede tener `invariant`; la medida y los invariantes se comprueban en ejecución (`E4005`, `E4006`).
-- No hay `break` ni `continue`.
-- No hay límite de tiempo ni de memoria en `nex`; el playground tiene timeout y límites.
-- No se demuestra estáticamente la terminación de funciones recursivas; se limita la profundidad a 1000 llamadas (`E3004`).
+- There are no lists, maps, tuples or records.
+- There is no `for`; `while` is used with a counter.
+- Every `while` requires `decreases` (`E2021`) and may have `invariant`; the measure and invariants are checked at runtime (`E4005`, `E4006`).
+- There is no `break` or `continue`.
+- There is no time or memory limit in `nex`; the playground has timeout and limits.
+- Recursive function termination is not proven statically; the call depth is limited to 1000 (`E3004`).
 
-### D.2. Propuesta **[P]**
+### D.2. Proposal **[P]**
 
-#### D.2.1. Listas
+#### D.2.1. Lists
 
-- `List[T]` nominal, inmutable y finita.
-- Literales: `[1, 2, 3]`, `[]`; `[]` exige anotación si no se puede inferir.
-- Operaciones esenciales: `List.length`, `List.get`, `List.append`, `List.concat`, `List.contains`.
-- `List.get(xs, i)` es parcial y declara `requires 0 <= i and i < List.length(xs)`; el contrato se comprueba en ejecución. Cuando exista `Option`, se añade una variante total.
-- Sin mutación de elementos; `var` puede reasignar la variable a otra lista, no modificar la lista original.
-- Igualdad estructural; `to_text`/`print` con representación canónica.
+- `List[T]` nominal, immutable and finite.
+- Literals: `[1, 2, 3]`, `[]`; `[]` requires annotation if it cannot be inferred.
+- Essential operations: `List.length`, `List.get`, `List.append`, `List.concat`, `List.contains`.
+- `List.get(xs, i)` is partial and declares `requires 0 <= i and i < List.length(xs)`; the contract is checked at runtime. When `Option` exists, a total variant may be added.
+- No element mutation; `var` may reassign the variable to another list, but not mutate the original list.
+- Structural equality; `to_text`/`print` with canonical representation.
 
-#### D.2.2. `for` sobre listas
+#### D.2.2. `for` over lists
 
 ```text
 for x in xs {
@@ -529,80 +458,80 @@ for x in xs {
 }
 ```
 
-- `xs` se evalúa una vez y debe ser `List[T]`.
-- `x` es inmutable y de tipo `T`.
-- El cuerpo es un bloque con su propio ámbito.
-- No exige `decreases`: la lista es finita por construcción.
-- Puede tener `invariant` (misma semántica que en `while`), pero no `decreases`.
-- No hay `break` ni `continue` en la primera versión.
-- No se añade `for` sobre rangos ni sobre `Text`; eso exigiría `Range` o una conversión explícita y sería un caso especial.
+- `xs` is evaluated once and must be `List[T]`.
+- `x` is immutable and has type `T`.
+- The body is a block with its own scope.
+- It does not require `decreases`: a list is finite by construction.
+- It may have `invariant` (same semantics as `while`), but not `decreases`.
+- There is no `break` or `continue` in the first version.
+- No `for` over ranges or `Text`; that would require `Range` or an explicit conversion and would be a special case.
 
-#### D.2.3. Terminación y garantías
+#### D.2.3. Termination and guarantees
 
-| Garantía | Tipo | Qué se puede afirmar |
+| Guarantee | Type | What may be asserted |
 |---|---|---|
-| `for` sobre `List[T]` inmutable y finita | Estructural | Termina si la lista es finita; no promete rapidez |
-| `while` con `decreases` | En ejecución | La medida se comprueba; no se demuestra estáticamente |
-| Recursividad | Límite de ejecución | Se detiene con `E3004`; no hay prueba de terminación |
-| Programa que termina pero tarda | Documentada | Puede consumir tiempo/memoria; el playground tiene timeout; `nex` no |
-| División por cero, overflow | En ejecución | No se detectan estáticamente |
+| `for` over `List[T]` immutable and finite | Structural | Terminates if the list is finite; does not promise speed |
+| `while` with `decreases` | At runtime | The measure is checked; it is not proven statically |
+| Recursion | Execution limit | Stops with `E3004`; no termination proof |
+| Program terminates but takes time | Documented | May consume time/memory; playground times out; `nex` does not |
+| Division by zero, overflow | At runtime | Not detected statically |
 
-**Importante:** “termina” no significa “termina pronto”. Un `for` sobre una lista enorme puede tardar. El playground lo corta; `nex` no tiene límite de tiempo. No se debe prometer más.
+**Important:** “terminates” does not mean “terminates quickly.” A `for` over a huge list may take time. The playground cuts it off; `nex` has no time limit. This must not be promised more strongly.
 
-#### D.2.4. `break` y `continue`
+#### D.2.4. `break` and `continue`
 
-Recomendación: **no introducirlos inicialmente**.
+Recommendation: **do not introduce them initially**.
 
-Motivos:
+Reasons:
 
-- `continue` es relativamente simple, pero añade una ruta de control que los invariantes deben tolerar.
-- `break` invalida el razonamiento “el bucle terminó porque la condición es falsa”; cualquier postcondición que dependa de la condición de salida deja de ser válida.
-- Para que `break` fuera verificable haría falta una condición de salida explícita o un valor de bucle, que es otra construcción.
-- No hay demanda demostrada; se puede escribir con `while`, condición o `return`.
+- `continue` is relatively simple, but adds a control path that invariants must tolerate.
+- `break` invalidates the reasoning “the loop ended because the condition is false”; any postcondition depending on the exit condition becomes invalid.
+- To make `break` verifiable, an explicit exit condition or loop value would be needed, which is another construct.
+- There is no demonstrated need; it can be written with `while`, condition or `return`.
 
-Si se añaden después, deben tener semántica documentada, interacción con `invariant` y pruebas de que no rompen la terminación.
+If added later, they must have documented semantics, interaction with `invariant` and tests proving they do not break termination.
 
-### D.3. Alternativas
+### D.3. Alternatives
 
-| Alternativa | Ventajas | Inconvenientes | Consecuencia |
+| Alternative | Advantages | Disadvantages | Consequence |
 |---|---|---|---|
-| Listas inmutables | Sin aliasing; contratos y terminación simples | Coste de copia; puede ser lento | **Recomendada** |
-| Listas mutables | Rendimiento intuitivo | Aliasing, contratos, terminación, igualdad complejos | Aplazada |
-| `for` sobre rangos | Cómodo | Otro caso especial; sin tipo `Range` | Aplazada |
-| Iteradores/lazy | Potente | Terminación y efectos difíciles | Aplazada |
-| `break`/`continue` desde el inicio | Familiar | Rompe razonamiento de invariantes | Aplazada |
+| Immutable lists | No aliasing; simple contracts and termination | Copy cost; may be slow | **Recommended** |
+| Mutable lists | Intuitive performance | Aliasing, contracts and termination become complex | Deferred |
+| `for` over ranges | Convenient | Another special case; no `Range` type | Deferred |
+| Iterators/lazy evaluation | Powerful | Termination and effects are hard to reason about | Deferred |
+| `break`/`continue` from the start | Familiar | Breaks invariant reasoning | Deferred |
 
-### D.4. Consecuencias
+### D.4. Consequences
 
-**Positivas:** iteración clara y terminante; listas como base de `Input`, stdlib y datos; `for` sin medida obligatoria; menos casos especiales.
+**Positive:** clear and terminating iteration; lists as base for `Input`, stdlib and data; `for` without mandatory measure; fewer special cases.
 
-**Negativas:** inmutabilidad puede costar; sin `break` algunos algoritmos son más verbosos; `List.get` parcial exige contratos; la stdlib necesitará más funciones.
+**Negative:** immutability may cost; some algorithms are more verbose without `break`; `List.get` partial requires contracts; the stdlib will need more functions.
 
-### D.5. Evidencia pendiente **[?]**
+### D.5. Evidence pending **[?]**
 
-- No se ha medido el coste de listas inmutables en el intérprete.
-- No se ha validado si `for` sin `break`/`continue` es suficiente para las tareas objetivo.
-- No se ha decidido la representación interna (tupla, lista persistente, etc.).
-- No se ha probado la ergonomía de `List.get` parcial frente a `Option`.
-- No se ha medido el impacto de `for` en el playground.
+- no measurement of the cost of immutable lists in the interpreter;
+- no validation that `for` without `break`/`continue` is sufficient for the target tasks;
+- no decision on the internal representation (tuple, persistent list, etc.);
+- no proof of the ergonomics of partial `List.get` versus `Option`;
+- no measured impact of `for` on the playground.
 
 ---
 
-## E. Entrada, efectos y testabilidad
+## E. Input, effects and testability
 
-### E.1. Estado actual **[V]**
+### E.1. Current state **[V]**
 
-- Un programa NEXORA solo puede calcular y escribir con `print`; no hay entrada de teclado, argumentos, archivos ni red.
-- `main` no puede tener parámetros (`E2013`) y debe devolver `Void` (`E2004`).
-- El playground ejecuta el worker con entorno vacío; no hay estado global del servidor.
-- `nex test` evalúa `example` sin ejecutar `main`.
-- El intérprete no usa `eval` ni `exec`; las pruebas de seguridad lo comprueban.
+- A NEXORA program can only compute and write with `print`; there is no keyboard input, arguments, files or network access.
+- `main` cannot have parameters (`E2013`) and must return `Void` (`E2004`).
+- The playground executes the worker in an empty environment; there is no global server state.
+- `nex test` evaluates `example` without executing `main`.
+- The interpreter does not use `eval` or `exec`; security tests check this.
 
-### E.2. Propuesta **[P]**
+### E.2. Proposal **[P]**
 
-#### E.2.1. Entrada explícita
+#### E.2.1. Explicit input
 
-Introducir un tipo de prelude `Input`:
+Introduce a prelude type `Input`:
 
 ```text
 type Input = {
@@ -611,242 +540,242 @@ type Input = {
 }
 ```
 
-El programa puede declarar:
+The program may declare:
 
-- `fn main() -> Void` (compatibilidad), o
+- `fn main() -> Void` (compatibility), or
 - `fn main(input: Input) -> Void`.
 
-El runtime construye `Input` con argumentos y entrada estándar. No hay `read_line()` global, ni variables de entorno, ni archivos, ni red.
+The runtime builds `Input` with arguments and standard input. There is no global `read_line()`, environment variables, files or network.
 
-- `nex run archivo.nex -- arg1 arg2` y la entrada estándar alimentan `Input`.
-- `nex test` construye un `Input` vacío por defecto; las funciones que necesitan entrada se prueban pasándoles un `Input` construido explícitamente en un `example` cuando los registros existan.
-- El playground añade un campo `input` a la petición y lo pasa al worker; sigue sin acceso a archivos/red.
-- `Text.lines(text) -> List[Text]` o una operación equivalente en la stdlib procesa `stdin`; no se hace un caso especial de `Input`.
+- `nex run file.nex -- arg1 arg2` and standard input feed `Input`.
+- `nex test` builds an empty `Input` by default; functions requiring input are tested by passing an explicitly built `Input` in an `example` when records exist.
+- The playground adds an `input` field to the request and passes it to the worker; it still has no access to files/network.
+- `Text.lines(text) -> List[Text]` or an equivalent stdlib operation processes `stdin`; no special case for `Input`.
 
-#### E.2.2. Errores de entrada
+#### E.2.2. Input errors
 
-- La entrada ausente o inválida se representa con `Option`/`Result` cuando existan; antes, con contratos y valores válidos.
-- No se lanzan excepciones del lenguaje.
-- `Int.parse`/`Float.parse` ya tienen `requires` y `E4001`; se mantiene ese modelo.
-- Los errores de entrada deben ser datos, no efectos ocultos.
+- Missing or invalid input is represented by `Option`/`Result` when available; otherwise, by contracts and valid values.
+- No language exceptions are thrown.
+- `Int.parse`/`Float.parse` already have `requires` and `E4001`; this model is kept.
+- Input errors must be data, not hidden effects.
 
-#### E.2.3. Efectos explícitos sin sistema formal
+#### E.2.3. Explicit effects without a formal effect system
 
-En la primera versión no se introduce un sistema de efectos algebraicos. Se mantienen explícitos:
+In the first version, no algebraic effect system is introduced. The following remain explicit:
 
-- `print`: salida.
-- `Input`: entrada inyectada como parámetro.
-- Errores de ejecución: `E3001`–`E4006`, documentados.
-- Sin archivos, red, procesos, variables de entorno ni reloj.
+- `print`: output.
+- `Input`: input injected as a parameter.
+- Runtime errors: `E3001`–`E4006`, documented.
+- No files, network, processes, environment variables or clock.
 
-Un sistema de efectos (`uses`) puede explorarse después; no es necesario para la propuesta diferencial y añadiría carga de anotación.
+An effects system (`uses`) may be explored later; it is not necessary for the differential proposal and would add annotation cost.
 
-### E.3. Alternativas
+### E.3. Alternatives
 
-| Alternativa | Ventajas | Inconvenientes | Consecuencia |
+| Alternative | Advantages | Disadvantages | Consequence |
 |---|---|---|---|
-| `Input` explícito | Testable, reproducible, seguro | Cambia `main` o exige dos formas | **Recomendada** |
-| `read_line()` global | Cómodo | Estado oculto, no testable, inseguro | Rechazada |
-| Mónada `IO` | Efectos explícitos | Demasiado pesado para el lenguaje actual | Aplazada |
-| Sistema de efectos `uses` | Documenta efectos | Carga de anotación y análisis | Aplazada |
-| Variables de entorno | Cómodo para configuración | Secretos y no determinismo | Rechazada para el lenguaje |
+| Explicit `Input` | Testable, reproducible, safe | Changes `main` or requires two forms | **Recommended** |
+| Global `read_line()` | Convenient | Hidden state, not testable, unsafe | Rejected |
+| `IO` monad | Explicit effects | Too heavy for the current language | Deferred |
+| Effects system `uses` | Documents effects | Annotation burden and analysis cost | Deferred |
+| Environment variables | Convenient for configuration | Secrets and nondeterminism | Rejected for the language |
 
-### E.4. Consecuencias
+### E.4. Consequences
 
-**Positivas:** pruebas reproducibles; playground con entrada controlada; sin estado global; base para `nex test` de funciones con entrada.
+**Positive:** reproducible tests; playground with controlled input; no global state; a base for `nex test` on functions with input.
 
-**Negativas:** dos formas de `main`; necesidad de `Input` y registros; la entrada interactiva/streaming no está cubierta; la stdlib necesita operaciones de texto.
+**Negative:** two ways to define `main`; need for `Input` and records; interactive/streaming input is not covered; stdlib needs text operations.
 
-### E.5. Evidencia pendiente **[?]**
+### E.5. Evidence pending **[?]**
 
-- La API exacta de `Input` no está aprobada.
-- No se ha decidido `stdin: Text` frente a `stdin: List[Text]`.
-- No se ha validado la compatibilidad de `main()` y `main(input)`.
-- No se ha diseñado la interfaz de entrada del playground.
-- No se ha medido el coste de inyectar entrada en `nex test`.
+- exact `Input` API is not approved;
+- no decision between `stdin: Text` and `stdin: List[Text]`;
+- no validation of compatibility between `main()` and `main(input)`;
+- no playground input interface designed;
+- no measured cost of injecting input into `nex test`.
 
 ---
 
-## F. Módulos y visibilidad
+## F. Modules and visibility
 
-### F.1. Estado actual **[V]**
+### F.1. Current state **[V]**
 
-- Un programa es un único archivo.
-- `nex context` y `nex symbols` describen un solo archivo.
-- No hay imports, exports, visibilidad, namespaces ni proyecto.
-- El checker resuelve nombres en un único espacio global + ámbitos locales.
-- `nex inspect`, `context`, `symbols` y MCP no tienen concepto de módulo.
+- A program is a single file.
+- `nex context` and `nex symbols` describe a single file.
+- There are no imports, exports, visibility, namespaces or project concept.
+- The checker resolves names in a single global space plus local scopes.
+- `nex inspect`, `context`, `symbols` and MCP have no module concept.
 
-### F.2. Problemas que hay que resolver antes de implementar
+### F.2. Problems to solve before implementation
 
-1. **Imports y exports:** qué se importa, con qué nombre y cómo se resuelve.
-2. **Visibilidad:** `pub`/privado; qué se exporta por defecto.
-3. **Dependencias y ciclos:** grafo, orden topológico, rechazo de ciclos.
-4. **Resolución de nombres:** cualificada, `from`-import, alias, conflictos.
-5. **Organización de proyectos:** raíz, manifest, rutas, stdlib.
-6. **Cachés e invalidación:** contenido, dependencias, cambios de interfaz.
-7. **Herramientas:** `inspect` por archivo, `context`/`symbols` por proyecto, IDs estables, grafo.
-8. **Seguridad:** imports de stdlib vs código de usuario; no acceso a archivos arbitrarios.
+1. **Imports and exports:** what is imported, under what name and how it is resolved.
+2. **Visibility:** `pub`/private; what is exported by default.
+3. **Dependencies and cycles:** graph, topological order, cycle rejection.
+4. **Name resolution:** qualified names, `from` imports, aliases, conflicts.
+5. **Project organization:** root, manifest, paths, stdlib.
+6. **Caches and invalidation:** content hash, interface fingerprint, dependency graph.
+7. **Tools:** `inspect` per file, `context`/`symbols` per project, stable IDs, graph.
+8. **Security:** stdlib imports vs. user code; no arbitrary file access.
 
-### F.3. Propuesta **[P]**
+### F.3. Proposal **[P]**
 
-- **Archivo = módulo.** Nombre por defecto: el del archivo; declaración opcional `module a.b.c`.
-- **Imports:** `import a.b.c`, `from a.b.c import f, Tipo`, alias `import a.b.c as c`.
-- **Visibilidad:** `pub` en funciones y tipos; privado por defecto. Sin `pub` en variables locales.
-- **Sin imports comodín** en la primera versión; sin re-exportaciones; sin ciclos.
-- **Resolución:** nombres cualificados por defecto; `from` introduce nombres; conflictos = error.
-- **Proyecto:** raíz detectable por `nexora.toml` (o `nex.project`) con nombre/versión; sin registro de paquetes en 1.0. Los módulos de la stdlib se resuelven desde la instalación.
-- **Orden:** grafo acíclico, orden topológico; sin inicialización de módulo con efectos (solo declaraciones).
-- **Caché:** no se implementa en la primera fase; se diseña con hash de contenido + huella de interfaz + grafo de dependencias. Invalidación conservadora: si cambia una interfaz pública, se reanalizan los dependientes.
-- **Herramientas:** `nex inspect` sigue siendo por archivo; `nex context`/`symbols` aceptan archivo o proyecto; se añaden `module`, `imports`, `exports`, `dependencies`, `dependents`, `cycles`.
+- **File = module.** Default name: the file name; optional `module a.b.c` declaration.
+- **Imports:** `import a.b.c`, `from a.b.c import f, Type`, alias `import a.b.c as c`.
+- **Visibility:** `pub` on functions and types; private by default. No `pub` on local variables.
+- **No wildcard imports** in the first version; no re-export; no cycles.
+- **Resolution:** qualified names by default; `from` introduces names; conflicts = error.
+- **Project:** root detected by `nexora.toml` (or `nex.project`) with name/version; no package registry in 1.0. Stdlib modules resolve from the installation.
+- **Order:** acyclic graph, topological order; no module initialization with effects (only declarations).
+- **Cache:** not implemented in the first phase; designed with content hash + interface fingerprint + dependency graph. Conservative invalidation: if a public interface changes, dependent modules are reanalyzed.
+- **Tools:** `nex inspect` remains file-based; `nex context`/`symbols` accept file or project; add `module`, `imports`, `exports`, `dependencies`, `dependents`, `cycles`.
 
-### F.4. Impacto en herramientas
+### F.4. Tool impact
 
-| Herramienta | Hoy | Con módulos |
+| Tool | Today | With modules |
 |---|---|---|
-| `nex inspect` | AST de un archivo | AST de un archivo + `module`, `imports`; sigue siendo local |
-| `nex context` | Resumen de un archivo | Resumen de proyecto o archivo; grafo de llamadas entre módulos; API pública |
-| `nex symbols` | Símbolos de un archivo | Símbolos de proyecto; IDs con módulo; visibilidad; filtros |
-| MCP | 7 herramientas de un archivo | Añadir `project_context`; el resto conserva compatibilidad |
-| JSON | Esquemas por archivo | Campos aditivos; nuevo esquema de proyecto si hace falta |
+| `nex inspect` | AST of one file | AST of one file + `module`, `imports`; still local |
+| `nex context` | Summary of one file | Summary of project or file; call graph between modules; public API |
+| `nex symbols` | Symbols of one file | Symbols of the project; IDs with module; visibility; filters |
+| MCP | 7 file-level tools | Add `project_context`; the rest keep compatibility |
+| JSON | File-level schemas | Additive fields; new project schema if needed |
 
-### F.5. Secuencia segura de implementación
+### F.5. Safe implementation sequence
 
-1. **Ahora:** decidir semántica de módulos, visibilidad, ciclos, resolución y forma del manifest.
-2. **Después de tipos/patrones:** añadir `module`/`import`/`from`/`pub` al lexer/parser/AST.
-3. **Checker:** tabla de módulos, resolución, visibilidad, ciclos.
-4. **Cargador de proyecto:** raíz, manifest, orden topológico, stdlib.
-5. **Herramientas:** contexto/símbolos de proyecto, IDs, grafo.
-6. **Caché:** solo cuando el análisis de proyecto sea estable y medible.
+1. **Now:** decide module semantics, visibility, cycles, resolution and manifest shape.
+2. **After type/pattern work:** add `module`/`import`/`from`/`pub` to the lexer/parser/AST.
+3. **Checker:** module table, resolution, visibility, cycles.
+4. **Project loader:** root, manifest, topological order, stdlib.
+5. **Tools:** project-level context/symbols, IDs, graph.
+6. **Cache:** only when project analysis is stable and measurable.
 
-### F.6. Alternativas
+### F.6. Alternatives
 
-| Alternativa | Ventajas | Inconvenientes | Consecuencia |
+| Alternative | Advantages | Disadvantages | Consequence |
 |---|---|---|---|
-| Archivo = módulo, imports explícitos | Claro, tooling-friendly | Más sintaxis | **Recomendada** |
-| Módulos implícitos por ruta | Menos sintaxis | Colisiones y ambigüedad | Rechazada |
-| Espacio global plano | Simple | No escala | Rechazada para 1.0 |
-| Ciclos permitidos | Flexible | Orden de inicialización y análisis complejos | Rechazada inicialmente |
-| Registro de paquetes | Ecosistema | Fuera de alcance | Aplazado |
-| Imports comodín | Cómodo | Conflictos y difícil análisis | Aplazados |
+| File = module, explicit imports | Clear, tool-friendly | More syntax | **Recommended** |
+| Implicit modules by path | Less syntax | Collisions and ambiguity | Rejected |
+| Flat global namespace | Simple | Does not scale | Rejected for 1.0 |
+| Allowed cycles | Flexible | Initialization and analysis complexity | Rejected initially |
+| Package registry | Ecosystem | Out of scope | Deferred |
+| Wildcard imports | Convenient | Conflicts and difficult analysis | Deferred |
 
-### F.7. Consecuencias
+### F.7. Consequences
 
-**Positivas:** stdlib posible; proyectos reales; grafo para IA; API pública explícita.
+**Positive:** stdlib possible; real projects; graph for AI; explicit public API.
 
-**Negativas:** cambio profundo en checker, tooling, esquemas y CLI; necesidad de manifest y caché; riesgo de complejidad de resolución.
+**Negative:** deep change in checker, tooling, schemas and CLI; need for manifest and cache; risk of resolution complexity.
 
-### F.8. Evidencia pendiente **[?]**
+### F.8. Evidence pending **[?]**
 
-- No hay diseño validado de manifest ni de resolución de nombres.
-- No se ha medido el coste de análisis de proyectos.
-- No se ha probado la invalidación de caché.
-- No se ha decidido si `nex inspect` debe aceptar proyectos o solo archivos.
-- No se ha evaluado el impacto en el playground (que ejecuta un archivo).
+- no validated design of manifest or name resolution;
+- no measured cost of project analysis;
+- no tested cache invalidation;
+- no decision if `nex inspect` should accept projects or only files;
+- no evaluation of impact on the playground (which executes a single file).
 
 ---
 
-## G. Arquitectura vertical de las funcionalidades
+## G. Vertical architecture of features
 
-### G.1. Capas que deben mantenerse coherentes
+### G.1. Layers that must remain coherent
 
-Para cada capacidad nueva, el cambio debe atravesar estas capas:
+For each new feature, the change must pass through these layers:
 
-| Capa | Artefactos | Qué debe cumplir |
+| Layer | Artifacts | What it must satisfy |
 |---|---|---|
-| Léxico | `tokens.py`, `lexer.py` | Tokens, palabras reservadas, posiciones |
-| Sintaxis | `ast_nodes.py`, `parser.py` | Nodos inmutables con `Span`, recuperación de errores |
-| Tipos | `checker.py` | Reglas, firmas, símbolos, rutas de retorno, diagnósticos |
-| Ejecución | `interpreter.py` | Semántica, valores, errores de ejecución, contratos |
-| Diagnósticos | `diagnostics.py` | Código estable, categoría, etiqueta, notas, sugerencia |
-| CLI | `cli.py` | Comando, formatos, códigos de salida |
-| JSON/MCP | `schemas.py`, `tooling.py`, `mcp_server.py` | Esquema, documento, paridad, solo lectura |
-| Documentación | `language-spec.md`, docs temáticas, ADR | Semántica y límites |
-| Ejemplos | `examples/`, docs | Ejecutables y con salida esperada |
-| Tests | `tests/` | Positivos, negativos, límites, regresión |
-| Playground | `worker.py`, `servidor/src/playground/` | Misma semántica, límites, seguridad |
+| Lexical | `tokens.py`, `lexer.py` | Tokens, reserved words, positions |
+| Syntax | `ast_nodes.py`, `parser.py` | Immutable nodes with `Span`, error recovery |
+| Types | `checker.py` | Rules, signatures, symbols, return paths, diagnostics |
+| Execution | `interpreter.py` | Semantics, values, runtime errors, contracts |
+| Diagnostics | `diagnostics.py` | Stable codes, category, label, notes, suggestion |
+| CLI | `cli.py` | Command, formats, exit codes |
+| JSON/MCP | `schemas.py`, `tooling.py`, `mcp_server.py` | Schema, document, parity, read-only |
+| Documentation | `language-spec.md`, topical docs, ADR | Semantics and limits |
+| Examples | `examples/`, docs | Executable and with expected output |
+| Tests | `tests/` | Positive, negative, boundary and regression |
+| Playground | `worker.py`, `server/src/playground/` | Same semantics, same limits, same security |
 
-### G.2. Definición de “terminado”
+### G.2. Definition of “finished”
 
-Una funcionalidad está terminada cuando:
+A feature is finished when:
 
-1. Tiene semántica escrita en la especificación y en un ADR o documento de diseño.
-2. El lexer/parser la reconocen y producen nodos con posición.
-3. El checker la tipa y diagnostica sus errores.
-4. El intérprete la ejecuta con la semántica documentada.
-5. Tiene códigos de diagnóstico estables y mensajes con posición.
-6. `nex check`, `inspect`, `context` y `symbols` la representan correctamente.
-7. Los esquemas JSON se actualizan de forma aditiva y validan la salida real.
-8. La CLI, la API y MCP devuelven el mismo documento cuando comparten capacidad.
-9. Hay ejemplos ejecutables y documentación sincronizada.
-10. Hay pruebas positivas, negativas, de límites y de regresión.
-11. El playground la ejecuta con los mismos límites y sin debilitar la seguridad.
-12. Los programas existentes siguen funcionando o hay una migración documentada.
+1. It has semantics written in the specification and in an ADR or design document.
+2. The lexer/parser recognize it and produce nodes with position.
+3. The checker types it and diagnoses its errors.
+4. The interpreter executes it with the documented semantics.
+5. It has stable diagnostic codes and messages with position.
+6. `nex check`, `inspect`, `context` and `symbols` represent it correctly.
+7. JSON schemas are updated additively and validate the real output.
+8. The CLI, API and MCP return the same document when they share a capability.
+9. There are executable examples and synchronized docs.
+10. There are positive, negative, boundary and regression tests.
+11. The playground executes it with the same limits and without weakening safety.
+12. Existing programs continue to work or a documented migration exists.
 
-### G.3. Cómo evitar que las herramientas queden por detrás
+### G.3. How to avoid tooling falling behind
 
-- **Esquema primero:** diseñar el nodo/forma JSON antes de implementar el parser, para que el checker y las herramientas no inventen formas incompatibles.
-- **Prueba de paridad:** cada funcionalidad debe tener una prueba que compare CLI/API/MCP y la salida del intérprete.
-- **`capabilities.features`:** declarar qué está soportado y qué no, para que un agente no alucine.
-- **Documentación ejecutable:** los ejemplos de la especificación se ejecutan en pruebas; si no, se detecta el desfase.
-- **Prohibición de campos vacíos:** si una herramienta no puede representar una funcionalidad, la funcionalidad no está terminada.
-- **Revisión de esquema:** cualquier campo nuevo se añade al final; cualquier eliminación exige subir la versión del esquema.
+- **Schema first:** design the node/JSON form before implementing the parser so checker and tooling do not invent incompatible shapes.
+- **Parity test:** every feature must have a test comparing CLI/API/MCP and interpreter output.
+- **`capabilities.features`:** declare what is supported and what is not, so an agent cannot hallucinate.
+- **Executable docs:** examples in the specification are run in tests; otherwise the mismatch is detected.
+- **Prohibition of empty fields:** if a tool cannot represent a feature, the feature is not finished.
+- **Schema review:** any new field is added at the end; any removal requires a schema version bump.
 
-### G.4. Matriz por fase
+### G.4. Phase matrix
 
-| Fase | Léxico/parser | Tipos | Intérprete | Diagnósticos | CLI/JSON/MCP | Docs/ejemplos | Tests | Playground |
+| Phase | Lexer/parser | Types | Interpreter | Diagnostics | CLI/JSON/MCP | Docs/examples | Tests | Playground |
 |---|---|---|---|---|---|---|---|---|
-| Tipos base | — | `Type` | — | códigos de tipo | `type_repr` | spec | unitarios | — |
-| Listas + `for` | `[` `]`, `for` | `List[T]`, `for` | listas inmutables | índices, tipos | inspect/context/symbols | ejemplos | límites | sí |
-| Registros | `type X = { ... }` | nominal, campos | valores inmutables | campos | símbolos/campos | ejemplos | negativos | sí |
-| Enums + `match` | `enum`, `=>`, patrones | variantes, exhaustividad | match | testigos | inspect/context | ejemplos | exhaustividad | sí |
-| `Option`/`Result` | — | prelude | constructores | — | requirements | ejemplos | contracts | sí |
-| Entrada | `Input` | registro | `main(input)` | entrada inválida | API/worker | ejemplos | reproducibilidad | input |
-| Módulos | `module`, `import`, `pub` | tabla de módulos | carga | ciclos/visibilidad | project_context | proyecto | grafo | límites |
+| Base types | — | `Type` | — | type codes | `type_repr` | spec | unit tests | — |
+| Lists + `for` | `[` `]`, `for` | `List[T]`, `for` | immutable lists | index/type errors | inspect/context/symbols | examples | boundaries | yes |
+| Records | `type X = { ... }` | nominal, fields | immutable values | field errors | symbols/fields | examples | negatives | yes |
+| Enums + `match` | `enum`, `=>`, patterns | variants, exhaustiveness | match | witnesses | inspect/context | examples | exhaustiveness | yes |
+| `Option`/`Result` | — | prelude | constructors | — | requirements | examples | contracts | yes |
+| Input | `Input` | record | `main(input)` | invalid input | API/worker | examples | reproducibility | input |
+| Modules | `module`, `import`, `pub` | module table | load | cycles/visibility | project_context | project | graph | limits |
 
 ---
 
-## H. Desarrollo asistido por IA y evidencia
+## H. AI-assisted development and evidence
 
-### H.1. Estado actual **[V]/[D]**
+### H.1. Current state **[V]/[D]**
 
-- La CLI, la API Python y MCP comparten `tooling.py`; MCP es de solo lectura.
-- `nex context` entrega firmas, contratos, variables, llamadas, llamadores, ejemplos y bucles.
-- `nex symbols` entrega símbolos, referencias, tipos y builtins con contratos.
-- `nex inspect` entrega el AST con tipos como cadenas.
-- `tests/tooling_tasks.py` define nueve tareas de referencia; `tests/test_tooling_tasks.py` las comprueba contra las herramientas reales.
-- No hay documento de requisitos con IDs, ni análisis de impacto, ni evidencia `checked`/`not_checked`, ni IDs estables de símbolos, ni grafo de proyecto, ni tipos estructurados.
-- La API Python es experimental; los esquemas son versionados y aditivos.
+- The CLI, Python API and MCP share `tooling.py`; MCP is read-only.
+- `nex context` delivers signatures, contracts, variables, calls, callers, examples and loops.
+- `nex symbols` delivers symbols, references, types and builtins with contracts.
+- `nex inspect` delivers the AST with types as strings.
+- `tests/tooling_tasks.py` defines nine reference tasks; `tests/test_tooling_tasks.py` checks them against the real tools.
+- There is no ID-based requirements document, no impact analysis, no `checked`/`not_checked` evidence, no stable symbol IDs, no project graph and no structured types.
+- The Python API is experimental; schemas are versioned and additive.
 
-### H.2. Propuesta incremental **[P]**
+### H.2. Incremental proposal **[P]**
 
-| Paso | Qué añadir | Depende de | Valor para el agente |
+| Step | What to add | Depends on | Value for the agent |
 |---|---|---|---|
-| 1 | `type_repr` estructurado + IDs estables en `inspect`/`symbols`/`context` | Modelo de tipos | Referencias estables y tipos legibles por máquina |
-| 2 | `nexora.requirements/1`: inventario de contratos, refinamientos y ejemplos con ID, condición, explicación, span, procedencia, estado de comprobación y dependencias | Tipos + contratos | Comprender requisitos antes de editar |
-| 3 | `evidence`: `checked`, `not_checked`, `assumptions`, `source_hash`, `tool_version` | Paso 1-2 | Honestidad sobre lo comprobado |
-| 4 | `nexora.impact/1`: diff semántico, requisitos afectados, nivel de certeza, comprobaciones y límites | Requisitos + grafo de llamadas | Identificar impacto de un cambio |
-| 5 | `nexora.project_context/1`: módulos, imports, exports, dependencias, ciclos, API pública | Módulos | Análisis de proyectos reales |
-| 6 | `capabilities.features`: matriz de soportado/no soportado | Todo | Evitar alucinaciones |
+| 1 | structured `type_repr` + stable IDs in `inspect`/`symbols`/`context` | Type model | stable references and machine-readable types |
+| 2 | `nexora.requirements/1`: inventory of contracts, refinements and examples with ID, condition, explanation, span, provenance, checking status and dependencies | Types + contracts | understand requirements before editing |
+| 3 | `evidence`: `checked`, `not_checked`, `assumptions`, `source_hash`, `tool_version` | Steps 1-2 | honesty about what was checked |
+| 4 | `nexora.impact/1`: semantic diff, affected requirements, certainty level, checks and limits | Requirements + call graph | identify impact of a change |
+| 5 | `nexora.project_context/1`: modules, imports, exports, dependencies, cycles, public API | Modules | analysis of real projects |
+| 6 | `capabilities.features`: support/no-support matrix | Everything | avoid hallucinations |
 
-No se propone duplicar `nexora_check` (ya existe), `nexora_types` (basta extender `inspect`/`symbols`) ni `nexora_run` en MCP (la ejecución debe ser explícita y aislada).
+No duplication is proposed for `nexora_check` (already exists), `nexora_types` (just extend `inspect`/`symbols`) or `nexora_run` in MCP (execution must be explicit and isolated).
 
-### H.3. Identificar requisitos afectados
+### H.3. Identifying affected requirements
 
-El análisis de impacto debe combinar:
+Impact analysis must combine:
 
-- **Cambios de firma:** parámetros, retorno, tipos, visibilidad.
-- **Cambios de contrato:** `requires`/`ensures` añadidos, eliminados o modificados.
-- **Cambios de refinamiento:** condición, base, cadena.
-- **Cambios de cuerpo:** llamadas, variables, ramas, bucles.
-- **Grafo de llamadas:** llamadores directos y transitivos.
-- **Propagación de requisitos:** un `ensures` de una función puede ser un `requires` implícito de sus llamadores; el análisis debe decirlo, no inventarlo.
-- **Nivel de certeza:** `definitely_removed`, `definitely_added`, `changed_unproved`, `possibly_weakened`, `possibly_strengthened`, `unchanged`.
-- **Regla de honestidad:** no usar `proved_weakened` salvo que un fragmento decidible lo demuestre.
+- **Signature changes:** parameters, return value, types, visibility.
+- **Contract changes:** `requires`/`ensures` added, removed or modified.
+- **Refinement changes:** condition, base, chain.
+- **Body changes:** calls, variables, branches, loops.
+- **Call graph:** direct and transitive callers.
+- **Propagation of requirements:** an `ensures` of one function may be an implicit `requires` of its callers; the analysis must state this, not invent it.
+- **Certainty level:** `definitely_removed`, `definitely_added`, `changed_unproved`, `possibly_weakened`, `possibly_strengthened`, `unchanged`.
+- **Honesty rule:** do not use `proved_weakened` unless a decidable fragment proves it.
 
-### H.4. Explicar relaciones y separar evidencia
+### H.4. Explaining relationships and separating evidence
 
-Un documento de impacto debería incluir:
+An impact document should include:
 
 ```json
 {
@@ -868,233 +797,233 @@ Un documento de impacto debería incluir:
 }
 ```
 
-La separación es obligatoria:
+The separation is mandatory:
 
-- **Verificado:** lo que una herramienta determinista ha comprobado.
-- **Inferido:** lo que se deduce del grafo o del diff, con su nivel de certeza.
-- **No resuelto:** lo que depende de ejecución, de decisiones humanas o de propiedades indecidibles.
+- **Verified:** what a deterministic tool has checked.
+- **Inferred:** what is deduced from the graph or diff, with its certainty level.
+- **Unresolved:** what depends on execution, human decisions or undecidable properties.
 
-### H.5. Diagnósticos, cobertura y regresiones
+### H.5. Diagnostics, coverage and regressions
 
-- Diagnósticos con código estable, posición y `related`.
-- Cobertura de requisitos, no solo cobertura de código: qué contratos se han ejercitado en `nex test`/`nex run`.
-- Regresiones: comparación de diagnóstico/resultados entre versiones.
-- `nex test` puede informar qué ejemplos cubren qué requisitos; no debe afirmar cobertura total.
-- Un agente debe poder ver “0 diagnósticos” y “contratos no comprobados” al mismo tiempo.
+- Diagnostics with stable code, position and `related`.
+- Coverage of requirements, not just coverage of code: which contracts were exercised in `nex test`/`nex run`.
+- Regressions: comparison of diagnoses/results between versions.
+- `nex test` may report which examples cover which requirements; it must not claim total coverage.
+- An agent must be able to see “0 diagnostics” and “contracts not checked” at the same time.
 
-### H.6. Cambios compatibles sin afirmar corrección
+### H.6. Compatible changes without claiming correctness
 
-Las herramientas pueden:
+The tools may:
 
-- dar restricciones y requisitos;
-- proponer un diff estructurado;
-- señalar conflictos;
-- ejecutar comprobaciones autorizadas;
-- devolver evidencia y límites.
+- provide constraints and requirements;
+- propose a structured diff;
+- point out conflicts;
+- execute authorized checks;
+- return evidence and limits.
 
-Las herramientas **no** deben:
+The tools **must not**:
 
-- aplicar cambios sin autorización;
-- decir “correcto” o “verificado” sin evidencia;
-- ocultar que un contrato solo se comprobó en ejecución;
-- ejecutar código no confiable en MCP.
+- apply changes without authorization;
+- say “correct” or “verified” without evidence;
+- hide that a contract was checked only at runtime;
+- execute untrusted code through MCP.
 
-### H.7. Plan de evaluación empírica
+### H.7. Empirical evaluation plan
 
-Partir de las nueve tareas de `tests/tooling_tasks.py` y ampliar a familias:
+Start from the nine tasks in `tests/tooling_tasks.py` and extend to families:
 
-| Familia | Tarea | Qué mide |
+| Family | Task | What it measures |
 |---|---|---|
-| A. Modificación con requisitos | Cambiar una fórmula preservando `ensures` | Preservación |
-| B. Invariantes | Cambiar un bucle preservando `invariant`/`decreases` | Razonamiento |
-| C. Regresión deliberada | Introducir un fallo que viola un contrato | Detección |
-| D. Comprensión | ¿Quién llama y qué promete? | Uso de herramientas |
-| E. Tentación de debilitar | “Haz que pase”; la vía fácil es borrar un contrato | Honestidad |
-| F. Multiarchivo | Cambiar una función usada en varios módulos | Impacto |
+| A. Modification with requirements | Change a formula while preserving `ensures` | Preservation |
+| B. Invariants | Change a loop while preserving `invariant`/`decreases` | Reasoning |
+| C. Deliberate regression | Introduce a bug that violates a contract | Detection |
+| D. Understanding | Who calls whom and what do they promise? | Tool use |
+| E. Weakening temptation | “Make it pass”; the easy path is deleting a contract | Honesty |
+| F. Multi-file | Change a function used in several modules | Impact |
 
-**Condiciones:** lenguaje de referencia con tests; NEXORA sin herramientas; NEXORA con herramientas estáticas; NEXORA con herramientas + ejecución; referencia con contratos/tests equivalentes.
+**Conditions:** reference language with tests; NEXORA without tools; NEXORA with static tools; NEXORA with tools + execution; reference with equivalent contracts/tests.
 
-**Métricas:** requisitos violados detectados/no detectados; falsos positivos; contratos eliminados/debilitados; éxito de la tarea; tiempo/tokens/llamadas; calidad del diagnóstico; honestidad.
+**Metrics:** violated requirements detected/not detected; false positives; contracts removed/weakened; task success; time/tokens/calls; diagnostic quality; honesty.
 
-**Controles:** modelos fijados por versión, temperatura/budget fijos, repeticiones, orden aleatorizado, evaluador ciego, pruebas ocultas, publicación de todos los resultados, pre-registro de umbrales.
+**Controls:** models fixed by version, temperature/budget fixed, repetitions, randomized order, blind evaluator, hidden tests, publication of all results, pre-registration of thresholds.
 
-**Criterios de publicación:** no afirmar superioridad sin datos; publicar resultados negativos; separar hipótesis, observaciones y conclusiones; indicar límites (muestra, modelo, tarea, novedad de NEXORA).
+**Publication criteria:** do not claim superiority without data; publish negative results; separate hypotheses, observations and conclusions; indicate limits (sample, model, task, novelty of NEXORA).
 
-**No se ha ejecutado nada de esto.** No hay resultados.
+**Nothing of this has been executed.** There are no results.
 
 ---
 
-## I. Seguridad y aislamiento
+## I. Security and isolation
 
-### I.1. Garantías del lenguaje vs. garantías del entorno
+### I.1. Guarantees of the language vs. guarantees of the environment
 
-| Nivel | Garantía | Límite |
+| Level | Guarantee | Limit |
 |---|---|---|
-| Lenguaje | No hay archivos, red, procesos, variables de entorno, `eval` ni `exec`; solo cálculo y `print` | Un defecto del intérprete podría romperlo |
-| `nex` CLI | Ejecuta con los permisos del usuario | Sin límite de tiempo/memoria; no es sandbox |
-| Worker del playground | Proceso separado por petición; entorno vacío; `-I`; límites de salida/texto; timeout externo | No es sandbox; en Windows no hay límites POSIX |
-| Contenedor | Configuración `--network none`, `--read-only`, `--cap-drop ALL`, `--user 65534`, etc. | **No probado**; depende de Docker/kernel |
-| Servicio | Origen, rate limit, tamaño, CSP, salida como texto | No elimina riesgos de agotamiento o defectos |
+| Language | No files, network, processes, environment variables, `eval` or `exec`; only computation and `print` | A bug in the interpreter could break it |
+| `nex` CLI | Executes with the user’s permissions | No time/memory limit; not a sandbox |
+| Playground worker | Separate process per request; empty environment; `-I`; output/text limits; external timeout | Not a sandbox; on Windows there are no POSIX limits |
+| Container | Configuration such as `--network none`, `--read-only`, `--cap-drop ALL`, `--user 65534`, etc. | **Not tested**; depends on Docker/kernel |
+| Service | Origin, rate limit, size, CSP, output as text | Does not eliminate exhaustion or defect risks |
 
-### I.2. Riesgos del playground
+### I.2. Risks of the playground
 
-- **Agotamiento de recursos:** tiempo, memoria, CPU, salida; el timeout externo ayuda, pero no es aislamiento.
-- **Defecto del intérprete:** código malicioso podría explotar un fallo; el lenguaje no es una sandbox.
-- **Contenedor:** escapar del contenedor o del kernel; Docker mal configurado; imagen mutable por etiqueta; daemon Docker con privilegios.
-- **Usuario del servidor:** pertenecer al grupo `docker` equivale a privilegios de administrador; un compromiso del servidor web controla el equipo.
-- **Caché/limpieza:** contenedores huérfanos tras una caída; el servidor no los busca al arrancar.
-- **Inyección de salida:** la salida se trata como texto y se escribe con `textContent`; hay que mantenerlo.
-- **CSRF/origen:** la comprobación de `Origin` es necesaria; CORS limitado.
-- **Abuso:** rate limit por cliente, pero IPv6/red distribuida; no hay CAPTCHA en playground.
-- **Secretos:** el worker debe seguir con entorno vacío; nunca pasar `.env` ni credenciales.
+- **Resource exhaustion:** time, memory, CPU, output; external timeout helps, but is not isolation.
+- **Interpreter bug:** malicious code could exploit a flaw; the language is not a sandbox.
+- **Container:** escaping the container or kernel; badly configured Docker; mutable image by tag; privileged Docker daemon.
+- **Server user:** being in the `docker` group is equivalent to administrator privileges; a compromise of the web server controls the machine.
+- **Cache/cleanup:** orphaned containers after a crash; the server does not look for them on startup.
+- **Output injection:** output is treated as text and written with `textContent`; this must be preserved.
+- **CSRF/origin:** `Origin` validation is required; CORS limited.
+- **Abuse:** rate limit per client, but IPv6/distributed networks; no CAPTCHA in the playground.
+- **Secrets:** the worker must continue with an empty environment; never pass `.env` or credentials.
 
-### I.3. Pruebas necesarias antes de exposición pública
+### I.3. Tests required before public exposure
 
-No ejecutadas en este encargo:
+Not executed in this task:
 
-1. Límites POSIX de memoria, CPU, archivos, procesos y wall-clock en Linux/macOS.
-2. Worker en contenedor: sin red, solo lectura, usuario no privilegiado, `--init`, límites de memoria/CPU/PIDs.
-3. Timeout y limpieza de contenedores; `docker rm -f` y confirmación con `docker ps`.
-4. Caída del servidor y contenedores huérfanos.
-5. Imagen ausente y `--pull never`.
-6. Concurrencia y cola; 503 `busy`.
-7. Origen/CORS/CSP; salida con HTML/JS.
-8. Fuzzing del parser/checker/intérprete y entradas truncadas.
-9. Memoria agotada en análisis y ejecución.
-10. Aislamiento real con Docker/kernel versionados; no basta con validar la orden.
+1. POSIX limits for memory, CPU, files, processes and wall-clock on Linux/macOS.
+2. Worker in a container: no network, read-only, unprivileged user, `--init`, memory/CPU/PIDs limits.
+3. Timeout and cleanup of containers; `docker rm -f` and confirmation with `docker ps`.
+4. Server crash and orphaned containers.
+5. Missing image and `--pull never`.
+6. Concurrency and queue; 503 `busy`.
+7. Origin/CORS/CSP; output with HTML/JS.
+8. Fuzzing of parser/checker/interpreter and truncated input.
+9. Memory exhaustion during analysis and execution.
+10. Real isolation with Docker/kernel versions; validating the command is not enough.
 
-### I.4. Puerta de despliegue
+### I.4. Deployment gate
 
-El playground debe permanecer desactivado por defecto (`PLAYGROUND_ENABLED=false`) y no debe exponerse públicamente hasta completar la lista anterior. En producción, el servidor ya exige la orden de contenedor admitida si el playground está activo; aun así, **configurar la orden no demuestra el aislamiento**. **[V]/[D]**
+The playground must remain disabled by default (`PLAYGROUND_ENABLED=false`) and must not be exposed publicly until the previous list is completed. In production, the server already requires the accepted container command if the playground is active; even so, **configuring the command does not prove isolation**. **[V]/[D]**
 
 ---
 
-## J. Decisiones, alternativas y cuestiones abiertas
+## J. Decisions, alternatives and open questions
 
-> Ninguna decisión nueva de esta tabla está aprobada. “Decidida previamente” se refiere a ADR ya aceptados que este documento no reabre.
+> No new decision in this table is approved. “Previously decided” refers to ADRs already accepted that this document does not reopen.
 
-| ID | Tema | Recomendación propuesta | Alternativas | Motivo | Coste/riesgo | Evidencia pendiente | Dependencias | Estado |
+| ID | Topic | Proposed recommendation | Alternatives | Reason | Cost/risk | Pending evidence | Dependencies | Status |
 |---|---|---|---|---|---|---|---|---|
-| D01 | Representación interna de tipos | Modelo estructurado `Type` + `TypeExpr`; cadenas solo para presentación; identidad estructural/nominal; `type_repr` aditivo | Seguir con cadenas; HM/typeclasses desde el inicio | Corrección, tipos anidados, diagnósticos y tooling | Alto (migración de checker/tooling) | Prototipo de igualdad/display, migración, rendimiento y estabilidad de `type_repr` | — | **Propuesta pendiente de aprobación** |
-| D02 | Registros nominales vs. estructurales | Nominales por defecto; estructural explícito después | Estructural por defecto | Contratos estables, mensajes claros | Medio | Ergonomía, migración | D01 | Propuesta |
-| D03 | Genéricos e inferencia | Paramétricos de primer orden; sin typeclasses; inferencia local + unificación | HM; typeclasses; sin genéricos | Equilibrio potencia/coste | Alto | Usabilidad, mensajes | D01 | Propuesta |
-| D04 | Refinamientos sobre compuestos | Predicados puros/totales; constantes estáticas + `T(x)` | Contratos completos; verificación formal | Mantener garantía actual y honestidad | Medio | Lenguaje de predicados, rendimiento | D01 | Propuesta |
-| D05 | Enums/uniones etiquetadas | `type X[T] = enum { ... }`; constructores namespaced | `enum` global; clases selladas; especiales | Generalidad y consistencia | Medio | Ergonomía, colisiones | D01 | Propuesta |
-| D06 | Pattern matching | `match` expresión con patrones y bloques | `match` sentencia; visitor | Base para Option/Result | Alto | Ergonomía, AST, parser | D05 | Propuesta |
-| D07 | Exhaustividad | Obligatoria; testigo; inalcanzable error inicial | Opcional; warning | Evitar casos sin gestionar | Medio | Calidad de testigos, falso positivo | D06 | Propuesta |
-| D08 | Listas | Inmutables, finitas, `List[T]` | Mutables; persistentes; lazy | Sin aliasing; terminación simple | Medio | Rendimiento, memoria | D01 | Propuesta |
-| D09 | `for` y terminación | `for` sobre `List[T]`; `invariant` opcional; sin `decreases` | Rangos; iteradores; `for` con medida | Terminación estructural clara | Medio | Suficiencia, rendimiento | D08 | Propuesta |
-| D10 | `break`/`continue` | No introducir inicialmente | Introducir ambos; solo `continue` | Evitar romper invariantes/salida | Bajo/medio | Demanda real, semántica de salida | D09 | Propuesta |
-| D11 | Entrada | `Input` explícito; `main()` o `main(input)` | `read_line` global; IO monad | Testabilidad y seguridad | Bajo/medio | API, stdin, playground | D08, D02 | Propuesta |
-| D12 | Errores | `Option`/`Result` como enums; `?` después | Excepciones; solo contratos | Consistencia y composición | Medio | Ergonomía, `?` | D05-D07 | Propuesta |
-| D13 | Módulos | Archivo=módulo; `import`/`from`; `pub`; sin ciclos | Implícitos; plano; ciclos | Proyectos reales y stdlib | Alto | Resolución, tooling, caché | D01-D12 | Propuesta |
-| D14 | Proyecto y caché | Manifest mínimo; caché por contenido + interfaz + grafo | Sin proyecto; caché por mtime | Análisis de proyectos | Medio | Invalidación, rendimiento | D13 | Propuesta |
-| D15 | Requisitos e impacto | `requirements` + `impact` + `evidence`; solo lectura | Extender solo `context` | Propuesta diferencial | Medio | Precisión/recall, ergonomía | D01, D06, D13 | Propuesta |
-| D16 | IDs y esquemas | IDs por ruta de declaración; JSON aditivo; `type_repr` | IDs por línea; sin IDs | Estabilidad para agentes | Medio | Compatibilidad, migración | D15 | Propuesta |
-| D17 | Seguridad/playground | Desactivado por defecto; puerta de aislamiento; límites | Exposición pública ya; solo proceso | Ejecuta código de terceros | Alto | Pruebas de aislamiento | — | Propuesta |
-| D18 | Alcance de 1.0 | Núcleo + módulos + stdlib + herramientas + seguridad; LSP/REPL opcionales | Todo; fecha fija | Coherencia y calidad | Alto | Criterios K | Todas | Propuesta |
-| D19 | Contratos en ejecución | Mantener 0004/0007: se comprueban al ejecutar, no se demuestran | Verificación formal | Ya decidido | — | — | — | Decidida previamente |
-| D20 | Intérprete solo programas comprobados | Mantener 0002 | Ejecución sin checker | Ya decidido | — | — | — | Decidida previamente |
-| D21 | Requisitos como característica diferencial | Mantener 0006; la hipótesis sigue sin medir | Otra característica | Ya decidido | — | Evaluación H.7 | — | Decidida previamente (dirección), hipótesis pendiente |
+| D01 | Internal representation of types | Structured model `Type` + `TypeExpr`; strings only for presentation; structural/nominal identity; additive `type_repr` | Keep strings; HM/typeclasses from the start | Correctness, nested types, diagnostics and tooling | High (checker/tooling migration) | Prototype of equality/display, migration, performance and `type_repr` stability | — | **Proposal pending approval** |
+| D02 | Nominal vs. structural records | Nominal by default; structural explicit later | Structural by default | Stable contracts, clear messages | Medium | Ergonomics, migration | D01 | Proposal |
+| D03 | Generics and inference | First-order parameters; no typeclasses; local inference + unification | HM; typeclasses; no generics | Balance of power and cost | High | Usability, messages | D01 | Proposal |
+| D04 | Refinements over compounds | Pure/total predicates; static constants + `T(x)` | Full contracts; formal verification | Keep current guarantee and honesty | Medium | Predicate language, performance | D01 | Proposal |
+| D05 | Enums/tagged unions | `type X[T] = enum { ... }`; namespaced constructors | global `enum`; sealed classes; special cases | Generality and consistency | Medium | Ergonomics, collisions | D01 | Proposal |
+| D06 | Pattern matching | expression `match` with patterns and blocks | statement `match`; visitor | Base for `Option`/`Result` | High | Ergonomics, AST, parser | D05 | Proposal |
+| D07 | Exhaustiveness | Mandatory; witness; unreachable is initial error | Optional; warning | Avoid unmanaged cases | Medium | Quality of witnesses, false positives | D06 | Proposal |
+| D08 | Lists | Immutable, finite, `List[T]` | Mutable; persistent; lazy | No aliasing; simple termination | Medium | Performance, memory | D01 | Proposal |
+| D09 | `for` and termination | `for` over `List[T]`; optional `invariant`; no `decreases` | Ranges; iterators; `for` with measure | Clear structural termination | Medium | Sufficiency, performance | D08 | Proposal |
+| D10 | `break`/`continue` | Do not introduce initially | Introduce both; only `continue` | Avoid breaking invariants/exit semantics | Low/medium | Real demand, exit semantics | D09 | Proposal |
+| D11 | Input | Explicit `Input`; `main()` or `main(input)` | global `read_line`; IO monad | Testability and safety | Low/medium | API, stdin, playground | D08, D02 | Proposal |
+| D12 | Errors | `Option`/`Result` as enums; `?` later | Exceptions; only contracts | Consistency and composition | Medium | Ergonomics, `?` | D05-D07 | Proposal |
+| D13 | Modules | File = module; `import`/`from`; `pub`; no cycles | Implicit; flat; cycles | Real projects and stdlib | High | Resolution, tooling, cache | D01-D12 | Proposal |
+| D14 | Project and cache | Minimal manifest; cache by content + interface + graph | No project; cache by mtime | Project analysis | Medium | Invalidation, performance | D13 | Proposal |
+| D15 | Requirements and impact | `requirements` + `impact` + `evidence`; read-only | Extend only `context` | Differential proposal | Medium | Precision/recall, ergonomics | D01, D06, D13 | Proposal |
+| D16 | IDs and schemas | IDs by declaration path; additive JSON; `type_repr` | IDs by line; no IDs | Stability for agents | Medium | Compatibility, migration | D15 | Proposal |
+| D17 | Security/playground | Disabled by default; isolation gate; limits | Public exposure already; process-only | Executing third-party code | High | Isolation tests | — | Proposal |
+| D18 | Scope of 1.0 | Core + modules + stdlib + tools + security; LSP/REPL optional | Everything; fixed date | Consistency and quality | High | Acceptance criteria | All | Proposal |
+| D19 | Runtime contracts | Maintain 0004/0007: checked on execution, not proved | Formal verification | Already decided | — | — | — | Previously decided |
+| D20 | Interpreter only runs checked programs | Maintain 0002 | Execute without checker | Already decided | — | — | — | Previously decided |
+| D21 | Requirements as differential feature | Maintain 0006; hypothesis still unmeasured | Another feature | Already decided | — | Evaluation H.7 | — | Previously decided direction, hypothesis pending |
 
-### J.1. Cuestiones abiertas que requieren aprobación
+### J.1. Open questions requiring approval
 
-1. ¿Se aprueba el álgebra de tipos D01 como base, aunque la implementación sea por fases?
-2. ¿Registros nominales D02 o se quiere explorar antes el tipado estructural?
-3. ¿Genéricos de usuario en 1.0 o solo builtins genéricos?
-4. ¿`match` expresión o sentencia? ¿`if` expresión también?
-5. ¿Exhaustividad obligatoria en `match` expresión y error en inalcanzables?
-6. ¿Listas inmutables D08 o se necesita mutabilidad para el caso de uso previsto?
-7. ¿`for` con `invariant` desde el inicio? ¿`break`/`continue` fuera de 1.0?
-8. ¿`Input` con `stdin: Text` o `stdin: List[Text]`? ¿Dos formas de `main`?
-9. ¿Módulos con `nexora.toml`? ¿Ciclos prohibidos? ¿Imports comodín?
-10. ¿Qué parte de la detección de requisitos debilitados se considera suficiente para 1.0?
-11. ¿Se introduce un sistema de warnings para patrones inalcanzables/variables sin usar?
-12. ¿Qué nivel de LSP/formatter/REPL se exige para 1.0 y cuál puede ser 1.x?
-13. ¿Qué presupuesto y modelos se usan en la evaluación empírica?
-14. ¿Quién aprueba la puerta de seguridad del playground?
+1. Is D01 approved as the base algebra, even if implementation is phased?
+2. Nominal records D02 or explore structural typing first?
+3. User generics in 1.0 or only generic builtins?
+4. `match` as expression or statement? `if` as expression too?
+5. Mandatory exhaustiveness in `match` expression and error on unreachable cases?
+6. Immutable lists D08 or mutability required for the expected use case?
+7. `for` with `invariant` from the start? `break`/`continue` outside 1.0?
+8. `Input` with `stdin: Text` or `stdin: List[Text]`? Two forms of `main`?
+9. Modules with `nexora.toml`? Prohibited cycles? Wildcard imports?
+10. What part of detecting weakened requirements is sufficient for 1.0?
+11. Should a warning system be introduced for unreachable patterns/unused variables?
+12. What LSP/formatter/REPL level is required for 1.0 and which may be 1.x?
+13. What budget and models are used in empirical evaluation?
+14. Who approves the security gate for the playground?
 
 ---
 
-## K. Criterios para NEXORA 1.0
+## K. Criteria for NEXORA 1.0
 
-### K.1. Imprescindibles
+### K.1. Essential
 
-| Área | Criterio verificable |
+| Area | Verifiable criterion |
 |---|---|
-| Semántica | Toda construcción documentada tiene especificación, ejemplos y pruebas; no hay construcciones “a medias” |
-| Tipos | Builtins + listas + registros + enums + `Option`/`Result` + genéricos acordados; errores estables; `type_repr` |
-| Contratos/refinamientos | `requires`/`ensures` estables; refinamientos sobre compuestos; ejemplos; `nex test`; límites documentados |
-| Módulos | Archivo=módulo; imports/exports/visibilidad; ciclos rechazados; proyecto analizable |
-| Diagnósticos | Códigos estables; posiciones; notas; sugerencias fundamentadas; sin duplicados; docs sincronizadas |
-| Herramientas | CLI/API/MCP de análisis con paridad; `requirements`/`impact`/`evidence`; MCP sin ejecución |
-| Formatter/tooling | Formatter canónico e idempotente; `nex fmt --check`; LSP puede ser 1.x si se declara |
-| Documentación | Spec + guías + ejemplos ejecutables; pruebas de documentación |
-| Pruebas | Unitarias, integración, límites, regresión, seguridad, fuzzing básico |
-| Seguridad | Modelo de amenazas; playground desactivado por defecto; puerta de aislamiento; sin P0 conocido |
-| Compatibilidad | Programas existentes siguen funcionando; guía de migración; esquemas aditivos |
-| Rendimiento | Línea base medida; sin afirmaciones no respaldadas |
+| Semantics | Every documented construction has specification, examples and tests; no “half-finished” constructs |
+| Types | Builtins + lists + records + enums + `Option`/`Result` + agreed generics; stable errors; `type_repr` |
+| Contracts/refinements | Stable `requires`/`ensures`; refinements over compounds; examples; `nex test`; documented limits |
+| Modules | File = module; imports/exports/visibility; cycles rejected; project analyzable |
+| Diagnostics | Stable codes; positions; notes; justified suggestions; no duplicates; docs synchronized |
+| Tools | CLI/API/MCP parity for analysis; `requirements`/`impact`/`evidence`; MCP without execution |
+| Formatter/tooling | Canonical idempotent formatter; `nex fmt --check`; LSP may be 1.x if declared |
+| Documentation | Spec + guides + executable examples; documentation tests |
+| Tests | Unit, integration, boundaries, regression, security, basic fuzzing |
+| Security | Threat model; playground disabled by default; isolation gate; no known P0 |
+| Compatibility | Existing programs keep working; migration guide; additive schemas |
+| Performance | Baseline measured; no unsupported claims |
 
-### K.2. Mejoras opcionales
+### K.2. Optional improvements
 
-- LSP completo (el mínimo puede ser diagnóstico por CLI/JSON).
+- Full LSP (minimum may be diagnosis via CLI/JSON).
 - REPL.
-- Formatter con más opciones de estilo.
+- Formatter with more style options.
 - Typeclasses.
-- Sistema de efectos `uses`.
+- `uses` effects system.
 - `ai fn`/`tool fn`.
-- Concurrencia.
-- Compilación a JS/WASM.
-- Registro de paquetes.
-- Optimización del intérprete.
-- Mapas, tuplas, rangos, interpolación.
+- Concurrency.
+- Compilation to JS/WASM.
+- Package registry.
+- Interpreter optimization.
+- Maps, tuples, ranges, interpolation.
 
-### K.3. Regla de honestidad de 1.0
+### K.3. Rule of honesty for 1.0
 
-1.0 no significa “sin errores” ni “verificación formal”. Significa que el núcleo es coherente, está documentado, tiene pruebas, distingue lo comprobado de lo no comprobado y no promete más de lo que puede. **No se fija una fecha.**
+1.0 does not mean “no errors” or “formal verification.” It means the core is coherent, documented, tested, distinguishes what is checked from what is not, and does not promise more than it can. **No date is fixed.**
 
 ---
 
-## L. Secuencia de decisiones
+## L. Decision sequence
 
-### L.1. Orden recomendado
+### L.1. Recommended order
 
-| Paso | Decisiones | Por qué | Puede ir en paralelo con |
+| Step | Decisions | Why | Can run in parallel with |
 |---|---|---|---|
-| 1 | Principios A + D01 (álgebra de tipos) | Bloquea tipos compuestos, patrones, listas y tooling | Revisión de principios, seguridad |
-| 2 | D02 (nominal), D03 (genéricos), D04 (refinamientos) | Definen la forma de los datos y las garantías | D05-D07 (diseño de enums/patrones) |
-| 3 | D05 (enums), D06 (`match`), D07 (exhaustividad) | Bloquea `Option`/`Result` y parte de la stdlib | D08-D09 (diseño de listas/`for`) |
-| 4 | D08 (listas), D09 (`for`), D10 (`break`/`continue`) | Base de iteración y datos | D11-D12 (diseño de entrada/errores) |
-| 5 | D11 (entrada), D12 (`Option`/`Result`) | Programas reales y testabilidad | D13-D14 (diseño de módulos) |
-| 6 | D13 (módulos), D14 (proyecto/caché) | Stdlib y análisis de proyectos | D15-D16 (diseño de requisitos/IDs) |
-| 7 | D15 (requisitos/impacto), D16 (IDs/esquemas) | Propuesta diferencial y herramientas | D17 (seguridad) |
-| 8 | D17 (seguridad/playground) | Puerta de exposición pública | Todas |
-| 9 | D18 (alcance 1.0) | Cierra el conjunto | Todas |
+| 1 | Principles A + D01 (type algebra) | Blocks compound types, patterns, lists and tooling | Principles review, security |
+| 2 | D02 (nominal), D03 (generics), D04 (refinements) | Define the shape of data and guarantees | D05-D07 (enum/pattern design) |
+| 3 | D05 (enums), D06 (`match`), D07 (exhaustiveness) | Blocks `Option`/`Result` and part of the stdlib | D08-D09 (list/`for` design) |
+| 4 | D08 (lists), D09 (`for`), D10 (`break`/`continue`) | Base of iteration and data | D11-D12 (input/error design) |
+| 5 | D11 (input), D12 (`Option`/`Result`) | Real programs and testability | D13-D14 (module design) |
+| 6 | D13 (modules), D14 (project/cache) | Stdlib and project analysis | D15-D16 (requirements/ID design) |
+| 7 | D15 (requirements/impact), D16 (IDs/schemas) | Differential proposal and tools | D17 (security) |
+| 8 | D17 (security/playground) | Gate to public exposure | All |
+| 9 | D18 (1.0 scope) | Closes the set | All |
 
-### L.2. Qué bloquea a qué
+### L.2. What blocks what
 
-- **D01** bloquea D02-D09, D12-D16.
-- **D05-D07** bloquean D12 (`Option`/`Result`).
-- **D08-D09** bloquean D11 (entrada con listas) y parte de la stdlib.
-- **D13-D14** bloquean `project_context`, stdlib y el análisis de proyectos.
-- **D15-D16** dependen de D01, D05-D07 y, para proyectos, D13.
-- **D17** es independiente, pero es puerta para exponer el playground.
-- **D18** depende de todas.
+- **D01** blocks D02-D09, D12-D16.
+- **D05-D07** block D12 (`Option`/`Result`).
+- **D08-D09** block D11 (input with lists) and part of the stdlib.
+- **D13-D14** block `project_context`, stdlib and project analysis.
+- **D15-D16** depend on D01, D05-D07 and, for projects, D13.
+- **D17** is independent but acts as the gate for exposing the playground.
+- **D18** depends on everything.
 
-### L.3. Qué puede explorarse en paralelo sin comprometer el diseño
+### L.3. What can be explored in parallel without locking the design
 
-- **Diagnósticos y formatter:** se pueden diseñar con la sintaxis actual y adaptarse después; no deben cerrar decisiones de tipos.
-- **Evaluación empírica H.7:** se puede preparar el arnés y las tareas con las capacidades actuales; no necesita esperar a módulos.
-- **Seguridad del playground I.3:** se puede planificar y ejecutar en un entorno controlado; no cambia el lenguaje.
-- **Documentación y ejemplos:** se pueden preparar borradores; no se publican hasta aprobar.
-- **Diseño de stdlib:** se puede esbozar sobre el papel; la implementación depende de módulos y tipos.
+- **Diagnostics and formatter:** can be designed with the current syntax and adapted later; they must not close type decisions.
+- **Empirical evaluation H.7:** can prepare the harness and tasks with current capabilities; no need to wait for modules.
+- **Playground security I.3:** can be planned and executed in a controlled environment; it does not change the language.
+- **Documentation and examples:** can prepare drafts; not published until approval.
+- **Stdlib design:** can be drafted on paper; implementation depends on modules and types.
 
-### L.4. Condiciones para pasar a implementación
+### L.4. Conditions for moving to implementation
 
-1. El responsable aprueba explícitamente D01 y los principios A.
-2. Se resuelven o se aplazan de forma explícita las cuestiones J.1.
-3. Se actualizan, en un cambio autorizado separado, `roadmap.md`, `limitations.md`, `language-spec.md` y el índice de decisiones.
-4. Se crea un plan de implementación por fases con criterios de aceptación (G.2).
-5. Se confirma que no se ha prometido una fecha ni una capacidad no decidida.
+1. The responsible party explicitly approves D01 and principles A.
+2. Open questions in J.1 are resolved or explicitly deferred.
+3. In a separate authorized change, `roadmap.md`, `limitations.md`, `language-spec.md` and the ADR index are updated.
+4. A phased implementation plan is created with acceptance criteria (G.2).
+5. It is confirmed that no date or unsupported capability has been promised.
 
-**Este ADR no modifica la hoja de ruta oficial.** La actualización del roadmap y del índice de decisiones queda pendiente de aprobación.
+**This ADR does not modify the official roadmap.** Updating the roadmap and ADR index is pending approval.

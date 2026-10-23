@@ -1,51 +1,51 @@
-# Código de conducta
+# Code of conduct
 
-Este proyecto adopta el **Contributor Covenant, versión 2.1**, un código de conducta reconocido y
-ampliamente usado en proyectos de código abierto.
+This project adopts the **Contributor Covenant, version 2.1**, a recognized and
+widely used code of conduct in open source projects.
 
-El texto completo, en español, está en:
-<https://www.contributor-covenant.org/es/version/2/1/code_of_conduct/>
+The full text is at:
+<https://www.contributor-covenant.org/version/2/1/code_of_conduct/>
 
-## En resumen
+## In short
 
-Queremos que participar en NEXORA sea una experiencia libre de acoso para todas las personas, con
-independencia de su edad, corpulencia, discapacidad, etnia, características sexuales, identidad y
-expresión de género, nivel de experiencia, educación, nivel socioeconómico, nacionalidad,
-apariencia personal, raza, religión u orientación sexual.
+We want taking part in NEXORA to be a harassment-free experience for everyone,
+regardless of age, body size, disability, ethnicity, sex characteristics, gender identity and
+expression, level of experience, education, socio-economic status, nationality,
+personal appearance, race, religion or sexual orientation.
 
-Se espera de quien participa:
+Participants are expected to show:
 
-- Empatía y amabilidad con las demás personas.
-- Respeto por las opiniones, puntos de vista y experiencias distintos.
-- Dar y aceptar críticas constructivas con buena disposición.
-- Asumir la responsabilidad de los propios errores, disculparse y aprender de ellos.
-- Centrarse en lo que es mejor para el proyecto y para quienes participan en él.
+- Empathy and kindness towards other people.
+- Respect for differing opinions, viewpoints and experiences.
+- Willingness to give and accept constructive criticism.
+- Responsibility for their own mistakes, apologizing and learning from them.
+- Focus on what is best for the project and for the people who take part in it.
 
-No se acepta:
+Not acceptable:
 
-- Lenguaje o imágenes de carácter sexual, ni atenciones sexuales no deseadas.
-- Comentarios insultantes o despectivos, y ataques personales o políticos.
-- Acoso, en público o en privado.
-- Publicar información privada de otras personas sin su permiso expreso.
-- Cualquier otra conducta que resulte razonablemente inapropiada en un entorno profesional.
+- Sexualized language or imagery, or unwanted sexual attention.
+- Insulting or derogatory comments, and personal or political attacks.
+- Harassment, in public or in private.
+- Publishing other people's private information without their explicit permission.
+- Any other conduct that could reasonably be considered inappropriate in a professional setting.
 
-## Ámbito
+## Scope
 
-Se aplica en todos los espacios del proyecto y cuando alguien representa al proyecto en público.
+It applies in all the spaces of the project and when someone represents the project in public.
 
-## Aplicación
+## Enforcement
 
-> **Pendiente de configurar por quien mantiene el proyecto.** El repositorio es público, pero
-> **todavía no hay una forma de contacto privada**: los avisos se pueden abrir en el
-> [rastreador de incidencias](https://github.com/xGlizyy/nexoralang/issues), que es público, y los
-> atiende quien mantiene el proyecto. Antes de abrir el proyecto a colaboradores hay que indicar
-> aquí una forma de contacto privada y quién atiende los avisos.
+> **Pending setup by whoever maintains the project.** The repository is public, but
+> **there is no private contact channel yet**: reports can be opened in the
+> [issue tracker](https://github.com/xGlizyy/nexoralang/issues), which is public, and they
+> are handled by whoever maintains the project. Before opening the project to contributors, a private
+> contact channel and who handles the reports have to be stated here.
 
-Cuando ese canal exista, los avisos se tratarán con confidencialidad y se aplicarán las pautas de
-actuación del Contributor Covenant (corrección, advertencia, expulsión temporal o permanente).
+When that channel exists, reports will be handled confidentially and the enforcement guidelines of
+the Contributor Covenant will be applied (correction, warning, temporary or permanent ban).
 
-## Atribución
+## Attribution
 
-Este documento resume y adopta el [Contributor Covenant](https://www.contributor-covenant.org/),
-versión 2.1, publicado bajo la licencia
-[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
+This document summarizes and adopts the [Contributor Covenant](https://www.contributor-covenant.org/),
+version 2.1, published under the
+[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/) licence.

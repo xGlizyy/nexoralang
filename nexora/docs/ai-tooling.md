@@ -1,63 +1,63 @@
-# Herramientas automáticas e IA
+# Automated tools and AI
 
-NEXORA nace de una pregunta: cómo debería ser un lenguaje cuando el código lo escriben, lo leen y
-lo revisan tanto personas como sistemas de inteligencia artificial. Esta página explica qué hay de
-eso **hoy**, con precisión, y qué es todavía una intención.
+NEXORA comes from a question: what a language should look like when code is written, read and
+reviewed by people and by artificial intelligence systems alike. This page explains what there is of
+that **today**, precisely, and what is still an intention.
 
-## Qué es cada cosa
+## What each thing is
 
-| | Qué incluye | Estado |
-|-|-------------|--------|
-| **Características del lenguaje** | Tipos estáticos sin conversiones implícitas, un solo significado por nombre, contratos y tipos refinados con la explicación de cada regla | Implementado |
-| **Datos estructurados para herramientas** | Diagnósticos, árbol de sintaxis, símbolos y resumen del programa en JSON, con [esquemas versionados](json-protocol.md) | Implementado y probado |
-| **API de Python** | El módulo `nexora.tooling`: las mismas salidas, sin pasar por la línea de comandos | Implementado y probado. **Experimental**: puede cambiar antes de la 1.0 |
-| **Servidor MCP** | Un servidor opcional que ofrece el análisis como herramientas a un asistente compatible ([MCP](mcp.md)) | Implementado y probado con el cliente del SDK oficial. Comprobado a mano en una sesión de Claude Code; **en ningún otro asistente** |
-| **Servidor de lenguaje (LSP)** | Integración con editores ([LSP](lsp.md)) | **Planificado. No existe** |
-| **Objetivo de investigación** | Averiguar si estas decisiones facilitan que una herramienta automática entienda, genere o corrija código | **Sin evaluar** |
-| **Integraciones con modelos de IA** | Llamadas a modelos, generación de código, asistente propio | **No existen** |
+| | What it includes | Status |
+|-|------------------|--------|
+| **Features of the language** | Static types without implicit conversions, a single meaning per name, contracts and refined types with the explanation of every rule | Implemented |
+| **Structured data for tools** | Diagnostics, syntax tree, symbols and summary of the program as JSON, with [versioned schemas](json-protocol.md) | Implemented and tested |
+| **Python API** | The `nexora.tooling` module: the same outputs, without going through the command line | Implemented and tested. **Experimental**: it may change before 1.0 |
+| **MCP server** | An optional server that offers the analysis as tools to a compatible assistant ([MCP](mcp.md)) | Implemented and tested with the client of the official SDK. Checked by hand in a Claude Code session; **in no other assistant** |
+| **Language server (LSP)** | Integration with editors ([LSP](lsp.md)) | **Planned. It does not exist** |
+| **Research goal** | Finding out whether these decisions make it easier for an automated tool to understand, generate or fix code | **Not evaluated** |
+| **Integrations with AI models** | Calls to models, code generation, an assistant of its own | **They do not exist** |
 
-Lo que NEXORA **no** hace:
+What NEXORA does **not** do:
 
-- No llama a ningún modelo de IA ni a ningún servicio externo. Funciona sin conexión.
-- Ningún modelo interviene en decidir si un programa es válido. Las reglas son código determinista:
-  el mismo archivo produce siempre el mismo resultado.
-- No incluye ningún asistente, generador de código ni corrector automático.
+- It calls no AI model and no external service. It works offline.
+- No model takes part in deciding whether a program is valid. The rules are deterministic code:
+  the same file always produces the same result.
+- It includes no assistant, code generator or automatic fixer.
 
-Y lo que **no se puede afirmar**:
+And what **cannot be claimed**:
 
-- No hay ninguna evaluación que muestre que una herramienta de IA obtenga mejores resultados con
-  NEXORA que con otro lenguaje. No se ha hecho ese experimento.
-- Las decisiones de diseño descritas aquí son hipótesis razonadas, no resultados medidos.
+- There is no evaluation that shows that an AI tool gets better results with
+  NEXORA than with another language. That experiment has not been done.
+- The design decisions described here are reasoned hypotheses, not measured results.
 
-## Lo que el lenguaje ofrece a una herramienta
+## What the language offers a tool
 
-Cuatro salidas en JSON, pensadas para leerse sin interpretar texto escrito para personas. Ninguna
-ejecuta el programa analizado.
+Four JSON outputs, meant to be read without interpreting text written for people. None
+runs the analyzed program.
 
-| Salida | Comando | Esquema | Contiene |
-|--------|---------|---------|----------|
-| Diagnósticos | `nex check archivo.nex --format json` | `nexora.diagnostics/1` | Los errores, con código, categoría, posición y sugerencia |
-| Estructura | `nex inspect archivo.nex` | `nexora.inspect/2` | El árbol de sintaxis, con el tipo de cada expresión |
-| Símbolos | `nex symbols archivo.nex --format json` | `nexora.symbols/1` | Funciones, parámetros y variables, con su tipo, su ámbito y cada uso |
-| Contexto | `nex context archivo.nex --format json` | `nexora.context/1` | Un resumen: firmas, contratos, quién llama a quién, características usadas |
+| Output | Command | Schema | Contains |
+|--------|---------|--------|----------|
+| Diagnostics | `nex check file.nex --format json` | `nexora.diagnostics/1` | The errors, with code, category, position and suggestion |
+| Structure | `nex inspect file.nex` | `nexora.inspect/2` | The syntax tree, with the type of every expression |
+| Symbols | `nex symbols file.nex --format json` | `nexora.symbols/1` | Functions, parameters and variables, with their type, their scope and every use |
+| Context | `nex context file.nex --format json` | `nexora.context/1` | A summary: signatures, contracts, who calls whom, features used |
 
-Las dos últimas están explicadas en [Contexto estructurado](ai-context.md); los formatos, sus
-versiones y sus reglas, en [Protocolo JSON](json-protocol.md).
+The last two are explained in [Structured context](ai-context.md); the formats, their
+versions and their rules, in [JSON protocol](json-protocol.md).
 
-### Cómo encajan las piezas
+### How the pieces fit
 
 ```text
-                       ┌─ nex (línea de comandos)
+                       ┌─ nex (command line)
 lexer → parser →       │
 checker  ──────────►  nexora.tooling  ──┼─ import nexora.tooling (Python)
-(análisis, sin ejecutar)   (documentos JSON)   │
-                       └─ nex-mcp (servidor MCP, opcional)
+(analysis, no run)        (JSON documents)    │
+                       └─ nex-mcp (MCP server, optional)
 ```
 
-Las tres entradas llaman a las mismas funciones y devuelven los mismos documentos. No hay un segundo
-analizador ni reglas duplicadas: lo que decide si un programa es válido es siempre el comprobador.
+The three entry points call the same functions and return the same documents. There is no second
+analyzer and no duplicated rules: what decides whether a program is valid is always the checker.
 
-### Diagnósticos
+### Diagnostics
 
 <!-- nex:check-json -->
 ```nex
@@ -98,18 +98,18 @@ fn main() -> Void {
 }
 ```
 
-Lo que una herramienta puede hacer con esto sin leer el texto del mensaje:
+What a tool can do with this without reading the text of the message:
 
-- Saber **si** el programa es válido (`ok`) y **qué clase** de problema tiene (`category`).
-- Identificar el problema con un código que no cambia entre versiones (`code`).
-- Localizar el fragmento exacto, de principio a fin (`line`, `column`, `end_line`, `end_column`).
-- Ofrecer la corrección sugerida cuando existe (`hint`); cuando es `null`, el lenguaje no tiene
-  ninguna sugerencia fundamentada y no inventa una.
+- Know **whether** the program is valid (`ok`) and **what kind** of problem it has (`category`).
+- Identify the problem with a code that does not change between versions (`code`).
+- Locate the exact fragment, from start to end (`line`, `column`, `end_line`, `end_column`).
+- Offer the suggested fix when there is one (`hint`); when it is `null`, the language has
+  no well-founded suggestion and does not make one up.
 
-### Estructura del programa
+### Structure of the program
 
-`nex inspect` devuelve el mismo árbol que usan el comprobador y el intérprete, no una
-representación aparte. Para el programa más pequeño posible:
+`nex inspect` returns the same tree that the checker and the interpreter use, not a separate
+representation. For the smallest possible program:
 
 <!-- nex:inspect -->
 ```nex
@@ -255,24 +255,24 @@ fn main() -> Void {
 }
 ```
 
-Cada nodo indica qué es (`kind`), de dónde sale (`span`) y, en las expresiones, qué tipo tiene
-(`type`). Todos los nodos y campos están descritos en [`inspect-schema.md`](inspect-schema.md).
+Every node says what it is (`kind`), where it comes from (`span`) and, in expressions, what type it has
+(`type`). All the nodes and fields are described in [`inspect-schema.md`](inspect-schema.md).
 
-## API de Python
+## Python API
 
-El módulo `nexora.tooling` ofrece el análisis a otro programa de Python, sin lanzar un proceso ni
-interpretar la salida de la terminal. **Es experimental**: está probado, pero sus nombres pueden
-cambiar antes de la versión 1.0. El resto de módulos (`lexer`, `parser`, `checker`…) son internos.
+The `nexora.tooling` module offers the analysis to another Python program, without starting a process or
+interpreting the output of the terminal. **It is experimental**: it is tested, but its names may
+change before version 1.0. The rest of the modules (`lexer`, `parser`, `checker`…) are internal.
 
-| Función | Devuelve |
-|---------|----------|
-| `check_source(source, filename="source.nex")` | Documento `nexora.diagnostics/1` |
-| `inspect_source(source, filename="source.nex")` | Documento `nexora.inspect/2` |
-| `get_symbols(source, filename="source.nex", *, name=None, function=None)` | Documento `nexora.symbols/1` |
-| `get_context(source, filename="source.nex")` | Documento `nexora.context/1` |
-| `get_language_spec(section=None)` | Documento `nexora.spec/1`: el índice de la especificación, o una sección |
-| `get_capabilities()` | Documento `nexora.capabilities/1`: palabras clave, tipos, funciones integradas, códigos de error, límites |
-| `render_context(document)`, `render_symbols(document)` | El texto que escriben `nex context` y `nex symbols` |
+| Function | Returns |
+|----------|---------|
+| `check_source(source, filename="source.nex")` | `nexora.diagnostics/1` document |
+| `inspect_source(source, filename="source.nex")` | `nexora.inspect/2` document |
+| `get_symbols(source, filename="source.nex", *, name=None, function=None)` | `nexora.symbols/1` document |
+| `get_context(source, filename="source.nex")` | `nexora.context/1` document |
+| `get_language_spec(section=None)` | `nexora.spec/2` document: the index of the specification, or a section |
+| `get_capabilities()` | `nexora.capabilities/1` document: keywords, types, built-in functions, error codes, limits |
+| `render_context(document)`, `render_symbols(document)` | The text that `nex context` and `nex symbols` write |
 
 ```python
 from nexora.tooling import check_source
@@ -282,127 +282,128 @@ print(result["ok"])                        # False
 print(result["diagnostics"][0]["code"])    # E2005
 ```
 
-- Reciben el **código como texto** y devuelven diccionarios que se convierten a JSON sin más.
-  `filename` es solo una etiqueta: no se abre ningún archivo.
-- **Ninguna ejecuta el programa**, ni escribe en disco, ni usa la red.
-- Un programa con errores no lanza una excepción: devuelve `ok: False` y los diagnósticos.
-- `ToolingError` se lanza solo por un argumento incorrecto (por ejemplo, una sección que no existe).
-- `get_language_spec` lee la especificación del proyecto. Solo está disponible con NEXORA instalado
-  desde el código fuente; desde un paquete *wheel* responde `available: False`.
+- They receive the **code as text** and return dictionaries that convert to JSON as they are.
+  `filename` is only a label: no file is opened.
+- **None of them runs the program**, writes to disk or uses the network.
+- A program with errors does not raise an exception: it returns `ok: False` and the diagnostics.
+- `ToolingError` is only raised for a wrong argument (for example, a section that does not exist).
+- `get_language_spec` reads the specification of the project. It is only available with NEXORA installed
+  from the source code; from a *wheel* package it answers `available: False`.
 
-Para **ejecutar** un programa desde Python existe otro módulo, `nexora.api` (`run_source`), que es
-el que usa el [playground](playground.md). Está separado a propósito: las herramientas de análisis
-no pueden ejecutar nada.
+To **run** a program from Python there is another module, `nexora.api` (`run_source`), which is
+the one the [playground](playground.md) uses. It is separate on purpose: the analysis tools
+cannot run anything.
 
-## El ciclo de un agente
+## The cycle of an agent
 
-El uso para el que están pensadas estas herramientas:
+The use these tools are meant for:
 
-1. **Obtener las reglas** de la fuente oficial: `get_capabilities` y `get_language_spec`.
-2. **Obtener el contexto** del programa: `nex context`, y `nex symbols` para lo que vaya a tocar.
-3. **Escribir o modificar** el código. Esto lo hace el agente; NEXORA no interviene.
-4. **Analizar**: `nex check --format json`.
-5. **Leer los diagnósticos**: código, categoría, posición exacta, sugerencia si la hay.
-6. **Corregir** y volver al paso 4, hasta que `ok` sea `true` o se agote el número de intentos que
-   el agente tenga fijado.
+1. **Getting the rules** from the official source: `get_capabilities` and `get_language_spec`.
+2. **Getting the context** of the program: `nex context`, and `nex symbols` for what it is going to touch.
+3. **Writing or modifying** the code. The agent does this; NEXORA takes no part.
+4. **Analyzing**: `nex check --format json`.
+5. **Reading the diagnostics**: code, category, exact position, suggestion if there is one.
+6. **Fixing** and going back to step 4, until `ok` is `true` or the number of attempts that
+   the agent has set runs out.
 
-Todo lo que NEXORA aporta en ese ciclo es determinista y comprobable. Ni genera el código, ni aplica
-correcciones, ni decide cuándo parar. Y que `ok` sea `true` significa que el programa cumple las
-reglas estáticas, no que haga lo que se pretendía: eso solo lo dicen la ejecución y las pruebas.
+Everything NEXORA brings to that cycle is deterministic and checkable. It neither generates the code, nor applies
+fixes, nor decides when to stop. And `ok` being `true` means that the program meets the
+static rules, not that it does what was intended: only running it and testing it say that.
 
-Un agente puede recorrer el ciclo con la línea de comandos, con la API de Python o, si su asistente
-es compatible, con el [servidor MCP](mcp.md).
+An agent can go through the cycle with the command line, with the Python API or, if its assistant
+is compatible, with the [MCP server](mcp.md).
 
-## Tareas de referencia
+## Reference tasks
 
-`tests/tooling_tasks.py` define nueve tareas que una persona o un agente necesita resolver sobre un
-programa, cada una con la herramienta que la responde y la respuesta esperada:
+`tests/tooling_tasks.py` defines nine tasks that a person or an agent needs to solve on a
+program, each one with the tool that answers it and the expected answer:
 
-| Tarea | Herramienta |
-|-------|-------------|
-| Listar las funciones y sus firmas | `get_context` |
-| Averiguar el tipo de una variable sin anotación | `get_symbols` |
-| Saber quién llama a una función y qué promete, antes de cambiarla | `get_context` |
-| Encontrar cada uso de un parámetro | `get_symbols` |
-| Decir si un programa es válido y, si no, qué falla, dónde y con qué sugerencia | `check_source` |
-| Distinguir cuál de dos versiones de un programa es válida | `check_source` |
-| Consultar en la especificación qué significa un código de error | `get_language_spec` |
-| Localizar en qué llamada se incumple un contrato | `nexora.api.run_source` (**ejecuta** el programa) |
-| Reconocer lo que el análisis estático **no** puede decir | `get_context` |
+| Task | Tool |
+|------|------|
+| List the functions and their signatures | `get_context` |
+| Find out the type of a variable without an annotation | `get_symbols` |
+| Know who calls a function and what it promises, before changing it | `get_context` |
+| Find every use of a parameter | `get_symbols` |
+| Say whether a program is valid and, if not, what fails, where and with which suggestion | `check_source` |
+| Tell which of two versions of a program is valid | `check_source` |
+| Look up in the specification what an error code means | `get_language_spec` |
+| Locate in which call a contract is broken | `nexora.api.run_source` (it **runs** the program) |
+| Recognize what the static analysis can **not** say | `get_context` |
 
-`tests/test_tooling_tasks.py` comprueba las nueve contra las herramientas reales. Las dos últimas
-son deliberadas: el programa de referencia llama a una función con un valor que incumple su
-contrato. El análisis estático responde `ok: true` y avisa en una nota de que los contratos no se han
-demostrado; encontrar el incumplimiento exige ejecutar el programa, cosa que las herramientas de
-análisis (y el servidor MCP) no hacen.
+`tests/test_tooling_tasks.py` checks all nine against the real tools. The last two
+are deliberate: the reference program calls a function with a value that breaks its
+contract. The static analysis answers `ok: true` and warns in a note that the contracts have not been
+proven; finding the violation requires running the program, which the analysis tools
+(and the MCP server) do not do.
 
-**Qué mide y qué no.** Mide que las herramientas deterministas responden correctamente a esas
-preguntas. **No mide ningún modelo de IA.** Que un agente escriba mejor NEXORA con estas herramientas
-que sin ellas no se ha evaluado, y no se afirma.
+**What it measures and what it does not.** It measures that the deterministic tools answer those
+questions correctly. **It measures no AI model.** Whether an agent writes better NEXORA with these tools
+than without them has not been evaluated, and it is not claimed.
 
-Una evaluación así tendría que hacerse fuera de este repositorio (que no llama a ningún modelo), y
-para ser honesta necesitaría: un conjunto de tareas fijado de antemano, las mismas tareas con y sin
-herramientas, varios intentos por tarea, un criterio de éxito automático (el programa pasa
-`nex check` y produce la salida esperada con `nex run`) y la publicación de todos los resultados,
-también los malos.
+An evaluation like that would have to be done outside this repository (which calls no model), and
+to be honest it would need: a set of tasks fixed in advance, the same tasks with and without
+tools, several attempts per task, an automatic success criterion (the program passes
+`nex check` and produces the expected output with `nex run`) and the publication of all the results,
+the bad ones too.
 
-## Garantías de estas salidas
+## Guarantees of these outputs
 
-Comprobadas por pruebas automatizadas:
+Checked by automated tests:
 
-| Garantía | Prueba |
-|----------|--------|
-| Cada documento cumple su JSON Schema, también con entradas incorrectas | `tests/test_tooling.py` |
-| La CLI, la API de Python y el servidor MCP devuelven el mismo documento | `tests/test_tooling.py`, `tests/test_mcp.py` |
-| Ninguna herramienta de análisis ejecuta el programa, abre archivos ajenos ni usa la red | `tests/test_security.py`, `tests/test_mcp.py` |
-| La salida es siempre JSON válido, también para archivos inexistentes o que no son NEXORA | `tests/test_cli.py`, `tests/test_robustness.py` |
-| Los campos y su orden son los documentados | `tests/test_inspect.py`, `tests/test_cli.py` |
-| Las posiciones coinciden con el texto del archivo | `tests/test_inspect.py`, `tests/test_diagnostics.py` |
-| El mismo archivo produce exactamente la misma salida | `tests/test_inspect.py`, `tests/test_cli.py` |
-| Ni `check` ni `inspect` ejecutan el programa | `tests/test_security.py` |
-| Los ejemplos JSON de esta página son la salida real | `tests/test_docs.py` |
+| Guarantee | Test |
+|-----------|------|
+| Every document meets its JSON Schema, also with wrong inputs | `tests/test_tooling.py` |
+| The CLI, the Python API and the MCP server return the same document | `tests/test_tooling.py`, `tests/test_mcp.py` |
+| No analysis tool runs the program, opens other files or uses the network | `tests/test_security.py`, `tests/test_mcp.py` |
+| The output is always valid JSON, also for missing files or files that are not NEXORA | `tests/test_cli.py`, `tests/test_robustness.py` |
+| The fields and their order are the documented ones | `tests/test_inspect.py`, `tests/test_cli.py` |
+| The positions match the text of the file | `tests/test_inspect.py`, `tests/test_diagnostics.py` |
+| The same file produces exactly the same output | `tests/test_inspect.py`, `tests/test_cli.py` |
+| Neither `check` nor `inspect` runs the program | `tests/test_security.py` |
+| The JSON examples of this page are the real output | `tests/test_docs.py` |
 
-## Versiones de los esquemas
+## Versions of the schemas
 
-Cada documento lleva un campo `schema` con nombre y número de versión.
+Every document carries a `schema` field with a name and a version number.
 
-- El número **cambia** si un campo o un tipo de nodo se elimina, se renombra o cambia de significado.
-- El número **no cambia** si se añaden campos o tipos de nodo. Una herramienta debe ignorar lo que
-  no conozca.
+- The number **changes** if a field or a node kind is removed, renamed or changes its meaning.
+- The number **does not change** if fields or node kinds are added. A tool must ignore what it
+  does not know.
 
-Las reglas completas, el historial y los archivos JSON Schema están en
-[Protocolo JSON](json-protocol.md).
+The complete rules, the history and the JSON Schema files are in
+[JSON protocol](json-protocol.md).
 
-## Limitaciones
+## Limitations
 
-- **Con errores de sintaxis el árbol es parcial** (`"complete": false`): faltan las sentencias que
-  tienen un error y las funciones cuya declaración lo tiene, y solo se comunican los errores de
-  sintaxis. Sirve para inspeccionar código a medio escribir, con esa salvedad.
-- **Con errores léxicos no hay árbol** (`"program": null`): un texto sin cerrar o un carácter no
-  válido impiden todo el análisis.
-- **Los comentarios no aparecen en el árbol.**
-- **No hay información entre archivos**: un programa es un único archivo.
-- **No se puede aplicar una corrección automáticamente.** `hint` es un texto para personas, no una
-  edición estructurada con posición y texto de reemplazo.
-- **Los mensajes están en inglés** y su redacción puede cambiar; lo estable es el código.
-- **El JSON de `nex run` solo aparece si hay un fallo**, y va a la salida de error.
-- **No hay servidor de lenguaje ni formateador.** El [LSP](lsp.md) está planificado, no implementado.
-- **La API de Python es experimental**, y los demás módulos son internos y pueden cambiar sin aviso.
-- **El servidor MCP solo se ha probado en un asistente** (Claude Code, una sesión manual), además
-  de las pruebas automáticas con el cliente del SDK.
-- **No se ha evaluado ningún modelo de IA** con estas herramientas.
-- Los nodos `Contract` y `TypeDecl` son estables desde `nexora.inspect/2`.
+- **With syntax errors the tree is partial** (`"complete": false`): the statements that
+  have an error and the functions whose declaration has one are missing, and only the syntax errors
+  are reported. It is useful to inspect half-written code, with that caveat.
+- **With lexical errors there is no tree** (`"program": null`): an unclosed text or an invalid
+  character prevents the whole analysis.
+- **Comments do not appear in the tree.**
+- **Across files there is little information**: the documents describe the entry file, and of the
+  modules it imports they only give the `file` of each function and symbol.
+- **A fix cannot be applied automatically.** `hint` is a text for people, not a
+  structured edit with a position and replacement text.
+- **Messages are in English** and their wording may change; what is stable is the code.
+- **The JSON of `nex run` only appears if there is a failure**, and it goes to the standard error.
+- **There is no language server or formatter.** The [LSP](lsp.md) is planned, not implemented.
+- **The Python API is experimental**, and the other modules are internal and may change without notice.
+- **The MCP server has only been tested in one assistant** (Claude Code, a manual session), besides
+  the automated tests with the SDK client.
+- **No AI model has been evaluated** with these tools.
+- The `Contract` and `TypeDecl` nodes are stable since `nexora.inspect/2`.
 
-## Casos de uso que esto permite
+## Use cases this allows
 
-Usos para los que estas salidas son suficientes, sin que NEXORA incluya ninguno:
+Uses for which these outputs are enough, without NEXORA including any of them:
 
-- Un editor que subraye los errores en su posición exacta y muestre la sugerencia.
-- Un script de integración continua que rechace cambios según la categoría de los errores.
-- Una herramienta que liste las funciones de un programa con sus firmas y contratos.
-- Un asistente de IA externo que, tras generar código, ejecute `nex check --format json`, lea los
-  códigos y posiciones, y corrija el programa en un bucle, con el intérprete —y no el modelo— como
-  árbitro de si el resultado es válido.
+- An editor that underlines errors at their exact position and shows the suggestion.
+- A continuous integration script that rejects changes according to the category of the errors.
+- A tool that lists the functions of a program with their signatures and contracts.
+- An external AI assistant that, after generating code, runs `nex check --format json`, reads the
+  codes and positions, and fixes the program in a loop, with the interpreter —and not the model— as
+  the judge of whether the result is valid.
 
-Este último es el escenario que motiva el diseño. Que funcione mejor que con otros lenguajes es
-justo lo que queda por comprobar.
+The last one is the scenario that motivates the design. Whether it works better than with other languages is
+exactly what remains to be checked.

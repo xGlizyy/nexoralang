@@ -1,41 +1,41 @@
-# Tipos
+# Types
 
-NEXORA tiene un sistema de tipos **estático**: el tipo de cada expresión se conoce sin ejecutar el
-programa, y todos los errores de tipos los detecta `nex check`. Ningún error de tipos puede
-aparecer mientras el programa se ejecuta.
+NEXORA has a **static** type system: the type of every expression is known without running the
+program, and all type errors are detected by `nex check`. No type error can
+appear while the program runs.
 
-La definición formal está en la [especificación](language-spec.md#4-tipos-de-datos). Esta guía la
-explica con ejemplos; todos se comprueban en las pruebas del proyecto.
+The formal definition is in the [specification](language-spec.md#4-data-types). This guide
+explains it with examples; all of them are checked by the tests of the project.
 
-## Los tipos
+## The types
 
-| Tipo | Valores | Literales |
-|------|---------|-----------|
-| `Int` | Enteros de 64 bits con signo: de `-9223372036854775808` a `9223372036854775807` | `0`, `42`, `1_000_000` |
-| `Float` | Coma flotante IEEE 754 de 64 bits | `3.14`, `0.5`, `10.0` |
-| `Bool` | Verdadero o falso | `true`, `false` |
-| `Text` | Texto Unicode, inmutable | `"Hello"` |
-| `List[T]` | Secuencia inmutable y finita de valores de tipo `T` | `[1, 2, 3]`, `[]` (con un tipo esperado) |
-| Un registro | Los valores que se construyen con `Nombre(campo: valor, ...)` | `Point(x: 1, y: 2)` |
-| `Void` | Ningún valor | No tiene literales |
+| Type | Values | Literals |
+|------|--------|----------|
+| `Int` | 64-bit signed integers: from `-9223372036854775808` to `9223372036854775807` | `0`, `42`, `1_000_000` |
+| `Float` | IEEE 754 64-bit floating point | `3.14`, `0.5`, `10.0` |
+| `Bool` | True or false | `true`, `false` |
+| `Text` | Unicode text, immutable | `"Hello"` |
+| `List[T]` | Immutable and finite sequence of values of type `T` | `[1, 2, 3]`, `[]` (with an expected type) |
+| A record | The values built with `Name(field: value, ...)` | `Point(x: 1, y: 2)` |
+| `Void` | No value | It has no literals |
 
-`Int`, `Float`, `Bool` y `Text` son los **tipos de valor** integrados. `List[T]` es un tipo de valor
-compuesto, y un programa puede declarar tipos refinados sobre los integrados y registros. `Void`
-solo puede usarse como tipo de retorno de una función que no devuelve nada.
+`Int`, `Float`, `Bool` and `Text` are the built-in **value types**. `List[T]` is a compound value
+type, and a program can declare refined types over the built-in ones and records. `Void`
+can only be used as the return type of a function that returns nothing.
 
-Detalles de cada uno:
+Details of each one:
 
-- **`Int`**: un resultado fuera de rango no "da la vuelta": detiene el programa con el error `E3002`.
-- **`Float`**: algunas fracciones decimales no son exactas (`0.1 + 0.2` es `0.30000000000000004`).
-  No existen infinito ni NaN: una operación cuyo resultado no cabe detiene el programa (`E3003`).
-  Existe el cero negativo (`-0.0`), que es igual a `0.0`.
-- **`Text`**: se escribe entre comillas dobles, en una sola línea. Los escapes son `\n`, `\t`,
-  `\"`, `\\` y `\{`. Una llave `{` sin escapar es un error: está reservada.
-- Un literal numérico no lleva signo: `-5` es el operador `-` aplicado a `5`.
+- **`Int`**: a result out of range does not "wrap around": it stops the program with the error `E3002`.
+- **`Float`**: some decimal fractions are not exact (`0.1 + 0.2` is `0.30000000000000004`).
+  There is no infinity and no NaN: an operation whose result does not fit stops the program (`E3003`).
+  Negative zero (`-0.0`) exists, and it is equal to `0.0`.
+- **`Text`**: it is written between double quotes, on a single line. The escapes are `\n`, `\t`,
+  `\"`, `\\` and `\{`. An unescaped brace `{` is an error: it is reserved.
+- A numeric literal has no sign: `-5` is the `-` operator applied to `5`.
 
-## Inferencia y anotaciones
+## Inference and annotations
 
-Sin anotación, una variable toma el tipo de su valor:
+Without an annotation, a variable takes the type of its value:
 
 <!-- nex:body -->
 ```nex
@@ -45,7 +45,7 @@ let price = 19.99        // Float
 let active = true        // Bool
 ```
 
-Con anotación, el valor tiene que ser **exactamente** de ese tipo:
+With an annotation, the value has to be **exactly** of that type:
 
 <!-- nex:body -->
 ```nex
@@ -55,7 +55,7 @@ let price: Float = 19.99
 let active: Bool = true
 ```
 
-Si no lo es, el error señala el valor:
+If it is not, the error points at the value:
 
 <!-- nex:check-fails -->
 ```nex
@@ -76,34 +76,34 @@ type error[E2011]: Type mismatch
 error: program.nex: check failed with 1 error
 ```
 
-La sugerencia (`hint`) aparece porque existe una conversión de `Int` a `Float`. Cuando no existe
-ninguna conversión entre los dos tipos, no se sugiere nada.
+The suggestion (`hint`) appears because there is a conversion from `Int` to `Float`. When there is
+no conversion between the two types, nothing is suggested.
 
-## La regla de compatibilidad
+## The compatibility rule
 
-**Dos tipos son compatibles solo si son el mismo tipo, o si el valor es de un tipo refinado y se
-espera su base.** No hay tipos numéricos "más anchos" ni conversiones automáticas:
+**Two types are compatible only if they are the same type, or if the value is of a refined type and
+its base is expected.** There are no "wider" numeric types and no automatic conversions:
 
-- Un `Int` no se acepta donde se espera un `Float`, ni al revés.
-- Ningún tipo se convierte a `Bool` ni a `Text` por sí solo.
-- Un `Percent` (refinado sobre `Int`) se acepta donde se espera un `Int`; la dirección contraria
-  exige construir el refinado.
-- Los argumentos de `List` son invariantes: `List[Percent]` no se acepta donde se espera
-  `List[Int]`, aunque cada `Percent` sea un `Int`.
+- An `Int` is not accepted where a `Float` is expected, nor the other way round.
+- No type converts to `Bool` or to `Text` on its own.
+- A `Percent` (refined over `Int`) is accepted where an `Int` is expected; the opposite direction
+  requires building the refined value.
+- The arguments of `List` are invariant: `List[Percent]` is not accepted where
+  `List[Int]` is expected, even though every `Percent` is an `Int`.
 
-La regla se aplica en los cuatro lugares donde un valor tiene que tener un tipo concreto:
+The rule applies in the four places where a value has to have a concrete type:
 
-| Lugar | Ejemplo incorrecto |
-|-------|--------------------|
-| La anotación de una variable | `let n: Int = 2.0` |
-| Un argumento de una llamada | `half(4)` si `half` espera un `Float` |
-| El valor de un `return` | `return "x"` en una función `-> Int` |
-| Los operandos de un operador | `1 + 1.5` |
+| Place | Wrong example |
+|-------|---------------|
+| The annotation of a variable | `let n: Int = 2.0` |
+| An argument of a call | `half(4)` if `half` expects a `Float` |
+| The value of a `return` | `return "x"` in a `-> Int` function |
+| The operands of an operator | `1 + 1.5` |
 
-## Listas
+## Lists
 
-Una lista es una secuencia **inmutable y finita** de valores del mismo tipo. Se escribe `List[T]`,
-donde `T` es el tipo de sus elementos:
+A list is an **immutable and finite** sequence of values of the same type. It is written `List[T]`,
+where `T` is the type of its elements:
 
 ```nex
 let numbers: List[Int] = [1, 2, 3]
@@ -112,17 +112,17 @@ let nested: List[List[Int]] = [[1], [2, 3]]
 let words: List[Text] = ["a", "b"]
 ```
 
-`T` puede ser `Int`, `Float`, `Bool`, `Text`, un tipo refinado u otra `List[...]`; no puede ser
-`Void`. Los argumentos de `List` son **invariantes**: `List[Int]` y `List[Text]` son tipos
-distintos, y `List[Percent]` no se acepta donde se espera `List[Int]`. Un elemento refinado sí
-puede ensancharse a su base al construir la lista con un tipo esperado:
+`T` can be `Int`, `Float`, `Bool`, `Text`, a refined type or another `List[...]`; it cannot be
+`Void`. The arguments of `List` are **invariant**: `List[Int]` and `List[Text]` are different
+types, and `List[Percent]` is not accepted where `List[Int]` is expected. A refined element can
+be widened to its base when the list is built with an expected type:
 `let xs: List[Int] = [Percent(10), 20]`.
 
-Sin un tipo esperado, el primer elemento fija el tipo de los demás. Una lista vacía necesita un
-tipo esperado (una anotación, un parámetro, un retorno, una asignación o el lado izquierdo de una
-igualdad, como `a == []`); `let xs = []` es `E2011`. El tipo no se propaga del lado derecho al
-izquierdo de una igualdad: `[] == a` es `E2011`. Todos los elementos tienen que ser del mismo tipo:
-`let xs = [1, "a"]` es `E2011`.
+Without an expected type, the first element sets the type of the rest. An empty list needs an
+expected type (an annotation, a parameter, a return, an assignment or the left-hand side of an
+equality, as in `a == []`); `let xs = []` is `E2011`. The type does not propagate from the right-hand side to the
+left-hand side of an equality: `[] == a` is `E2011`. All the elements have to be of the same type:
+`let xs = [1, "a"]` is `E2011`.
 
 <!-- nex:run -->
 ```nex
@@ -150,39 +150,39 @@ true
 6
 ```
 
-Una lista no cambia: `List.append` y `List.concat` construyen listas nuevas. `print` y `to_text`
-escriben `[1, 2, 3]`, y `==`/`!=` comparan listas del mismo tipo de forma estructural. No hay
-sintaxis de índice (`xs[i]`), mutación de elementos ni orden entre listas. Para leer una posición se
-usa `List.get`, que exige un índice válido y detiene el programa con `E4001` si no lo es. Las cinco
-funciones y el `for` están en la [especificación](language-spec.md), secciones 8.2 y 9.6.
+A list does not change: `List.append` and `List.concat` build new lists. `print` and `to_text`
+write `[1, 2, 3]`, and `==`/`!=` compare lists of the same type structurally. There is no
+index syntax (`xs[i]`), no mutation of elements and no ordering between lists. To read a position,
+use `List.get`, which requires a valid index and stops the program with `E4001` if it is not. The five
+functions and the `for` are in the [specification](language-spec.md), sections 8.2 and 9.6.
 
-No se puede refinar una lista en esta versión (`type NonEmpty = List[Int] ...` es `E2016`).
+A list cannot be refined in this version (`type NonEmpty = List[Int] ...` is `E2016`).
 
-## Operadores
+## Operators
 
-| Operadores | Operandos | Resultado |
-|------------|-----------|-----------|
-| `+`  `-`  `*`  `/` | Dos `Int` o dos `Float` | El mismo tipo |
-| `+` | Dos `Text` | `Text` (los une) |
-| `-x` | `Int` o `Float` | El mismo tipo |
-| `==`  `!=` | Dos valores del mismo tipo | `Bool` |
-| `<`  `<=`  `>`  `>=` | Dos `Int` o dos `Float` | `Bool` |
-| `and`  `or` | Dos `Bool` | `Bool` |
+| Operators | Operands | Result |
+|-----------|----------|--------|
+| `+`  `-`  `*`  `/` | Two `Int` or two `Float` | The same type |
+| `+` | Two `Text` | `Text` (joins them) |
+| `-x` | `Int` or `Float` | The same type |
+| `==`  `!=` | Two values of the same type | `Bool` |
+| `<`  `<=`  `>`  `>=` | Two `Int` or two `Float` | `Bool` |
+| `and`  `or` | Two `Bool` | `Bool` |
 | `not x` | `Bool` | `Bool` |
 
-La precedencia, de mayor a menor: `-x` y `not`; `*` y `/`; `+` y `-`; comparaciones; `and`; `or`.
-Los paréntesis agrupan.
+Precedence, from highest to lowest: `-x` and `not`; `*` and `/`; `+` and `-`; comparisons; `and`; `or`.
+Parentheses group.
 
 <!-- nex:run -->
 ```nex
 fn main() -> Void {
-    print(2 + 3 * 4)                    // 14: '*' antes que '+'
+    print(2 + 3 * 4)                    // 14: '*' before '+'
     print((2 + 3) * 4)                  // 20
-    print(7 / 2)                        // 3: Int / Int es Int
+    print(7 / 2)                        // 3: Int / Int is Int
     print(7.0 / 2.0)                    // 3.5
     print("Nex" + "ora")
     print(3 > 2 and not (1 == 2))
-    print(true or false and false)      // 'and' antes que 'or'
+    print(true or false and false)      // 'and' before 'or'
 }
 ```
 
@@ -196,38 +196,38 @@ true
 true
 ```
 
-Cosas que conviene saber:
+Things worth knowing:
 
-- **División entre enteros.** `Int / Int` devuelve un `Int` y descarta los decimales, redondeando
-  hacia cero: `7 / 2` es `3` y `-7 / 2` es `-3`. Para obtener decimales, divide dos `Float`.
-- **Comparaciones.** No se encadenan: `a < b < c` es un error de sintaxis. Se escribe
+- **Integer division.** `Int / Int` returns an `Int` and drops the decimals, rounding
+  towards zero: `7 / 2` is `3` and `-7 / 2` is `-3`. To get decimals, divide two `Float` values.
+- **Comparisons.** They do not chain: `a < b < c` is a syntax error. Write
   `a < b and b < c`.
-- **`not`** se aplica antes que las comparaciones: `not a == b` significa `(not a) == b`. Para
-  negar una comparación escribe `not (a == b)` o `a != b`.
-- **`and` y `or`** no evalúan su lado derecho si el izquierdo ya decide el resultado.
-- **Textos.** Admiten `+`, `==`, `!=` y el orden (`<`, `<=`, `>`, `>=`) entre dos textos, carácter
-  a carácter por punto de código Unicode: `"Z" < "a"` y `"10" < "9"` son verdaderos. Sus funciones
-  (`Text.length`, `Text.slice`…) y la lectura de números (`Int.parse`, `Float.parse`) están en la
-  [especificación](language-spec.md), sección 8.1.
+- **`not`** applies before comparisons: `not a == b` means `(not a) == b`. To
+  negate a comparison write `not (a == b)` or `a != b`.
+- **`and` and `or`** do not evaluate their right-hand side if the left-hand side already decides the result.
+- **Texts.** They allow `+`, `==`, `!=` and ordering (`<`, `<=`, `>`, `>=`) between two texts, character
+  by character by Unicode code point: `"Z" < "a"` and `"10" < "9"` are true. Their functions
+  (`Text.length`, `Text.slice`…) and reading numbers (`Int.parse`, `Float.parse`) are in the
+  [specification](language-spec.md), section 8.1.
 
-## Casos inválidos
+## Invalid cases
 
-Cada una de estas líneas es un error de tipos (`E2011`), detectado sin ejecutar:
+Each of these lines is a type error (`E2011`), detected without running:
 
 <!-- nex:body-fails codes=E2011 -->
 ```nex
-let a = 10 + 2.5           // Int y Float no se mezclan
-let b = 1 == 1.0           // tampoco al comparar
-let c = true + 1           // un Bool no admite aritmética
-let d = true < false       // ni orden
-let e = "a" + 1            // '+' une Text con Text
-let f = [1] == ["a"]       // las listas comparan elementos del mismo tipo
-let g = 1 and 2            // 'and' necesita dos Bool
-let h = not 0              // 'not' necesita un Bool
-let i = -"text"            // '-' necesita un número
+let a = 10 + 2.5           // Int and Float do not mix
+let b = 1 == 1.0           // not even when comparing
+let c = true + 1           // a Bool does not allow arithmetic
+let d = true < false       // nor ordering
+let e = "a" + 1            // '+' joins Text with Text
+let f = [1] == ["a"]       // lists compare elements of the same type
+let g = 1 and 2            // 'and' needs two Bool
+let h = not 0              // 'not' needs a Bool
+let i = -"text"            // '-' needs a number
 ```
 
-Una condición tiene que ser un `Bool`; un número no vale:
+A condition has to be a `Bool`; a number is not valid:
 
 <!-- nex:check-fails -->
 ```nex
@@ -250,23 +250,23 @@ type error[E2011]: Type mismatch
 error: program.nex: check failed with 1 error
 ```
 
-Usar un nombre que no es un tipo, o `Void` donde hace falta un tipo de valor, es el error `E2012`:
+Using a name that is not a type, or `Void` where a value type is needed, is the error `E2012`:
 
 <!-- nex:body-fails codes=E2012 -->
 ```nex
-let a: String = "x"        // el tipo de texto se llama Text
-let b: Void = 1            // una variable no puede ser Void
+let a: String = "x"        // the text type is called Text
+let b: Void = 1            // a variable cannot be Void
 ```
 
-## Conversiones
+## Conversions
 
-Las únicas conversiones son llamadas a estas tres funciones:
+The only conversions are calls to these three functions:
 
-| Función | De | A | Regla |
-|---------|----|---|-------|
-| `to_float(value)` | `Int` | `Float` | Siempre posible. Los enteros de más de 53 bits se redondean al `Float` más cercano |
-| `to_int(value)` | `Float` | `Int` | Descarta los decimales (redondea hacia cero). Si el resultado no cabe en un `Int`, error de ejecución `E3005` |
-| `to_text(value)` | `Int`, `Float`, `Bool`, `Text` o `List[T]` | `Text` | El mismo texto que escribiría `print` |
+| Function | From | To | Rule |
+|----------|------|----|------|
+| `to_float(value)` | `Int` | `Float` | Always possible. Integers of more than 53 bits are rounded to the nearest `Float` |
+| `to_int(value)` | `Float` | `Int` | Drops the decimals (rounds towards zero). If the result does not fit in an `Int`, runtime error `E3005` |
+| `to_text(value)` | `Int`, `Float`, `Bool`, `Text` or `List[T]` | `Text` | The same text that `print` would write |
 
 <!-- nex:run -->
 ```nex
@@ -289,41 +289,41 @@ ready: true
 2.0
 ```
 
-No existe ninguna conversión de `Text` a número, ni entre `Bool` y los números.
+There is no conversion from `Text` to a number, nor between `Bool` and numbers.
 
-Cada función de conversión acepta solo su tipo de origen:
+Each conversion function only accepts its source type:
 
 <!-- nex:body-fails codes=E2011 -->
 ```nex
-let a = to_float(1.5)      // espera un Int
-let b = to_int(1)          // espera un Float
-let c = to_int("12")       // no hay conversión desde Text
+let a = to_float(1.5)      // expects an Int
+let b = to_int(1)          // expects a Float
+let c = to_int("12")       // there is no conversion from Text
 ```
 
 ## `Void`
 
-`Void` significa "ningún valor". Una llamada a una función `Void` no puede usarse donde hace falta
-un valor:
+`Void` means "no value". A call to a `Void` function cannot be used where a
+value is needed:
 
 <!-- nex:body-fails codes=E2011 -->
 ```nex
-let nothing = print("x")           // no hay valor que guardar
-print(print("x"))                  // ni que pasar como argumento
+let nothing = print("x")           // there is no value to store
+print(print("x"))                  // nor to pass as an argument
 ```
 
-## Lo que se comprueba al ejecutar
+## What is checked when running
 
-El sistema de tipos garantiza que cada operación recibe valores del tipo correcto. No puede
-garantizar nada que dependa del **valor** concreto. Estas situaciones se detectan al ejecutar:
+The type system guarantees that every operation receives values of the right type. It cannot
+guarantee anything that depends on the concrete **value**. These situations are detected when running:
 
-| Situación | Error |
+| Situation | Error |
 |-----------|-------|
-| División por cero | `E3001` |
-| Resultado `Int` fuera de rango | `E3002` |
-| Resultado `Float` demasiado grande | `E3003` |
-| `to_int` de un `Float` que no cabe en un `Int` | `E3005` |
-| `List.get` con un índice fuera de la lista | `E4001` |
-| `Percent(x)` con un valor que no cumple la condición de `Percent` | `E4003` |
+| Division by zero | `E3001` |
+| `Int` result out of range | `E3002` |
+| `Float` result too large | `E3003` |
+| `to_int` of a `Float` that does not fit in an `Int` | `E3005` |
+| `List.get` with an index outside the list | `E4001` |
+| `Percent(x)` with a value that does not meet the condition of `Percent` | `E4003` |
 
 <!-- nex:fails exit=3 -->
 ```nex
@@ -346,9 +346,9 @@ runtime error[E3002]: Integer overflow
 error: program.nex: the program stopped because of a runtime error
 ```
 
-## Tipos refinados
+## Refined types
 
-Un tipo refinado es un tipo de valor con una regla que cumplen todos sus valores:
+A refined type is a value type with a rule that all its values meet:
 
 <!-- nex:run -->
 ```nex
@@ -369,20 +369,20 @@ fn main() -> Void {
 1700
 ```
 
-- `type Percent = Int where ...` declara el tipo: su **base** (`Int`) y su **condición**, en la que
-  `value` es el valor que se comprueba. Tras una coma puede ir la explicación de la regla.
-- Las firmas dicen ahora más que antes: `apply_discount` no acepta cualquier `Int` como porcentaje,
-  y quien la llama lo ve sin leer el cuerpo.
-- **Todo valor de tipo `Percent` cumple la condición de `Percent`.** Esa es la garantía, y se
-  mantiene en todo el programa.
+- `type Percent = Int where ...` declares the type: its **base** (`Int`) and its **condition**, in which
+  `value` is the value being checked. After a comma there may be the explanation of the rule.
+- Signatures now say more than before: `apply_discount` does not accept any `Int` as a percentage,
+  and its caller sees it without reading the body.
+- **Every value of type `Percent` meets the condition of `Percent`.** That is the guarantee, and it
+  holds in the whole program.
 
-### Cómo entra un valor en un tipo refinado
+### How a value enters a refined type
 
-Solo hay dos formas, y las dos están escritas en el código:
+There are only two ways, and both are written in the code:
 
-1. **Una constante.** `apply_discount(2000, 15)` pasa el literal `15` donde se espera un
-   `Percent`. `nex check` evalúa la condición con ese valor **sin ejecutar el programa**, y si no se
-   cumple el programa no llega a ejecutarse:
+1. **A constant.** `apply_discount(2000, 15)` passes the literal `15` where a
+   `Percent` is expected. `nex check` evaluates the condition with that value **without running the program**, and if it is not
+   met the program never runs:
 
 <!-- nex:check-fails -->
 ```nex
@@ -407,12 +407,12 @@ type error[E2017]: Value outside refined type
 error: program.nex: check failed with 1 error
 ```
 
-2. **La comprobación explícita `Percent(x)`** para cualquier valor calculado. Se hace al ejecutar,
-   y si la condición no se cumple el programa se detiene en esa línea (`E4003`, código de salida
-   `5`). En el ejemplo de arriba, `Cents(...)` comprueba que el precio rebajado no es negativo.
+2. **The explicit check `Percent(x)`** for any computed value. It is done when running,
+   and if the condition is not met the program stops on that line (`E4003`, exit code
+   `5`). In the example above, `Cents(...)` checks that the discounted price is not negative.
 
-Un valor calculado sin comprobar no se acepta donde se espera un tipo refinado, aunque su tipo sea
-la base:
+A computed value that has not been checked is not accepted where a refined type is expected, even if its type is
+the base:
 
 <!-- nex:check-fails -->
 ```nex
@@ -437,50 +437,50 @@ type error[E2011]: Type mismatch
 error: program.nex: check failed with 1 error
 ```
 
-La razón es la misma que la de las [conversiones](#conversiones): nada cambia de tipo sin que el
-código lo diga. Cada punto donde una regla puede detener el programa es una llamada `Percent(...)`
-que se ve y se puede buscar.
+The reason is the same as that of [conversions](#conversions): nothing changes type without the
+code saying so. Every point where a rule can stop the program is a `Percent(...)` call
+that can be seen and searched for.
 
-### Usar valores refinados
+### Using refined values
 
-- Un `Percent` se acepta en cualquier lugar donde se espera un `Int`: es un `Int` que además cumple
-  una regla.
-- Una operación con valores refinados da un valor de la base: `discount + 10` es un `Int`, porque
-  puede valer 110.
-- Dos tipos refinados diferentes son tipos diferentes, aunque tengan la misma base.
-- Un tipo puede refinar otro tipo refinado: `type Pass = Percent where value >= 50` exige las dos
-  condiciones.
+- A `Percent` is accepted anywhere an `Int` is expected: it is an `Int` that also meets
+  a rule.
+- An operation with refined values gives a value of the base: `discount + 10` is an `Int`, because
+  it may be 110.
+- Two different refined types are different types, even if they have the same base.
+- A type can refine another refined type: `type Pass = Percent where value >= 50` requires both
+  conditions.
 
-### Lo que la condición puede usar
+### What the condition can use
 
-Solo `value`, literales, operadores y las conversiones integradas (`to_float`, `to_int`,
-`to_text`). No puede llamar a funciones del programa (`E2018`): un tipo refinado describe un valor
-por sí mismo. Una regla que depende de otros datos ("el descuento no puede superar el precio") es
-una relación entre argumentos y se escribe como [contrato](contracts.md).
+Only `value`, literals, operators and the built-in conversions (`to_float`, `to_int`,
+`to_text`). It cannot call functions of the program (`E2018`): a refined type describes a value
+by itself. A rule that depends on other data ("the discount cannot exceed the price") is
+a relation between arguments and is written as a [contract](contracts.md).
 
-### Errores de los tipos refinados
+### Errors of refined types
 
-| Situación | Código | Cuándo |
-|-----------|--------|--------|
-| Nombre en minúscula, repetido, de un tipo integrado o cadena de tipos sin fin | `E2016` | Sin ejecutar |
-| Condición que no es `Bool`, o que usa otro nombre que `value` | `E2011`, `E2005` | Sin ejecutar |
-| Condición que llama a una función del programa | `E2018` | Sin ejecutar |
-| Constante que no cumple la condición | `E2017` | Sin ejecutar |
-| Demasiadas constantes que comprobar (límite de trabajo del análisis) | `E2019` | Sin ejecutar |
-| Valor calculado usado sin `Percent(...)` | `E2011` | Sin ejecutar |
-| `Percent(x)` con un valor que no cumple la condición | `E4003` | Al ejecutar |
+| Situation | Code | When |
+|-----------|------|------|
+| Lowercase name, repeated, of a built-in type or an endless chain of types | `E2016` | Without running |
+| Condition that is not `Bool`, or that uses a name other than `value` | `E2011`, `E2005` | Without running |
+| Condition that calls a function of the program | `E2018` | Without running |
+| Constant that does not meet the condition | `E2017` | Without running |
+| Too many constants to check (work limit of the analysis) | `E2019` | Without running |
+| Computed value used without `Percent(...)` | `E2011` | Without running |
+| `Percent(x)` with a value that does not meet the condition | `E4003` | When running |
 
-## `Option` y `Result`: cuando no hay valor, o cuando algo falla
+## `Option` and `Result`: when there is no value, or when something fails
 
-Dos tipos del lenguaje dicen lo que un valor no puede decir por sí solo: que **no hay** valor
-(`Option[T]`) o que **algo falló** (`Result[T, E]`). Los dos tienen dos variantes, y la variante es
-parte del valor: `None` nunca es `Some(x)` y `Ok(x)` nunca es `Err(x)`, aunque los dos payloads sean
-iguales.
+Two types of the language say what a value cannot say on its own: that **there is no** value
+(`Option[T]`) or that **something failed** (`Result[T, E]`). Both have two variants, and the variant is
+part of the value: `None` is never `Some(x)` and `Ok(x)` is never `Err(x)`, even if the two payloads are
+equal.
 
-No hacen falta excepciones: un `Option` o un `Result` es un valor que se devuelve, se guarda, se
-compara y se imprime.
+No exceptions are needed: an `Option` or a `Result` is a value that is returned, stored,
+compared and printed.
 
-### `Option[T]`: puede que no haya nada
+### `Option[T]`: there may be nothing
 
 <!-- nex:run -->
 ```nex
@@ -508,8 +508,8 @@ fn main() -> Void {
 -1
 ```
 
-`Some(valor)` es la variante que tiene valor y `None` la que no. El tipo de lo que hay cuando lo hay
-se escribe en el tipo del `Option`:
+`Some(value)` is the variant that has a value and `None` the one that does not. The type of what is there when there is something
+is written in the type of the `Option`:
 
 <!-- nex:body -->
 ```nex
@@ -517,10 +517,10 @@ let found: Option[Int] = Some(42)
 let missing: Option[Int] = None
 ```
 
-`None` necesita que el contexto diga cuál es el `Option`: sin una anotación, un parámetro o un tipo
-de resultado, el análisis no sabe de qué `Option` se trata y lo dice (`E2011`).
+`None` needs the context to say which `Option` it is: without an annotation, a parameter or a result
+type, the analysis does not know which `Option` it is about and says so (`E2011`).
 
-Para reconocer la variante y para leer el valor:
+To recognize the variant and to read the value:
 
 <!-- nex:body -->
 ```nex
@@ -530,10 +530,10 @@ if Option.is_some(found) {
 }
 ```
 
-`Option.unwrap_or(x, defecto)` devuelve el valor de `x` si lo tiene, y `defecto` si no. `Option.unwrap(x)`
-lee el valor sin defecto: si no lo hay, el programa se detiene con `E3011` y lo dice.
+`Option.unwrap_or(x, default)` returns the value of `x` if it has one, and `default` otherwise. `Option.unwrap(x)`
+reads the value without a default: if there is none, the program stops with `E3011` and says so.
 
-### `Result[T, E]`: algo puede fallar
+### `Result[T, E]`: something can fail
 
 <!-- nex:run -->
 ```nex
@@ -555,18 +555,18 @@ fn main() -> Void {
 not a whole number
 ```
 
-`Ok(valor)` es la variante que se consiguió y `Err(error)` la que falló. El error se guarda **tal
-cual**: `Err("not a whole number")` lleva ese texto.
+`Ok(value)` is the variant that succeeded and `Err(error)` the one that failed. The error is stored **as
+is**: `Err("not a whole number")` carries that text.
 
-El tipo del error y el del valor los dice el contexto. El tipo de resultado de la función es el que
-los fija:
+The type of the error and that of the value are given by the context. The result type of the function is what
+sets them:
 
 <!-- nex:body -->
 ```nex
 let number: Result[Int, Text] = Ok(1)
 ```
 
-Y para reconocer la variante y leer lo que lleva:
+And to recognize the variant and read what it carries:
 
 <!-- nex:body -->
 ```nex
@@ -576,82 +576,82 @@ if Result.is_err(failed) {
 }
 ```
 
-`Result.unwrap_or(x, defecto)` devuelve el valor de `x` si se consiguió, y `defecto` si falló.
-`Result.unwrap(x)` y `Result.error(x)` leen sin defecto: si la variante no lleva eso, el programa se
-detiene con `E3012` o `E3013`.
+`Result.unwrap_or(x, default)` returns the value of `x` if it succeeded, and `default` if it failed.
+`Result.unwrap(x)` and `Result.error(x)` read without a default: if the variant does not carry that, the program
+stops with `E3012` or `E3013`.
 
-### Cuál de los dos
+### Which of the two
 
-- `Option` cuando lo que falta es **lo que se buscaba**: una búsqueda, un valor opcional de un
-  registro, la primera línea de un texto.
-- `Result` cuando lo que pasó es **un fallo**: una lectura que no se pudo hacer, un texto que no es un
-  número, una división por cero.
+- `Option` when what is missing is **what was being looked for**: a search, an optional value of a
+  record, the first line of a text.
+- `Result` when what happened is **a failure**: a read that could not be done, a text that is not a
+  number, a division by zero.
 
-Un `Option` no lleva la razón de la ausencia; un `Result` sí. Si quien llama necesita saber por
-qué falta, es un `Result`.
+An `Option` does not carry the reason for the absence; a `Result` does. If the caller needs to know why
+something is missing, it is a `Result`.
 
-### Lo que no hay
+### What there is not
 
-No hay `match`, ni `if let`, ni el operador `?`, ni enums del usuario: las variantes se reconocen
-con las funciones de arriba y el valor se lee con `unwrap_or` cuando se sabe cuál es.
+There is no `match`, no `if let`, no `?` operator and no user enums: the variants are recognized
+with the functions above and the value is read with `unwrap_or` when it is known which one it is.
 
-## Los registros
+## Records
 
-Un **registro** es un tipo que declara el programa, con campos **inmutables** y **obligatorios**.
-Se declara con `type` y unas llaves:
+A **record** is a type that the program declares, with **immutable** and **required** fields.
+It is declared with `type` and braces:
 
 ```nex
 type Point = { x: Int, y: Int }
 ```
 
-El nombre empieza por mayúscula, como el de cualquier tipo, y no puede ser el de un tipo integrado
-ni el de otro tipo declarado (`E2016`). El tipo de un campo puede ser un tipo integrado, `List[T]`,
-un tipo refinado u **otro registro**.
+The name starts with an uppercase letter, like that of any type, and cannot be that of a built-in type
+or that of another declared type (`E2016`). The type of a field can be a built-in type, `List[T]`,
+a refined type or **another record**.
 
-Se construye dando a cada campo su valor **por nombre**:
+It is built by giving each field its value **by name**:
 
 ```nex
 let p = Point(x: 1, y: 2)
 ```
 
-Los campos se pueden escribir en cualquier orden, pero cada uno se da **una sola vez** y **todos**
-están obligatorios: un campo que falta, uno que se repite o uno que el registro no tiene son el
-error `E2023`. El valor de un campo tiene que tener el tipo del campo (`E2011`).
+The fields can be written in any order, but each one is given **only once** and **all** of them
+are required: a missing field, a repeated one or one that the record does not have is the
+error `E2023`. The value of a field has to have the type of the field (`E2011`).
 
-Los campos se leen con un punto, y la raíz es siempre un nombre:
+Fields are read with a dot, and the root is always a name:
 
 ```nex
 print(p.x)
 ```
 
-Se pueden encadenar (`segment.to.x`), sin límite de longitud, siempre que cada paso intermedio sea
-un registro; si el valor no es un registro, o el registro no tiene ese campo, es el error `E2024`.
+Reads can be chained (`segment.to.x`), with no length limit, as long as every intermediate step is
+a record; if the value is not a record, or the record does not have that field, it is the error `E2024`.
 
-Un registro **no cambia**: no hay forma de asignar a un campo. `p.x = 1` es el error `E2025`.
+A record **does not change**: there is no way to assign to a field. `p.x = 1` is the error `E2025`.
 
-Un registro es **nominal**: su identidad es la de su declaración, no la de su nombre ni la de sus
-campos. Dos registros con los mismos campos son tipos distintos, y un valor de uno no se acepta
-donde se espera el otro (`E2011`). Dos valores del **mismo** registro se comparan **por valor**,
-campo a campo.
+A record is **nominal**: its identity is that of its declaration, not that of its name or of its
+fields. Two records with the same fields are different types, and a value of one is not accepted
+where the other is expected (`E2011`). Two values of the **same** record are compared **by value**,
+field by field.
 
-Un registro no puede contenerse a sí mismo, ni directamente ni a través de otro registro ni de una
-lista: es el error `E2016`, y el mensaje escribe el ciclo (`A -> B -> A`).
+A record cannot contain itself, neither directly nor through another record or a
+list: it is the error `E2016`, and the message writes out the cycle (`A -> B -> A`).
 
-### Errores de los registros
+### Errors of records
 
-| Situación | Código | Cuándo |
-|-----------|--------|--------|
-| Nombre en minúscula, repetido, de un tipo integrado, un campo repetido o un ciclo | `E2016` | Sin ejecutar |
-| El tipo de un campo no existe, o es `Void` | `E2012` | Sin ejecutar |
-| Falta un campo, sobra uno o se repite uno | `E2023` | Sin ejecutar |
-| El valor de un campo no tiene el tipo del campo | `E2011` | Sin ejecutar |
-| Se lee un campo de algo que no es un registro, o de un registro sin ese campo | `E2024` | Sin ejecutar |
-| Se asigna a un campo | `E2025` | Sin ejecutar |
+| Situation | Code | When |
+|-----------|------|------|
+| Lowercase name, repeated, of a built-in type, a repeated field or a cycle | `E2016` | Without running |
+| The type of a field does not exist, or is `Void` | `E2012` | Without running |
+| A field is missing, there is an extra one or one is repeated | `E2023` | Without running |
+| The value of a field does not have the type of the field | `E2011` | Without running |
+| A field is read from something that is not a record, or from a record without that field | `E2024` | Without running |
+| A field is assigned to | `E2025` | Without running |
 
-## Lo que no existe
+## What does not exist
 
-Mapas, enumeraciones, valores opcionales (`Option`, `Result`), alias de tipos sin condición,
-genéricos de usuario y cualquier otro tipo compuesto que no sea `List[T]` o un registro. Las listas
-no tienen sintaxis de índice ni mutación, y no se pueden refinar; los registros no admiten métodos,
-refinamientos ni recursión. Están en la [hoja de ruta](roadmap.md) como trabajo previsto, y no
-funcionan hoy.
+Maps, enumerations, type aliases without a condition,
+user generics and any other compound type that is not `List[T]`, `Option[T]`, `Result[T, E]` or a record. Lists
+have no index syntax and no mutation, and they cannot be refined; records do not allow methods,
+refinements or recursion. They are in the [roadmap](roadmap.md) as planned work, and they do not
+work today.

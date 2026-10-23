@@ -1,9 +1,9 @@
-# Diagnósticos
+# Diagnostics
 
-Un diagnóstico es la forma en que NEXORA comunica un problema. Todos tienen la misma estructura,
-un código que no cambia y una categoría que dice qué clase de problema es.
+A diagnostic is the way NEXORA reports a problem. All of them have the same structure,
+a code that does not change and a category that says what kind of problem it is.
 
-## Anatomía de un diagnóstico
+## Anatomy of a diagnostic
 
 <!-- nex:check-fails -->
 ```nex
@@ -25,171 +25,171 @@ semantic error[E2006]: Name already declared
 error: program.nex: check failed with 1 error
 ```
 
-| Parte | En el ejemplo | Significado |
-|-------|---------------|-------------|
-| Categoría | `semantic` | Qué clase de problema es y qué etapa lo encontró |
-| Severidad | `error` | En esta versión, siempre `error`. No existen avisos |
-| Código | `E2006` | Identificador estable del problema |
-| Título | `Name already declared` | Texto fijo asociado al código |
-| Posición | `program.nex:3:9` | Archivo, línea y columna. Ambas empiezan en 1 |
-| Marcador | `^^^^^` | El fragmento exacto afectado |
-| Explicación | `'total' is already declared…` | Qué ocurre en este caso concreto |
-| `= note:` | | Información relacionada: dónde se declaró algo, la firma de una función, la cadena de llamadas |
-| `= hint:` | | Una corrección sugerida |
+| Part | In the example | Meaning |
+|------|----------------|---------|
+| Category | `semantic` | What kind of problem it is and which stage found it |
+| Severity | `error` | In this version, always `error`. There are no warnings |
+| Code | `E2006` | Stable identifier of the problem |
+| Title | `Name already declared` | Fixed text associated with the code |
+| Position | `program.nex:3:9` | File, line and column. Both start at 1 |
+| Marker | `^^^^^` | The exact affected fragment |
+| Explanation | `'total' is already declared…` | What happens in this concrete case |
+| `= note:` | | Related information: where something was declared, the signature of a function, the chain of calls |
+| `= hint:` | | A suggested fix |
 
-La última línea (`error: …`) es un resumen del comando, no un diagnóstico.
+The last line (`error: …`) is a summary of the command, not a diagnostic.
 
-Detalles:
+Details:
 
-- La columna cuenta caracteres, no bytes, y una tabulación cuenta como una columna.
-- Algunos diagnósticos no tienen posición (por ejemplo, "falta la función `main`").
-- Los mensajes están en inglés.
-- **Las sugerencias solo aparecen cuando hay una regla que las respalda**: existe una conversión
-  entre los dos tipos, hay un nombre declarado muy parecido al escrito, o el mensaje describe la
-  forma correcta de la construcción. Si no la hay, no se sugiere nada.
+- The column counts characters, not bytes, and a tab counts as one column.
+- Some diagnostics have no position (for example, "the `main` function is missing").
+- Messages are in English.
+- **Suggestions only appear when there is a rule that backs them**: there is a conversion
+  between the two types, there is a declared name very similar to the one written, or the message describes the
+  correct form of the construct. If there is none, nothing is suggested.
 
-## Categorías
+## Categories
 
-La categoría indica en qué etapa se encontró el problema.
+The category says at which stage the problem was found.
 
-| Categoría | Significado | Cuándo se detecta | `nex` termina con |
-|-----------|-------------|-------------------|-------------------|
-| `file` | El archivo no pudo cargarse | Antes de analizar | `4` |
-| `lexical` | El texto contiene algo que no pertenece al lenguaje | Sin ejecutar | `1` |
-| `syntax` | El código no sigue la gramática | Sin ejecutar | `1` |
-| `semantic` | Nombres, ámbitos o estructura del programa | Sin ejecutar | `1` |
-| `type` | Tipos | Sin ejecutar | `1` |
-| `runtime` | Depende de los valores calculados | Al ejecutar | `3` (con `nex test`, `6`) |
-| `contract` | Se incumplió una regla que el programa declara: una condición `requires` o `ensures`, o la condición de un tipo refinado | Al ejecutar | `5` (con `nex test`, `6`) |
-| `test` | Un ejemplo evaluado por `nex test` resultó falso | Al ejecutar `nex test` | `6` |
+| Category | Meaning | When it is detected | `nex` ends with |
+|----------|---------|---------------------|-----------------|
+| `file` | The file could not be loaded | Before analyzing | `4` |
+| `lexical` | The text contains something that does not belong to the language | Without running | `1` |
+| `syntax` | The code does not follow the grammar | Without running | `1` |
+| `semantic` | Names, scopes or structure of the program | Without running | `1` |
+| `type` | Types | Without running | `1` |
+| `runtime` | Depends on computed values | When running | `3` (with `nex test`, `6`) |
+| `contract` | A rule that the program declares was broken: a `requires` or `ensures` condition, or the condition of a refined type | When running | `5` (with `nex test`, `6`) |
+| `test` | An example evaluated by `nex test` turned out false | When running `nex test` | `6` |
 
-Las etapas se ejecutan en orden y cada una solo se realiza si la anterior no encontró errores.
-Por eso un archivo con un error de sintaxis no muestra a la vez errores de tipos: se corrige
-primero la sintaxis.
+The stages run in order and each one only runs if the previous one found no errors.
+That is why a file with a syntax error does not show type errors at the same time: the syntax is fixed
+first.
 
-Dentro de una etapa se comunican todos los errores independientes que se encuentran, hasta un
-máximo de 100.
+Within a stage all the independent errors found are reported, up to a
+maximum of 100.
 
-## Todos los códigos
+## All the codes
 
-Un código no cambia nunca de significado. Si deja de usarse se retira, no se reutiliza.
+A code never changes its meaning. If it stops being used it is retired, not reused.
 
-### Archivo
+### File
 
-| Código | Título | Qué significa | Qué hacer |
-|--------|--------|---------------|-----------|
-| `E0001` | Cannot read file | El archivo no existe, es un directorio o no hay permiso para leerlo | Revisa la ruta y el directorio desde el que ejecutas el comando |
-| `E0002` | File is not valid UTF-8 | El archivo usa otra codificación | Guárdalo como UTF-8 |
+| Code | Title | What it means | What to do |
+|------|-------|---------------|------------|
+| `E0001` | Cannot read file | The file does not exist, it is a directory or there is no permission to read it | Check the path and the directory you run the command from |
+| `E0002` | File is not valid UTF-8 | The file uses another encoding | Save it as UTF-8 |
 
-### Léxicos
+### Lexical
 
-| Código | Título | Qué significa | Qué hacer |
-|--------|--------|---------------|-----------|
-| `E1001` | Unexpected character | Un carácter que no pertenece al lenguaje: `;`, `'`, `!`, `@`, letras acentuadas en un nombre… | Elimínalo. Los textos usan comillas dobles; no hay punto y coma |
-| `E1002` | Unterminated string | Falta la comilla de cierre en esa línea | Cierra el texto. Un texto no puede ocupar varias líneas |
-| `E1003` | Invalid escape sequence | Un `\` seguido de un carácter no admitido | Los escapes son `\n`, `\t`, `\"`, `\\` y `\{` |
-| `E1004` | Invalid number literal | Número mal escrito (`007`, `1_`, `12abc`) o demasiado grande | Corrige el número. El mayor `Int` es `9223372036854775807` |
-| `E1005` | Unescaped '{' in string | Una `{` dentro de un texto | Escribe `\{`. La llave está reservada para una característica futura |
+| Code | Title | What it means | What to do |
+|------|-------|---------------|------------|
+| `E1001` | Unexpected character | A character that does not belong to the language: `;`, `'`, `!`, `@`, accented letters in a name… | Remove it. Texts use double quotes; there is no semicolon |
+| `E1002` | Unterminated string | The closing quote is missing on that line | Close the text. A text cannot span several lines |
+| `E1003` | Invalid escape sequence | A `\` followed by a character that is not allowed | The escapes are `\n`, `\t`, `\"`, `\\` and `\{` |
+| `E1004` | Invalid number literal | Badly written number (`007`, `1_`, `12abc`) or too large | Fix the number. The largest `Int` is `9223372036854775807` |
+| `E1005` | Unescaped '{' in string | A `{` inside a text | Write `\{`. The brace is reserved for a future feature |
 
-### Sintácticos
+### Syntax
 
-| Código | Título | Qué significa | Qué hacer |
-|--------|--------|---------------|-----------|
-| `E1101` | Unexpected token | El código no sigue la gramática | El mensaje dice qué se esperaba en ese punto |
-| `E1102` | Unclosed block | Se llegó al final del archivo con una `{` sin cerrar | Añade la `}`. La nota indica dónde se abrió el bloque |
-| `E1103` | Reserved word | Se usa una palabra reservada para el futuro (`break`, `match`…) | Esa construcción no existe todavía; elige otro nombre o reescribe el código. Para `break` y `continue` la sugerencia explica cómo expresarlo con la condición del bucle, un `if` o `return` |
-| `E1105` | Expression too deeply nested | Más de 64 niveles de anidamiento, o una expresión de más de 256 niveles | Divide el código en variables o funciones |
-| `E1106` | Misplaced contract clause | `requires`, `ensures` o `example` fuera del principio del cuerpo de una función, o `invariant` o `decreases` fuera del principio del cuerpo de un bucle | Mueve la cláusula a las primeras líneas de la función o del bucle |
+| Code | Title | What it means | What to do |
+|------|-------|---------------|------------|
+| `E1101` | Unexpected token | The code does not follow the grammar | The message says what was expected at that point |
+| `E1102` | Unclosed block | The end of the file was reached with an unclosed `{` | Add the `}`. The note says where the block was opened |
+| `E1103` | Reserved word | A word reserved for the future is used (`break`, `match`…) | That construct does not exist yet; choose another name or rewrite the code. For `break` and `continue` the suggestion explains how to express it with the condition of the loop, an `if` or `return` |
+| `E1105` | Expression too deeply nested | More than 64 levels of nesting, or an expression of more than 256 levels | Split the code into variables or functions |
+| `E1106` | Misplaced contract clause | `requires`, `ensures` or `example` outside the beginning of the body of a function, or `invariant` or `decreases` outside the beginning of the body of a loop | Move the clause to the first lines of the function or of the loop |
 
-### Semánticos
+### Semantic
 
-| Código | Título | Qué significa | Qué hacer |
-|--------|--------|---------------|-----------|
-| `E2001` | Missing main function | El programa no declara `main` | Añade `fn main() -> Void { ... }` |
-| `E2002` | Duplicate function | Dos funciones con el mismo nombre, o con el de una integrada | Cambia el nombre de una |
-| `E2005` | Unknown variable | Se usa un nombre que no está declarado o que ya no es visible | Decláralo antes con `let`, o corrige el nombre |
-| `E2006` | Name already declared | Se declara un nombre que ya es visible, o el de una función | Elige otro nombre |
-| `E2007` | Cannot reassign variable | Se asigna un valor nuevo a una variable declarada con `let`, a un parámetro o al iterador de un `for` | Declara la variable con `var`; un parámetro o el iterador se copian antes en una `var` |
-| `E2008` | Unknown function | Se llama a una función que no existe. También en una llamada cualificada (`Texto.length(t)`, `Text.lenght(t)`, `name.length()`) cuyo nombre delante del punto no es un tipo con esa función ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)) | Corrige el nombre o declara la función. Las funciones de un tipo se llaman con su nombre: `Text.length(t)` |
-| `E2010` | Unused value | Un valor calculado que se pierde: una operación suelta o una llamada cuyo resultado no se usa | Guárdalo con `let` o pásalo a una función |
-| `E2013` | Invalid parameter | `main` tiene parámetros, o un parámetro se llama `result` | Quita los parámetros de `main`, o cambia el nombre |
-| `E2014` | Missing return | Una función que devuelve un valor puede terminar sin `return` | Asegúrate de que todas las ramas terminan con `return` |
-| `E2015` | Unreachable code | Código situado después de un `return` | Elimínalo o muévelo antes del `return` |
-| `E2016` | Invalid type declaration | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, una cadena de tipos que no termina en un tipo integrado, o una base que es una lista. También un registro con nombre inválido o repetido, un campo repetido, o un registro que se contiene a sí mismo | Corrige el nombre o la base; el mensaje dice cuál de los casos es |
-| `E2018` | Invalid refinement condition | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado | Escribe la regla con operadores sobre `value`, o pásala a un `requires` |
-| `E2019` | Too many refinement checks | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (100 000 nodos de condición). Solo ocurre con muchas constantes de cadenas largas de tipos refinados | Usa menos constantes de esos tipos o condiciones más cortas |
-| `E2020` | Example without its function | Un ejemplo no contiene ninguna llamada a su propia función: su expresión no la nombra en ningún punto. Una llamada que solo ocurre dentro de otra función no cuenta | Escribe la llamada con sus entradas: `example f(2) == 4` |
-| `E2021` | Missing loop measure | Un `while` no declara su medida (`decreases`), o declara más de una. Sin medida, nada dice por qué el bucle termina | Añade `decreases` con un `Int` que baje en cada vuelta y no pase de 0, por ejemplo `decreases n - i` |
-| `E2022` | Unsupported loop clause | Un `for` declara `decreases`, pero recorre una lista finita y no lleva medida | Quita el `decreases`; si necesitas invariantes, escríbelos con `invariant` |
-| `E2026` | Missing capability declaration | Se lee o se escribe un archivo sin declararlo con `uses` ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Decláralo al principio del archivo: `uses read "datos/entradas.txt"` |
-| `E2025` | Cannot reassign a field | Se asigna a un campo de un registro, que es inmutable ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) | Construye otro registro con el valor que quieres |
-| `E2027` | Unknown module | Se usa el nombre de un módulo que el programa no importa ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) | Decláralo al principio del archivo: `import "app/models.nex"` |
-| `E2028` | Private name | Se usa de otro módulo un nombre que ese módulo no declara con `pub` ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) | Escribe `pub` delante de la función o del tipo en el archivo que lo declara |
-| `E2029` | Circular import | Los módulos se importan unos a otros, de forma que ninguno puede analizarse antes que el que necesita ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) | Rompe el ciclo: mueve lo que los dos comparten a un tercer módulo que ambos importen |
-| `E2030` | Module name clash | Dos archivos distintos se importan como el mismo módulo, porque tienen el mismo nombre ([decisión 0018](decisions/0018-modulos-e-importaciones.md)) | Renombra uno de los dos archivos: el módulo toma su nombre de su archivo |
+| Code | Title | What it means | What to do |
+|------|-------|---------------|------------|
+| `E2001` | Missing main function | The program does not declare `main` | Add `fn main() -> Void { ... }` |
+| `E2002` | Duplicate function | Two functions with the same name, or with that of a built-in one | Rename one of them |
+| `E2005` | Unknown variable | A name is used that is not declared or is no longer visible | Declare it first with `let`, or fix the name |
+| `E2006` | Name already declared | A name is declared that is already visible, or that of a function | Choose another name |
+| `E2007` | Cannot reassign variable | A new value is assigned to a variable declared with `let`, to a parameter or to the iterator of a `for` | Declare the variable with `var`; a parameter or the iterator are copied first into a `var` |
+| `E2008` | Unknown function | A function that does not exist is called. Also in a qualified call (`Texto.length(t)`, `Text.lenght(t)`, `name.length()`) whose name in front of the dot is not a type with that function ([decision 0011](decisions/0011-operaciones-sobre-textos.md)) | Fix the name or declare the function. The functions of a type are called with its name: `Text.length(t)` |
+| `E2010` | Unused value | A computed value that is lost: a loose operation or a call whose result is not used | Keep it with `let` or pass it to a function |
+| `E2013` | Invalid parameter | `main` has parameters, or a parameter is named `result` | Remove the parameters of `main`, or change the name |
+| `E2014` | Missing return | A function that returns a value can end without `return` | Make sure that all branches end with `return` |
+| `E2015` | Unreachable code | Code placed after a `return` | Remove it or move it before the `return` |
+| `E2016` | Invalid type declaration | A refined type with a lowercase name, a repeated one or one of a built-in type, a chain of types that does not end in a built-in type, or a base that is a list. Also a record with an invalid or repeated name, a repeated field, or a record that contains itself | Fix the name or the base; the message says which of the cases it is |
+| `E2018` | Invalid refinement condition | The condition of a refined type calls a function of the program or checks another refined type | Write the rule with operators on `value`, or move it to a `requires` |
+| `E2019` | Too many refinement checks | Checking the constants against their refined types exceeds the work limit of the analysis (100,000 condition nodes). It only happens with many constants of long chains of refined types | Use fewer constants of those types or shorter conditions |
+| `E2020` | Example without its function | An example contains no call to its own function: its expression does not name it anywhere. A call that only happens inside another function does not count | Write the call with its inputs: `example f(2) == 4` |
+| `E2021` | Missing loop measure | A `while` does not declare its measure (`decreases`), or declares more than one. Without a measure, nothing says why the loop ends | Add `decreases` with an `Int` that goes down on every iteration and does not go below 0, for example `decreases n - i` |
+| `E2022` | Unsupported loop clause | A `for` declares `decreases`, but it goes through a finite list and has no measure | Remove the `decreases`; if you need invariants, write them with `invariant` |
+| `E2026` | Missing capability declaration | A file is read or written without declaring it with `uses` ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Declare it at the beginning of the file: `uses read "data/inputs.txt"` |
+| `E2025` | Cannot reassign a field | A field of a record, which is immutable, is assigned to ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) | Build another record with the value you want |
+| `E2027` | Unknown module | The name of a module that the program does not import is used ([decision 0018](decisions/0018-modulos-e-importaciones.md)) | Declare it at the beginning of the file: `import "app/models.nex"` |
+| `E2028` | Private name | A name of another module is used that this module does not declare with `pub` ([decision 0018](decisions/0018-modulos-e-importaciones.md)) | Write `pub` in front of the function or the type in the file that declares it |
+| `E2029` | Circular import | Modules import each other, so that none can be analyzed before the one it needs ([decision 0018](decisions/0018-modulos-e-importaciones.md)) | Break the cycle: move what both share to a third module that both import |
+| `E2030` | Module name clash | Two different files are imported as the same module, because they have the same name ([decision 0018](decisions/0018-modulos-e-importaciones.md)) | Rename one of the two files: the module takes its name from its file |
 
-### De tipos
+### Type
 
-| Código | Título | Qué significa | Qué hacer |
-|--------|--------|---------------|-----------|
-| `E2004` | Invalid return type | `main` declara un tipo de retorno distinto de `Void` | Escribe `fn main() -> Void` |
-| `E2009` | Wrong number of arguments | La llamada no pasa tantos argumentos como parámetros tiene la función | La nota muestra la firma de la función |
-| `E2011` | Type mismatch | Un tipo no es el que exige la regla: anotación, asignación, operador, argumento, retorno, condición, elemento de una lista, iterable de un `for`, medida de un bucle (`Int`), o un `Void` usado como valor | El mensaje indica el tipo esperado y el encontrado. Convierte de forma explícita si existe una conversión |
-| `E2012` | Invalid type | Un nombre que no es un tipo, `List` sin argumento, un argumento de tipo que no existe, o `Void` donde hace falta un tipo de valor | Los tipos son `Int`, `Float`, `Bool`, `Text`, `Void` y `List[T]`, los tipos refinados que declara el programa y sus registros |
-| `E2023` | Invalid record construction | Una construcción de un registro a la que le falta un campo, le sobra uno o se le da dos veces el mismo ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) | Da cada campo una vez, con el nombre del campo |
-| `E2024` | Invalid field access | Se lee un campo de un valor que no es un registro, o de un registro que no tiene ese campo ([decisión 0014](decisions/0014-registros-nominales-inmutables.md)) | El mensaje dice qué campos tiene el registro |
-| `E2017` | Value outside refined type | Una constante usada como valor de un tipo refinado no cumple su condición. Las notas muestran la condición, el valor y la explicación de la regla | Cambia el valor, o revisa la regla si era incorrecta |
+| Code | Title | What it means | What to do |
+|------|-------|---------------|------------|
+| `E2004` | Invalid return type | `main` declares a return type other than `Void` | Write `fn main() -> Void` |
+| `E2009` | Wrong number of arguments | The call does not pass as many arguments as the function has parameters | The note shows the signature of the function |
+| `E2011` | Type mismatch | A type is not the one the rule requires: annotation, assignment, operator, argument, return, condition, element of a list, iterable of a `for`, measure of a loop (`Int`), or a `Void` used as a value | The message says the expected type and the one found. Convert explicitly if a conversion exists |
+| `E2012` | Invalid type | A name that is not a type, `List` without an argument, a type argument that does not exist, or `Void` where a value type is needed | The types are `Int`, `Float`, `Bool`, `Text`, `Void` and `List[T]`, the refined types that the program declares and its records |
+| `E2023` | Invalid record construction | A construction of a record that is missing a field, has an extra one or is given the same one twice ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) | Give each field once, with the name of the field |
+| `E2024` | Invalid field access | A field is read from a value that is not a record, or from a record that does not have that field ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) | The message says which fields the record has |
+| `E2017` | Value outside refined type | A constant used as a value of a refined type does not meet its condition. The notes show the condition, the value and the explanation of the rule | Change the value, or review the rule if it was wrong |
 
-### De ejecución
+### Runtime
 
-| Código | Título | Qué significa | Qué hacer |
-|--------|--------|---------------|-----------|
-| `E3001` | Division by zero | El divisor vale cero | Comprueba el divisor antes de dividir, o declara un `requires` |
-| `E3002` | Integer overflow | Un resultado `Int` no cabe en 64 bits | Usa valores menores, o `Float` si no necesitas exactitud |
-| `E3003` | Float result out of range | Un resultado `Float` es demasiado grande | Revisa la operación |
-| `E3004` | Too many nested calls | Más de 1000 llamadas anidadas, o la pila se agotó antes | Suele ser una recursividad que no alcanza su caso base |
-| `E3005` | Conversion out of range | `to_int` de un `Float` que no cabe en un `Int` | Comprueba el valor antes de convertir |
-| `E3006` | Text too long | Un texto construido con `+` supera el límite del entorno donde se ejecuta. Solo ocurre donde se fija un límite, como el playground | Construye textos más cortos |
-| `E3007` | Out of memory | El programa necesitó más memoria de la disponible mientras se ejecutaba. No señala ninguna posición; las notas muestran la cadena de llamadas | Reduce el tamaño de los valores que crea el programa, sobre todo los que crecen en cada llamada |
-| `E3008` | Permission denied | El programa intenta usar un archivo que no puede usar: no lo declara con `uses`, quien lo ejecuta no lo ha permitido con `--allow-read` o `--allow-write`, o el entorno no admite archivos ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Declara la capacidad y pide el permiso: `uses read "datos.txt"` y `nex run programa.nex --allow-read=datos` |
-| `E3009` | No more input | `input()` se ha llamado cuando la entrada estándar ya se ha terminado | Comprueba que hay más entrada antes de leer, o termina el programa |
-| `E3010` | File error | El archivo se podía usar, pero no se ha podido leer o escribir: no existe, no es un texto UTF-8, o el sistema operativo lo ha impedido | Comprueba la ruta y que el archivo sea un texto UTF-8 |
-| `E3011` | Option has no value | `Option.unwrap` se ha llamado con un `None`: la variante no lleva el valor ([decisión 0016](decisions/0016-option-y-result.md)) | Comprueba antes con `Option.is_none(...)`, o usa `Option.unwrap_or(x, defecto)` |
-| `E3012` | Result is an error | `Result.unwrap` se ha llamado con un `Err`: la variante no lleva el valor | Comprueba antes con `Result.is_err(...)`, o usa `Result.unwrap_or(x, defecto)` |
-| `E3013` | Result is not an error | `Result.error` se ha llamado con un `Ok`: la variante no lleva el error | Comprueba antes con `Result.is_ok(...)` |
+| Code | Title | What it means | What to do |
+|------|-------|---------------|------------|
+| `E3001` | Division by zero | The divisor is zero | Check the divisor before dividing, or declare a `requires` |
+| `E3002` | Integer overflow | An `Int` result does not fit in 64 bits | Use smaller values, or `Float` if you do not need exactness |
+| `E3003` | Float result out of range | A `Float` result is too large | Review the operation |
+| `E3004` | Too many nested calls | More than 1000 nested calls, or the stack ran out before | It is usually a recursion that does not reach its base case |
+| `E3005` | Conversion out of range | `to_int` of a `Float` that does not fit in an `Int` | Check the value before converting |
+| `E3006` | Text too long | A text built with `+` exceeds the limit of the environment where it runs. It only happens where a limit is set, as in the playground | Build shorter texts |
+| `E3007` | Out of memory | The program needed more memory than was available while it ran. It points at no position; the notes show the chain of calls | Reduce the size of the values the program creates, above all those that grow on every call |
+| `E3008` | Permission denied | The program tries to use a file it cannot use: it does not declare it with `uses`, whoever runs it has not allowed it with `--allow-read` or `--allow-write`, or the environment does not support files ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Declare the capability and ask for the permission: `uses read "data.txt"` and `nex run program.nex --allow-read=data` |
+| `E3009` | No more input | `input()` was called when the standard input had already ended | Check that there is more input before reading, or end the program |
+| `E3010` | File error | The file could be used, but it could not be read or written: it does not exist, it is not UTF-8 text, or the operating system prevented it | Check the path and that the file is UTF-8 text |
+| `E3011` | Option has no value | `Option.unwrap` was called with a `None`: the variant does not carry the value ([decision 0016](decisions/0016-option-y-result.md)) | Check first with `Option.is_none(...)`, or use `Option.unwrap_or(x, default)` |
+| `E3012` | Result is an error | `Result.unwrap` was called with an `Err`: the variant does not carry the value | Check first with `Result.is_err(...)`, or use `Result.unwrap_or(x, default)` |
+| `E3013` | Result is not an error | `Result.error` was called with an `Ok`: the variant does not carry the error | Check first with `Result.is_ok(...)` |
 
-### De contrato
+### Contract
 
-| Código | Título | Qué significa | Qué hacer |
-|--------|--------|---------------|-----------|
-| `E4001` | Precondition violated | Una llamada no cumple una condición `requires`, de una función del programa o de una función de un tipo (`Text.slice`, `Int.parse`, `List.get`). Señala la llamada | Corrige los argumentos, o comprueba la condición antes de llamar (`Int.can_parse` antes de `Int.parse`, un índice válido antes de `List.get`) |
-| `E4002` | Postcondition violated | Una función no cumple su propia condición `ensures`. Señala la cláusula | Corrige el cuerpo de la función (o la condición, si era incorrecta) |
-| `E4003` | Refinement violated | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado. Señala la comprobación | Corrige el cálculo que produce el valor, o compruébalo antes con un `if` |
-| `E4005` | Loop invariant violated | Un `invariant` es falso antes de una vuelta o después de la última: al llegar, después de una vuelta o al agotarse la lista de un `for`. Señala la cláusula; las notas dicen después de qué vuelta y con qué valores | Corrige el cuerpo del bucle, o el invariante si no describía lo que el bucle mantiene |
-| `E4006` | Loop measure did not decrease | La medida (`decreases`) de un `while` es negativa, o no es menor que en la vuelta anterior: el bucle no iba a terminar. Señala la medida; la etiqueta da los dos valores y las notas, la vuelta y las variables | Haz que cada vuelta avance hacia el final del bucle, o corrige la medida |
+| Code | Title | What it means | What to do |
+|------|-------|---------------|------------|
+| `E4001` | Precondition violated | A call does not meet a `requires` condition, of a function of the program or of a function of a type (`Text.slice`, `Int.parse`, `List.get`). It points at the call | Fix the arguments, or check the condition before calling (`Int.can_parse` before `Int.parse`, a valid index before `List.get`) |
+| `E4002` | Postcondition violated | A function does not meet its own `ensures` condition. It points at the clause | Fix the body of the function (or the condition, if it was wrong) |
+| `E4003` | Refinement violated | A value checked with `Type(x)` does not meet the condition of the refined type. It points at the check | Fix the computation that produces the value, or check it first with an `if` |
+| `E4005` | Loop invariant violated | An `invariant` is false before an iteration or after the last one: on arrival, after an iteration or when the list of a `for` runs out. It points at the clause; the notes say after which iteration and with which values | Fix the body of the loop, or the invariant if it did not describe what the loop keeps true |
+| `E4006` | Loop measure did not decrease | The measure (`decreases`) of a `while` is negative, or is not smaller than in the previous iteration: the loop was not going to end. It points at the measure; the label gives both values and the notes, the iteration and the variables | Make every iteration move towards the end of the loop, or fix the measure |
 
-### De prueba
+### Test
 
-Solo los produce `nex test` ([decisión 0008](decisions/0008-ejemplos-y-nex-test.md)).
+Only produced by `nex test` ([decision 0008](decisions/0008-ejemplos-y-nex-test.md)).
 
-| Código | Título | Qué significa | Qué hacer |
-|--------|--------|---------------|-----------|
-| `E4004` | Example failed | Un ejemplo se evaluó sin errores, pero vale `false`. Señala la expresión del ejemplo; las notas dan lo que devolvió cada llamada a la función y la explicación del ejemplo | Corrige la función, o el ejemplo si el resultado esperado era el incorrecto |
+| Code | Title | What it means | What to do |
+|------|-------|---------------|------------|
+| `E4004` | Example failed | An example was evaluated without errors, but it is `false`. It points at the expression of the example; the notes give what each call to the function returned and the explanation of the example | Fix the function, or the example if the expected result was the wrong one |
 
-Un ejemplo que se detiene por un error de ejecución o por una regla incumplida no da `E4004`: da el
-diagnóstico de ese error, con una nota más que dice qué ejemplo lo provocó.
+An example that stops because of a runtime error or a broken rule does not give `E4004`: it gives the
+diagnostic of that error, with one more note that says which example caused it.
 
-Cuando la regla incumplida tiene explicación, el diagnóstico la muestra en una nota `Reason: ...`.
+When the broken rule has an explanation, the diagnostic shows it in a `Reason: ...` note.
 
-### Códigos retirados
+### Retired codes
 
-`E1104` y `E2003` existieron en la versión 0.1 y ya no se emiten: avisaban de que los parámetros,
-las anotaciones de tipo y las funciones propias no existían. Sus números no se reutilizarán.
+`E1104` and `E2003` existed in version 0.1 and are no longer emitted: they warned that parameters,
+type annotations and user functions did not exist. Their numbers will not be reused.
 
-## Diagnósticos de ejecución
+## Runtime diagnostics
 
-Un error de ejecución incluye la cadena de llamadas que llevó hasta él, de la más reciente a la
-más antigua:
+A runtime error includes the chain of calls that led to it, from the most recent to the
+oldest:
 
 <!-- nex:fails exit=3 -->
 ```nex
@@ -220,16 +220,16 @@ runtime error[E3001]: Division by zero
 error: program.nex: the program stopped because of a runtime error
 ```
 
-Se muestran como máximo seis llamadas; si hay más, una nota indica cuántas se omiten.
+At most six calls are shown; if there are more, a note says how many are left out.
 
-Un error que ocurre dentro de un bucle añade una nota por cada bucle que lo contiene, del más
-interior al más exterior, como máximo seis: `In turn 3 of the loop at line 6.` Si el error está en
-una cláusula o en la condición, la nota dice `Before turn …` o `After turn …`.
+An error that happens inside a loop adds a note for every loop that contains it, from the
+innermost to the outermost, at most six: `In turn 3 of the loop at line 6.` If the error is in
+a clause or in the condition, the note says `Before turn …` or `After turn …`.
 
-## Formato JSON
+## JSON format
 
-Con `--format json` los diagnósticos se entregan como datos, para que un programa no tenga que
-interpretar el texto anterior. Para el primer ejemplo de esta página:
+With `--format json` the diagnostics are delivered as data, so that a program does not have to
+interpret the text above. For the first example of this page:
 
 <!-- nex:check-json -->
 ```nex
@@ -266,11 +266,11 @@ fn main() -> Void {
 }
 ```
 
-Cada campo está descrito en la [especificación, sección 11.4](language-spec.md#114-formato-json),
-y su uso por herramientas en [Herramientas automáticas e IA](ai-tooling.md).
+Every field is described in the [specification, section 11.4](language-spec.md#114-json-format),
+and its use by tools in [Automated tools and AI](ai-tooling.md).
 
-## Errores internos
+## Internal errors
 
-Si NEXORA falla por un defecto propio, no lo presenta como un error de tu programa: muestra un
-mensaje que empieza por `internal error:` y termina con el código de salida `70`. No tiene código
-`E…` ni categoría. Está descrito en la [referencia de la CLI](cli-reference.md#errores-internos).
+If NEXORA fails because of a defect of its own, it does not present it as an error of your program: it shows a
+message that starts with `internal error:` and ends with exit code `70`. It has no
+`E…` code or category. It is described in the [CLI reference](cli-reference.md#internal-errors).

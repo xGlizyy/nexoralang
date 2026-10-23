@@ -1,54 +1,54 @@
-# 0003 — Funciones con `return` explícito, un único espacio de nombres e `if` como sentencia
+# 0003 — Functions with an explicit `return`, a single namespace and `if` as a statement
 
-- **Estado:** aceptada
-- **Versión:** 0.2.0
+- **Status:** accepted
+- **Version:** 0.2.0
 
-## Decisión
+## Decision
 
-1. **Funciones con parámetros tipados y tipo de retorno obligatorio.** Sin sobrecarga, valores por
-   defecto, genéricos ni funciones anónimas.
-2. **El valor se devuelve siempre con `return`.** El borrador de diseño proponía que un bloque
-   valiera lo que su última expresión; no se adopta en esta versión.
-3. **Toda ruta devuelve.** El análisis estático rechaza una función que puede terminar sin
-   `return` (`E2014`) y el código situado tras un `return` (`E2015`). El análisis es estructural:
-   no evalúa condiciones.
-4. **Un único espacio de nombres y sin ocultación.** Funciones, parámetros y variables comparten
-   nombres; un nombre visible no se vuelve a declarar.
-5. **Las funciones no son valores.** Solo pueden llamarse.
-6. **Un valor devuelto no puede ignorarse** (`E2010`).
-7. **`if` / `else if` / `else` como sentencia.** No estaba en la lista de esta fase, pero se añade.
-8. **Recursividad permitida**, con un máximo de 1000 llamadas anidadas (`E3004`).
+1. **Functions with typed parameters and a required return type.** No overloading, default
+   values, generics or anonymous functions.
+2. **The value is always returned with `return`.** The design draft proposed that a block
+   be worth its last expression; that is not adopted in this version.
+3. **Every path returns.** The static analysis rejects a function that can end without
+   `return` (`E2014`) and code placed after a `return` (`E2015`). The analysis is structural:
+   it does not evaluate conditions.
+4. **A single namespace and no shadowing.** Functions, parameters and variables share
+   names; a visible name is not declared again.
+5. **Functions are not values.** They can only be called.
+6. **A returned value cannot be ignored** (`E2010`).
+7. **`if` / `else if` / `else` as a statement.** It was not in the list of this phase, but it is added.
+8. **Recursion allowed**, with a maximum of 1000 nested calls (`E3004`).
 
-## Motivos
+## Reasons
 
-- `return` explícito hace visible dónde termina una función y permite comprobar las rutas de
-  retorno con una regla sencilla. Con "la última expresión es el valor", la regla de `E2010`
-  (valor sin usar) y la de retorno implícito entrarían en conflicto.
-- Con un único espacio de nombres, cada nombre de una función significa una sola cosa. Esto
-  simplifica la lectura para una persona y para una herramienta: no hay que resolver qué `x` es
-  cuál.
-- **Por qué `if`:** sin condicionales, una función recursiva no puede detenerse, la regla "toda
-  ruta devuelve" no tiene rutas que comprobar y `ensures` nunca tendría más de un camino. Las
-  comparaciones y los `Bool` tampoco servirían para nada más que imprimirse. Es la construcción
-  mínima que hace útiles las demás.
-- El límite de llamadas convierte una recursividad sin fin en un diagnóstico claro en lugar de un
-  fallo del intérprete.
+- An explicit `return` makes visible where a function ends and allows checking the return
+  paths with a simple rule. With "the last expression is the value", the rule of `E2010`
+  (unused value) and that of the implicit return would conflict.
+- With a single namespace, every name in a function means a single thing. This
+  makes reading simpler for a person and for a tool: there is no need to work out which `x` is
+  which.
+- **Why `if`:** without conditionals, a recursive function cannot stop, the rule "every
+  path returns" has no paths to check and `ensures` would never have more than one path. The
+  comparisons and the `Bool` values would not be good for anything but printing either. It is the minimal
+  construct that makes the others useful.
+- The call limit turns an endless recursion into a clear diagnostic instead of a
+  crash of the interpreter.
 
-## Alternativas descartadas
+## Alternatives ruled out
 
-- **Bucles (`while`).** Requieren variables reasignables (`var`), que no existen. Se aplazan juntos.
-- **`if` como expresión.** Obliga a definir el tipo de un bloque; se aplaza.
-- **Permitir ignorar valores devueltos.** Contradice la regla ya existente para expresiones sueltas.
+- **Loops (`while`).** They need reassignable variables (`var`), which do not exist. They are postponed together.
+- **`if` as an expression.** It forces defining the type of a block; it is postponed.
+- **Allowing returned values to be ignored.** It contradicts the rule that already exists for loose expressions.
 
-## Límites conocidos
+## Known limits
 
-- El análisis de rutas no razona sobre valores: `if true { return 1 }` sin `else` se rechaza.
-- El límite de 1000 llamadas depende de la implementación (el intérprete recorre el árbol de forma
-  recursiva) y puede reducirse con expresiones muy anidadas.
-- Como máximo 64 niveles de `else if` encadenados.
+- The path analysis does not reason about values: `if true { return 1 }` without `else` is rejected.
+- The limit of 1000 calls depends on the implementation (the interpreter walks the tree
+  recursively) and can be lower with very nested expressions.
+- At most 64 levels of chained `else if`.
 
-## Compatibilidad
+## Compatibility
 
-Sin cambios incompatibles: en 0.1 solo podía declararse `main`, y todo programa de 0.1 sigue
-siendo válido. Los códigos `E1104` y `E2003`, que avisaban de que estas construcciones no existían,
-quedan retirados.
+No incompatible changes: in 0.1 only `main` could be declared, and every 0.1 program is still
+valid. The codes `E1104` and `E2003`, which warned that these constructs did not exist,
+are retired.

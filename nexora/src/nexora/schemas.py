@@ -409,13 +409,13 @@ def all_schemas() -> dict[str, dict]:
          "capability": _CONTEXT_CAPABILITY},
     )
     spec = _document(
-        "nexora-spec", "nexora.spec/1: the language specification, or one section of it",
-        {"schema": {"const": "nexora.spec/1"},
+        "nexora-spec", "nexora.spec/2: the language specification, or one section of it",
+        {"schema": {"const": "nexora.spec/2"},
          "nexora_version": {"type": "string"},
          "available": {"type": "boolean",
                        "description": "False when NEXORA was installed without its documentation."},
          "spec_version": _NULLABLE_STRING,
-         "language": {"const": "es", "description": "The specification is written in Spanish."},
+         "language": {"const": "en", "description": "The specification is written in English."},
          "sections": {"type": "array", "items": {
              "type": "object", "required": ["id", "title", "level"],
              "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "level": {"enum": [2, 3]}}}},

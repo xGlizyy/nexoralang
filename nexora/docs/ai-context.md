@@ -1,24 +1,24 @@
-# Contexto estructurado: `nex context` y `nex symbols`
+﻿# Structured context: `nex context` and `nex symbols`
 
-Dos herramientas para entender un programa NEXORA sin leerlo entero ni ejecutarlo. Están pensadas
-para una persona que llega a un archivo nuevo y, sobre todo, para un agente de IA que va a
-modificarlo: en lugar de enviar todo el código a un modelo y esperar que deduzca su estructura, se
-le entrega un resumen calculado por el propio lenguaje.
+Two tools for understanding a NEXORA program without reading it all or running it. They are intended
+for someone who arrives at a new file and, above all, for an AI agent that will modify it: instead of
+sending the entire code to a model and hoping it infers the structure, a summary calculated by the
+language itself is provided.
 
-Las dos comparten tres propiedades, comprobadas por pruebas (`tests/test_tooling.py`):
+Both share three properties, verified by tests (`tests/test_tooling.py`):
 
-- **No ejecutan el programa.** Usan el análisis léxico, sintáctico y estático, nada más.
-- **No interviene ningún modelo.** El mismo archivo produce siempre el mismo resultado.
-- **No suponen nada.** Lo que el análisis no pudo establecer aparece como `null` o no aparece.
+- **They do not run the program.** They use lexical, syntactic, and static analysis only.
+- **No model is involved.** The same file always produces the same result.
+- **They assume nothing.** Anything the analysis could not establish appears as `null` or is omitted.
 
 ## `nex context`
 
 ```bash
-nex context programa.nex
-nex context programa.nex --format json
+nex context program.nex
+nex context program.nex --format json
 ```
 
-Para este programa:
+For this program:
 
 <!-- nex:context -->
 ```nex
@@ -38,7 +38,7 @@ fn main() -> Void {
 }
 ```
 
-`nex context program.nex` escribe:
+`nex context program.nex` writes:
 
 ```text
 program.nex | NEXORA 0.11.0 | 14 lines
@@ -66,54 +66,54 @@ Notes:
   - Int / Int produces an Int: the fractional part is dropped. Division by zero is a runtime error (E3001) that static analysis does not detect.
 ```
 
-### Qué contiene y cómo se calcula
+### What it contains and how it is computed
 
-| Dato | De dónde sale |
-|------|---------------|
-| Funciones, parámetros, tipos de retorno | El árbol de sintaxis |
-| Contratos, con su condición **tal como está escrita** | El texto del archivo, recortado por la posición del nodo |
-| Variables de cada función, su tipo y si pueden cambiar (`mutable`, `true` en las `var`) | Los símbolos que registra el comprobador. Si la variable no tiene anotación, es el tipo que el comprobador infirió |
-| `loops`: los bucles de cada función (`while` y `for`), con su condición o su iterable, sus invariantes y su medida **tal como están escritos** | El árbol de sintaxis y el texto del archivo. `kind` dice `while` o `for`; para un `for`, `condition` es `x in xs`. `measure` es `null` en todo `for` y cuando falta en un `while` (`E2021`) |
-| `calls`, `called_by` | Las llamadas que el comprobador resolvió. No se busca texto: una llamada cuenta cuando el comprobador la asoció a una función |
-| `builtins_called` | Las funciones integradas a las que llama cada función, con su nombre completo (`print`, `Text.length`). En la salida de texto, debajo van los `requires` de cada una, con su explicación |
-| `recursive` | Si la función puede alcanzarse a sí misma siguiendo esas llamadas, directa o indirectamente |
-| `features` | Qué construcciones aparecen en el árbol (ver la tabla siguiente) |
-| `reserved_words_used` | Palabras reservadas para características no implementadas que aparecen en el texto |
-| `diagnostics` | Los mismos diagnósticos que `nex check` |
-| `notes` | Reglas del lenguaje que afectan a este programa concreto (ver más abajo) |
+| Data | Where it comes from |
+|------|----------------------|
+| Functions, parameters, return types | The syntax tree |
+| Contracts, with their condition exactly as written | The file text, sliced by node position |
+| Variables in each function, their type, and whether they can change (`mutable`, `true` for `var`) | The symbols recorded by the checker. If the variable has no annotation, it is the type inferred by the checker |
+| `loops`: the loops in each function (`while` and `for`), with their condition or iterable, invariants, and measure exactly as written | The syntax tree and the file text. `kind` is `while` or `for`; for a `for`, `condition` is `x in xs`. `measure` is `null` for every `for` and when missing in a `while` (`E2021`) |
+| `calls`, `called_by` | Calls the checker resolved. No text is searched: a call counts when the checker associated it with a function |
+| `builtins_called` | Built-in functions called by each function, using their fully qualified names (`print`, `Text.length`). In the text output, the `requires` of each one appear underneath, with their explanation |
+| `recursive` | Whether the function can reach itself again through those calls, directly or indirectly |
+| `features` | Which constructs appear in the tree (see the next table) |
+| `reserved_words_used` | Reserved words for unimplemented features that appear in the text |
+| `diagnostics` | The same diagnostics as `nex check` |
+| `notes` | Language rules that affect this specific program (see below) |
 
-Características que puede enumerar `features`:
+Features that `features` may list:
 
-| Valor | Aparece cuando el programa… |
-|-------|-----------------------------|
-| `user_functions` | declara alguna función además de `main` |
-| `conditionals` | usa `if` |
-| `contracts` | tiene alguna cláusula `requires` o `ensures` |
-| `recursion` | tiene alguna función recursiva |
-| `type_annotations` | anota el tipo de alguna variable |
-| `arithmetic` | usa `+ - * /` sobre números |
-| `text_concatenation` | une textos con `+` |
-| `comparisons` | usa `== != < <= > >=` |
-| `logic` | usa `and`, `or` o `not` |
-| `conversions` | llama a `to_text`, `to_float` o `to_int` |
-| `nested_blocks` | tiene un bloque `{ }` suelto dentro de otro |
-| `refined_types` | declara algún tipo refinado |
-| `examples` | tiene alguna cláusula `example` |
-| `mutable_variables` | declara alguna variable con `var` |
-| `loops` | usa `while` o `for` |
-| `loop_invariants` | algún bucle declara un `invariant` |
-| `text_operations` | llama a una función de un tipo (`Text.length`, `Int.parse`…) u ordena textos con `< <= > >=` |
+| Value | Appears when the program… |
+|-------|---------------------------|
+| `user_functions` | declares any function besides `main` |
+| `conditionals` | uses `if` |
+| `contracts` | has any `requires` or `ensures` clause |
+| `recursion` | has any recursive function |
+| `type_annotations` | annotates the type of any variable |
+| `arithmetic` | uses `+ - * /` on numbers |
+| `text_concatenation` | concatenates text with `+` |
+| `comparisons` | uses `== != < <= > >=` |
+| `logic` | uses `and`, `or`, or `not` |
+| `conversions` | calls `to_text`, `to_float`, or `to_int` |
+| `nested_blocks` | has a loose `{ }` block inside another |
+| `refined_types` | declares any refined type |
+| `examples` | has any `example` clause |
+| `mutable_variables` | declares any variable with `var` |
+| `loops` | uses `while` or `for` |
+| `loop_invariants` | a loop declares an `invariant` |
+| `text_operations` | calls a method on a type (`Text.length`, `Int.parse`…) or compares texts with `< <= > >=` |
 
-Las **notas** no son opiniones sobre el código. Cada una es una regla del lenguaje que se añade
-solo si el programa contiene aquello a lo que se refiere: que los contratos se comprueban al
-ejecutar y no se han demostrado, que cada `while` comprueba su medida y que los bucles comprueban
-sus invariantes en cada vuelta si hay bucles, el límite de llamadas anidadas si hay recursividad, que
-`Int / Int` descarta los decimales si hay una división entera, o qué palabras reservadas se han usado.
+The **notes** are not opinions about the code. Each one is a language rule that is added only if the
+program contains the thing it refers to: that contracts are checked at runtime and have not been
+proved, that each `while` checks its measure and loops check their invariants on every iteration if
+there are loops, the limit on nested calls if there is recursion, that `Int / Int` drops the fractional
+part if there is integer division, or which reserved words were used.
 
-### Formato JSON
+### JSON format
 
-Esquema `nexora.context/1`, descrito en
-[`schemas/nexora-context.schema.json`](schemas/nexora-context.schema.json). Para un programa mínimo:
+Schema `nexora.context/1`, described in
+[`schemas/nexora-context.schema.json`](schemas/nexora-context.schema.json). For a minimal program:
 
 <!-- nex:context-json -->
 ```nex
@@ -205,36 +205,27 @@ fn main() -> Void {
 }
 ```
 
-| Campo | Significado |
-|-------|-------------|
-| `schema`, `nexora_version`, `file`, `ok`, `diagnostics` | Cabecera común a todos los documentos ([protocolo JSON](json-protocol.md)) |
-| `executed` | Siempre `false`: el programa no se ejecuta para producir el resumen |
-| `lines` | Líneas del archivo |
-| `analysed` | `false` si hay errores léxicos (o el archivo no pudo leerse): entonces no hay estructura que describir |
-| `complete` | `true` si el resumen cubre todo el archivo. `false` si hay errores de sintaxis: el resumen es **parcial** |
-| `entry_point` | `"main"`, o `null` si el programa no la declara |
-| `functions` | Las funciones, en el orden del archivo. `null` si `analysed` es `false` |
-| `features` | Características usadas, en orden alfabético. `null` si `analysed` es `false` |
-| `reserved_words_used` | `null` si el texto ni siquiera pudo dividirse en tokens |
-| `notes` | Reglas del lenguaje relevantes para este programa |
+| Field | Meaning |
+|-------|---------|
+| `schema`, `nexora_version`, `file`, `ok`, `diagnostics` | Common header for all documents ([JSON protocol](json-protocol.md)) |
+| `executed` | Always `false`: the program is not run to produce the summary |
+| `lines` | Number of lines in the file |
+| `analysed` | `false` if there are lexical errors (or the file could not be read): then there is no structure to describe |
+| `complete` | `true` if the summary covers the entire file. `false` if there are syntax errors: the summary is **partial** |
+| `entry_point` | `"main"`, or `null` if the program does not declare one |
+| `functions` | The functions, in file order. `null` if `analysed` is `false` |
+| `features` | Used features, in alphabetical order. `null` if `analysed` is `false` |
+| `reserved_words_used` | `null` if the text could not even be split into tokens |
+| `notes` | Language rules relevant to this program |
 
-### Cuando el programa tiene errores
+### When the program has errors
 
-- **Errores semánticos o de tipos:** el resumen incluye la estructura y los diagnósticos. Un tipo mal
-  escrito aparece como `null`, no se inventa.
-- **Errores de sintaxis:** el resumen es **parcial** y `complete` es `false`. Describe el código que
-  sí pudo analizarse. Faltan las sentencias que tienen un error y las funciones cuya declaración
-  (la línea `fn …`) lo tiene; un bloque sin cerrar al final del archivo se conserva con lo escrito.
-  Lo que dependa de una pieza que falta es desconocido: por ejemplo, el tipo de una variable
-  calculada a partir de otra cuya declaración tiene un error aparece como `null`.
-- Con un resumen parcial, **los diagnósticos son solo los de sintaxis**. Los errores de nombres y de
-  tipos no se comunican hasta que la sintaxis es correcta, porque sobre un árbol con huecos
-  describirían los huecos y no el programa.
-- **Errores léxicos** (un texto sin cerrar, un carácter no válido): no hay árbol. `analysed` es
-  `false`, `functions` y `features` son `null`, y el resumen se reduce a los diagnósticos.
+- **Semantic or type errors:** the summary includes the structure and the diagnostics. A misspelled type appears as `null`; it is not invented.
+- **Syntax errors:** the summary is **partial** and `complete` is `false`. It describes only the code that could be analyzed. Statements with errors and functions whose declaration (the `fn …` line) has an error are missing; a block left unclosed at the end of the file is kept with what was written. Anything depending on a missing piece is unknown; for example, the type of a variable computed from another whose declaration has an error appears as `null`.
+- With a partial summary, **diagnostics are only syntax diagnostics**. Name and type errors are not reported until the syntax is correct, because describing gaps over a tree with holes would describe the gaps rather than the program.
+- **Lexical errors** (an unterminated string, an invalid character): there is no tree. `analysed` is `false`, `functions` and `features` are `null`, and the summary is reduced to the diagnostics.
 
-Por ejemplo, un programa que usa construcciones que todavía no existen. Las dos sentencias con
-error no forman parte del resumen:
+For example, a program that uses features that do not yet exist. The two erroneous statements are not part of the summary:
 
 <!-- nex:context -->
 ```nex
@@ -267,36 +258,32 @@ Notes:
   - The program has syntax errors, so this summary is partial: it covers only the code that could be parsed. Statements with errors, and functions whose declaration has errors, are missing, and a type that depends on them is unknown.
 ```
 
-### Límites
+### Limits
 
-- **Un solo archivo.** No hay módulos, así que no hay contexto entre archivos.
-- **No dice qué hace el programa.** Describe su estructura. Para saber qué imprime hay que ejecutarlo
-  (`nex run`).
-- **No ve lo que depende de valores.** Que `ok` sea `true` no significa que el programa no vaya a
-  dividir por cero ni a incumplir un contrato.
-- **Con errores de sintaxis el resumen es parcial**, y una función cuya declaración tiene un error
-  desaparece entera. Con errores léxicos no hay estructura.
-- **Los comentarios no se incluyen.**
-- Las notas y los mensajes están en inglés.
+- **A single file only.** There are no modules, so there is no cross-file context.
+- **It does not say what the program does.** It describes its structure. To know what it prints, you must run it (`nex run`).
+- **It cannot see what depends on values.** That `ok` is `true` does not mean the program will not divide by zero or violate a contract.
+- **With syntax errors the summary is partial**, and a function whose declaration has an error disappears entirely. With lexical errors there is no structure.
+- **Comments are not included.**
+- Notes and messages are in English.
 
 ## `nex symbols`
 
-Lista las funciones, parámetros y variables que declara un programa, y **dónde se usa cada uno**.
+Lists the functions, parameters, and variables declared by a program, and **where each one is used**.
 
 ```bash
-nex symbols programa.nex
-nex symbols programa.nex --name units
-nex symbols programa.nex --function unit_price --format json
+nex symbols program.nex
+nex symbols program.nex --name units
+nex symbols program.nex --function unit_price --format json
 ```
 
-| Opción | Efecto |
+| Option | Effect |
 |--------|--------|
-| `--name NOMBRE` | Solo los símbolos con ese nombre |
-| `--function FUNCION` | Solo esa función y lo que se declara dentro de ella |
-| `--format json` | El documento `nexora.symbols/1` en vez de texto |
+| `--name NAME` | Only symbols with that name |
+| `--function FUNCTION` | Only that function and what is declared inside it |
+| `--format json` | The `nexora.symbols/1` document instead of plain text |
 
-Sobre el primer programa de esta página, `nex symbols program.nex --format json` devuelve (se
-muestra con un programa más corto para abreviar):
+On the first program on this page, `nex symbols program.nex --format json` returns (shown with a shorter program for brevity):
 
 <!-- nex:symbols-json -->
 ```nex
@@ -873,43 +860,33 @@ fn main() -> Void {
 }
 ```
 
-Cada símbolo tiene:
+Each symbol has:
 
-| Campo | Significado |
-|-------|-------------|
-| `name` | El nombre |
-| `category` | `function`, `parameter` o `variable` |
-| `type` | Su tipo; en una función, su tipo de retorno. `null` si está mal escrito en el código |
-| `function` | La función donde se declara. `null` si el símbolo es una función |
-| `declaration` | Posición de la declaración |
-| `scope` | El bloque donde es visible. `null` en una función, que es visible en todo el archivo |
-| `references` | Posición de cada uso que el comprobador resolvió a este símbolo, incluidas las asignaciones |
-| `mutable` | `true` solo en una variable declarada con `var` |
-| `assignments` | Posición de cada asignación que le da un valor nuevo. Vacía en todo lo que no es una `var` |
-| `signature`, `params`, `return_type` | Solo en las funciones |
+| Field | Meaning |
+|-------|---------|
+| `name` | The name |
+| `category` | `function`, `parameter`, or `variable` |
+| `type` | Its type; for a function, its return type. `null` if it was misspelled in the code |
+| `function` | The function where it is declared. `null` if the symbol is a function |
+| `declaration` | The declaration position |
+| `scope` | The block where it is visible. `null` in a function, which is visible throughout the file |
+| `references` | Position of each use that the checker resolved to this symbol, including assignments |
+| `mutable` | `true` only for a variable declared with `var` |
+| `assignments` | Position of each assignment that gives it a new value. Empty for anything that is not a `var` |
+| `signature`, `params`, `return_type` | Only for functions |
 
-`builtins` enumera aparte las funciones que proporciona el lenguaje (`print`, `to_text`…, y las de
-un tipo, con su nombre completo: `Text.length`, `Int.parse`…), que no tienen declaración en el
-archivo. Cada una lleva `contracts`: sus `requires` y `ensures`, con la condición escrita en NEXORA,
-su explicación y `checked_at_run_time`, que es `true` en los `requires` (se comprueban en cada
-llamada) y `false` en los `ensures` (los cumple la implementación y lo verifican las pruebas, pero el
-programa no los comprueba). Una variable llamada `length` es un símbolo más, sin relación con
-`Text.length` ([decisión 0011](decisions/0011-operaciones-sobre-textos.md)).
+`builtins` lists separately the functions provided by the language (`print`, `to_text`…, and type methods, with their fully qualified names: `Text.length`, `Int.parse`…), which do not have a declaration in the file. Each one carries `contracts`: its `requires` and `ensures`, with the condition written in NEXORA, its explanation, and `checked_at_run_time`, which is `true` for `requires` (checked at each call) and `false` for `ensures` (the implementation guarantees them and tests verify them, but the program does not check them). A variable named `length` is just another symbol, unrelated to `Text.length` ([decision 0011](decisions/0011-operaciones-sobre-textos.md)).
 
-Cómo se calcula: el comprobador registra cada declaración al procesarla y, cada vez que resuelve un
-nombre con las reglas de ámbito del lenguaje, anota esa posición en el símbolo correspondiente. Por
-eso dos variables con el mismo nombre en bloques distintos son dos símbolos distintos, cada uno con
-sus referencias. **Nada se deduce del nombre** de una variable o de una función.
+How it is computed: the checker records each declaration as it processes it and, each time it resolves a name according to the language's scoping rules, it annotates that position on the corresponding symbol. That is why two variables with the same name in different blocks are two different symbols, each with its own references. **Nothing is inferred from the name** of a variable or a function.
 
-Límites:
+Limits:
 
-- Sin índice ni búsqueda entre archivos: el lenguaje todavía es de un solo archivo.
-- Un nombre que no se pudo resolver (un error `E2005`) no es referencia de ningún símbolo.
-- Con errores de sintaxis la lista es parcial (`complete` es `false`): solo incluye lo declarado en
-  el código que pudo analizarse.
-- `symbols` es `null` si hay errores léxicos.
+- No index and no cross-file search: the language is still single-file.
+- A name that could not be resolved (an `E2005` error) is not a reference to any symbol.
+- With syntax errors, the list is partial (`complete` is `false`): it only includes declarations in the code that could be analyzed.
+- `symbols` is `null` if there are lexical errors.
 
-## Desde Python
+## From Python
 
 ```python
 from nexora.tooling import get_context, get_symbols
@@ -918,5 +895,5 @@ context = get_context(source_text, "programa.nex")
 symbols = get_symbols(source_text, "programa.nex", function="unit_price")
 ```
 
-Devuelven exactamente los mismos documentos que los comandos. Ver
-[Herramientas automáticas e IA](ai-tooling.md#api-de-python).
+They return exactly the same documents as the commands. See
+[Automatic tools and AI](ai-tooling.md#python-api).

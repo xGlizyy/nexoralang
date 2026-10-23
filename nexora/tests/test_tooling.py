@@ -473,24 +473,24 @@ def test_instructions_inside_a_program_are_data():
 def test_spec_index():
     document = tooling.get_language_spec()
     validate(document, "nexora-spec.schema.json")
-    assert (document["available"], document["spec_version"], document["language"], document["section"]) == (True, "0.11", "es", None)
+    assert (document["available"], document["spec_version"], document["language"], document["section"]) == (True, "0.11", "en", None)
     ids = [section["id"] for section in document["sections"]]
     assert len(ids) == len(set(ids))
-    for expected in ("4-tipos-de-datos", "7-funciones", "9-contratos", "44-tipos-refinados", "113-códigos-de-error"):
+    for expected in ("4-data-types", "7-functions", "9-contracts", "44-refined-types", "113-error-codes"):
         assert expected in ids
 
 
 def test_spec_section_is_the_text_of_the_real_document():
-    document = tooling.get_language_spec("113-códigos-de-error")
+    document = tooling.get_language_spec("113-error-codes")
     validate(document, "nexora-spec.schema.json")
     section = document["section"]
-    assert section["text"].startswith("### 11.3 Códigos de error")
+    assert section["text"].startswith("### 11.3 Error codes")
     spec = (ROOT / "docs" / "language-spec.md").read_text(encoding="utf-8")
     assert section["text"] in spec
     for code in CODES:
         assert f"`{code}`" in section["text"]
     # A level-2 section includes its subsections.
-    whole = tooling.get_language_spec("11-diagnósticos")["section"]["text"]
+    whole = tooling.get_language_spec("11-diagnostics")["section"]["text"]
     assert section["text"] in whole
 
 

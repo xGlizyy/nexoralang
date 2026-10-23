@@ -1,154 +1,155 @@
-# Limitaciones
+# Limitations
 
-Lo que NEXORA **no** hace en la versión 0.11.0, y los riesgos que conviene conocer antes de usarlo.
-Nada de lo que aparece aquí como "no existe" funciona hoy, aunque se mencione en el borrador de
-diseño, en la hoja de ruta o en una decisión aceptada y pendiente de implementar.
+What NEXORA does **not** do in version 0.11.0, and the risks worth knowing before using it.
+Nothing that appears here as "does not exist" works today, even if it is mentioned in the design
+draft, in the roadmap or in a decision that is accepted and pending implementation.
 
-## Estado general
+## General status
 
-NEXORA es un proyecto en una fase temprana (anterior a la versión 1.0):
+NEXORA is an early-stage project (before version 1.0):
 
-- El lenguaje puede cambiar de forma incompatible entre versiones.
-- **No es apto para uso en producción.**
-- No ha sido utilizado por nadie fuera de su desarrollo, ni auditado por terceros.
-- No se ha medido su rendimiento ni se ha comparado con ningún otro lenguaje.
+- The language may change incompatibly between versions.
+- **It is not suitable for production use.**
+- It has not been used by anyone outside its development, nor audited by third parties.
+- Its performance has not been measured or compared with any other language.
 
-## Lo que el lenguaje no tiene
+## What the language does not have
 
-| Falta | Consecuencia |
-|-------|--------------|
-| `break` y `continue`, y `for` sobre rangos o `Text` | Se escribe un `while` con un contador; para salir antes, la condición o `return`. Un `for` solo recorre una `List[T]` |
-| Que el análisis de rutas reconozca que un `for` siempre devuelve | No lo considera una ruta de retorno completa, aunque todas sus vueltas contengan un `return`; si el bucle es la última sentencia, hay que añadir un `return` después |
-| Asignaciones compuestas (`+=`, `++`) | Se escribe `x = x + 1` |
-| Reasignar un parámetro o el iterador de un `for` | Se copia antes en una `var` |
-| Un `while` sin medida (`decreases`) | Todo `while` declara por qué termina; si no puede escribirse una medida, se pone un máximo de vueltas explícito (`decreases limit - turns`). Un `for` sobre una lista finita no la necesita |
-| `if` como expresión | `if` no puede usarse para dar valor a una variable |
-| Indexar una lista (`xs[i]`) o modificar sus elementos | Se usa `List.get(xs, i)` para leer; `List.append` y `List.concat` crean otra lista. No hay `List.set` ni mutación |
-| Una variante total de `List.get` | `List.get` exige `0 <= i and i < List.length(xs)` y falla con `E4001`; no hay `Option` para representar la ausencia |
-| Listas con elementos de tipos distintos, o vacías sin tipo esperado | Todos los elementos tienen el mismo tipo. `[]` y `for x in []` necesitan un tipo esperado (`E2011`) |
-| Refinar una lista (`type NonEmpty = List[Int] where ...`) | Un tipo refinado solo puede construirse sobre `Int`, `Float`, `Bool`, `Text` u otro refinado (`E2016`) |
-| Funciones de `List` más allá de `length`, `get`, `append`, `concat` y `contains` | No hay `map`, `filter`, `fold`, ordenación, `slice` ni búsqueda de posiciones |
-| Mapas, enumeraciones y opcionales | Las listas `List[T]` son inmutables y finitas; los registros (sección 4.6 de la [especificación](language-spec.md)) son inmutables y no tienen métodos, refinamientos ni recursión. `Option[T]` y `Result[T, E]` (sección 4.7) existen, pero sin `match` ni `if let`: las variantes se reconocen con funciones |
-| Tipos definidos por el usuario y genéricos | Las listas usan `List[T]`, pero el programa no puede declarar tipos genéricos ni funciones genéricas |
-| `trim`, mayúsculas, `split`, `replace`, búsqueda de posiciones | Existen `Text.length`, `Text.slice`, `Text.contains`, `Text.starts_with`, `Text.ends_with` y el orden entre textos ([especificación](language-spec.md), 8.1) |
-| Grafemas y normalización Unicode | Un carácter es un punto de código: una `e` con el acento combinado cuenta 2, y dos textos que se ven iguales pueden ser distintos para `==` |
-| Orden alfabético según el idioma | El orden entre textos es el de los puntos de código: `"Z" < "a"` |
-| Interpolación de textos | Se usa `+` y `to_text` |
-| Leer números con espacios, `+`, separadores o en otras bases | `Int.parse` y `Float.parse` solo leen una forma (`"-42"`, `"2.5e3"`) |
-| Operador de resto (`%`) y potencias | |
-| Funciones matemáticas (raíz, redondeo, valor absoluto…) | Hay que escribirlas |
-| Entrada de datos: la red y los procesos externos | Un programa puede imprimir, leer sus argumentos y la entrada estándar, y usar los archivos que declara con `uses` y que se le permiten con `--allow-read` o `--allow-write` ([decisión 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). No hay red ni procesos externos |
-| Módulos e importaciones | Módulos e importaciones están implementados en la 0.11.0 ([decisión 0018](decisions/0018-modulos-e-importaciones.md)). El playground no los admite; `nex test` solo evalúa los ejemplos del archivo que se le pasa; no hay alias ni importación selectiva. |
-| Funciones como valores, funciones anónimas, sobrecarga, valores por defecto | |
-| Avisos (*warnings*) | Todo diagnóstico es un error. Una variable sin usar no produce ningún aviso |
-| Comentarios de bloque, textos de varias líneas | |
-| Literales hexadecimales o con exponente (`1e-3`) | |
+| Missing | Consequence |
+|---------|-------------|
+| `break` and `continue`, and `for` over ranges or `Text` | Write a `while` with a counter; to leave early, the condition or `return`. A `for` only goes through a `List[T]` |
+| The path analysis recognizing that a `for` always returns | It does not consider it a complete return path, even if all its iterations contain a `return`; if the loop is the last statement, a `return` has to be added after it |
+| Compound assignments (`+=`, `++`) | Write `x = x + 1` |
+| Reassigning a parameter or the iterator of a `for` | Copy it first into a `var` |
+| A `while` without a measure (`decreases`) | Every `while` declares why it ends; if a measure cannot be written, put an explicit maximum number of iterations (`decreases limit - turns`). A `for` over a finite list does not need one |
+| `if` as an expression | `if` cannot be used to give a variable its value |
+| Indexing a list (`xs[i]`) or modifying its elements | Use `List.get(xs, i)` to read; `List.append` and `List.concat` create another list. There is no `List.set` and no mutation |
+| A total variant of `List.get` | `List.get` requires `0 <= i and i < List.length(xs)` and fails with `E4001`; there is no `Option` to represent the absence |
+| Lists with elements of different types, or empty ones without an expected type | All the elements have the same type. `[]` and `for x in []` need an expected type (`E2011`) |
+| Refining a list (`type NonEmpty = List[Int] where ...`) | A refined type can only be built over `Int`, `Float`, `Bool`, `Text` or another refined type (`E2016`) |
+| `List` functions beyond `length`, `get`, `append`, `concat` and `contains` | There is no `map`, `filter`, `fold`, sorting, `slice` or search for positions |
+| Maps, enumerations and optionals | `List[T]` lists are immutable and finite; records (section 4.6 of the [specification](language-spec.md)) are immutable and have no methods, refinements or recursion. `Option[T]` and `Result[T, E]` (section 4.7) exist, but without `match` or `if let`: the variants are recognized with functions |
+| User-defined types and generics | Lists use `List[T]`, but the program cannot declare generic types or generic functions |
+| `trim`, case conversion, `split`, `replace`, search for positions | There are `Text.length`, `Text.slice`, `Text.contains`, `Text.starts_with`, `Text.ends_with` and the ordering between texts ([specification](language-spec.md), 8.1) |
+| Graphemes and Unicode normalization | A character is a code point: an `e` with the combining accent counts 2, and two texts that look the same can be different for `==` |
+| Alphabetical order according to the language | The order between texts is that of the code points: `"Z" < "a"` |
+| Text interpolation | Use `+` and `to_text` |
+| Reading numbers with spaces, `+`, separators or in other bases | `Int.parse` and `Float.parse` only read one form (`"-42"`, `"2.5e3"`) |
+| Remainder operator (`%`) and powers | |
+| Mathematical functions (root, rounding, absolute value…) | They have to be written |
+| Data input: the network and external processes | A program can print, read its arguments and the standard input, and use the files that it declares with `uses` and that it is allowed with `--allow-read` or `--allow-write` ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). There is no network and there are no external processes |
+| Modules and imports | Modules and imports are implemented in 0.11.0 ([decision 0018](decisions/0018-modulos-e-importaciones.md)). The playground does not support them; `nex test` only evaluates the examples of the file it is given; there are no aliases and no selective imports. |
+| Functions as values, anonymous functions, overloading, default values | |
+| Warnings | Every diagnostic is an error. An unused variable produces no warning |
+| Block comments, multi-line texts | |
+| Hexadecimal literals or literals with an exponent (`1e-3`) | |
 
-Con estas limitaciones NEXORA sirve para programas pequeños de cálculo y para estudiar el propio
-lenguaje. No sirve todavía para escribir aplicaciones.
+With these limitations NEXORA is useful for small computation programs and for studying the
+language itself. It is not yet useful for writing applications.
 
-## Límites de la implementación
+## Limits of the implementation
 
-| Límite | Valor | Qué ocurre al superarlo |
-|--------|-------|-------------------------|
-| Llamadas anidadas | 1000 (contando `main`) | Error de ejecución `E3004` |
-| Llamadas anidadas con expresiones muy profundas | Menos de 1000 | El mismo error `E3004`; el mensaje indica cuántas había |
-| Anidamiento de paréntesis, bloques, `else if`, operadores unarios o tipos (`List[...]`) | 64 niveles | Error `E1105` |
-| Profundidad de una expresión (por ejemplo, términos de una suma) | 256 | Error `E1105` |
-| Trabajo de `nex check` comprobando constantes contra tipos refinados | 100 000 nodos de condición evaluados | Error `E2019`; el programa no se ejecuta |
-| Errores comunicados por etapa y archivo | 100 | El análisis se detiene; el resumen lo indica |
-| Rango de `Int` | 64 bits con signo | Error de ejecución `E3002` |
-| Entero literal más pequeño | `-9223372036854775807` | `-9223372036854775808` solo puede obtenerse calculándolo: `-9223372036854775807 - 1` |
+| Limit | Value | What happens when it is exceeded |
+|-------|-------|----------------------------------|
+| Nested calls | 1000 (counting `main`) | Runtime error `E3004` |
+| Nested calls with very deep expressions | Fewer than 1000 | The same error `E3004`; the message says how many there were |
+| Nesting of parentheses, blocks, `else if`, unary operators or types (`List[...]`) | 64 levels | Error `E1105` |
+| Depth of an expression (for example, terms of a sum) | 256 | Error `E1105` |
+| Work of `nex check` checking constants against refined types | 100,000 evaluated condition nodes | Error `E2019`; the program does not run |
+| Errors reported per stage and file | 100 | The analysis stops; the summary says so |
+| Range of `Int` | 64-bit signed | Runtime error `E3002` |
+| Smallest integer literal | `-9223372036854775807` | `-9223372036854775808` can only be obtained by computing it: `-9223372036854775807 - 1` |
 
-No hay límite de tiempo ni de memoria: un programa puede tardar o consumir memoria sin que el
-intérprete lo detenga. Ningún programa se queda repitiendo algo para siempre: una recursividad sin
-fin se detiene con `E3004` y un bucle sin fin, con `E4006` (su medida deja de disminuir). Pero un
-programa que termina puede tardar mucho: una recursividad que se ramifica (`fib(40)`) o un bucle
-con una medida inicial enorme. Se puede interrumpir con Ctrl+C. Tampoco `nex test` tiene límites
-de tiempo por ejemplo. Si Python se queda sin memoria mientras el programa se ejecuta, el programa
-termina con el error `E3007`; pero en Linux el sistema puede matar el proceso antes, sin ningún
-mensaje ([decisión 0009](decisions/0009-memoria-agotada.md)).
+There is no time or memory limit: a program can take long or use memory without the
+interpreter stopping it. No program keeps repeating something forever: an endless
+recursion stops with `E3004` and an endless loop, with `E4006` (its measure stops decreasing). But a
+program that ends can take a long time: a branching recursion (`fib(40)`) or a loop
+with a huge initial measure. It can be interrupted with Ctrl+C. `nex test` has no time limits
+per example either. If Python runs out of memory while the program runs, the program
+ends with the error `E3007`; but on Linux the system can kill the process first, without any
+message ([decision 0009](decisions/0009-memoria-agotada.md)).
 
-## Rendimiento
+## Performance
 
-El intérprete recorre el árbol de sintaxis directamente, sin compilar. Es una implementación de
-referencia, pensada para ser correcta y fácil de entender, no rápida. **No se ha medido** su
-velocidad, y no se hace ninguna afirmación sobre ella.
+The interpreter walks the syntax tree directly, without compiling. It is a reference
+implementation, meant to be correct and easy to understand, not fast. Its speed **has not been
+measured**, and no claim is made about it.
 
-## Contratos y tipos refinados
+## Contracts and refined types
 
-Estables desde la 0.3.0. Sus límites, en detalle, en [contratos](contracts.md#limitaciones) y en
-[tipos refinados](types.md#tipos-refinados):
+Stable since 0.3.0. Their limits, in detail, in [contracts](contracts.md#limitations) and in
+[refined types](types.md#refined-types):
 
-- Los contratos se comprueban al ejecutar, en las llamadas que se ejecutan. No se demuestran.
-- `nex check` no afirma que un contrato se cumpla.
-- De los tipos refinados, `nex check` solo comprueba las constantes. Un valor calculado se comprueba
-  con `Percent(x)` al ejecutar, y `nex check` no afirma que vaya a cumplir la condición.
-- La condición de un tipo refinado no puede llamar a funciones del programa.
-- No hay alias de tipos sin condición, ni forma de comprobar un valor sin detener el programa si
-  falla (no existe `Result`).
-- No pueden desactivarse.
+- Contracts are checked when running, on the calls that run. They are not proven.
+- `nex check` does not claim that a contract holds.
+- Of refined types, `nex check` only checks constants. A computed value is checked
+  with `Percent(x)` when running, and `nex check` does not claim that it will meet the condition.
+- The condition of a refined type cannot call functions of the program.
+- There are no type aliases without a condition, and no way of checking a value without stopping the program if
+  it fails (there is no `Result`).
+- They cannot be turned off.
 
-## Herramientas
+## Tools
 
-- La única interfaz estable es la línea de comandos. La API de Python (`nexora.tooling`) es
-  **experimental**; el resto de módulos de `src/nexora/` son internos y pueden cambiar sin aviso.
-- No hay formateador, depurador ni integración con editores. El servidor de lenguaje (LSP) está
-  **planificado, no implementado**: [LSP](lsp.md).
-- Con errores de sintaxis, `nex inspect`, `nex context` y `nex symbols` devuelven una estructura
-  **parcial**: faltan las sentencias con errores y, entera, cualquier función cuya declaración tenga
-  uno; y solo se comunican los errores de sintaxis. Con errores léxicos (un texto sin cerrar, un
-  carácter no válido) no devuelven estructura. Nunca incluyen los comentarios.
-- `nex context` y `nex symbols` describen un único archivo, porque el lenguaje no tiene módulos.
-- Las sugerencias de los diagnósticos son texto para personas, no ediciones aplicables
-  automáticamente.
-- El servidor MCP se prueba de forma automática con el cliente del SDK oficial. En un asistente
-  real solo se ha comprobado **una vez, a mano, en Claude Code**; en ningún otro. Solo analiza: no ejecuta programas. Depende de la versión 2 del SDK de Python de MCP. Sus
-  límites, en [Servidor MCP](mcp.md#limitaciones).
-- La especificación solo está disponible para las herramientas (`get_language_spec`) si NEXORA se
-  instaló desde el código fuente; el paquete *wheel* no incluye la documentación.
-- NEXORA no llama a ningún modelo de IA, y **ningún modelo se ha evaluado** con estas herramientas.
-  Lo que hay son datos estructurados y deterministas:
-  [Herramientas automáticas e IA](ai-tooling.md).
+- The only stable interface is the command line. The Python API (`nexora.tooling`) is
+  **experimental**; the rest of the modules of `src/nexora/` are internal and may change without notice.
+- There is no formatter, debugger or editor integration. The language server (LSP) is
+  **planned, not implemented**: [LSP](lsp.md).
+- With syntax errors, `nex inspect`, `nex context` and `nex symbols` return a **partial**
+  structure: the statements with errors are missing and so is, entirely, any function whose declaration has
+  one; and only the syntax errors are reported. With lexical errors (an unclosed text, an
+  invalid character) they return no structure. They never include comments.
+- `nex context` and `nex symbols` describe the entry file; the names that come from a module appear in
+  it as qualified.
+- The suggestions of the diagnostics are text for people, not edits that can be applied
+  automatically.
+- The MCP server is tested automatically with the client of the official SDK. In a real
+  assistant it has only been checked **once, by hand, in Claude Code**; in no other. It only analyzes: it does not run programs. It depends on version 2 of the Python MCP SDK. Its
+  limits, in [MCP server](mcp.md#limitations).
+- The specification is only available to the tools (`get_language_spec`) if NEXORA was
+  installed from the source code; the *wheel* package does not include the documentation.
+- NEXORA does not call any AI model, and **no model has been evaluated** with these tools.
+  What there is are structured and deterministic data:
+  [Automated tools and AI](ai-tooling.md).
 
-## Seguridad
+## Security
 
-Un programa NEXORA puede calcular, escribir texto, leer sus argumentos y la entrada estándar, y
-usar los archivos que declara con `uses` y que se le permiten con `--allow-read` o `--allow-write`.
-No tiene ninguna construcción para usar la red o ejecutar otros programas, y las pruebas
-comprueban que el intérprete no usa `eval` ni `exec`. Aun así:
+A NEXORA program can compute, write text, read its arguments and the standard input, and
+use the files that it declares with `uses` and that it is allowed with `--allow-read` or `--allow-write`.
+It has no construct to use the network or run other programs, and the tests
+check that the interpreter does not use `eval` or `exec`. Even so:
 
-- **NEXORA no es un entorno aislado (*sandbox*).** Se ejecuta dentro de un proceso de Python normal,
-  con los permisos de quien lo lanza.
-- **No hay límites de tiempo ni de memoria** al usar `nex`. Un programa malintencionado puede hacer
-  que el proceso consuma recursos.
-- El [playground](playground.md) sí ejecuta cada programa en un proceso aparte con límites de
-  tiempo, de salida y de tamaño, pero **eso tampoco es una sandbox**: el aislamiento con contenedor
-  está configurado y **no se ha probado**. Los límites de CPU, de archivos y de procesos del sistema
-  operativo existen en Linux y macOS, y se han comprobado en los dos; el límite de memoria del
-  sistema operativo solo se cumple en Linux: en macOS, el kernel lo acepta y no lo aplica. No está
-  desplegado en ningún servidor.
-- El servidor MCP no ejecuta programas, pero se ejecuta con los permisos de quien lo arranca.
-- No ha sido auditado.
+- **NEXORA is not a sandbox.** It runs inside a normal Python process,
+  with the permissions of whoever launches it.
+- **There are no time or memory limits** when using `nex`. A malicious program can make
+  the process use resources.
+- The [playground](playground.md) does run each program in a separate process with time,
+  output and size limits, but **that is not a sandbox either**: the container isolation
+  is configured and **has not been tested**. The CPU, file and process limits of the operating
+  system exist on Linux and macOS, and have been checked on both; the memory limit of the
+  operating system is only enforced on Linux: on macOS, the kernel accepts it and does not apply it. It is not
+  deployed on any server.
+- The MCP server does not run programs, but it runs with the permissions of whoever starts it.
+- It has not been audited.
 
-No ejecutes programas NEXORA que no sean de confianza en un entorno donde un consumo excesivo de
-recursos sea un problema. El alcance exacto está en [`SECURITY.md`](../SECURITY.md).
+Do not run untrusted NEXORA programs in an environment where excessive use of
+resources is a problem. The exact scope is in [`SECURITY.md`](../SECURITY.md).
 
-## Plataformas
+## Platforms
 
-Comprobado en Windows 11 con Python 3.12, y en Linux (Ubuntu 24.04 sobre WSL 2) con Python 3.11,
-3.12 y 3.13; ejecutado además en Linux, Windows y macOS con Python 3.11, 3.12 y 3.13 por la
-[integración continua](testing.md#integración-continua). Otras distribuciones y Linux sin WSL no se
-han probado; ver [Instalación](installation.md#qué-se-ha-comprobado).
+Checked on Windows 11 with Python 3.12, and on Linux (Ubuntu 24.04 on WSL 2) with Python 3.11,
+3.12 and 3.13; also run on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13 by the
+[continuous integration](testing.md#continuous-integration). Other distributions and Linux without WSL have not
+been tested; see [Installation](installation.md#what-has-been-checked).
 
-## Proyecto
+## Project
 
-- Se distribuye con la licencia MIT: sin garantía de ningún tipo.
-- El repositorio es público: <https://github.com/xGlizyy/nexoralang>. No hay canal de contacto
-  privado, ni un proceso de publicación de versiones más allá del que se documenta en
-  [Instalación](installation.md#publicar).
-- La integración continua se ejecuta en cada cambio a `main`, en Linux, Windows y macOS, pero no hay
-  una regla escrita de qué se integra: cada cambio se revisa a mano.
-- Los ejemplos de `ejemplos/*.nx` y el documento `docs/fase-1-diseno.md`, en la raíz del
-  repositorio, describen un diseño anterior y más amplio. Usan una sintaxis que el intérprete **no**
-  admite. La referencia válida es la [especificación](language-spec.md).
+- It is distributed under the MIT licence: without warranty of any kind.
+- The repository is public: <https://github.com/xGlizyy/nexoralang>. There is no private contact
+  channel, nor a release process beyond the one documented in
+  [Installation](installation.md#publishing).
+- The continuous integration runs on every change to `main`, on Linux, Windows and macOS, but there is
+  no written rule of what is merged: every change is reviewed by hand.
+- The examples of `ejemplos/*.nx` and the document `docs/fase-1-diseno.md`, at the root of the
+  repository, describe an earlier and broader design. They use a syntax that the interpreter does **not**
+  accept. The valid reference is the [specification](language-spec.md).

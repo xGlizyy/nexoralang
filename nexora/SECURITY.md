@@ -1,93 +1,92 @@
-# Seguridad
+# Security
 
-Este documento explica qué protege NEXORA hoy, qué **no** protege, y cómo avisar de un problema.
+This document explains what NEXORA protects today, what it does **not** protect, and how to report a problem.
 
-NEXORA es un proyecto en fase temprana que no ha sido auditado. **No afirmamos que sea seguro
-ejecutar con él código que no sea de confianza.**
+NEXORA is an early-stage project that has not been audited. **We do not claim that it is safe
+to run untrusted code with it.**
 
-## Versiones con soporte
+## Supported versions
 
-Solo la versión más reciente del código. No hay versiones publicadas ni mantenimiento de versiones
-anteriores.
+Only the most recent version. Earlier versions are not maintained.
 
-## Cómo avisar de una vulnerabilidad
+## How to report a vulnerability
 
-**El canal de contacto privado es el botón *Report a vulnerability* de la pestaña *Security* del
-repositorio** (<https://github.com/xGlizyy/nexoralang/security/advisories/new>): el aviso llega en
-privado a quien mantiene el proyecto, y solo se hace público cuando hay una corrección. La función
-*Private vulnerability reporting* está activada en el repositorio (*Settings → Code security*).
+**The private contact channel is the *Report a vulnerability* button in the *Security* tab of the
+repository** (<https://github.com/xGlizyy/nexoralang/security/advisories/new>): the report reaches
+whoever maintains the project privately, and it is only made public when there is a fix. The
+*Private vulnerability reporting* feature is enabled in the repository (*Settings → Code security*).
 
-> **Pendiente por quien mantiene el proyecto:** indicar aquí un plazo de respuesta que realmente
-> pueda cumplirse, y sustituir este bloque por el canal nuevo si algún día se decide cambiarlo.
+> **Pending for whoever maintains the project:** state here a response time that can really
+> be met, and replace this block with the new channel if it is ever decided to change it.
 
-Hasta entonces, si tienes acceso directo a quien mantiene el proyecto, comunícaselo en privado.
-**No describas una vulnerabilidad en un canal público** antes de que haya una corrección.
+Until then, if you have direct access to whoever maintains the project, tell them privately.
+**Do not describe a vulnerability in a public channel** before there is a fix.
 
-Un buen aviso incluye:
+A good report includes:
 
-- La versión (`nex --version`), el sistema operativo y la versión de Python.
-- El programa `.nex` o el comando más pequeño que reproduce el problema.
-- Qué ocurre y qué impacto tiene.
+- The version (`nex --version`), the operating system and the Python version.
+- The smallest `.nex` program or command that reproduces the problem.
+- What happens and what impact it has.
 
-No hay programa de recompensas.
+There is no bug bounty programme.
 
-## Qué está dentro del alcance
+## What is in scope
 
-Se considera un problema de seguridad cualquier forma de conseguir, **mediante un archivo `.nex` o
-mediante los argumentos de `nex`**, algo de lo siguiente:
+Any way of achieving, **through a `.nex` file or
+through the arguments of `nex`**, any of the following is considered a security problem:
 
-- Ejecutar código Python o comandos del sistema.
-- Leer o escribir archivos distintos del archivo `.nex` indicado.
-- Acceder a la red, a variables de entorno o a otros procesos.
-- Que `nex check` o `nex inspect` ejecuten el programa que analizan.
-- Que un texto del programa se interprete como código en lugar de tratarse como dato.
+- Running Python code or system commands.
+- Reading or writing files other than the given `.nex` file.
+- Accessing the network, environment variables or other processes.
+- Making `nex check` or `nex inspect` run the program they analyze.
+- Having a text of the program interpreted as code instead of being treated as data.
 
-También interesa, aunque con menor gravedad, cualquier entrada que provoque un error interno
-(`internal error`, código de salida `70`) o un cierre inesperado del proceso.
+Also of interest, although less serious, is any input that causes an internal error
+(`internal error`, exit code `70`) or an unexpected exit of the process.
 
-## Qué protege el diseño
+## What the design protects
 
-Estas propiedades se derivan de cómo está construido el lenguaje y **se comprueban con pruebas
-automatizadas** (`tests/test_security.py`, `tests/test_robustness.py`):
+These properties follow from how the language is built and **are checked by automated
+tests** (`tests/test_security.py`, `tests/test_robustness.py`):
 
-| Propiedad | Cómo se consigue | Qué comprueba la prueba |
-|-----------|------------------|-------------------------|
-| Un programa solo puede calcular y escribir texto | El lenguaje no tiene ninguna construcción de entrada/salida salvo `print`. Las funciones integradas son `print`, `to_text`, `to_float` y `to_int` | Que la lista de funciones integradas es exactamente esa, y que nombres como `open`, `eval` o `exec` no existen |
-| El intérprete no evalúa código Python | Recorre su propio árbol de sintaxis. No usa `eval`, `exec` ni `compile` | Se analiza el código fuente de cada módulo y se rechaza cualquier llamada a esas funciones |
-| El análisis no ejecuta | `nex check` y `nex inspect` terminan antes de la etapa de ejecución | Un programa que imprime, divide por cero y entra en recursividad infinita se analiza sin que ocurra nada de eso |
-| Los argumentos no son código | `nex` solo acepta rutas de archivo. No existe ninguna opción para pasar código | Argumentos con forma de código se tratan como nombres de archivo inexistentes |
-| Las etapas del lenguaje no tocan el sistema | Solo `cli.py` lee el archivo y escribe en la terminal | Los demás módulos no importan `os`, `pathlib` ni `subprocess` |
-| No se escriben archivos | La única operación de archivo es leer el programa | Ejecutar los tres comandos no crea ningún archivo |
-| Sin dependencias externas | Solo se usa la biblioteca estándar de Python | La lista de dependencias está vacía, y los módulos solo importan de una lista cerrada |
-| Las entradas incorrectas no hacen fallar al intérprete | Límites de anidamiento, de profundidad y de número de errores | Archivos truncados, mutados, aleatorios, binarios, enormes o con anidamiento extremo producen diagnósticos, no excepciones |
+| Property | How it is achieved | What the test checks |
+|----------|--------------------|----------------------|
+| A program can only compute and write text | The language has no input/output construct except `print`. The built-in functions are `print`, `to_text`, `to_float` and `to_int` | That the list of built-in functions is exactly that one, and that names such as `open`, `eval` or `exec` do not exist |
+| The interpreter does not evaluate Python code | It walks its own syntax tree. It does not use `eval`, `exec` or `compile` | The source code of every module is analyzed and any call to those functions is rejected |
+| The analysis does not run | `nex check` and `nex inspect` end before the execution stage | A program that prints, divides by zero and enters infinite recursion is analyzed without any of that happening |
+| Arguments are not code | `nex` only accepts file paths. There is no option to pass code | Arguments shaped like code are treated as names of files that do not exist |
+| The stages of the language do not touch the system | Only `cli.py` reads the file and writes to the terminal | The other modules do not import `os`, `pathlib` or `subprocess` |
+| No files are written | The only file operation is reading the program | Running the three commands creates no file |
+| No external dependencies | Only the Python standard library is used | The list of dependencies is empty, and the modules only import from a closed list |
+| Wrong inputs do not make the interpreter crash | Limits on nesting, on depth and on the number of errors | Truncated, mutated, random, binary, huge or extremely nested files produce diagnostics, not exceptions |
 
-## Qué **no** está protegido
+## What is **not** protected
 
-- **NEXORA no es un entorno aislado (*sandbox*).** El intérprete es un programa de Python normal,
-  que se ejecuta con los permisos de quien lo lanza. Las propiedades anteriores dependen de que el
-  intérprete no tenga defectos; no hay una segunda barrera (aislamiento de proceso, restricción de
-  llamadas al sistema) si los tiene.
-- **No hay límite de tiempo de ejecución.** Un programa puede tardar mucho.
-- **No hay límite de memoria.** Un programa puede construir textos muy grandes por concatenación.
-  El límite de 1000 llamadas anidadas acota la recursividad, no el consumo de memoria.
-- **No hay límite de tamaño del archivo de entrada**, ni del tamaño de la salida.
-- **Las pruebas con entradas aleatorias son limitadas.** Recorren unos miles de casos generados con
-  una semilla fija. No son una búsqueda exhaustiva ni sustituyen a una auditoría.
-- **No se ha hecho ninguna auditoría externa**, ni análisis de seguridad con herramientas
-  especializadas.
-- **La salida de un programa no se filtra.** Un programa puede escribir secuencias de control de
-  terminal. Si muestras la salida de un programa no confiable en una terminal, tenlo en cuenta.
+- **NEXORA is not a sandbox.** The interpreter is a normal Python program,
+  which runs with the permissions of whoever launches it. The properties above depend on the
+  interpreter having no defects; there is no second barrier (process isolation, restriction of
+  system calls) if it has them.
+- **There is no limit on running time.** A program can take a long time.
+- **There is no memory limit.** A program can build very large texts by concatenation.
+  The limit of 1000 nested calls bounds recursion, not memory use.
+- **There is no limit on the size of the input file**, nor on the size of the output.
+- **The tests with random inputs are limited.** They go through a few thousand cases generated with
+  a fixed seed. They are not an exhaustive search and do not replace an audit.
+- **No external audit has been done**, nor any security analysis with specialized
+  tools.
+- **The output of a program is not filtered.** A program can write terminal control
+  sequences. If you show the output of an untrusted program in a terminal, keep it in mind.
 
-En consecuencia: ejecutar un programa NEXORA desconocido no debería poder leer tus archivos ni
-ejecutar otros programas, pero **puede consumir CPU y memoria sin límite**. Si necesitas ejecutar
-código no confiable, hazlo dentro de un aislamiento proporcionado por el sistema operativo
-(un contenedor, una máquina virtual, límites de recursos del sistema).
+Consequently: running an unknown NEXORA program should not be able to read your files or
+run other programs, but **it can use CPU and memory without limit**. If you need to run
+untrusted code, do it inside an isolation provided by the operating system
+(a container, a virtual machine, system resource limits).
 
-## Cadena de suministro
+## Supply chain
 
-- El intérprete no tiene dependencias en ejecución.
-- Las dependencias de desarrollo (`pytest`, `pytest-cov`, `ruff`) y la de empaquetado
-  (`setuptools`) se descargan de PyPI al instalar. No se fijan a versiones exactas ni se verifican
-  por *hash*.
-- No se publican paquetes de NEXORA en ningún repositorio. Cualquier paquete llamado `nexora` en
-  PyPI u otro índice **no procede de este proyecto**.
+- The interpreter has no runtime dependencies.
+- The development dependencies (`pytest`, `pytest-cov`, `ruff`) and the packaging one
+  (`setuptools`) are downloaded from PyPI on installation. They are not pinned to exact versions or verified
+  by *hash*.
+- The packages of this project are published as `nexora-lang`, on PyPI and on npm. Any package
+  called `nexora`, or any other name, on PyPI or another index **does not come from this project**.

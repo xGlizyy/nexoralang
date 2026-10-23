@@ -1,79 +1,79 @@
-# Especificación del lenguaje NEXORA
+# NEXORA language specification
 
-- **Versión de la especificación:** 0.11
-- **Implementación de referencia:** `nexora` 0.11.0 (este repositorio, directorio `nexora/`)
-- **Estado:** describe exactamente lo que el intérprete hace hoy.
+- **Specification version:** 0.11
+- **Reference implementation:** `nexora` 0.11.0 (this repository, directory `nexora/`)
+- **Status:** describes exactly what the interpreter does today.
 
-Este documento es la referencia del lenguaje: define la sintaxis y el significado de cada
-construcción. Si el intérprete y este documento no coinciden, es un error que hay que corregir.
+This document is the reference for the language: it defines the syntax and the meaning of every
+construct. If the interpreter and this document disagree, that is a bug to be fixed.
 
-Cómo leer el estado de cada parte:
+How to read the status of each part:
 
-| Marca | Significado |
-|-------|-------------|
-| *(sin marca)* | **Implementado** y cubierto por pruebas |
-| **Experimental** | Implementado y probado, pero su sintaxis o sus reglas pueden cambiar. En la versión 0.8 ninguna parte del lenguaje lo es |
-| **Previsto** | No existe. Reunido en la sección 14; no forma parte del lenguaje |
+| Mark | Meaning |
+|------|---------|
+| *(no mark)* | **Implemented** and covered by tests |
+| **Experimental** | Implemented and tested, but its syntax or its rules may change. In version 0.8 no part of the language is |
+| **Planned** | Does not exist. Gathered in section 14; not part of the language |
 
-Los cambios respecto a la versión 0.1 están en [`CHANGELOG.md`](../CHANGELOG.md) y sus motivos
-en [`docs/decisions/`](decisions/README.md).
+The changes since version 0.1 are in [`CHANGELOG.md`](../CHANGELOG.md) and their reasons
+in [`docs/decisions/`](decisions/README.md).
 
-## 1. Filosofía
+## 1. Philosophy
 
-NEXORA explora cómo puede ser un lenguaje de programación cuando el código lo leen y lo escriben
-tanto personas como herramientas automáticas. En esta versión esa idea se concreta en cinco
-decisiones:
+NEXORA explores what a programming language can look like when its code is read and written by
+people and by automated tools alike. In this version that idea takes the shape of five
+decisions:
 
-1. **Una sola forma de escribir cada cosa.** La sintaxis es pequeña y regular.
-2. **Nada implícito.** No hay conversiones automáticas entre tipos ni valores "verdaderos" o
-   "falsos" por convención. Todo cambio de tipo se escribe.
-3. **Lo que puede comprobarse antes de ejecutar, se comprueba antes de ejecutar.** Nombres, ámbitos
-   y tipos se verifican sin ejecutar el programa; lo que depende de los valores queda delimitado
-   con precisión (sección 10).
-4. **Las reglas forman parte del código.** Una función declara qué espera y qué promete
-   (contratos, sección 9), un tipo puede declarar qué valores admite (tipos refinados,
-   sección 4.4) y un bucle declara por qué termina y qué mantiene (sección 9.5). Cada regla puede llevar su explicación, y cuando se incumple el diagnóstico dice
-   cuál, dónde y con qué valores ([decisión 0006](decisions/0006-requisitos-verificables.md)).
-5. **Las herramientas reciben datos, no texto.** El programa y sus errores pueden obtenerse en JSON
-   con un esquema versionado.
+1. **One way to write each thing.** The syntax is small and regular.
+2. **Nothing implicit.** There are no automatic conversions between types and no values that are
+   "true" or "false" by convention. Every change of type is written down.
+3. **What can be checked before running is checked before running.** Names, scopes and types are
+   verified without running the program; what depends on values is precisely delimited
+   (section 10).
+4. **The rules are part of the code.** A function declares what it expects and what it promises
+   (contracts, section 9), a type can declare which values it accepts (refined types,
+   section 4.4) and a loop declares why it ends and what it keeps true (section 9.5). Every rule can carry its explanation, and when it is broken the diagnostic says
+   which one, where and with which values ([decision 0006](decisions/0006-requisitos-verificables.md)).
+5. **Tools receive data, not text.** The program and its errors can be obtained as JSON
+   with a versioned schema.
 
-Las reglas del lenguaje son explícitas y deterministas. Ninguna depende de un modelo de IA, de
-internet ni de un servicio externo: el mismo programa da siempre el mismo resultado.
+The rules of the language are explicit and deterministic. None depends on an AI model, on the
+internet or on an external service: the same program always gives the same result.
 
-Esta especificación no afirma que NEXORA sea más rápido, más seguro o mejor para la IA que otros
-lenguajes. No existe ninguna medición que lo respalde.
+This specification does not claim that NEXORA is faster, safer or better for AI than other
+languages. There is no measurement that supports it.
 
-## 2. Estructura léxica
+## 2. Lexical structure
 
-### 2.1 Archivos
+### 2.1 Files
 
-- Un programa es un único archivo de texto con extensión `.nex`.
-- La codificación es UTF-8. Se acepta una marca de orden de bytes (BOM) inicial.
-- Los finales de línea pueden ser `\n`, `\r\n` o `\r`.
+- A program is a single text file with the `.nex` extension.
+- The encoding is UTF-8. A leading byte order mark (BOM) is accepted.
+- Line endings may be `\n`, `\r\n` or `\r`.
 
-### 2.2 Espacios, líneas y comentarios
+### 2.2 Spaces, lines and comments
 
-- Los espacios y las tabulaciones separan elementos y no tienen otro significado. La sangría es libre.
-- **El final de línea termina una sentencia.** No existe el punto y coma.
-- Dentro de unos paréntesis `( )` los saltos de línea se ignoran: una expresión, una lista de
-  argumentos o una lista de parámetros pueden ocupar varias líneas.
-- Un comentario empieza con `//` y llega hasta el final de la línea. No hay comentarios de bloque.
+- Spaces and tabs separate elements and have no other meaning. Indentation is free.
+- **The end of a line ends a statement.** There is no semicolon.
+- Inside parentheses `( )` line breaks are ignored: an expression, an argument list or a
+  parameter list may span several lines.
+- A comment starts with `//` and runs to the end of the line. There are no block comments.
 
-### 2.3 Nombres
+### 2.3 Names
 
-Un nombre empieza por una letra `a-z`, `A-Z` o `_` y continúa con letras, dígitos `0-9` o `_`.
-Solo se admiten letras ASCII. Se distinguen mayúsculas de minúsculas.
+A name starts with a letter `a-z`, `A-Z` or `_` and continues with letters, digits `0-9` or `_`.
+Only ASCII letters are allowed. Names are case-sensitive.
 
-### 2.4 Palabras clave y palabras reservadas
+### 2.4 Keywords and reserved words
 
-Palabras clave:
+Keywords:
 
 ```
 fn   let   var   return   if   else   while   for   in   true   false   and   or   not
 requires   ensures   example   invariant   decreases   type   where   uses   import   pub
 ```
 
-Palabras reservadas para versiones futuras. No pueden usarse como nombres y usarlas produce el
+Words reserved for future versions. They cannot be used as names, and using them produces the
 error `E1103`:
 
 ```
@@ -81,51 +81,51 @@ ai       assert   break    const    continue enum
 match    test     tool     try
 ```
 
-No son palabras reservadas, sino nombres predefinidos: los tipos `Int`, `Float`, `Bool`, `Text` y
-`Void`; las funciones `print`, `to_text`, `to_float`, `to_int`, `args`, `input`, `read_file` y
-`write_file`; `result`, que solo tiene un significado especial dentro de una cláusula `ensures`; y
-`value`, que solo lo tiene dentro de la condición de un tipo refinado.
+These are not reserved words but predefined names: the types `Int`, `Float`, `Bool`, `Text` and
+`Void`; the functions `print`, `to_text`, `to_float`, `to_int`, `args`, `input`, `read_file` and
+`write_file`; `result`, which only has a special meaning inside an `ensures` clause; and
+`value`, which only has one inside the condition of a refined type.
 
-### 2.5 Literales
+### 2.5 Literals
 
-| Literal | Tipo | Ejemplos | Reglas |
-|---------|------|----------|--------|
-| Entero | `Int` | `0`, `42`, `1_000_000` | Dígitos decimales. `_` puede separar dos dígitos. Sin ceros a la izquierda (`007` es un error). Máximo `9223372036854775807` |
-| Decimal | `Float` | `3.14`, `0.5`, `10.0` | Dígitos, un punto y más dígitos. Los dígitos son obligatorios a ambos lados del punto |
-| Booleano | `Bool` | `true`, `false` | |
-| Texto | `Text` | `"Hello"` | Entre comillas dobles, en una sola línea |
+| Literal | Type | Examples | Rules |
+|---------|------|----------|-------|
+| Integer | `Int` | `0`, `42`, `1_000_000` | Decimal digits. `_` may separate two digits. No leading zeros (`007` is an error). Maximum `9223372036854775807` |
+| Decimal | `Float` | `3.14`, `0.5`, `10.0` | Digits, a dot and more digits. Digits are required on both sides of the dot |
+| Boolean | `Bool` | `true`, `false` | |
+| Text | `Text` | `"Hello"` | Between double quotes, on a single line |
 
-Los literales numéricos no llevan signo: `-5` es el operador `-` aplicado a `5`.
+Numeric literals have no sign: `-5` is the `-` operator applied to `5`.
 
-Secuencias de escape dentro de un texto:
+Escape sequences inside a text:
 
-| Escape | Significado |
-|--------|-------------|
-| `\n` | Salto de línea |
-| `\t` | Tabulación |
-| `\"` | Comilla doble |
-| `\\` | Barra invertida |
-| `\{` | Llave de apertura `{` |
+| Escape | Meaning |
+|--------|---------|
+| `\n` | Line break |
+| `\t` | Tab |
+| `\"` | Double quote |
+| `\\` | Backslash |
+| `\{` | Opening brace `{` |
 
-Cualquier otra secuencia que empiece por `\` es un error (`E1003`). Una llave `{` sin escapar dentro
-de un texto es un error (`E1005`): está reservada para la futura interpolación.
+Any other sequence that starts with `\` is an error (`E1003`). An unescaped brace `{` inside
+a text is an error (`E1005`): it is reserved for future interpolation.
 
-### 2.6 Símbolos
+### 2.6 Symbols
 
 ```
 (  )  {  }  [  ]  ,  :  .  =  ->  +  -  *  /  ==  !=  <  <=  >  >=
 ```
 
-Un `.` seguido de un dígito, dentro de un número, forma parte del número decimal (`1.5`). Cualquier
-otro `.` es un símbolo, que solo es válido en una llamada cualificada como `Text.length(s)`
-(sección 8.1).
+A `.` followed by a digit, inside a number, is part of the decimal number (`1.5`). Any
+other `.` is a symbol, which is only valid in a qualified call such as `Text.length(s)`
+(section 8.1).
 
-Cualquier carácter que no forme parte de lo descrito en esta sección es un error (`E1001`); el
-analizador nunca ignora un carácter desconocido.
+Any character that is not part of what this section describes is an error (`E1001`); the
+analyzer never ignores an unknown character.
 
-## 3. Gramática
+## 3. Grammar
 
-En notación EBNF. `NEWLINE` es uno o más finales de línea seguidos.
+In EBNF notation. `NEWLINE` is one or more consecutive line endings.
 
 ```ebnf
 program    = { NEWLINE } { import_decl } { ( type_decl | record_decl | uses_decl | function ) { NEWLINE } } ;
@@ -145,7 +145,7 @@ contract   = ( "requires" | "ensures" | "example" ) expression [ explanation ] e
 explanation = "," TEXT ;
 
 block      = "{" { NEWLINE } { statement end } "}" ;
-end        = NEWLINE | (* nada, si lo siguiente es "}" *) ;
+end        = NEWLINE | (* nothing, if what follows is "}" *) ;
 
 statement  = let | var | return | if | while | for | block | assignment | field_assignment | expression ;
 let        = "let" NAME [ ":" type ] "=" expression ;
@@ -177,183 +177,183 @@ record_fields_values = record_value { "," record_value } ;
 record_value = NAME ":" expression ;
 ```
 
-Notas:
+Notes:
 
-- En el nivel superior del archivo solo hay importaciones, funciones y declaraciones de tipo. Las
-  importaciones van **antes** que cualquier otra declaración, una por línea; en cualquier otro lugar
-  son el error `E1101`. Un tipo no puede declararse dentro de una función (`E1101`).
-- Un archivo es un módulo (sección 7.6). `import "app/models.nex"` declara que el programa usa el
-  archivo `app/models.nex`, y `pub` marca lo que un módulo hace visible desde fuera: `pub fn`,
-  `pub type` (tanto los tipos refinados como los registros) y nada más. Todo lo demás es privado
-  del archivo que lo declara.
-- Una explicación (`explanation`) es un único texto literal no vacío, de una sola línea. Un texto
-  vacío, formado solo por espacios o con un salto de línea (`\n`) es el error `E1101`.
-- Las cláusulas `requires`, `ensures` y `example` van **al principio del cuerpo** de una función,
-  antes de cualquier sentencia; `invariant` y `decreases`, al principio del cuerpo de un bucle. En
-  cualquier otro lugar son el error `E1106`.
-- `else` se escribe en la misma línea que la `}` que cierra el bloque anterior: `} else {`.
-- Las comparaciones no se encadenan: `a < b < c` es un error de sintaxis (`E1101`). Se escribe
+- At the top level of the file there are only imports, functions and type declarations.
+  Imports go **before** any other declaration, one per line; anywhere else they are the error
+  `E1101`. A type cannot be declared inside a function (`E1101`).
+- A file is a module (section 7.6). `import "app/models.nex"` declares that the program uses the
+  file `app/models.nex`, and `pub` marks what a module makes visible from outside: `pub fn`,
+  `pub type` (both refined types and records) and nothing else. Everything else is private
+  to the file that declares it.
+- An explanation (`explanation`) is a single non-empty text literal, on one line. A text that is
+  empty, made only of spaces or containing a line break (`\n`) is the error `E1101`.
+- The `requires`, `ensures` and `example` clauses go **at the beginning of the body** of a function,
+  before any statement; `invariant` and `decreases`, at the beginning of the body of a loop.
+  Anywhere else they are the error `E1106`.
+- `else` is written on the same line as the `}` that closes the previous block: `} else {`.
+- Comparisons do not chain: `a < b < c` is a syntax error (`E1101`). Write
   `a < b and b < c`.
-- Una asignación es una sentencia, no una expresión: `a = b = 1` e `if x = 1 { }` son errores de
-  sintaxis (`E1101`). No existen `+=` ni `++`.
-- No se admite una coma final en las listas de parámetros ni de argumentos.
-- En una llamada cualificada (`NAME "." NAME "("`), el `.` va pegado a los dos nombres: sin espacios
-  ni saltos de línea a sus lados (`E1101`). Entre el segundo nombre y el `(` puede haber espacios,
-  como en cualquier llamada. Que el primer nombre sea un tipo con esa función, o un módulo que haga
-  pública esa función, lo comprueba el análisis estático (`E2008` y `E2027`, secciones 8.1 y 7.6).
-  Si el segundo nombre va seguido de `(` y de campos con nombre, lo que se construye es un registro
-  del módulo: `models.Point(x: 1, y: 2)`.
-- Un registro se declara con `type` y unas llaves: `type Point = { x: Int, y: Int }`. Las llaves van
-  en la misma línea que el `=`, y dentro de ellas se permite un salto de línea entre campos. Un
-  registro tiene al menos un campo y no admite coma final (`E1101`).
-- Una capacidad se declara con `uses`, al nivel superior del archivo: `uses read "datos.txt"`. Declara
-  lo que el programa necesita, no lo concede: quien lo ejecuta tiene que allowirlo aparte, y el
-  entorno tiene que admitirlo (sección 8.3). La ruta es un literal de texto y no puede estar
-  vacía.
-- Un registro se construye con el nombre del tipo y los campos con nombre: `Point(x: 1, y: 2)`. El
-  orden en que se escriben los campos no importa, pero cada uno se da una sola vez y todos están
-  obligatorios (`E2023`).
-- Leer un campo se escribe `valor.campo`. La raíz es siempre un nombre; sobre una llamada, una
-  construcción, un grupo o una lista no se puede leer un campo (`E1101`). Las cadenas de acceso
-  (`p.x.y`) no tienen un límite de longitud: cada paso intermedio tiene que ser un registro
-  (`E2024`). El `.` va pegado a los dos nombres, como en una llamada cualificada.
-- Un registro no cambia: `p.x = 1` es el error `E2025`. La forma existe para poder decirlo, no para
-  poder hacerlo.
-- Límites de tamaño: los paréntesis, los operadores unarios, los bloques, las cadenas `else if` y los
-  tipos pueden anidarse hasta 64 niveles, y un árbol de expresión puede tener hasta 256 niveles (por
-  ejemplo, una suma de 256 términos). Superarlos es el error `E1105`.
-- Un tipo se escribe `NAME`, `MODULO "." NAME`, o cualquiera de los dos con argumentos entre
-  corchetes. En esta versión solo `List` admite argumentos de tipo, y exactamente uno; un tipo de
-  otro módulo no admite ninguno, porque no puede ser `List` (`E2012`). `List` sin argumento no es un
-  tipo (`E2012`); `List[]`, `List[Int, Text]`, `List[Void]`, `Option[...]`, `Result[...]`, `Foo[...]`
-  e `Int[...]` son errores de sintaxis (`E1101`). El anidamiento cuenta para el límite de 64 niveles.
+- An assignment is a statement, not an expression: `a = b = 1` and `if x = 1 { }` are syntax
+  errors (`E1101`). There is no `+=` or `++`.
+- A trailing comma is not allowed in parameter or argument lists.
+- In a qualified call (`NAME "." NAME "("`), the `.` is attached to both names: no spaces or
+  line breaks on either side (`E1101`). Between the second name and the `(` there may be spaces,
+  as in any call. Whether the first name is a type with that function, or a module that makes
+  that function public, is checked by the static analysis (`E2008` and `E2027`, sections 8.1 and 7.6).
+  If the second name is followed by `(` and by named fields, what is built is a record
+  of the module: `models.Point(x: 1, y: 2)`.
+- A record is declared with `type` and braces: `type Point = { x: Int, y: Int }`. The braces go
+  on the same line as the `=`, and inside them a line break is allowed between fields. A
+  record has at least one field and does not allow a trailing comma (`E1101`).
+- A capability is declared with `uses`, at the top level of the file: `uses read "data.txt"`. It declares
+  what the program needs, it does not grant it: whoever runs it has to allow it separately, and the
+  environment has to support it (section 8.3). The path is a text literal and cannot be
+  empty.
+- A record is built with the name of the type and the named fields: `Point(x: 1, y: 2)`. The
+  order in which the fields are written does not matter, but each one is given only once and all of them are
+  required (`E2023`).
+- Reading a field is written `value.field`. The root is always a name; a field cannot be read
+  from a call, a construction, a group or a list (`E1101`). Access chains
+  (`p.x.y`) have no length limit: every intermediate step has to be a record
+  (`E2024`). The `.` is attached to both names, as in a qualified call.
+- A record does not change: `p.x = 1` is the error `E2025`. The form exists so that it can be said, not so that
+  it can be done.
+- Size limits: parentheses, unary operators, blocks, `else if` chains and
+  types can be nested up to 64 levels, and an expression tree can have up to 256 levels (for
+  example, a sum of 256 terms). Exceeding them is the error `E1105`.
+- A type is written `NAME`, `MODULE "." NAME`, or either of them with arguments in square
+  brackets. In this version only `List` accepts type arguments, and exactly one; a type from
+  another module accepts none, because it cannot be `List` (`E2012`). `List` without an argument is not a
+  type (`E2012`); `List[]`, `List[Int, Text]`, `List[Void]`, `Option[...]`, `Result[...]`, `Foo[...]`
+  and `Int[...]` are syntax errors (`E1101`). Nesting counts towards the 64-level limit.
 
-## 4. Tipos de datos
+## 4. Data types
 
-| Tipo | Valores | Notas |
-|------|---------|-------|
-| `Int` | Enteros de `-9223372036854775808` a `9223372036854775807` | 64 bits con signo. Salirse del rango es un error de ejecución (`E3002`), nunca un resultado incorrecto |
-| `Float` | Coma flotante IEEE 754 de 64 bits | No existen infinito ni NaN: una operación cuyo resultado no cabe es un error de ejecución (`E3003`). Existe el cero negativo (`-0.0`), que es igual a `0.0` y se escribe `-0.0` |
+| Type | Values | Notes |
+|------|--------|-------|
+| `Int` | Integers from `-9223372036854775808` to `9223372036854775807` | 64-bit signed. Going out of range is a runtime error (`E3002`), never a wrong result |
+| `Float` | IEEE 754 64-bit floating point | There is no infinity and no NaN: an operation whose result does not fit is a runtime error (`E3003`). Negative zero (`-0.0`) exists; it is equal to `0.0` and is written `-0.0` |
 | `Bool` | `true`, `false` | |
-| `Text` | Texto Unicode | Inmutable |
-| `List[T]` | Secuencia inmutable y finita de valores de tipo `T` | `T` no puede ser `Void`; no hay covarianza (sección 4.5) |
-| `Void` | Ningún valor | Solo puede ser el tipo de retorno de una función |
-| Un registro | Los valores que se construyen con `Nombre(campo: valor, ...)` | Lo declara el programa: `type Point = { x: Int, y: Int }` (sección 4.6) |
+| `Text` | Unicode text | Immutable |
+| `List[T]` | Immutable, finite sequence of values of type `T` | `T` cannot be `Void`; there is no covariance (section 4.5) |
+| `Void` | No value | It can only be the return type of a function |
+| A record | The values built with `Name(field: value, ...)` | Declared by the program: `type Point = { x: Int, y: Int }` (section 4.6) |
 
-`Int`, `Float`, `Bool` y `Text` son los **tipos de valor** integrados. `List[T]` es un tipo de valor
-compuesto (sección 4.5); un programa también puede declarar tipos refinados sobre los integrados
-(sección 4.4) y registros (sección 4.6). Los tipos de valor son los que puede
-tener una variable, un parámetro o una expresión. `Void` no es un tipo de valor: una variable o un parámetro de tipo
-`Void` es el error `E2012`, y usar una llamada a una función `Void` donde hace falta un valor es
-el error `E2011`.
+`Int`, `Float`, `Bool` and `Text` are the built-in **value types**. `List[T]` is a compound value
+type (section 4.5); a program can also declare refined types over the built-in ones
+(section 4.4) and records (section 4.6). Value types are the ones a variable, a parameter or an
+expression can have. `Void` is not a value type: a variable or a parameter of type
+`Void` is the error `E2012`, and using a call to a `Void` function where a value is needed is
+the error `E2011`.
 
-Escribir un nombre que no es un tipo donde se espera uno es el error `E2012`.
+Writing a name that is not a type where a type is expected is the error `E2012`.
 
-### 4.1 El sistema de tipos es estático
+### 4.1 The type system is static
 
-El tipo de **toda** expresión se determina sin ejecutar el programa, a partir de los literales, las
-anotaciones y las firmas de las funciones. No existe ningún caso en el que el tipo de una expresión
-dependa de un valor calculado, así que ningún error de tipos puede aparecer durante la ejecución.
+The type of **every** expression is determined without running the program, from the literals, the
+annotations and the signatures of the functions. There is no case in which the type of an expression
+depends on a computed value, so no type error can appear while the program runs.
 
-### 4.2 Compatibilidad
+### 4.2 Compatibility
 
-**Un valor se acepta donde se espera un tipo solo si es de ese mismo tipo, o de un tipo refinado
-construido sobre él** (sección 4.4). No hay tipos numéricos "más anchos" ni conversión automática:
+**A value is accepted where a type is expected only if it is of that same type, or of a refined type
+built on it** (section 4.4). There are no "wider" numeric types and no automatic conversion:
 
-- Un `Int` no se acepta donde se espera un `Float`, ni al revés.
-- Ningún tipo se convierte a `Bool` ni a `Text` por sí solo.
-- Un `Percent` (refinado sobre `Int`) se acepta donde se espera un `Int`. Un `Int` **no** se acepta
-  donde se espera un `Percent`, salvo que sea una constante que cumple su condición.
-- Los argumentos de `List` son **invariantes**: `List[Int]` no se acepta donde se espera
-  `List[Text]`, y `List[Percent]` no se acepta donde se espera `List[Int]`, aunque cada `Percent`
-  sea un `Int`. Un elemento refinado sí puede ensancharse a la base cuando la lista se construye
-  con un tipo esperado (`let xs: List[Int] = [Percent(10), 20]`).
+- An `Int` is not accepted where a `Float` is expected, nor the other way round.
+- No type converts to `Bool` or to `Text` on its own.
+- A `Percent` (refined over `Int`) is accepted where an `Int` is expected. An `Int` is **not** accepted
+  where a `Percent` is expected, unless it is a constant that meets its condition.
+- The arguments of `List` are **invariant**: `List[Int]` is not accepted where
+  `List[Text]` is expected, and `List[Percent]` is not accepted where `List[Int]` is expected, even though every `Percent`
+  is an `Int`. A refined element can be widened to its base when the list is built
+  with an expected type (`let xs: List[Int] = [Percent(10), 20]`).
 
-Esta regla se aplica por igual a la anotación de una variable, a los argumentos de una llamada, al
-valor de un `return` y a los operandos de un operador.
+This rule applies equally to the annotation of a variable, to the arguments of a call, to the
+value of a `return` and to the operands of an operator.
 
-### 4.3 Conversiones
+### 4.3 Conversions
 
-Las únicas conversiones que existen son llamadas explícitas a funciones integradas:
+The only conversions that exist are explicit calls to built-in functions:
 
-| Función | Convierte | Regla |
-|---------|-----------|-------|
-| `to_float(value)` | `Int` → `Float` | Siempre posible. Los enteros de más de 53 bits se redondean al `Float` más cercano |
-| `to_int(value)` | `Float` → `Int` | Descarta la parte decimal (redondea hacia cero): `to_int(3.9)` es `3`, `to_int(-3.9)` es `-3`. Si el resultado no cabe en un `Int`, error de ejecución `E3005` |
-| `to_text(value)` | `Int`, `Float`, `Bool`, `Text` o `List[T]` → `Text` | El mismo texto que escribiría `print` (sección 8) |
-| `Int.parse(text)` | `Text` → `Int` | Solo si `Int.can_parse(text)`; si no, `E4001` (sección 8.1) |
-| `Float.parse(text)` | `Text` → `Float` | Solo si `Float.can_parse(text)`; si no, `E4001` (sección 8.1) |
+| Function | Converts | Rule |
+|----------|----------|------|
+| `to_float(value)` | `Int` → `Float` | Always possible. Integers of more than 53 bits are rounded to the nearest `Float` |
+| `to_int(value)` | `Float` → `Int` | Drops the decimal part (rounds towards zero): `to_int(3.9)` is `3`, `to_int(-3.9)` is `-3`. If the result does not fit in an `Int`, runtime error `E3005` |
+| `to_text(value)` | `Int`, `Float`, `Bool`, `Text` or `List[T]` → `Text` | The same text that `print` would write (section 8) |
+| `Int.parse(text)` | `Text` → `Int` | Only if `Int.can_parse(text)`; otherwise, `E4001` (section 8.1) |
+| `Float.parse(text)` | `Text` → `Float` | Only if `Float.can_parse(text)`; otherwise, `E4001` (section 8.1) |
 
-No existe conversión desde `Text` hacia `Bool`, ni entre `Bool` y los números.
+There is no conversion from `Text` to `Bool`, nor between `Bool` and numbers.
 
 ```nex
 let count = 3
 let price = 19.99
-let total = to_float(count) * price        // correcto: Float * Float
-print("Total: " + to_text(total))          // correcto: Text + Text
+let total = to_float(count) * price        // correct: Float * Float
+print("Total: " + to_text(total))          // correct: Text + Text
 ```
 
 ```nex
-let total = count * price                  // E2011: Int y Float no se mezclan
-print("Total: " + total)                   // E2011: '+' une Text con Text
+let total = count * price                  // E2011: Int and Float do not mix
+print("Total: " + total)                   // E2011: '+' joins Text with Text
 ```
 
-### 4.4 Tipos refinados
+### 4.4 Refined types
 
-Un tipo refinado es un tipo de valor más una condición que cumplen todos sus valores:
+A refined type is a value type plus a condition that all its values meet:
 
 ```text
 type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
 ```
 
-Se declara en el nivel superior del archivo, antes o después de usarlo. `Percent` es el nombre,
-`Int` es la **base** y lo que sigue a `where` es la **condición**. Detrás de la condición puede ir,
-tras una coma, la explicación de la regla; aparece en los diagnósticos cuando la regla se incumple.
+It is declared at the top level of the file, before or after it is used. `Percent` is the name,
+`Int` is the **base** and what follows `where` is the **condition**. After the condition there may be,
+after a comma, the explanation of the rule; it appears in the diagnostics when the rule is broken.
 
-**La garantía.** Todo valor cuyo tipo es un tipo refinado cumple su condición, en cualquier punto
-del programa. Para mantenerla, un valor solo puede llegar a tener un tipo refinado de dos formas:
+**The guarantee.** Every value whose type is a refined type meets its condition, at any point
+of the program. To keep it, a value can only come to have a refined type in two ways:
 
-| Forma | Ejemplo | Cuándo se comprueba | Si no se cumple |
-|-------|---------|---------------------|-----------------|
-| Una **constante** donde se espera el tipo | `let p: Percent = 20`, `discount(20)`, `return 20` | Sin ejecutar, en `nex check` | `E2017`, el programa no se ejecuta |
-| La **comprobación explícita** `Percent(x)` | `let p = Percent(total / 2)` | Al ejecutar, cada vez que se evalúa | `E4003`, el programa se detiene ahí |
+| Way | Example | When it is checked | If it is not met |
+|-----|---------|--------------------|------------------|
+| A **constant** where the type is expected | `let p: Percent = 20`, `discount(20)`, `return 20` | Without running, in `nex check` | `E2017`, the program does not run |
+| The **explicit check** `Percent(x)` | `let p = Percent(total / 2)` | When running, every time it is evaluated | `E4003`, the program stops there |
 
-Una constante es un literal, opcionalmente con `-` o `not` delante o entre paréntesis. Comprobar una
-constante cuesta tanto como las condiciones de toda la cadena de su tipo; si el total de un
-programa supera 100 000 nodos de condición evaluados, el programa se rechaza con `E2019` en vez
-de quedar comprobado a medias. Es un límite de la implementación, como los de la sección 3, y un
-programa corriente queda muy por debajo. Cualquier
-otro valor de la base (una variable, una operación, el resultado de una llamada) no se acepta donde
-se espera el tipo refinado (`E2011`): hay que comprobarlo con `Percent(...)`. Así, cada punto donde
-el programa puede detenerse por una regla está escrito en el código.
+A constant is a literal, optionally with `-` or `not` in front of it or in parentheses. Checking a
+constant costs as much as the conditions of the whole chain of its type; if the total for a
+program exceeds 100,000 evaluated condition nodes, the program is rejected with `E2019` instead
+of being left half checked. It is a limit of the implementation, like those of section 3, and an
+ordinary program stays far below it. Any
+other value of the base (a variable, an operation, the result of a call) is not accepted where
+the refined type is expected (`E2011`): it has to be checked with `Percent(...)`. That way, every point where
+the program can stop because of a rule is written in the code.
 
-Reglas de la declaración:
+Rules of the declaration:
 
-- El nombre empieza por mayúscula (`E2016`) y no puede ser el de un tipo integrado (`E2016`), el de
-  otro tipo (`E2016`), ni usarse para una función, un parámetro o una variable (`E2006`).
-- La base es `Int`, `Float`, `Bool`, `Text` u otro tipo refinado. No puede ser una lista
-  (`E2016`). Una cadena de tipos que no llega a un tipo integrado (`type A = B ...` y
-  `type B = A ...`) es el error `E2016`.
-- La condición es una expresión `Bool` (`E2011`). En ella solo existe el nombre `value`, que es el
-  valor que se comprueba y tiene el tipo de la base (`E2005` para cualquier otro nombre).
-- La condición no puede llamar a funciones del programa ni comprobar otros tipos refinados
-  (`E2018`). Puede usar operadores, literales y las conversiones integradas. Un tipo refinado
-  describe un valor y nada más; las reglas que dependen de otros datos se escriben con `requires`.
+- The name starts with an uppercase letter (`E2016`) and cannot be that of a built-in type (`E2016`), that of
+  another type (`E2016`), nor be used for a function, a parameter or a variable (`E2006`).
+- The base is `Int`, `Float`, `Bool`, `Text` or another refined type. It cannot be a list
+  (`E2016`). A chain of types that does not reach a built-in type (`type A = B ...` and
+  `type B = A ...`) is the error `E2016`.
+- The condition is a `Bool` expression (`E2011`). Only the name `value` exists in it; it is the
+  value being checked and has the type of the base (`E2005` for any other name).
+- The condition cannot call functions of the program or check other refined types
+  (`E2018`). It can use operators, literals and the built-in conversions. A refined type
+  describes a value and nothing more; rules that depend on other data are written with `requires`.
 
-Uso de los valores:
+Using the values:
 
-- Un valor refinado se acepta donde se espera su base, o cualquier tipo de la cadena de bases: un
-  `Percent` es un `Int`.
-- En una operación cuenta como un valor de su base: `p + 1` es un `Int`, no un `Percent`, porque el
-  resultado puede no cumplir la condición. Para volver a tener un `Percent` hay que comprobarlo.
-- Dos tipos refinados distintos son tipos distintos aunque tengan la misma base y la misma
-  condición.
-- `Percent(x)` recibe exactamente un argumento de la misma base (`E2009`, `E2011`) y devuelve un
-  `Percent`. El nombre de un tipo solo puede usarse así: escrito solo, sin paréntesis, es `E2011`.
+- A refined value is accepted where its base is expected, or any type in the chain of bases: a
+  `Percent` is an `Int`.
+- In an operation it counts as a value of its base: `p + 1` is an `Int`, not a `Percent`, because the
+  result may not meet the condition. To have a `Percent` again it has to be checked.
+- Two different refined types are different types even if they have the same base and the same
+  condition.
+- `Percent(x)` receives exactly one argument of the same base (`E2009`, `E2011`) and returns a
+  `Percent`. The name of a type can only be used this way: written alone, without parentheses, it is `E2011`.
 
-**Refinar un tipo refinado.** `type Pass = Percent where value >= 50` exige las dos condiciones.
-Se comprueban en orden, desde la base: primero la de `Percent` y después la de `Pass`. El
-diagnóstico indica cuál de las dos es falsa.
+**Refining a refined type.** `type Pass = Percent where value >= 50` requires both conditions.
+They are checked in order, starting from the base: first that of `Percent` and then that of `Pass`. The
+diagnostic says which of the two is false.
 
 <!-- nex:run -->
 ```nex
@@ -378,7 +378,7 @@ fn main() -> Void {
 true
 ```
 
-Una constante que no cumple la condición se rechaza sin ejecutar nada:
+A constant that does not meet the condition is rejected without running anything:
 
 <!-- nex:check-fails -->
 ```nex
@@ -403,7 +403,7 @@ type error[E2017]: Value outside refined type
 error: program.nex: check failed with 1 error
 ```
 
-Y un valor calculado que no la cumple detiene el programa en el punto donde se comprueba:
+And a computed value that does not meet it stops the program at the point where it is checked:
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -428,10 +428,10 @@ contract error[E4003]: Refinement violated
 error: program.nex: the program stopped because a contract was broken
 ```
 
-### 4.5 Listas
+### 4.5 Lists
 
-Una lista es una secuencia **inmutable y finita** de valores del mismo tipo. Su tipo se escribe
-`List[T]`, donde `T` es el tipo de los elementos:
+A list is an **immutable and finite** sequence of values of the same type. Its type is written
+`List[T]`, where `T` is the type of the elements:
 
 ```nex
 let numbers: List[Int] = [1, 2, 3]
@@ -440,62 +440,62 @@ let nested: List[List[Int]] = [[1], [2, 3]]
 let words: List[Text] = ["a", "b"]
 ```
 
-`T` puede ser `Int`, `Float`, `Bool`, `Text`, un tipo refinado u otra `List[...]`. No puede ser
-`Void`: `List[Void]` es un error de sintaxis (`E1101`). El tipo es **invariante** en `T`:
+`T` can be `Int`, `Float`, `Bool`, `Text`, a refined type or another `List[...]`. It cannot be
+`Void`: `List[Void]` is a syntax error (`E1101`). The type is **invariant** in `T`:
 
-- `List[Int]` y `List[Text]` son tipos distintos; no hay conversión de uno a otro.
-- `List[Percent]` no se acepta donde se espera `List[Int]`, aunque `Percent` sea un `Int` refinado.
-  La razón es que una operación que acepta `List[Int]` podría tratar sus elementos como `Int`
-  cualesquiera, y una `List[Percent]` promete más que eso.
-- Un elemento refinado sí puede ensancharse a su base al construir una lista con un tipo esperado:
+- `List[Int]` and `List[Text]` are different types; there is no conversion from one to the other.
+- `List[Percent]` is not accepted where `List[Int]` is expected, even though `Percent` is a refined `Int`.
+  The reason is that an operation that accepts `List[Int]` could treat its elements as arbitrary
+  `Int` values, and a `List[Percent]` promises more than that.
+- A refined element can be widened to its base when a list is built with an expected type:
   `let xs: List[Int] = [Percent(10), 20]`.
 
-#### Literales e inferencia
+#### Literals and inference
 
-`[a, b, c]` y `[]` son expresiones. Sin un tipo esperado, el **primer elemento** fija el tipo de
-los demás; todos tienen que ser aceptables como ese tipo. Con un tipo esperado `List[T]`, todos los
-elementos se comprueban contra `T`.
+`[a, b, c]` and `[]` are expressions. Without an expected type, the **first element** sets the type of
+the rest; all of them have to be acceptable as that type. With an expected type `List[T]`, all the
+elements are checked against `T`.
 
 ```nex
 let numbers = [1, 2, 3]                 // List[Int]
 let texts = ["a", "b"]                  // List[Text]
 let nested = [[1], [2, 3]]              // List[List[Int]]
-let empty: List[Int] = []               // el tipo esperado fija Int
+let empty: List[Int] = []               // the expected type sets Int
 ```
 
-Una lista vacía **necesita un tipo esperado**. No se inventa el tipo del elemento:
+An empty list **needs an expected type**. The type of the element is not made up:
 
 <!-- nex:body-fails codes=E2011 -->
 ```nex
-let xs = []                             // no se sabe de qué tipo son los elementos
-print([])                               // tampoco
+let xs = []                             // the type of the elements is unknown
+print([])                               // neither is it here
 ```
 
-El tipo esperado puede venir de una anotación, de un parámetro, del tipo de retorno, de una
-asignación o del lado izquierdo de una igualdad (`a == []`). No se propaga del lado derecho al
-izquierdo: `[] == a` es `E2011` aunque `a` tenga tipo. También se propaga a listas anidadas:
-`let xs: List[List[Int]] = [[]]` es válido.
+The expected type can come from an annotation, from a parameter, from the return type, from an
+assignment or from the left-hand side of an equality (`a == []`). It does not propagate from the right-hand side to the
+left: `[] == a` is `E2011` even if `a` has a type. It also propagates into nested lists:
+`let xs: List[List[Int]] = [[]]` is valid.
 
-Todos los elementos de una lista tienen el mismo tipo. No se mezclan, por ejemplo, `Int` y `Text`:
+All the elements of a list have the same type. `Int` and `Text`, for example, do not mix:
 
 <!-- nex:body-fails codes=E2011 -->
 ```nex
 let mixed = [1, "a"]                    // Expected Int, found Text
 ```
 
-#### Inmutabilidad, igualdad e impresión
+#### Immutability, equality and printing
 
-Una lista no cambia. Una variable `var` puede pasar a apuntar a otra lista, pero la lista anterior
-conserva sus elementos. `List.append` y `List.concat` construyen listas nuevas (sección 8.2).
+A list does not change. A `var` variable can come to point to another list, but the previous list
+keeps its elements. `List.append` and `List.concat` build new lists (section 8.2).
 
-`==` y `!=` comparan listas del **mismo tipo** de forma estructural: mismos elementos, en el mismo
-orden, comparados recursivamente. El resultado es `Bool`. No hay orden (`<`, `<=`, `>`, `>=`) entre
-listas.
+`==` and `!=` compare lists of the **same type** structurally: same elements, in the same
+order, compared recursively. The result is `Bool`. There is no ordering (`<`, `<=`, `>`, `>=`) between
+lists.
 
-`print` y `to_text` escriben la forma canónica con corchetes y sin comillas alrededor de los textos:
-`[1, 2, 3]`, `[[1], [2, 3]]`, `[a, b]`, `[]`. Los diagnósticos pueden entrecomillar los textos para
-distinguirlos; esa no es la salida de `print`. La impresión no escapa los textos: no es un formato de
-serialización, y un texto que contenga `,` o `]` puede verse ambiguo.
+`print` and `to_text` write the canonical form with square brackets and no quotes around texts:
+`[1, 2, 3]`, `[[1], [2, 3]]`, `[a, b]`, `[]`. Diagnostics may quote texts to tell them
+apart; that is not the output of `print`. Printing does not escape texts: it is not a serialization
+format, and a text that contains `,` or `]` may look ambiguous.
 
 <!-- nex:run -->
 ```nex
@@ -519,14 +519,14 @@ true
 true
 ```
 
-No hay sintaxis de índice (`xs[i]`) ni forma de modificar un elemento. Para leer una posición se
-usa `List.get`; para añadir o unir listas, `List.append` y `List.concat` (sección 8.2). Un tipo
-refinado no puede construirse sobre una lista en esta versión (`E2016`).
+There is no index syntax (`xs[i]`) and no way to modify an element. To read a position,
+use `List.get`; to add to lists or join them, `List.append` and `List.concat` (section 8.2). A refined
+type cannot be built over a list in this version (`E2016`).
 
-### 4.6 Registros
+### 4.6 Records
 
-Un **registro** es un tipo que declara el programa, con campos **inmutables** y **obligatorios**, que
-se construye dando a cada campo su valor por nombre.
+A **record** is a type that the program declares, with **immutable** and **required** fields, and that
+is built by giving each field its value by name.
 
 <!-- nex:run -->
 ```nex
@@ -547,176 +547,176 @@ fn main() -> Void {
 Line(from: Point(x: 0, y: 0), to: Point(x: 3, y: 4))
 ```
 
-**Declaración.** `type Nombre = { campo: Tipo, ... }`. El nombre empieza por mayúscula, como el de
-cualquier tipo, y no puede ser el de un tipo integrado ni el de otro tipo declarado (`E2016`). Cada
-campo tiene un nombre y un tipo; dos campos del mismo registro no pueden llamarse igual (`E2016`).
-El tipo de un campo puede ser un tipo integrado, `List[T]`, un tipo refinado u **otro registro**.
+**Declaration.** `type Name = { field: Type, ... }`. The name starts with an uppercase letter, like that of
+any type, and cannot be that of a built-in type or that of another declared type (`E2016`). Every
+field has a name and a type; two fields of the same record cannot have the same name (`E2016`).
+The type of a field can be a built-in type, `List[T]`, a refined type or **another record**.
 
-**Construcción.** `Nombre(campo: valor, ...)`. Los campos se pueden escribir en cualquier orden,
-pero cada uno se da **una sola vez** y **todos** están obligatorios: un campo que falta, uno que se
-repite o uno que el registro no tiene son el error `E2023`. El valor de un campo tiene que tener el
-tipo del campo (`E2011`).
+**Construction.** `Name(field: value, ...)`. The fields can be written in any order,
+but each one is given **only once** and **all** of them are required: a missing field, a repeated
+one or one that the record does not have is the error `E2023`. The value of a field has to have the
+type of the field (`E2011`).
 
-**Lectura.** `valor.campo`. La raíz es siempre un nombre: una variable, un parámetro o `result` dentro
-de un `ensures`. Se pueden encadenar (`p.x.y`), sin límite de longitud, siempre que cada paso
-intermedio sea un registro; si el valor no es un registro, o el registro no tiene ese campo, es el
-error `E2024`. Un nombre de tipo no es un valor: `Point.x` no lee un campo, es una llamada cualificada
-como las de la sección 8.1.
+**Reading.** `value.field`. The root is always a name: a variable, a parameter or `result` inside
+an `ensures`. Reads can be chained (`p.x.y`), with no length limit, as long as every intermediate
+step is a record; if the value is not a record, or the record does not have that field, it is the
+error `E2024`. A type name is not a value: `Point.x` does not read a field, it is a qualified call
+like those of section 8.1.
 
-**Inmutabilidad.** Un registro no cambia: no hay ninguna forma de asignar a un campo. `p.x = 1` es el
+**Immutability.** A record does not change: there is no way to assign to a field. `p.x = 1` is the
 error `E2025`.
 
-**Identidad.** Un registro es **nominal**: su identidad es la de su declaración, no la de su nombre
-ni la de sus campos. Dos registros con los mismos campos son tipos distintos, y un valor de uno no
-se acepta donde se espera el otro (`E2011`). Dos valores del **mismo** registro se comparan **por
-valor**, campo a campo: `Point(x: 1, y: 2) == Point(x: 1, y: 2)` es `true`.
+**Identity.** A record is **nominal**: its identity is that of its declaration, not that of its name
+or of its fields. Two records with the same fields are different types, and a value of one is not
+accepted where the other is expected (`E2011`). Two values of the **same** record are compared **by
+value**, field by field: `Point(x: 1, y: 2) == Point(x: 1, y: 2)` is `true`.
 
-**Referencias adelantadas y ciclos.** Un registro puede usar otro declarado más abajo, mientras el
-grafo de dependencias no tenga ciclos. Un registro no puede contenerse a sí mismo, ni directamente
-ni a través de otro registro ni de una lista: `type A = { a: A }` es el error `E2016`, y el mensaje
-escribe el ciclo (`A -> B -> A`).
+**Forward references and cycles.** A record can use another one declared further down, as long as the
+dependency graph has no cycles. A record cannot contain itself, neither directly
+nor through another record or a list: `type A = { a: A }` is the error `E2016`, and the message
+writes out the cycle (`A -> B -> A`).
 
-**Qué no hay.** Un registro no tiene métodos ni funciones propias, no se puede refinar, no admite
-genéricos y no puede ser recursivo. Un tipo refinado no puede construirse sobre un registro
+**What there is not.** A record has no methods or functions of its own, cannot be refined, does not accept
+generics and cannot be recursive. A refined type cannot be built over a record
 (`E2016`).
 
-### 4.7 Option y Result
+### 4.7 Option and Result
 
-Dos tipos del lenguaje dicen lo que un valor no puede decir por sí solo: que **no hay** valor
-(`Option[T]`) o que **algo falló** (`Result[T, E]`). Los dos tienen dos variantes, y **la variante es
-parte del valor**: `None` nunca es `Some(x)` y `Ok(x)` nunca es `Err(x)`, aunque los dos载荷 sean
-iguales.
+Two types of the language say what a value cannot say on its own: that **there is no** value
+(`Option[T]`) or that **something failed** (`Result[T, E]`). Both have two variants, and **the variant is
+part of the value**: `None` is never `Some(x)` and `Ok(x)` is never `Err(x)`, even if the two payloads are
+equal.
 
-Los dos existen para que un programa diga «no hay nada» o «esto falló» **sin excepciones**: un
-`Option` o un `Result` es un valor que se devuelve, se guarda, se compara y se imprime.
+Both exist so that a program can say "there is nothing" or "this failed" **without exceptions**: an
+`Option` or a `Result` is a value that is returned, stored, compared and printed.
 
-**`Option[T]`.** `T` es el tipo del valor que hay cuando lo hay.
+**`Option[T]`.** `T` is the type of the value that is there when there is one.
 
-- `Some(valor)` construye la variante con valor. Su tipo es `Option[T]`, donde `T` es el tipo de
-  `valor`.
-- `None` es la variante sin valor. Su tipo es `Option[T]`, y `T` lo dice **el contexto que espera el
-  valor**: la anotación de una variable, el tipo de un parámetro, el tipo de resultado de una
-  función o el otro lado de una comparación. Sin ese contexto, `None` no tiene tipo, y es el error
-  `E2011` («Cannot infer the type of None without an expected type»).
+- `Some(value)` builds the variant with a value. Its type is `Option[T]`, where `T` is the type of
+  `value`.
+- `None` is the variant without a value. Its type is `Option[T]`, and `T` is given by **the context that expects the
+  value**: the annotation of a variable, the type of a parameter, the result type of a
+  function or the other side of a comparison. Without that context, `None` has no type, and it is the error
+  `E2011` ("Cannot infer the type of None without an expected type").
 
-**`Result[T, E]`.** `T` es el tipo del valor que se consigue y `E` el del error que se recibe.
+**`Result[T, E]`.** `T` is the type of the value that is obtained and `E` that of the error that is received.
 
-- `Ok(valor)` construye la variante correcta. Su tipo es `Result[T, E]`: `T` es el tipo de `valor`
-  y `E` lo dice el contexto que espera el resultado.
-- `Err(error)` construye la variante con error. Su tipo es `Result[T, E]`: `E` es el tipo de
-  `error` y `T` lo dice el contexto que espera el resultado.
+- `Ok(value)` builds the successful variant. Its type is `Result[T, E]`: `T` is the type of `value`
+  and `E` is given by the context that expects the result.
+- `Err(error)` builds the variant with an error. Its type is `Result[T, E]`: `E` is the type of
+  `error` and `T` is given by the context that expects the result.
 
-El error se guarda **tal cual**: `Err("falta el archivo")` lleva ese texto, y al leerlo sigue siendo
-ese texto.
+The error is stored **as is**: `Err("the file is missing")` carries that text, and when it is read it is still
+that text.
 
-**Inspección.** Cada variante se reconoce sin excepciones:
+**Inspection.** Each variant is recognized without exceptions:
 
-| Función | Devuelve |
-|---------|----------|
-| `Option.is_some(x)` | `true` si `x` es un `Some` |
-| `Option.is_none(x)` | `true` si `x` es un `None` |
-| `Result.is_ok(x)` | `true` si `x` es un `Ok` |
-| `Result.is_err(x)` | `true` si `x` es un `Err` |
+| Function | Returns |
+|----------|---------|
+| `Option.is_some(x)` | `true` if `x` is a `Some` |
+| `Option.is_none(x)` | `true` if `x` is a `None` |
+| `Result.is_ok(x)` | `true` if `x` is an `Ok` |
+| `Result.is_err(x)` | `true` if `x` is an `Err` |
 
-**Lectura del valor.** `Option.unwrap_or(x, defecto)` devuelve el valor de `x` si es un `Some`, y
-`defecto` si es un `None`; el defecto tiene el mismo tipo que el valor. `Result.unwrap_or(x, defecto)`
-hace lo mismo con un `Ok` y un `Err`.
+**Reading the value.** `Option.unwrap_or(x, default)` returns the value of `x` if it is a `Some`, and
+`default` if it is a `None`; the default has the same type as the value. `Result.unwrap_or(x, default)`
+does the same with an `Ok` and an `Err`.
 
-`Option.unwrap(x)`, `Result.unwrap(x)` y `Result.error(x)` leen el valor **sin** defecto: si la
-variante no lleva ese valor, el programa se detiene con un diagnóstico (`E3011`, `E3012` o `E3013`).
-No hay una lectura que devuelva un valor inventado, ni una que haga fallar el programa sin decir por
-qué.
+`Option.unwrap(x)`, `Result.unwrap(x)` and `Result.error(x)` read the value **without** a default: if the
+variant does not carry that value, the program stops with a diagnostic (`E3011`, `E3012` or `E3013`).
+There is no read that returns a made-up value, and none that makes the program fail without saying
+why.
 
-**Igualdad.** Dos valores de estos tipos se comparan por variante y por valor: `Some(1) == Some(1)`
-es `true` y `None == None` es `true`; `None == Some(1)`, `Ok(1) == Err(1)` y `Some(1) == Some(2)`
-son `false`.
+**Equality.** Two values of these types are compared by variant and by value: `Some(1) == Some(1)`
+is `true` and `None == None` is `true`; `None == Some(1)`, `Ok(1) == Err(1)` and `Some(1) == Some(2)`
+are `false`.
 
-**Cómo se imprimen.** `Some(1)`, `None`, `Ok(1)` y `Err(boom)`, con el texto sin comillas, como los
-campos de un registro. En los diagnósticos el texto va entrecomillado: `Err("boom")`.
+**How they are printed.** `Some(1)`, `None`, `Ok(1)` and `Err(boom)`, with the text unquoted, like the
+fields of a record. In diagnostics the text is quoted: `Err("boom")`.
 
-**Qué no hay.** No hay `match`, ni `if let`, ni `?`, ni enums del usuario: un `Option` o un
-`Result` se reconoce con las funciones de arriba y se lee con `unwrap_or` cuando se sabe qué
-variante tiene. El tipo de un `None` o de una lista vacía que es **argumento** de una función con
-variables de tipo no se deduce de los otros argumentos: el lenguaje no infiere un tipo a través de
-los argumentos de una llamada. Se da el tipo en una variable antes.
+**What there is not.** There is no `match`, no `if let`, no `?` and no user enums: an `Option` or a
+`Result` is recognized with the functions above and read with `unwrap_or` when it is known which
+variant it has. The type of a `None` or of an empty list that is an **argument** of a function with
+type variables is not deduced from the other arguments: the language does not infer a type through
+the arguments of a call. Give the type in a variable first.
 
-## 5. Variables y ámbitos
+## 5. Variables and scopes
 
-### 5.1 Declaración
+### 5.1 Declaration
 
 ```nex
-let name = "NEXORA"           // tipo inferido: Text
-let age: Int = 25             // tipo anotado
+let name = "NEXORA"           // inferred type: Text
+let age: Int = 25             // annotated type
 ```
 
-- `let` declara una variable y le da valor. Una variable siempre se inicializa al declararla.
-- **Inferencia:** sin anotación, el tipo de la variable es el tipo de su valor.
-- **Anotación:** con `: Tipo`, el valor tiene que ser exactamente de ese tipo. Si no lo es, el error
-  es `E2011` y señala el valor. La variable conserva el tipo anotado, de modo que un único error no
-  se repite en cada uso posterior.
-- El valor no puede ser una llamada a una función `Void` (`E2011`).
-- **Una variable `let` es inmutable.** No existe ninguna forma de cambiar su valor; `name = "x"` es el
-  error `E2007`. Los parámetros de una función también son inmutables. Una variable que tiene que
-  cambiar se declara con `var` (sección 5.3).
+- `let` declares a variable and gives it a value. A variable is always initialized when it is declared.
+- **Inference:** without an annotation, the type of the variable is the type of its value.
+- **Annotation:** with `: Type`, the value has to be exactly of that type. If it is not, the error
+  is `E2011` and it points at the value. The variable keeps the annotated type, so that a single error is not
+  repeated at every later use.
+- The value cannot be a call to a `Void` function (`E2011`).
+- **A `let` variable is immutable.** There is no way to change its value; `name = "x"` is the
+  error `E2007`. The parameters of a function are immutable too. A variable that has to
+  change is declared with `var` (section 5.3).
 
 ```nex
 let age: Int = "twenty"       // E2011: Expected Int, found Text
-let price: Float = 5          // E2011: Expected Float, found Int   (sugiere to_float)
-let nothing = print("x")      // E2011: la llamada no produce un valor
-let x: Void = 1               // E2012: una variable no puede ser Void
+let price: Float = 5          // E2011: Expected Float, found Int   (suggests to_float)
+let nothing = print("x")      // E2011: the call does not produce a value
+let x: Void = 1               // E2012: a variable cannot be Void
 ```
 
-### 5.2 Ámbitos y resolución de nombres
+### 5.2 Scopes and name resolution
 
-- Cada función tiene su propio ámbito. Empieza con sus parámetros y **no ve las variables de quien
-  la llama** ni de ninguna otra función. No existen variables globales.
-- Cada bloque `{ }` (incluidos los de `if` y `else`) abre un ámbito dentro del que lo contiene. Un
-  bloque interior puede leer las variables de los bloques exteriores de su misma función.
-- Una variable existe desde la sentencia siguiente a su declaración hasta el final del bloque donde
-  se declaró. No es visible dentro de su propia expresión inicial (`let x = x` es un error).
-- Las funciones son visibles en todo el archivo, también antes de la línea en la que se declaran.
-- **Un único espacio de nombres.** Funciones, parámetros y variables comparten los nombres: una
-  variable o un parámetro no puede llamarse como una función del programa ni como una función
-  integrada (`E2006`). Los nombres de los tipos refinados tampoco pueden usarse para otra cosa
+- Every function has its own scope. It starts with its parameters and **does not see the variables of its
+  caller** nor those of any other function. There are no global variables.
+- Every `{ }` block (including those of `if` and `else`) opens a scope inside the one that contains it. An
+  inner block can read the variables of the outer blocks of its own function.
+- A variable exists from the statement after its declaration to the end of the block where
+  it was declared. It is not visible inside its own initial expression (`let x = x` is an error).
+- Functions are visible in the whole file, also before the line where they are declared.
+- **A single namespace.** Functions, parameters and variables share names: a
+  variable or a parameter cannot be named like a function of the program or like a built-in
+  function (`E2006`). The names of refined types cannot be used for anything else either
   (`E2006`).
-- **No hay ocultación de nombres (*shadowing*).** Declarar un nombre que ya es visible, sea del mismo
-  bloque, de uno exterior o un parámetro, es el error `E2006`. Dos bloques hermanos sí pueden usar
-  el mismo nombre, porque ninguno ve las variables del otro.
-- Usar como valor un nombre que no existe es el error `E2005`. Usar una función sin llamarla
-  (`let f = add`) es el error `E2011`: las funciones no son valores.
+- **There is no name shadowing.** Declaring a name that is already visible, whether from the same
+  block, from an outer one or a parameter, is the error `E2006`. Two sibling blocks can use
+  the same name, because neither sees the variables of the other.
+- Using as a value a name that does not exist is the error `E2005`. Using a function without calling it
+  (`let f = add`) is the error `E2011`: functions are not values.
 
-Consecuencia: dentro de una función, cada nombre significa una sola cosa de principio a fin.
+Consequence: inside a function, every name means a single thing from beginning to end.
 
-### 5.3 Variables que cambian: `var` y la asignación
+### 5.3 Variables that change: `var` and assignment
 
 <!-- nex:body -->
 ```nex
-var count = 0                 // tipo inferido: Int
-var total: Float = 0.0        // tipo anotado
-count = count + 1             // asignación
+var count = 0                 // inferred type: Int
+var total: Float = 0.0        // annotated type
+count = count + 1             // assignment
 ```
 
-- `var` tiene la misma forma y las mismas reglas que `let` (inferencia, anotación, ámbito, sin
-  ocultación). La diferencia es que su valor puede cambiarse después con una asignación.
-- **El tipo de una `var` no cambia nunca.** El valor asignado tiene que ser compatible con él, con la
-  regla de la sección 4.2 (`E2011`).
-- Se puede asignar una `var` visible en ese punto, también desde un bloque interior. Asignar una
-  variable `let` o un parámetro es el error `E2007`; un nombre que no es una variable visible,
+- `var` has the same form and the same rules as `let` (inference, annotation, scope, no
+  shadowing). The difference is that its value can be changed later with an assignment.
+- **The type of a `var` never changes.** The assigned value has to be compatible with it, under the
+  rule of section 4.2 (`E2011`).
+- A `var` visible at that point can be assigned, also from an inner block. Assigning a
+  `let` variable or a parameter is the error `E2007`; a name that is not a visible variable,
   `E2005`.
-- **Los parámetros no se pueden asignar.** Así, en `ensures` y en los diagnósticos tienen siempre el
-  valor con el que se llamó a la función. Para cambiarlo, se copia: `var rest = n`.
-- Una `var` de tipo refinado conserva la garantía de la sección 4.4: se le asigna una constante que
-  cumple la condición (comprobada sin ejecutar, `E2017`) o un valor comprobado con `Tipo(x)`.
-  `p = p + 1` es `E2011`; se escribe `p = Percent(p + 1)`.
-- Una función no ve las variables de quien la llama, así que una `var` solo cambia desde su propia
-  función: no hay estado compartido entre funciones.
+- **Parameters cannot be assigned.** That way, in `ensures` and in diagnostics they always have the
+  value the function was called with. To change it, copy it: `var rest = n`.
+- A `var` of a refined type keeps the guarantee of section 4.4: it is assigned a constant that
+  meets the condition (checked without running, `E2017`) or a value checked with `Type(x)`.
+  `p = p + 1` is `E2011`; write `p = Percent(p + 1)`.
+- A function does not see the variables of its caller, so a `var` only changes from its own
+  function: there is no state shared between functions.
 
 ```text
 var p: Percent = 20
-p = 30                 // correcto: constante que cumple la condición
-p = 120                // E2017: 120 no es un Percent válido
-p = p + 10             // E2011: un Int no es un Percent
-p = Percent(p + 10)    // correcto: comprobado al ejecutar (E4003 si no se cumple)
+p = 30                 // correct: constant that meets the condition
+p = 120                // E2017: 120 is not a valid Percent
+p = p + 10             // E2011: an Int is not a Percent
+p = Percent(p + 10)    // correct: checked when running (E4003 if it is not met)
 ```
 
 <!-- nex:valid -->
@@ -724,84 +724,84 @@ p = Percent(p + 10)    // correcto: comprobado al ejecutar (E4003 si no se cumpl
 fn main() -> Void {
     let total = 10
     if total > 5 {
-        let double = total * 2   // lee 'total' del bloque exterior
+        let double = total * 2   // reads 'total' from the outer block
         print(double)
     }
-    // 'double' ya no existe aquí
+    // 'double' no longer exists here
 }
 ```
 
-## 6. Expresiones y operadores
+## 6. Expressions and operators
 
-### 6.1 Precedencia
+### 6.1 Precedence
 
-De mayor a menor. Todos los operadores binarios asocian por la izquierda.
+From highest to lowest. All binary operators associate to the left.
 
-| Nivel | Operadores | Operandos | Resultado |
-|-------|-----------|-----------|-----------|
-| 1 | `-x` | `Int` o `Float` | El mismo tipo |
+| Level | Operators | Operands | Result |
+|-------|-----------|----------|--------|
+| 1 | `-x` | `Int` or `Float` | The same type |
 | 1 | `not x` | `Bool` | `Bool` |
-| 2 | `*`  `/` | Dos `Int` o dos `Float` | El mismo tipo |
-| 3 | `+`  `-` | Dos `Int` o dos `Float` | El mismo tipo |
-| 3 | `+` | Dos `Text` | `Text` (concatenación) |
-| 4 | `==`  `!=` | Dos valores del mismo tipo (`Int`, `Float`, `Bool` o `Text`) | `Bool` |
-| 4 | `<`  `<=`  `>`  `>=` | Dos `Int`, dos `Float` o dos `Text` | `Bool` |
-| 5 | `and` | Dos `Bool` | `Bool` |
-| 6 | `or` | Dos `Bool` | `Bool` |
+| 2 | `*`  `/` | Two `Int` or two `Float` | The same type |
+| 3 | `+`  `-` | Two `Int` or two `Float` | The same type |
+| 3 | `+` | Two `Text` | `Text` (concatenation) |
+| 4 | `==`  `!=` | Two values of the same type (`Int`, `Float`, `Bool` or `Text`) | `Bool` |
+| 4 | `<`  `<=`  `>`  `>=` | Two `Int`, two `Float` or two `Text` | `Bool` |
+| 5 | `and` | Two `Bool` | `Bool` |
+| 6 | `or` | Two `Bool` | `Bool` |
 
-Los paréntesis agrupan: `(2 + 3) * 4`.
+Parentheses group: `(2 + 3) * 4`.
 
-`not` tiene más precedencia que las comparaciones: `not a == b` significa `(not a) == b`. Para negar
-una comparación se escribe `not (a == b)` o, mejor, `a != b`.
+`not` has higher precedence than comparisons: `not a == b` means `(not a) == b`. To negate
+a comparison, write `not (a == b)` or, better, `a != b`.
 
-Cualquier combinación de tipos que no aparezca en la tabla es el error `E2011`. En particular:
+Any combination of types that does not appear in the table is the error `E2011`. In particular:
 
-- `Int` y `Float` no se mezclan, tampoco al comparar: `1 + 1.5` y `1 == 1.0` son errores.
-- Los `Bool` no admiten aritmética ni orden: `true + 1` y `true < false` son errores.
-- Los `Text` solo admiten `+`, `==`, `!=` y el orden (`<`, `<=`, `>`, `>=`) entre dos `Text`:
-  `"a" * 2` y `"1" < 2` son errores.
-- `and`, `or` y `not` solo aceptan `Bool`: `1 and 2` y `not 0` son errores.
+- `Int` and `Float` do not mix, not even when comparing: `1 + 1.5` and `1 == 1.0` are errors.
+- `Bool` values allow neither arithmetic nor ordering: `true + 1` and `true < false` are errors.
+- `Text` values only allow `+`, `==`, `!=` and ordering (`<`, `<=`, `>`, `>=`) between two `Text`:
+  `"a" * 2` and `"1" < 2` are errors.
+- `and`, `or` and `not` only accept `Bool`: `1 and 2` and `not 0` are errors.
 
-### 6.2 Semántica
+### 6.2 Semantics
 
-- **Orden de evaluación:** en una operación binaria se evalúa primero el operando izquierdo y
-  después el derecho. Los argumentos de una llamada se evalúan de izquierda a derecha.
-- **Cortocircuito:** `a and b` no evalúa `b` si `a` es `false`; `a or b` no evalúa `b` si `a` es
+- **Order of evaluation:** in a binary operation the left operand is evaluated first and
+  then the right one. The arguments of a call are evaluated from left to right.
+- **Short circuit:** `a and b` does not evaluate `b` if `a` is `false`; `a or b` does not evaluate `b` if `a` is
   `true`.
-- **Igualdad:** dos `Text` son iguales si tienen exactamente los mismos caracteres (se distinguen
-  mayúsculas). Dos `Float` se comparan por su valor IEEE 754.
-- **Orden entre textos:** carácter a carácter, por punto de código Unicode. En la primera posición
-  en que difieren, va antes el carácter de punto de código más bajo; si uno es el principio del
-  otro, va antes el más corto. No depende del idioma ni de la configuración del sistema, y no es el
-  orden alfabético de ningún idioma: `"Z" < "a"`, `"z" < "é"` y `"10" < "9"` son verdaderos. Nada
-  se normaliza: una `é` escrita con un solo carácter es distinta de una `e` seguida del acento
-  combinado (sección 8.1).
-- **División entre enteros:** `/` entre dos `Int` devuelve un `Int` y descarta la parte decimal
-  (redondea hacia cero): `7 / 2` es `3` y `-7 / 2` es `-3`. Para obtener decimales se dividen dos
-  `Float`: `7.0 / 2.0` es `3.5`.
-- **División por cero:** dividir por `0` o por `0.0` es el error de ejecución `E3001`.
-- **Desbordamiento:** un resultado `Int` fuera de rango es `E3002`; un resultado `Float` que no
-  cabe es `E3003`.
+- **Equality:** two `Text` values are equal if they have exactly the same characters (case is
+  significant). Two `Float` values are compared by their IEEE 754 value.
+- **Ordering between texts:** character by character, by Unicode code point. At the first position
+  where they differ, the character with the lower code point comes first; if one is the beginning of the
+  other, the shorter one comes first. It does not depend on the language or on the system configuration, and it is not the
+  alphabetical order of any language: `"Z" < "a"`, `"z" < "é"` and `"10" < "9"` are true. Nothing
+  is normalized: an `é` written as a single character is different from an `e` followed by the combining
+  accent (section 8.1).
+- **Integer division:** `/` between two `Int` returns an `Int` and drops the decimal part
+  (rounds towards zero): `7 / 2` is `3` and `-7 / 2` is `-3`. To get decimals, divide two
+  `Float` values: `7.0 / 2.0` is `3.5`.
+- **Division by zero:** dividing by `0` or by `0.0` is the runtime error `E3001`.
+- **Overflow:** an `Int` result out of range is `E3002`; a `Float` result that does not
+  fit is `E3003`.
 
-### 6.3 Condiciones
+### 6.3 Conditions
 
-Una condición (la de un `if` o la de un contrato) tiene que ser de tipo `Bool`. Un número o un
-texto no son una condición (`E2011`):
+A condition (that of an `if` or that of a contract) has to be of type `Bool`. A number or a
+text is not a condition (`E2011`):
 
 ```nex
-if count > 0 { ... }          // correcto
-if count { ... }              // E2011: la condición debe ser Bool, es Int
+if count > 0 { ... }          // correct
+if count { ... }              // E2011: the condition must be Bool, it is Int
 ```
 
-### 6.4 Expresiones como sentencias
+### 6.4 Expressions as statements
 
-Una expresión usada como sentencia tiene que ser una llamada a una función `Void`. Cualquier otra
-cosa es el error `E2010`, porque su valor se perdería: una operación suelta (`40 + 2`) o una
-llamada cuyo resultado no se usa (`add(1, 2)`).
+An expression used as a statement has to be a call to a `Void` function. Anything else
+is the error `E2010`, because its value would be lost: a loose operation (`40 + 2`) or a
+call whose result is not used (`add(1, 2)`).
 
-## 7. Funciones
+## 7. Functions
 
-### 7.1 Declaración
+### 7.1 Declaration
 
 ```nex
 fn add(a: Int, b: Int) -> Int {
@@ -809,17 +809,17 @@ fn add(a: Int, b: Int) -> Int {
 }
 ```
 
-- Cada parámetro declara su tipo, que tiene que ser un tipo de valor.
-- El tipo de retorno se escribe siempre. `Void` indica que la función no devuelve nada.
-- Las funciones se declaran en el nivel superior del archivo, en cualquier orden. No pueden
-  declararse dentro de otra función.
-- No hay sobrecarga: dos funciones con el mismo nombre son el error `E2002`. Tampoco puede
-  declararse una función con el nombre de una integrada (`E2002`).
-- Dos parámetros con el mismo nombre son el error `E2006`. Un parámetro no puede llamarse `result`
+- Every parameter declares its type, which has to be a value type.
+- The return type is always written. `Void` means that the function returns nothing.
+- Functions are declared at the top level of the file, in any order. They cannot
+  be declared inside another function.
+- There is no overloading: two functions with the same name are the error `E2002`. A function
+  cannot be declared with the name of a built-in one either (`E2002`).
+- Two parameters with the same name are the error `E2006`. A parameter cannot be named `result`
   (`E2013`).
-- No hay valores por defecto, argumentos con nombre, genéricos, clases ni funciones anónimas.
+- There are no default values, named arguments, generics, classes or anonymous functions.
 
-### 7.2 La función principal
+### 7.2 The main function
 
 <!-- nex:valid -->
 ```nex
@@ -828,39 +828,39 @@ fn main() -> Void {
 }
 ```
 
-Todo programa declara una función `main`, sin parámetros y con tipo de retorno `Void`. Es el punto
-de entrada. Si falta, el error es `E2001`; con parámetros, `E2013`; con otro tipo de retorno,
+Every program declares a `main` function, with no parameters and with return type `Void`. It is the entry
+point. If it is missing, the error is `E2001`; with parameters, `E2013`; with another return type,
 `E2004`.
 
-### 7.3 `return` y rutas de retorno
+### 7.3 `return` and return paths
 
-- En una función que devuelve un valor, `return expresión` termina la función con ese valor. El
-  tipo de la expresión tiene que ser el tipo de retorno declarado (`E2011` si no).
-- En una función `Void`, `return` sin valor termina la función antes de llegar al final.
-  `return expresión` es el error `E2011`. Llegar al final del cuerpo también termina la función.
-- Un `return` sin valor en una función que devuelve un valor es el error `E2011`.
-- **Toda ruta devuelve.** Una función que devuelve un valor tiene que terminar con `return` por
-  todos los caminos posibles; si alguno puede llegar al final del cuerpo, el error es `E2014`.
-- Una sentencia situada después de un `return` en el mismo bloque no puede ejecutarse nunca y es el
+- In a function that returns a value, `return expression` ends the function with that value. The
+  type of the expression has to be the declared return type (`E2011` otherwise).
+- In a `Void` function, `return` without a value ends the function before reaching the end.
+  `return expression` is the error `E2011`. Reaching the end of the body also ends the function.
+- A `return` without a value in a function that returns a value is the error `E2011`.
+- **Every path returns.** A function that returns a value has to end with `return` on
+  every possible path; if any of them can reach the end of the body, the error is `E2014`.
+- A statement placed after a `return` in the same block can never run and is the
   error `E2015`.
 
-Cómo se decide si un bloque "siempre devuelve":
+How it is decided whether a block "always returns":
 
-| Sentencia | Siempre devuelve si… |
-|-----------|----------------------|
-| `return` | Siempre |
-| `if` sin `else` | Nunca (la condición puede ser falsa) |
-| `if` … `else` … | Todas sus ramas siempre devuelven |
-| Bloque `{ }` | Alguna de sus sentencias siempre devuelve |
-| `while` | Nunca (su condición puede ser falsa desde el principio) |
-| `for` | Nunca (la lista puede estar vacía) |
-| Cualquier otra | Nunca |
+| Statement | Always returns if… |
+|-----------|--------------------|
+| `return` | Always |
+| `if` without `else` | Never (the condition may be false) |
+| `if` … `else` … | All its branches always return |
+| Block `{ }` | One of its statements always returns |
+| `while` | Never (its condition may be false from the start) |
+| `for` | Never (the list may be empty) |
+| Any other | Never |
 
-El análisis no evalúa las condiciones: `if true { return 1 }` sin `else` se considera incompleto, y
-una función cuyo único `return` está dentro de un bucle necesita otro después del bucle.
+The analysis does not evaluate conditions: `if true { return 1 }` without `else` is considered incomplete, and
+a function whose only `return` is inside a loop needs another one after the loop.
 
 ```nex
-fn sign(n: Int) -> Int {          // correcto: las tres ramas devuelven
+fn sign(n: Int) -> Int {          // correct: the three branches return
     if n < 0 {
         return -1
     } else if n == 0 {
@@ -870,85 +870,85 @@ fn sign(n: Int) -> Int {          // correcto: las tres ramas devuelven
     }
 }
 
-fn broken(n: Int) -> Int {        // E2014: si n <= 0 se llega al final sin 'return'
+fn broken(n: Int) -> Int {        // E2014: if n <= 0 the end is reached without 'return'
     if n > 0 {
         return 1
     }
 }
 ```
 
-### 7.4 Llamadas
+### 7.4 Calls
 
 ```nex
 let result: Int = add(2, 3)
 ```
 
-Una llamada se comprueba sin ejecutar el programa:
+A call is checked without running the program:
 
-| Comprobación | Error |
-|--------------|-------|
-| La función existe | `E2008` |
-| El número de argumentos coincide con el de parámetros | `E2009` |
-| El tipo de cada argumento es el del parámetro correspondiente | `E2011` |
-| Ningún argumento es una llamada a una función `Void` | `E2011` |
+| Check | Error |
+|-------|-------|
+| The function exists | `E2008` |
+| The number of arguments matches the number of parameters | `E2009` |
+| The type of every argument is that of the corresponding parameter | `E2011` |
+| No argument is a call to a `Void` function | `E2011` |
 
-El tipo de una llamada es el tipo de retorno de la función.
+The type of a call is the return type of the function.
 
-Al ejecutarse, una llamada:
+When it runs, a call:
 
-1. Evalúa los argumentos, de izquierda a derecha.
-2. Crea un ámbito nuevo y asigna cada argumento a su parámetro, por posición.
-3. Comprueba las cláusulas `requires`, en orden (sección 9).
-4. Ejecuta el cuerpo hasta un `return` o hasta el final.
-5. Comprueba las cláusulas `ensures`, en orden.
-6. Devuelve el valor al punto de la llamada.
+1. Evaluates the arguments, from left to right.
+2. Creates a new scope and assigns each argument to its parameter, by position.
+3. Checks the `requires` clauses, in order (section 9).
+4. Runs the body until a `return` or until the end.
+5. Checks the `ensures` clauses, in order.
+6. Returns the value to the point of the call.
 
-Los argumentos se pasan por valor y todos los valores son inmutables, así que una función no puede
-modificar nada de quien la llama.
+Arguments are passed by value and all values are immutable, so a function cannot
+modify anything of its caller.
 
-### 7.5 Recursividad
+### 7.5 Recursion
 
-Una función puede llamarse a sí misma, y dos funciones pueden llamarse entre sí.
+A function can call itself, and two functions can call each other.
 
-El número de llamadas anidadas está limitado a 1000 (contando `main`). Superarlo es el error de
-ejecución `E3004`; el caso habitual es una recursividad que nunca alcanza su caso base. Con
-expresiones muy profundamente anidadas el límite efectivo puede ser menor; el error es el mismo.
-Para repetir algo muchas veces se usa un bucle (sección 9.5): sus vueltas no son llamadas y no
-cuentan para este límite.
+The number of nested calls is limited to 1000 (counting `main`). Exceeding it is the runtime
+error `E3004`; the usual case is a recursion that never reaches its base case. With
+very deeply nested expressions the effective limit can be lower; the error is the same.
+To repeat something many times, use a loop (section 9.5): its iterations are not calls and do not
+count towards this limit.
 
-### 7.6 Módulos e importaciones
+### 7.6 Modules and imports
 
-Un archivo `.nex` es un módulo (decisión 0018). El programa que se ejecuta es el archivo que se
-pasa a `nex run` (el **archivo de entrada**), y los demás archivos que importa forman parte del
-mismo programa: se analizan y se ejecutan con él.
+A `.nex` file is a module (decision 0018). The program that runs is the file that is
+passed to `nex run` (the **entry file**), and the other files it imports are part of the
+same program: they are analyzed and run with it.
 
-**Declarar un módulo.** La primera línea de un archivo puede ser una importación, y antes de
-cualquier otra declaración:
+**Declaring a module.** The first line of a file can be an import, and before
+any other declaration:
 
 ```nexora
 import "app/models.nex"
 ```
 
-- La ruta es un literal de texto y tiene que acabar en `.nex`; si no, es el error `E1101`.
-- La ruta es **relativa al archivo que la contiene**, no a la carpeta desde la que se ejecuta el
-  comando: el programa depende de dónde está, no de dónde se arranca.
-- Las importaciones van antes que cualquier otra declaración, una por línea. En otro lugar, o
-  después de una función, son el error `E1101`.
-- Un archivo se lee una sola vez, aunque lo importen varios. Las importaciones circulares son el
-  error `E2029`; dos archivos con el mismo nombre en carpetas distintas son el error `E2030`,
-  porque el módulo toma su nombre de su archivo. Un archivo que no existe o no se puede leer es el
-  error `E0001`, en la línea del `import`.
+- The path is a text literal and has to end in `.nex`; otherwise, it is the error `E1101`.
+- The path is **relative to the file that contains it**, not to the folder from which the
+  command is run: the program depends on where it is, not on where it is started from.
+- Imports go before any other declaration, one per line. Anywhere else, or
+  after a function, they are the error `E1101`.
+- A file is read only once, even if several files import it. Circular imports are the
+  error `E2029`; two files with the same name in different folders are the error `E2030`,
+  because the module takes its name from its file. A file that does not exist or cannot be read is the
+  error `E0001`, on the line of the `import`.
 
-**El nombre de un módulo.** Es el nombre de su archivo sin la extensión: `app/models.nex` es el
-módulo `models`. No hay alias (`as`) ni importación selectiva: se importa el archivo entero y se
-usan sus nombres cualificados con el módulo delante.
+**The name of a module.** It is the name of its file without the extension: `app/models.nex` is the
+module `models`. There are no aliases (`as`) and no selective imports: the whole file is imported and
+its names are used qualified with the module in front.
 
-**Lo que un módulo hace visible.** Todo lo que un módulo declara es **privado**, salvo lo que
-lleva `pub`: `pub fn`, `pub type` (tanto los tipos refinados como los registros). El archivo de
-entrada es la excepción: sus funciones y sus tipos son suyos y no llevan `pub`. Usar desde otro
-archivo un nombre que su módulo no hace público es el error `E2028`.
+**What a module makes visible.** Everything a module declares is **private**, except what
+carries `pub`: `pub fn`, `pub type` (both refined types and records). The entry
+file is the exception: its functions and its types are its own and do not carry `pub`. Using from another
+file a name that its module does not make public is the error `E2028`.
 
-**Cómo se usan los nombres de otro módulo.** Cualificados, con el módulo delante:
+**How the names of another module are used.** Qualified, with the module in front:
 
 ```nexora
 import "app/models.nex"
@@ -959,107 +959,107 @@ fn main() -> Void {
 }
 ```
 
-| Escritura | Significado | Error si no existe |
-|-----------|-------------|--------------------|
-| `models.area(p)` | Llama a la función `area` que el módulo `models` hace pública | `E2008`, o `E2028` si es privada |
-| `models.Point` | El tipo `Point` del módulo `models`, en una anotación o como argumento | `E2012` |
-| `models.Point(x: 1, y: 2)` | Construye un valor del registro `Point` del módulo `models` | `E2023`, o `E2028` si es privado |
-| `models` antes del `.` sin ser un módulo importado | — | `E2027` |
+| Written as | Meaning | Error if it does not exist |
+|------------|---------|----------------------------|
+| `models.area(p)` | Calls the function `area` that the module `models` makes public | `E2008`, or `E2028` if it is private |
+| `models.Point` | The type `Point` of the module `models`, in an annotation or as an argument | `E2012` |
+| `models.Point(x: 1, y: 2)` | Builds a value of the record `Point` of the module `models` | `E2023`, or `E2028` if it is private |
+| `models` before the `.` without being an imported module | — | `E2027` |
 
-El punto va pegado a los dos nombres, como en una llamada o en la lectura de un campo: `models.Point`
-es correcto y `models . Point` es el error `E1101`.
+The dot is attached to both names, as in a call or when reading a field: `models.Point`
+is correct and `models . Point` is the error `E1101`.
 
-Dentro de un módulo sus funciones se llaman por su nombre simple: una función de `models` escribe
-`area(p)`, no `models.area(p)`. Los nombres de dos módulos distintos no se confunden porque cada
-uno declara los suyos con su propio módulo delante, y un registro conserva su identidad propia
-aunque dos módulos declaren un `Point` (sección 4.6).
+Inside a module its functions are called by their simple name: a function of `models` writes
+`area(p)`, not `models.area(p)`. The names of two different modules do not get mixed up because each
+one declares its own with its own module in front, and a record keeps its own identity
+even if two modules declare a `Point` (section 4.6).
 
-**Cuándo se leen los módulos.** Cuando se analiza el programa, no cuando se ejecuta: los módulos
-son parte del programa (sección 10.1). Un módulo se analiza siempre después de los que importa, de
-forma que los nombres que usa ya existen cuando se comprueba su cuerpo.
+**When modules are read.** When the program is analyzed, not when it runs: modules
+are part of the program (section 10.1). A module is always analyzed after the ones it imports, so
+that the names it uses already exist when its body is checked.
 
-**Lo que el análisis y las herramientas hacen con los módulos.** `nex check`, `nex run` y `nex test`
-analizan el archivo de entrada y todos los que importa, y cada error se muestra con el archivo que
-lo tiene. `nex test` solo evalúa los ejemplos del archivo de entrada: los de un módulo no se
-ejecutan. `nex inspect`, `nex symbols` y `nex context` describen el archivo de entrada; los nombres
-que vienen de un módulo aparecen en él como cualificados.
+**What the analysis and the tools do with modules.** `nex check`, `nex run` and `nex test`
+analyze the entry file and all the ones it imports, and every error is shown with the file that
+has it. `nex test` only evaluates the examples of the entry file: those of a module are not
+run. `nex inspect`, `nex symbols` and `nex context` describe the entry file; the names
+that come from a module appear in it as qualified.
 
-**Lo que esta versión no admite.**
+**What this version does not support.**
 
-- Alias (`import "app/models.nex" as m`) ni importación selectiva
+- Aliases (`import "app/models.nex" as m`) or selective imports
   (`import { area } from ...`).
-- Importar de fuera del árbol de carpetas del programa: no hay ruta de búsqueda, ni paquetes, ni
-  versiones. Dos módulos de dos proyectos distintos no se pueden combinar.
-- Reexportar: un módulo no puede hacer públicos los nombres de otro.
-- Importar desde el playground, desde el servidor MCP o desde un editor sin ficheros: esos
-  entornos reciben el programa como texto y no tienen archivos al lado, así que un `import` es el
+- Importing from outside the folder tree of the program: there is no search path, no packages and no
+  versions. Two modules from two different projects cannot be combined.
+- Re-exporting: a module cannot make public the names of another one.
+- Importing from the playground, from the MCP server or from an editor without files: those
+  environments receive the program as text and have no files next to it, so an `import` is the
   error `E0001`.
-- Las capacidades (`uses`, sección 8.3) no se heredan: cada archivo declara las suyas, y un
-  módulo que lee un archivo tiene que declararlo él mismo.
+- Capabilities (`uses`, section 8.3) are not inherited: every file declares its own, and a
+  module that reads a file has to declare it itself.
 
-## 8. Funciones integradas
+## 8. Built-in functions
 
-| Función | Firma | Descripción |
-|---------|-------|-------------|
-| `print` | `print(value) -> Void` | Escribe el valor seguido de un salto de línea en la salida estándar. Acepta un valor de cualquier tipo de valor |
-| `to_text` | `to_text(value) -> Text` | Convierte cualquier valor en el texto que escribiría `print` |
-| `to_float` | `to_float(value: Int) -> Float` | Convierte un entero en decimal |
-| `to_int` | `to_int(value: Float) -> Int` | Convierte un decimal en entero descartando la parte decimal |
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `print` | `print(value) -> Void` | Writes the value followed by a line break to the standard output. Accepts a value of any value type |
+| `to_text` | `to_text(value) -> Text` | Converts any value into the text that `print` would write |
+| `to_float` | `to_float(value: Int) -> Float` | Converts an integer into a decimal |
+| `to_int` | `to_int(value: Float) -> Int` | Converts a decimal into an integer by dropping the decimal part |
 
-Texto que producen `print` y `to_text`:
+Text produced by `print` and `to_text`:
 
-| Tipo | Formato | Ejemplos |
-|------|---------|----------|
-| `Text` | El texto, sin comillas | `Hello` |
-| `Int` | En decimal | `42`, `-7` |
-| `Bool` | `true` o `false` | |
-| `Float` | La representación decimal más corta que identifica el valor; siempre lleva punto decimal o exponente | `3.5`, `2.0`, `0.30000000000000004`, `1e+16` |
-| `List[T]` | Corchetes, elementos separados por `, `, sin comillas alrededor de los textos | `[1, 2, 3]`, `[[1], [2]]`, `[]` |
+| Type | Format | Examples |
+|------|--------|----------|
+| `Text` | The text, without quotes | `Hello` |
+| `Int` | In decimal | `42`, `-7` |
+| `Bool` | `true` or `false` | |
+| `Float` | The shortest decimal representation that identifies the value; it always has a decimal point or an exponent | `3.5`, `2.0`, `0.30000000000000004`, `1e+16` |
+| `List[T]` | Square brackets, elements separated by `, `, no quotes around texts | `[1, 2, 3]`, `[[1], [2]]`, `[]` |
 
-`print` es la única forma que tiene un programa de producir un efecto. Un programa NEXORA no puede
-leer archivos, abrir conexiones, ejecutar otros programas ni leer datos de entrada.
+`print` is the only way a program has to produce an effect. A NEXORA program cannot
+read files, open connections, run other programs or read input data.
 
-### 8.1 Funciones de un tipo: `Text.length`, `Int.parse`…
+### 8.1 Functions of a type: `Text.length`, `Int.parse`…
 
-Algunas funciones integradas pertenecen a un tipo y se llaman con su nombre delante
-([decisión 0011](decisions/0011-operaciones-sobre-textos.md)):
+Some built-in functions belong to a type and are called with its name in front
+([decision 0011](decisions/0011-operaciones-sobre-textos.md)):
 
-| Función | Qué hace | Requisitos |
-|---------|----------|------------|
-| `Text.length(text: Text) -> Int` | Número de caracteres | |
-| `Text.slice(text: Text, start: Int, end: Int) -> Text` | Los caracteres desde `start` (incluido) hasta `end` (excluido) | `start >= 0`, `start <= end`, `end <= Text.length(text)` |
-| `Text.contains(text: Text, part: Text) -> Bool` | Si `part` aparece en `text` | |
-| `Text.starts_with(text: Text, part: Text) -> Bool` | Si `text` empieza por `part` | |
-| `Text.ends_with(text: Text, part: Text) -> Bool` | Si `text` termina en `part` | |
-| `Int.can_parse(text: Text) -> Bool` | Si `text` es un entero escrito según la gramática de abajo, dentro del rango de `Int` | |
-| `Int.parse(text: Text) -> Int` | El entero escrito en `text` | `Int.can_parse(text)` |
-| `Float.can_parse(text: Text) -> Bool` | Si `text` es un decimal escrito según la gramática de abajo, cuyo valor redondeado es finito | |
-| `Float.parse(text: Text) -> Float` | El decimal escrito en `text`, redondeado al `Float` más cercano | `Float.can_parse(text)` |
+| Function | What it does | Requirements |
+|----------|--------------|--------------|
+| `Text.length(text: Text) -> Int` | Number of characters | |
+| `Text.slice(text: Text, start: Int, end: Int) -> Text` | The characters from `start` (included) to `end` (excluded) | `start >= 0`, `start <= end`, `end <= Text.length(text)` |
+| `Text.contains(text: Text, part: Text) -> Bool` | Whether `part` appears in `text` | |
+| `Text.starts_with(text: Text, part: Text) -> Bool` | Whether `text` starts with `part` | |
+| `Text.ends_with(text: Text, part: Text) -> Bool` | Whether `text` ends with `part` | |
+| `Int.can_parse(text: Text) -> Bool` | Whether `text` is an integer written according to the grammar below, within the range of `Int` | |
+| `Int.parse(text: Text) -> Int` | The integer written in `text` | `Int.can_parse(text)` |
+| `Float.can_parse(text: Text) -> Bool` | Whether `text` is a decimal written according to the grammar below, whose rounded value is finite | |
+| `Float.parse(text: Text) -> Float` | The decimal written in `text`, rounded to the nearest `Float` | `Float.can_parse(text)` |
 
-- **Un carácter es un punto de código Unicode** y las posiciones empiezan en 0. `Text.length("año")`
-  es 3. No se normaliza nada: una `e` seguida del acento combinado son dos caracteres.
-- **Nombres.** No se reserva ningún nombre: `let length = Text.length(name)` es válido, y `Int`,
-  `Float`, `Bool` y `Text` se pueden seguir usando como nombres de variable. Delante del punto solo
-  puede ir un tipo con esa función; cualquier otra cosa es `E2008`, con una sugerencia (`length(t)`
-  sugiere `Text.length`). Un programa no puede declarar funciones de un tipo.
-- **Requisitos.** Antes de la operación se comprueban sus requisitos, en el orden de la tabla. El
-  primero que no se cumple detiene el programa con `E4001`, como el `requires` de una función del
-  programa. No hay índices negativos ni recortes silenciosos: `Text.slice("abc", 2, 9)` no devuelve
-  `"c"`. `Int.parse` y `Float.parse` añaden una sugerencia según lo que falló.
-- **Números escritos en un texto.** Una única forma, solo con caracteres ASCII:
+- **A character is a Unicode code point** and positions start at 0. `Text.length("año")`
+  is 3. Nothing is normalized: an `e` followed by the combining accent is two characters.
+- **Names.** No name is reserved: `let length = Text.length(name)` is valid, and `Int`,
+  `Float`, `Bool` and `Text` can still be used as variable names. Only a type with that function can go
+  in front of the dot; anything else is `E2008`, with a suggestion (`length(t)`
+  suggests `Text.length`). A program cannot declare functions of a type.
+- **Requirements.** Before the operation its requirements are checked, in the order of the table. The
+  first one that is not met stops the program with `E4001`, like the `requires` of a function of the
+  program. There are no negative indices and no silent truncation: `Text.slice("abc", 2, 9)` does not return
+  `"c"`. `Int.parse` and `Float.parse` add a suggestion depending on what failed.
+- **Numbers written in a text.** A single form, with ASCII characters only:
 
   ```text
-  entero    = [ "-" ] dígito { dígito }
-  decimal   = [ "-" ] dígito { dígito } ( fracción [ exponente ] | exponente )
-  fracción  = "." dígito { dígito }
-  exponente = ( "e" | "E" ) [ "+" | "-" ] dígito { dígito }
+  integer   = [ "-" ] digit { digit }
+  decimal   = [ "-" ] digit { digit } ( fraction [ exponent ] | exponent )
+  fraction  = "." digit { digit }
+  exponent  = ( "e" | "E" ) [ "+" | "-" ] digit { digit }
   ```
 
-  Sin espacios, sin `+` delante, sin `_` ni separadores, sin `inf` ni `nan`. Se admiten ceros a la
-  izquierda (`"007"` es 7). `Float.can_parse("1")` es falso: un entero no es un decimal; se lee con
-  `to_float(Int.parse("1"))`. Un valor demasiado pequeño se redondea a cero (`"1e-400"` es `0.0`);
-  uno que se redondearía a infinito no se admite (`"1e309"`). Lo que escribe `to_text` siempre se
-  puede volver a leer: `Int.parse(to_text(n)) == n` y `Float.parse(to_text(x)) == x`.
+  No spaces, no leading `+`, no `_` or separators, no `inf` or `nan`. Leading zeros are
+  allowed (`"007"` is 7). `Float.can_parse("1")` is false: an integer is not a decimal; it is read with
+  `to_float(Int.parse("1"))`. A value that is too small is rounded to zero (`"1e-400"` is `0.0`);
+  one that would round to infinity is not accepted (`"1e309"`). What `to_text` writes can always
+  be read back: `Int.parse(to_text(n)) == n` and `Float.parse(to_text(x)) == x`.
 
 <!-- nex:run -->
 ```nex
@@ -1084,7 +1084,7 @@ true
 43
 ```
 
-Un requisito que no se cumple detiene el programa con su explicación y los valores de la llamada:
+A requirement that is not met stops the program with its explanation and the values of the call:
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -1107,37 +1107,37 @@ contract error[E4001]: Precondition violated
 error: program.nex: the program stopped because a contract was broken
 ```
 
-### 8.2 Funciones de `List`
+### 8.2 `List` functions
 
-Las listas tienen cinco funciones integradas. Son funciones de un tipo, como las de la sección
-8.1, y se llaman con `List.` delante. Su firma usa una variable de tipo `T` que no se escribe en el
-programa: cada llamada la liga con el tipo de sus argumentos. No son genéricos de usuario y no se
-puede declarar una función así.
+Lists have five built-in functions. They are functions of a type, like those of section
+8.1, and are called with `List.` in front. Their signature uses a type variable `T` that is not written in the
+program: each call binds it to the type of its arguments. They are not user generics and a
+function like that cannot be declared.
 
-| Función | Firma | Qué hace | Requisitos |
-|---------|-------|----------|------------|
-| `List.length` | `List.length(xs: List[T]) -> Int` | Número de elementos | |
-| `List.get` | `List.get(xs: List[T], i: Int) -> T` | Elemento en la posición `i`, empezando en 0 | `0 <= i and i < List.length(xs)` |
-| `List.append` | `List.append(xs: List[T], x: T) -> List[T]` | Lista nueva con `x` al final | |
-| `List.concat` | `List.concat(xs: List[T], ys: List[T]) -> List[T]` | Lista nueva con los elementos de `xs` y después los de `ys` | |
-| `List.contains` | `List.contains(xs: List[T], x: T) -> Bool` | Si algún elemento es estructuralmente igual a `x` | |
+| Function | Signature | What it does | Requirements |
+|----------|-----------|--------------|--------------|
+| `List.length` | `List.length(xs: List[T]) -> Int` | Number of elements | |
+| `List.get` | `List.get(xs: List[T], i: Int) -> T` | Element at position `i`, starting at 0 | `0 <= i and i < List.length(xs)` |
+| `List.append` | `List.append(xs: List[T], x: T) -> List[T]` | New list with `x` at the end | |
+| `List.concat` | `List.concat(xs: List[T], ys: List[T]) -> List[T]` | New list with the elements of `xs` and then those of `ys` | |
+| `List.contains` | `List.contains(xs: List[T], x: T) -> Bool` | Whether some element is structurally equal to `x` | |
 
-- **`List.length`** es total. `List.length([])` no compila si la lista vacía no tiene un tipo
-  esperado (`E2011`); `let xs: List[Int] = []` y `List.length(xs)` sí.
-- **`List.get`** es parcial. El índice empieza en 0 y tiene que estar dentro de la lista. Un índice
-  negativo, igual a la longitud o mayor detiene el programa con `E4001`, también si es una constante:
-  `nex check` no demuestra el contrato. No hay índices negativos desde el final ni recortes
-  silenciosos. La comprobación lleva la explicación «An index must be inside the list».
-- **`List.append` y `List.concat`** no modifican sus argumentos: construyen una lista nueva. El tipo
-  del resultado conserva el elemento de las listas de entrada. Una lista vacía literal en un
-  argumento necesita un tipo esperado, porque la firma paramétrica no lo fija antes de leer los
-  argumentos: `List.append([], 1)` y `List.concat([1], [])` son `E2011`.
-- **`List.contains`** usa igualdad estructural, no búsqueda de subtextos: `List.contains(["ab"], "b")`
-  es `false`. La lista y el valor tienen que tener el mismo tipo de elemento; un `Int` no se busca
-  en una `List[Text]`.
-- Los argumentos se comprueban como en cualquier llamada: número (`E2009`), tipo (`E2011`) y, si
-  procede, el contrato al ejecutar (`E4001`). Una función de `List` desconocida es `E2008`, con
-  sugerencia si se parece a una de las cinco.
+- **`List.length`** is total. `List.length([])` does not compile if the empty list has no expected
+  type (`E2011`); `let xs: List[Int] = []` and `List.length(xs)` do.
+- **`List.get`** is partial. The index starts at 0 and has to be inside the list. A
+  negative index, or one equal to or greater than the length, stops the program with `E4001`, also if it is a constant:
+  `nex check` does not prove the contract. There are no negative indices counting from the end and no silent
+  truncation. The check carries the explanation "An index must be inside the list".
+- **`List.append` and `List.concat`** do not modify their arguments: they build a new list. The type
+  of the result keeps the element of the input lists. A literal empty list as an
+  argument needs an expected type, because the parametric signature does not set it before reading the
+  arguments: `List.append([], 1)` and `List.concat([1], [])` are `E2011`.
+- **`List.contains`** uses structural equality, not a search for substrings: `List.contains(["ab"], "b")`
+  is `false`. The list and the value have to have the same element type; an `Int` is not searched for
+  in a `List[Text]`.
+- The arguments are checked as in any call: number (`E2009`), type (`E2011`) and, where
+  applicable, the contract when running (`E4001`). An unknown `List` function is `E2008`, with a
+  suggestion if it resembles one of the five.
 
 <!-- nex:run -->
 ```nex
@@ -1161,101 +1161,101 @@ true
 false
 ```
 
-Fuera de estas cinco funciones no hay `map`, `filter`, `fold`, ordenación, `slice` ni una variante
-total de `List.get`. Llegarán, si se deciden, con `Option`/`Result` y las demás decisiones
-pendientes.
+Apart from these five functions there is no `map`, `filter`, `fold`, sorting, `slice` or total variant
+of `List.get`. They will come, if they are decided, with `Option`/`Result` and the other pending
+decisions.
 
-### 8.3 La entrada, los argumentos y los archivos
+### 8.3 Input, arguments and files
 
-Un programa puede recibir datos de fuera: los argumentos con los que se ejecutó, la entrada
-estándar y los archivos. Los argumentos y la entrada estándar están permitidos por defecto. Los
-archivos **no**: hay que declararlos y hay que permitirlos.
+A program can receive data from outside: the arguments it was run with, the standard
+input and files. Arguments and standard input are allowed by default. Files
+are **not**: they have to be declared and they have to be allowed.
 
-| Función | Firma | Qué hace |
-|---------|-------|----------|
-| `args` | `args() -> List[Text]` | Los argumentos con los que se ejecutó el programa, en orden |
-| `input` | `input() -> Text` | Lee **una línea** de la entrada estándar, sin el final de línea |
-| `read_file` | `read_file(ruta: Text) -> Text` | Lee un archivo de texto completo |
-| `write_file` | `write_file(ruta: Text, texto: Text) -> Void` | Escribe un archivo de texto, y lo crea si no existe |
+| Function | Signature | What it does |
+|----------|-----------|--------------|
+| `args` | `args() -> List[Text]` | The arguments the program was run with, in order |
+| `input` | `input() -> Text` | Reads **one line** from the standard input, without the line ending |
+| `read_file` | `read_file(path: Text) -> Text` | Reads a whole text file |
+| `write_file` | `write_file(path: Text, text: Text) -> Void` | Writes a text file, and creates it if it does not exist |
 
-**Los argumentos.** `nex run programa.nex -- uno dos` da al programa los argumentos `uno` y `dos`.
-`args()` devuelve una `List[Text]`, vacía si no hay ninguno. Los argumentos no necesitan ninguna
-declaración: no dan acceso a nada que quien ejecuta no haya dado ya.
+**Arguments.** `nex run program.nex -- one two` gives the program the arguments `one` and `two`.
+`args()` returns a `List[Text]`, empty if there are none. Arguments need no
+declaration: they give access to nothing that whoever runs the program has not already given.
 
-**La entrada estándar.** `input()` lee una línea y la devuelve sin el final de línea. Una línea
-vacía devuelve el texto vacío. Cuando ya no queda nada que leer, el programa se detiene con
-`E3009`: no se puede leer «hasta el final» sin parar, y no hay forma de distinguir el final de una
-línea vacía.
+**Standard input.** `input()` reads a line and returns it without the line ending. An empty
+line returns the empty text. When there is nothing left to read, the program stops with
+`E3009`: it is not possible to read "until the end" without stopping, and there is no way to tell the end from an
+empty line.
 
-**Los archivos.** Un programa declara lo que necesita con `uses`, al nivel superior del archivo:
+**Files.** A program declares what it needs with `uses`, at the top level of the file:
 
 ```nexora
-uses read "datos/entradas.txt"
-uses write "datos/salida.txt"
+uses read "data/inputs.txt"
+uses write "data/output.txt"
 ```
 
-La capacidad efectiva es la **intersección** de tres cosas:
+The effective capability is the **intersection** of three things:
 
-1. **Lo que declara el programa**: un `uses read` (o `uses write`) que cubra la ruta.
-2. **Lo que concede quien ejecuta**: `--allow-read=RUTA` (o `--allow-write=RUTA`) en la orden de
-   `nex run`, repetible. Leer y escribir se conceden por separado.
-3. **Lo que permite el entorno**: si el entorno admite archivos.
+1. **What the program declares**: a `uses read` (or `uses write`) that covers the path.
+2. **What whoever runs it grants**: `--allow-read=PATH` (or `--allow-write=PATH`) in the
+   `nex run` command, repeatable. Reading and writing are granted separately.
+3. **What the environment allows**: whether the environment supports files.
 
-Las tres tienen que estar. Declarar no concede: un programa que declara `uses read "secreto.txt"`
-y se ejecuta sin `--allow-read` recibe `E3008`. Conceder no habilita: `--allow-read` no abre un
-archivo que el programa no declara. Y el entorno manda: en un entorno que no admite archivos
-ninguna combinación los habilita.
+All three have to be there. Declaring does not grant: a program that declares `uses read "secret.txt"`
+and runs without `--allow-read` gets `E3008`. Granting does not enable: `--allow-read` does not open a
+file that the program does not declare. And the environment has the last word: in an environment that does not support files
+no combination enables them.
 
-`nex check` avisa de una declaración que falta, cuando la ruta de la llamada es un literal y
-ninguna declaración la cubre: es el error `E2026`. Es una ayuda, no la seguridad. Si la ruta se
-calcula, el análisis no puede saberlo y no avisa; la decisión la toma el intérprete, en cada
-acceso.
+`nex check` warns about a missing declaration, when the path of the call is a literal and
+no declaration covers it: it is the error `E2026`. It is a help, not the security. If the path is
+computed, the analysis cannot know it and does not warn; the interpreter makes the decision, on every
+access.
 
-**Las rutas.** Las rutas relativas se resuelven respecto al **directorio de trabajo** del proceso.
-El confineamiento se hace sobre la ruta **resuelta**: un `..` que sale del ámbito concedido y un
-enlace simbólico que apunta fuera de él no sirven de nada. La comparación es por segmentos, de
-modo que `datos2` no está dentro de `datos`. En Windows, una ruta con barras invertidas tiene que
-escribirse con las barras duplicadas (`"C:\\datos"`) o con barras normales (`"C:/datos"`), que
-funcionan en los dos sistemas.
+**Paths.** Relative paths are resolved against the **working directory** of the process.
+Confinement is applied to the **resolved** path: a `..` that leaves the granted scope and a
+symbolic link that points outside it are of no use. The comparison is by segments, so
+that `data2` is not inside `data`. On Windows, a path with backslashes has to be
+written with doubled backslashes (`"C:\\data"`) or with forward slashes (`"C:/data"`), which
+work on both systems.
 
-**Los entornos restringidos.** El playground de la web y el servidor MCP no admiten archivos: el
-worker no tiene ningún campo en su protocolo para pedirlos y el programa recibe `E3008` aunque
-declare la capacidad. El servidor MCP solo analiza: nunca ejecuta.
+**Restricted environments.** The playground of the website and the MCP server do not support files: the
+worker has no field in its protocol to ask for them and the program gets `E3008` even if it
+declares the capability. The MCP server only analyzes: it never runs anything.
 
-### 8.4 Las funciones de `Option` y de `Result`
+### 8.4 The functions of `Option` and `Result`
 
-Las dos variantes de cada tipo (sección 4.7) se construyen con `Some`, `None`, `Ok` y `Err`, y se
-reconocen y se leen con estas funciones:
+The two variants of each type (section 4.7) are built with `Some`, `None`, `Ok` and `Err`, and they are
+recognized and read with these functions:
 
-| Función | Firma | Qué hace |
-|---------|-------|----------|
-| `Some` | `Some(valor: T) -> Option[T]` | La variante de `Option` que tiene valor |
-| `None` | `None -> Option[T]` | La variante de `Option` sin valor; `T` lo dice el contexto |
-| `Ok` | `Ok(valor: T) -> Result[T, E]` | La variante de `Result` que se conseguiu |
-| `Err` | `Err(error: E) -> Result[T, E]` | La variante de `Result` que falló; `T` lo dice el contexto |
-| `Option.is_some` | `Option.is_some(x: Option[T]) -> Bool` | Si `x` tiene valor |
-| `Option.is_none` | `Option.is_none(x: Option[T]) -> Bool` | Si `x` no tiene valor |
-| `Option.unwrap_or` | `Option.unwrap_or(x: Option[T], defecto: T) -> T` | El valor de `x`, o `defecto` si no lo tiene |
-| `Option.unwrap` | `Option.unwrap(x: Option[T]) -> T` | El valor de `x`; si no lo tiene, `E3011` |
-| `Result.is_ok` | `Result.is_ok(x: Result[T, E]) -> Bool` | Si `x` se consiguió |
-| `Result.is_err` | `Result.is_err(x: Result[T, E]) -> Bool` | Si `x` falló |
-| `Result.unwrap_or` | `Result.unwrap_or(x: Result[T, E], defecto: T) -> T` | El valor de `x`, o `defecto` si falló |
-| `Result.unwrap` | `Result.unwrap(x: Result[T, E]) -> T` | El valor de `x`; si falló, `E3012` |
-| `Result.error` | `Result.error(x: Result[T, E]) -> E` | El error de `x`; si se consiguió, `E3013` |
+| Function | Signature | What it does |
+|----------|-----------|--------------|
+| `Some` | `Some(value: T) -> Option[T]` | The variant of `Option` that has a value |
+| `None` | `None -> Option[T]` | The variant of `Option` without a value; `T` is given by the context |
+| `Ok` | `Ok(value: T) -> Result[T, E]` | The variant of `Result` that succeeded |
+| `Err` | `Err(error: E) -> Result[T, E]` | The variant of `Result` that failed; `T` is given by the context |
+| `Option.is_some` | `Option.is_some(x: Option[T]) -> Bool` | Whether `x` has a value |
+| `Option.is_none` | `Option.is_none(x: Option[T]) -> Bool` | Whether `x` has no value |
+| `Option.unwrap_or` | `Option.unwrap_or(x: Option[T], default: T) -> T` | The value of `x`, or `default` if it has none |
+| `Option.unwrap` | `Option.unwrap(x: Option[T]) -> T` | The value of `x`; if it has none, `E3011` |
+| `Result.is_ok` | `Result.is_ok(x: Result[T, E]) -> Bool` | Whether `x` succeeded |
+| `Result.is_err` | `Result.is_err(x: Result[T, E]) -> Bool` | Whether `x` failed |
+| `Result.unwrap_or` | `Result.unwrap_or(x: Result[T, E], default: T) -> T` | The value of `x`, or `default` if it failed |
+| `Result.unwrap` | `Result.unwrap(x: Result[T, E]) -> T` | The value of `x`; if it failed, `E3012` |
+| `Result.error` | `Result.error(x: Result[T, E]) -> E` | The error of `x`; if it succeeded, `E3013` |
 
-Las tres últimas **leen el valor sin defecto**: si la variante no lo lleva, el programa se detiene con
-un diagnóstico que dice qué variante tenía (`E3011`, `E3012`, `E3013`). Ninguna de ellas devuelve un
-valor inventado.
+The last three **read the value without a default**: if the variant does not carry it, the program stops with
+a diagnostic that says which variant it had (`E3011`, `E3012`, `E3013`). None of them returns a
+made-up value.
 
-El tipo de `T` y de `E` lo fija el **contexto**: la anotación de una variable, el tipo de un
-parámetro, el tipo de resultado de una función o el otro lado de una comparación. Sin ese contexto,
-`None`, `Ok` y `Err` no tienen tipo completo, y es el error `E2011`.
+The type of `T` and of `E` is set by the **context**: the annotation of a variable, the type of a
+parameter, the result type of a function or the other side of a comparison. Without that context,
+`None`, `Ok` and `Err` do not have a complete type, and it is the error `E2011`.
 
-## 9. Contratos
+## 9. Contracts
 
-Un contrato expresa una condición que una función **espera** de quien la llama o una condición que
-**promete** cumplir. Los contratos son deterministas y se evalúan con las mismas reglas que
-cualquier otra expresión; no interviene ningún modelo de IA.
+A contract expresses a condition that a function **expects** from its caller or a condition that it
+**promises** to meet. Contracts are deterministic and are evaluated with the same rules as
+any other expression; no AI model is involved.
 
 ```nex
 fn divide(a: Float, b: Float) -> Float {
@@ -1272,24 +1272,24 @@ fn absolute(value: Int) -> Int {
 }
 ```
 
-### 9.1 Reglas
+### 9.1 Rules
 
-- Las cláusulas van al principio del cuerpo, una por línea, antes de cualquier sentencia. Puede
-  haber varias de cada tipo y en cualquier orden.
-- La condición de una cláusula tiene que ser de tipo `Bool` (`E2011`).
-- **`requires`** es una condición previa. En ella son visibles los parámetros de la función y
-  ningún otro nombre: ni las variables del cuerpo ni `result`.
-- **`ensures`** es una condición posterior. En ella son visibles los parámetros y, si la función
-  devuelve un valor, `result`, que es **el valor devuelto por la función** y tiene su tipo de
-  retorno. En una función `Void` no existe `result`.
-- Los parámetros son inmutables, así que en `ensures` tienen el mismo valor que al entrar.
-- `result` es un nombre contextual: solo significa "el valor devuelto" dentro de `ensures`. En el
-  cuerpo de una función es un nombre de variable como cualquier otro. Un parámetro no puede
-  llamarse `result` (`E2013`).
-- Una condición puede llamar a funciones.
-- Detrás de la condición puede ir, tras una coma, **la explicación de la regla**: un texto que dice
-  por qué existe. No cambia lo que se comprueba; aparece en el diagnóstico cuando la condición es
-  falsa, como `Reason: ...`.
+- The clauses go at the beginning of the body, one per line, before any statement. There can
+  be several of each kind and in any order.
+- The condition of a clause has to be of type `Bool` (`E2011`).
+- **`requires`** is a precondition. The parameters of the function are visible in it, and
+  no other name: neither the variables of the body nor `result`.
+- **`ensures`** is a postcondition. The parameters are visible in it and, if the function
+  returns a value, `result`, which is **the value returned by the function** and has its return
+  type. In a `Void` function `result` does not exist.
+- Parameters are immutable, so in `ensures` they have the same value as on entry.
+- `result` is a contextual name: it only means "the returned value" inside `ensures`. In the
+  body of a function it is a variable name like any other. A parameter cannot be
+  named `result` (`E2013`).
+- A condition can call functions.
+- After the condition there may be, after a comma, **the explanation of the rule**: a text that says
+  why it exists. It does not change what is checked; it appears in the diagnostic when the condition is
+  false, as `Reason: ...`.
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -1320,21 +1320,21 @@ contract error[E4001]: Precondition violated
 error: program.nex: the program stopped because a contract was broken
 ```
 
-### 9.2 Qué se comprueba y cuándo
+### 9.2 What is checked and when
 
-| Momento | Qué se comprueba |
-|---------|------------------|
-| Sin ejecutar (`nex check`) | Que cada condición esté bien formada: nombres visibles, tipos correctos, resultado `Bool` |
-| Al ejecutar, en cada llamada | `requires`: después de asignar los argumentos y **antes** de ejecutar el cuerpo |
-| Al ejecutar, en cada llamada | `ensures`: **después** de calcular el valor de retorno, antes de entregarlo a quien llamó |
+| Moment | What is checked |
+|--------|-----------------|
+| Without running (`nex check`) | That every condition is well formed: visible names, correct types, `Bool` result |
+| When running, on every call | `requires`: after assigning the arguments and **before** running the body |
+| When running, on every call | `ensures`: **after** computing the return value, before handing it to the caller |
 
-Si la condición es falsa, el programa se detiene con un diagnóstico de contrato:
+If the condition is false, the program stops with a contract diagnostic:
 
-- **`E4001` Precondition violated.** La posición señalada es **la llamada**: quien llama no cumplió
-  lo que la función exige. El diagnóstico muestra la cláusula incumplida y los valores de los
-  argumentos. El cuerpo de la función no llega a ejecutarse.
-- **`E4002` Postcondition violated.** La posición señalada es **la cláusula `ensures`**: la función
-  no cumplió lo que promete. El diagnóstico muestra el valor devuelto y los argumentos.
+- **`E4001` Precondition violated.** The position pointed at is **the call**: the caller did not meet
+  what the function requires. The diagnostic shows the broken clause and the values of the
+  arguments. The body of the function never runs.
+- **`E4002` Postcondition violated.** The position pointed at is **the `ensures` clause**: the function
+  did not meet what it promises. The diagnostic shows the returned value and the arguments.
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -1360,30 +1360,30 @@ contract error[E4001]: Precondition violated
 error: program.nex: the program stopped because a contract was broken
 ```
 
-Si evaluar la condición produce por sí mismo un error de ejecución (por ejemplo, una división por
-cero dentro de la condición), el error que se comunica es ese (`E3xxx`), no una violación de
-contrato.
+If evaluating the condition itself produces a runtime error (for example, a division by
+zero inside the condition), the error reported is that one (`E3xxx`), not a contract
+violation.
 
-### 9.3 Garantías que **no** ofrece
+### 9.3 Guarantees it does **not** give
 
-- **No hay verificación estática de contratos.** `nex check` comprueba los tipos de las
-  condiciones, no que se cumplan. Un programa que pasa `nex check` puede incumplir un contrato al
-  ejecutarse. `nex check` nunca afirma que un contrato se cumple.
-- Un contrato solo se comprueba **en las llamadas que realmente se ejecutan**. Un contrato que
-  ninguna ejecución ha incumplido no está demostrado.
-- No se comprueba que las condiciones sean "puras": una condición puede llamar a una función que
-  use `print`.
-- Los contratos no se pueden desactivar: se comprueban siempre.
+- **There is no static verification of contracts.** `nex check` checks the types of the
+  conditions, not that they hold. A program that passes `nex check` can break a contract when
+  it runs. `nex check` never claims that a contract holds.
+- A contract is only checked **on the calls that actually run**. A contract that
+  no run has broken is not proven.
+- It is not checked that conditions are "pure": a condition can call a function that
+  uses `print`.
+- Contracts cannot be turned off: they are always checked.
 
-Desde la versión 0.3 la sintaxis de los contratos es estable: las cláusulas van al principio del
-cuerpo, el valor devuelto se llama `result` y la explicación va tras una coma. Los motivos están en
-la [decisión 0007](decisions/0007-contratos-estables-y-tipos-refinados.md).
+Since version 0.3 the syntax of contracts is stable: the clauses go at the beginning of the
+body, the returned value is called `result` and the explanation goes after a comma. The reasons are in
+[decision 0007](decisions/0007-contratos-estables-y-tipos-refinados.md).
 
-### 9.4 Ejemplos (`example`)
+### 9.4 Examples (`example`)
 
-Un ejemplo es una cláusula más del principio del cuerpo, junto a `requires` y `ensures`: dice qué
-resultado concreto da la función con unas entradas concretas. La definición completa (estados,
-formato del informe, códigos de salida) está en la [decisión 0008](decisions/0008-ejemplos-y-nex-test.md).
+An example is one more clause at the beginning of the body, next to `requires` and `ensures`: it says what
+concrete result the function gives with some concrete inputs. The complete definition (statuses,
+report format, exit codes) is in [decision 0008](decisions/0008-ejemplos-y-nex-test.md).
 
 ```text
 fn double(n: Int) -> Int {
@@ -1393,25 +1393,25 @@ fn double(n: Int) -> Int {
 }
 ```
 
-- La expresión es de tipo `Bool` (`E2011`) y puede llevar su explicación tras una coma.
-- **Tiene que contener una llamada propia**: una llamada a su función escrita en la propia expresión
-  (`double(2)`, también anidada, como en `double(double(1))`). Sin ella, `E2020`. Una llamada que
-  solo ocurre dentro de otra función no cuenta.
-- No ve los parámetros ni `result` (`E2005`): sus entradas y el resultado esperado se escriben como
-  valores. Puede usar cualquier función del programa, las integradas y comprobaciones `Tipo(x)`.
-- **El análisis nunca evalúa un ejemplo.** `nex check`, `nex inspect`, `nex context` y `nex symbols`
-  comprueban que esté bien escrito y nada más; las llamadas de un ejemplo no forman parte del grafo
-  de llamadas de la función. `nex run` los ignora.
-- **Solo `nex test` los evalúa**, cada uno en un intérprete nuevo, comprobando los contratos de todas
-  las funciones que se ejecutan. Un ejemplo termina en `passed` (vale `true`), `failed` (vale
-  `false`: `E4004`, categoría `test`) o `error` (un error de ejecución o una regla incumplida, que
-  conserva su código y gana una nota con el ejemplo que lo provocó).
+- The expression is of type `Bool` (`E2011`) and can carry its explanation after a comma.
+- **It has to contain a call of its own**: a call to its function written in the expression itself
+  (`double(2)`, also nested, as in `double(double(1))`). Without it, `E2020`. A call that
+  only happens inside another function does not count.
+- It does not see the parameters or `result` (`E2005`): its inputs and the expected result are written as
+  values. It can use any function of the program, the built-in ones and `Type(x)` checks.
+- **The analysis never evaluates an example.** `nex check`, `nex inspect`, `nex context` and `nex symbols`
+  check that it is well written and nothing more; the calls of an example are not part of the call
+  graph of the function. `nex run` ignores them.
+- **Only `nex test` evaluates them**, each one in a fresh interpreter, checking the contracts of all
+  the functions that run. An example ends as `passed` (it is `true`), `failed` (it is
+  `false`: `E4004`, category `test`) or `error` (a runtime error or a broken rule, which
+  keeps its code and gains a note with the example that caused it).
 
-### 9.5 Bucles: `while`, `invariant` y `decreases`
+### 9.5 Loops: `while`, `invariant` and `decreases`
 
-Un bucle repite su cuerpo mientras su condición es `true`. Como una función, declara al principio
-de su cuerpo los requisitos que lo hacen correcto, y el intérprete los comprueba en cada vuelta
-([decisión 0010](decisions/0010-var-y-while.md)):
+A loop repeats its body while its condition is `true`. Like a function, it declares at the beginning
+of its body the requirements that make it correct, and the interpreter checks them on every iteration
+([decision 0010](decisions/0010-var-y-while.md)):
 
 <!-- nex:run -->
 ```nex
@@ -1438,35 +1438,35 @@ fn main() -> Void {
 50005000
 ```
 
-| Cláusula | Cuántas | Qué declara | Tipo |
-|----------|---------|-------------|------|
-| `decreases` | **Exactamente una** | La **medida**: un entero que nunca baja de 0 y disminuye en cada vuelta. Es la razón por la que el bucle termina | `Int` |
-| `invariant` | Cero o más | Una condición que se cumple antes de cada evaluación de la condición del bucle: al llegar, después de cada vuelta y, por tanto, al salir | `Bool` |
+| Clause | How many | What it declares | Type |
+|--------|----------|------------------|------|
+| `decreases` | **Exactly one** | The **measure**: an integer that never goes below 0 and decreases on every iteration. It is the reason why the loop ends | `Int` |
+| `invariant` | Zero or more | A condition that holds before every evaluation of the loop condition: on arrival, after every iteration and, therefore, on exit | `Bool` |
 
-Reglas:
+Rules:
 
-- **Todo `while` declara su medida.** Sin `decreases`, o con más de una, es el error `E2021`.
-- La condición del bucle es `Bool` (`E2011`), y la medida, `Int` (`E2011`).
-- Las cláusulas ven lo que es visible donde está el bucle (parámetros, `let`, `var`), no lo que
-  declara su cuerpo. Llevan una explicación opcional tras una coma, como los contratos.
-- Cada vuelta abre un ámbito nuevo: lo declarado en el cuerpo existe solo durante esa vuelta. Lo que
-  tiene que sobrevivir entre vueltas se declara con `var` antes del bucle.
-- Un `return` dentro del cuerpo termina la función.
-- Las vueltas no son llamadas: el bucle no añade una llamada y no consume el límite de 1000, aunque
-  las llamadas dentro del cuerpo sí cuentan.
-- No existen `break` ni `continue` (siguen reservadas).
+- **Every `while` declares its measure.** Without `decreases`, or with more than one, it is the error `E2021`.
+- The condition of the loop is `Bool` (`E2011`), and the measure, `Int` (`E2011`).
+- The clauses see what is visible where the loop is (parameters, `let`, `var`), not what
+  its body declares. They carry an optional explanation after a comma, like contracts.
+- Every iteration opens a new scope: what is declared in the body exists only during that iteration. What
+  has to survive between iterations is declared with `var` before the loop.
+- A `return` inside the body ends the function.
+- Iterations are not calls: the loop does not add a call and does not use up the limit of 1000, although
+  the calls inside the body do count.
+- There is no `break` or `continue` (they remain reserved).
 
-Cada vez que se ejecuta un bucle:
+Every time a loop runs:
 
-1. Se comprueban los `invariant`, en orden. Uno falso detiene el programa: **`E4005`**.
-2. Se evalúa la condición. Si es `false`, el bucle termina.
-3. Se evalúa la medida. Si es negativa, o no es estrictamente menor que en la vuelta anterior de esa
-   misma ejecución del bucle, el programa se detiene: **`E4006`**.
-4. Se ejecuta el cuerpo y se vuelve al paso 1.
+1. The `invariant` clauses are checked, in order. A false one stops the program: **`E4005`**.
+2. The condition is evaluated. If it is `false`, the loop ends.
+3. The measure is evaluated. If it is negative, or it is not strictly smaller than in the previous iteration of that
+   same run of the loop, the program stops: **`E4006`**.
+4. The body runs and the loop goes back to step 1.
 
-Así, **todo bucle termina, o se detiene con un diagnóstico que dice por qué no lo hacía**: una medida
-entera que no baja de 0 no puede disminuir para siempre. No hay límites de tiempo: el mismo programa
-da siempre el mismo resultado. El diagnóstico dice en qué vuelta ocurrió y con qué valores:
+So **every loop ends, or stops with a diagnostic that says why it would not**: an integer measure
+that does not go below 0 cannot decrease forever. There are no time limits: the same program
+always gives the same result. The diagnostic says in which iteration it happened and with which values:
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -1503,19 +1503,19 @@ contract error[E4006]: Loop measure did not decrease
 error: program.nex: the program stopped because a contract was broken
 ```
 
-Cualquier otro error que se produzca dentro de un bucle (`E3xxx`, `E4xxx`) gana una nota por cada
-bucle que lo contiene, del más interior al más exterior: `In turn 3 of the loop at line 6.`
+Any other error that happens inside a loop (`E3xxx`, `E4xxx`) gains a note for every
+loop that contains it, from the innermost to the outermost: `In turn 3 of the loop at line 6.`
 
-**Lo que no garantiza.** Que un bucle termine pronto: una medida inicial de mil millones permite mil
-millones de vueltas. Que la medida y los invariantes sean los adecuados: se comprueba lo escrito, en
-las vueltas que se ejecutan. Nada de esto se demuestra sin ejecutar.
+**What it does not guarantee.** That a loop ends soon: an initial measure of a billion allows a billion
+iterations. That the measure and the invariants are the right ones: what is written is checked, on
+the iterations that run. None of this is proven without running.
 
-### 9.6 Bucles `for` sobre listas
+### 9.6 `for` loops over lists
 
-Un `for` recorre una lista inmutable y declara el nombre que toma cada elemento. La parte
-implementada la acepta la [decisión 0013](decisions/0013-listas-y-for.md); la
-[0012](decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) sigue siendo la
-propuesta para el resto:
+A `for` goes through an immutable list and declares the name that each element takes. The
+implemented part is accepted by [decision 0013](decisions/0013-listas-y-for.md);
+[0012](decisions/0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) is still the
+proposal for the rest:
 
 <!-- nex:run -->
 ```nex
@@ -1537,114 +1537,114 @@ fn main() -> Void {
 10
 ```
 
-La lista se escribe con corchetes y su tipo dice el tipo de los elementos: `[1, 2, 3]` es
-`List[Int]`. Una lista no cambia: `List.append(xs, x)` y `List.concat(xs, ys)` construyen una lista
-nueva. La sintaxis y los literales están en la sección 4.5, y las funciones en la 8.2.
+The list is written with square brackets and its type gives the type of the elements: `[1, 2, 3]` is
+`List[Int]`. A list does not change: `List.append(xs, x)` and `List.concat(xs, ys)` build a new
+list. The syntax and the literals are in section 4.5, and the functions in 8.2.
 
-Reglas:
+Rules:
 
-- **El iterable se evalúa una vez**, antes de la primera comprobación de invariantes y de cualquier
-  vuelta, y debe ser `List[T]` (`E2011`). No se recorre un `Text` ni un `Int`, y no hay `for` sobre
-  rangos. Una lista vacía literal como iterable (`for x in []`) no tiene tipo esperado y es `E2011`;
-  para recorrer una lista vacía se usa una variable anotada:
-  `let xs: List[Int] = []` y `for x in xs`.
-- **El iterador es inmutable y de tipo `T`.** Se declara en el mismo `for`, no antes, y no puede
-  recibir un valor nuevo (`E2007`). Tampoco puede ocultar un nombre visible (`E2006`). No es visible
-  después del bucle. Cada vuelta abre un entorno nuevo: lo que el cuerpo declara existe solo durante
-  esa vuelta, y las asignaciones a una `var` exterior sí se conservan.
-- **No lleva `decreases`.** La lista es finita por construcción; un `decreases` en un `for` es el
-  error `E2022`. Un `for` puede declarar cero o más `invariant`, con la misma semántica que en un
-  `while`: se comprueban antes de cada vuelta y una vez después de la última. En una lista vacía se
-  comprueba una vez, antes de la primera vuelta que no llega a ejecutarse; no hay una comprobación
-  adicional separada. Un invariante debe ser `Bool` (`E2011`) y, si es falso, el programa se detiene
-  con `E4005`.
-- Las cláusulas ven lo que es visible donde está el `for`, nunca el iterador.
-- Un `return` dentro del cuerpo termina la función. El análisis de rutas no considera que un `for`
-  siempre devuelve, aunque todas sus vueltas contengan un `return`: si el bucle es la última
-  sentencia, la función necesita un `return` después.
-- No hay `break` ni `continue`: siguen reservadas (`E1103`).
-- Las vueltas no son llamadas: el bucle no añade una llamada y no consume el límite de 1000, aunque
-  las llamadas dentro del cuerpo sí cuentan.
+- **The iterable is evaluated once**, before the first check of the invariants and before any
+  iteration, and it must be `List[T]` (`E2011`). A `Text` or an `Int` cannot be iterated, and there is no `for` over
+  ranges. A literal empty list as the iterable (`for x in []`) has no expected type and is `E2011`;
+  to go through an empty list, use an annotated variable:
+  `let xs: List[Int] = []` and `for x in xs`.
+- **The iterator is immutable and of type `T`.** It is declared in the `for` itself, not before, and it cannot
+  receive a new value (`E2007`). It cannot shadow a visible name either (`E2006`). It is not visible
+  after the loop. Every iteration opens a new environment: what the body declares exists only during
+  that iteration, and assignments to an outer `var` are kept.
+- **It has no `decreases`.** The list is finite by construction; a `decreases` in a `for` is the
+  error `E2022`. A `for` can declare zero or more `invariant` clauses, with the same semantics as in a
+  `while`: they are checked before every iteration and once after the last one. On an empty list they are
+  checked once, before the first iteration, which never runs; there is no separate additional
+  check. An invariant must be `Bool` (`E2011`) and, if it is false, the program stops
+  with `E4005`.
+- The clauses see what is visible where the `for` is, never the iterator.
+- A `return` inside the body ends the function. The path analysis does not consider that a `for`
+  always returns, even if all its iterations contain a `return`: if the loop is the last
+  statement, the function needs a `return` after it.
+- There is no `break` or `continue`: they remain reserved (`E1103`).
+- Iterations are not calls: the loop does not add a call and does not use up the limit of 1000, although
+  the calls inside the body do count.
 
-**Lo que no garantiza.** Que el cuerpo termine pronto: una lista enorme tarda lo que tarda. El
-playground impone un tiempo máximo; `nex run` no. Que los invariantes sean los adecuados: se
-comprueban al ejecutar las vueltas que ocurren, no se demuestran.
+**What it does not guarantee.** That the body ends soon: a huge list takes as long as it takes. The
+playground imposes a maximum time; `nex run` does not. That the invariants are the right ones: they are
+checked on the iterations that run, they are not proven.
 
-## 10. Errores: antes de ejecutar y durante la ejecución
+## 10. Errors: before running and while running
 
-### 10.1 Etapas
+### 10.1 Stages
 
-La herramienta procesa un programa en cuatro etapas. Cada una solo se realiza si la anterior no
-encontró errores:
+The tool processes a program in four stages. Each one only runs if the previous one did not
+find errors:
 
-| Etapa | Qué hace | Categoría de sus errores |
-|-------|----------|--------------------------|
-| 1. Análisis léxico | Divide el texto en tokens | `lexical` |
-| 2. Análisis sintáctico | Construye el árbol de sintaxis (AST) | `syntax` |
-| 3. Análisis estático | Comprueba nombres, ámbitos, tipos y rutas de retorno | `semantic`, `type` |
-| 4. Ejecución | Recorre el AST | `runtime`, `contract`; con `nex test`, también `test` |
+| Stage | What it does | Category of its errors |
+|-------|--------------|------------------------|
+| 1. Lexical analysis | Splits the text into tokens | `lexical` |
+| 2. Syntax analysis | Builds the syntax tree (AST) | `syntax` |
+| 3. Static analysis | Checks names, scopes, types and return paths | `semantic`, `type` |
+| 4. Execution | Walks the AST | `runtime`, `contract`; with `nex test`, also `test` |
 
-`nex check` y `nex inspect` realizan las etapas 1 a 3 y **no ejecutan el programa**: ninguna
-sentencia ni ninguna función se ejecuta. Lo único que la etapa 3 evalúa son las condiciones de los
-tipos refinados sobre las constantes escritas en el código (sección 4.4). Esas condiciones solo
-pueden usar `value`, literales, operadores y conversiones integradas, no llaman a funciones del
-programa, y el trabajo total está acotado (`E2019`). Tampoco evalúan los ejemplos (sección 9.4).
-`nex run` realiza las cuatro etapas, y nunca inicia un programa que tenga algún error de las etapas
-1 a 3. `nex test` también, pero en la etapa 4 evalúa los ejemplos en lugar de `main`, y en la etapa 3
-no exige `main`.
+`nex check` and `nex inspect` run stages 1 to 3 and **do not run the program**: no
+statement and no function runs. The only thing stage 3 evaluates is the conditions of
+refined types on the constants written in the code (section 4.4). Those conditions can only
+use `value`, literals, operators and built-in conversions, they do not call functions of the
+program, and the total work is bounded (`E2019`). They do not evaluate examples either (section 9.4).
+`nex run` runs the four stages, and never starts a program that has any error from stages
+1 to 3. `nex test` does too, but in stage 4 it evaluates the examples instead of `main`, and in stage 3
+it does not require `main`.
 
-### 10.2 Lo que se detecta antes de ejecutar
+### 10.2 What is detected before running
 
-Todo lo siguiente lo comunica `nex check`, sin ejecutar una sola sentencia:
+All of the following is reported by `nex check`, without running a single statement:
 
-- Caracteres, números, textos y escapes mal escritos.
-- Código que no sigue la gramática.
-- Ausencia de `main`, funciones duplicadas, parámetros o declaraciones no válidas.
-- Nombres que no existen, nombres declarados dos veces, asignaciones a variables `let`, a
-  parámetros o al iterador de un `for`.
-- Llamadas a funciones inexistentes o con un número de argumentos incorrecto.
-- **Todos los errores de tipos**: anotaciones, asignaciones, operadores, argumentos, valores de
-  retorno, condiciones, condiciones de contratos y de bucles, medidas y uso de `Void` como valor.
-- Bucles `while` sin medida, o con más de una, y un `decreases` en un `for`.
-- Declaraciones de tipos refinados mal formadas, y **toda constante que no cumple la condición del
-  tipo refinado donde se usa** (`E2017`).
-- Funciones que pueden terminar sin `return`, y código inalcanzable tras un `return`.
-- Valores calculados y nunca usados.
+- Badly written characters, numbers, texts and escapes.
+- Code that does not follow the grammar.
+- A missing `main`, duplicate functions, invalid parameters or declarations.
+- Names that do not exist, names declared twice, assignments to `let` variables, to
+  parameters or to the iterator of a `for`.
+- Calls to functions that do not exist or with a wrong number of arguments.
+- **All type errors**: annotations, assignments, operators, arguments, return
+  values, conditions, conditions of contracts and of loops, measures and use of `Void` as a value.
+- `while` loops without a measure, or with more than one, and a `decreases` in a `for`.
+- Badly formed refined type declarations, and **every constant that does not meet the condition of the
+  refined type where it is used** (`E2017`).
+- Functions that can end without `return`, and unreachable code after a `return`.
+- Values that are computed and never used.
 
-### 10.3 Lo que solo puede detectarse al ejecutar
+### 10.3 What can only be detected when running
 
-Estas propiedades dependen de los valores calculados y **no se comprueban estáticamente**; el
-análisis estático no afirma nada sobre ellas:
+These properties depend on computed values and **are not checked statically**; the
+static analysis claims nothing about them:
 
-| Error | Código |
-|-------|--------|
-| División por cero | `E3001` |
-| Resultado `Int` fuera de rango | `E3002` |
-| Resultado `Float` fuera de rango | `E3003` |
-| Más de 1000 llamadas anidadas (recursividad sin fin) | `E3004` |
-| `to_int` de un valor que no cabe en un `Int` | `E3005` |
-| Un `Text` más largo que el límite del entorno, si este fija uno | `E3006` |
-| El programa agota la memoria disponible | `E3007` |
-| Condición `requires` falsa, también la de una función de un tipo (`Text.slice`, `Int.parse`, `List.get`…, sección 8) | `E4001` |
-| Condición `ensures` falsa | `E4002` |
-| Un valor comprobado con `Percent(x)` que no cumple la condición de su tipo | `E4003` |
-| Un `invariant` falso | `E4005` |
-| Una medida (`decreases`) negativa o que no disminuye | `E4006` |
+| Error | Code |
+|-------|------|
+| Division by zero | `E3001` |
+| `Int` result out of range | `E3002` |
+| `Float` result out of range | `E3003` |
+| More than 1000 nested calls (endless recursion) | `E3004` |
+| `to_int` of a value that does not fit in an `Int` | `E3005` |
+| A `Text` longer than the limit of the environment, if it sets one | `E3006` |
+| The program runs out of available memory | `E3007` |
+| A false `requires` condition, also that of a function of a type (`Text.slice`, `Int.parse`, `List.get`…, section 8) | `E4001` |
+| A false `ensures` condition | `E4002` |
+| A value checked with `Percent(x)` that does not meet the condition of its type | `E4003` |
+| A false `invariant` | `E4005` |
+| A measure (`decreases`) that is negative or does not decrease | `E4006` |
 
-El análisis no decide si un programa termina. Al ejecutarse, una recursividad sin fin se detiene con
-`E3004` y un bucle sin fin, con `E4006`.
+The analysis does not decide whether a program ends. When it runs, an endless recursion stops with
+`E3004` and an endless loop, with `E4006`.
 
-Estos son los **únicos** errores que puede producir la ejecución de un programa aceptado por
-`nex check`. Cuando se produce uno, el programa se detiene en ese punto: la salida ya escrita se
-conserva y no se ejecuta nada más.
+These are the **only** errors that running a program accepted by
+`nex check` can produce. When one happens, the program stops at that point: the output already written
+is kept and nothing else runs.
 
-## 11. Diagnósticos
+## 11. Diagnostics
 
-Todo error tiene un código estable, una categoría, un título fijo, una explicación concreta y,
-cuando existe, la posición exacta en el archivo. Las líneas y las columnas empiezan en 1; la
-columna cuenta caracteres (no bytes) y una tabulación cuenta como una columna.
+Every error has a stable code, a category, a fixed title, a concrete explanation and,
+when it exists, the exact position in the file. Lines and columns start at 1; the
+column counts characters (not bytes) and a tab counts as one column.
 
-### 11.1 Formato de texto
+### 11.1 Text format
 
 <!-- nex:check-fails -->
 ```nex
@@ -1664,117 +1664,117 @@ type error[E2011]: Type mismatch
 error: program.nex: check failed with 1 error
 ```
 
-- La primera línea es `<categoría> error[<código>]: <título>`.
-- La explicación concreta va junto al marcador `^`, que subraya el fragmento afectado.
-- Las líneas `= note:` dan información relacionada (dónde se declaró algo, la firma de una
-  función, la cadena de llamadas).
-- La línea `= hint:` sugiere una corrección. **Solo aparece cuando existe una regla que la
-  fundamenta**: una conversión que existe entre esos dos tipos, un nombre declarado muy parecido al
-  escrito, o la forma correcta de una construcción. Si no la hay, no se sugiere nada.
+- The first line is `<category> error[<code>]: <title>`.
+- The concrete explanation goes next to the `^` marker, which underlines the affected fragment.
+- The `= note:` lines give related information (where something was declared, the signature of a
+  function, the chain of calls).
+- The `= hint:` line suggests a fix. **It only appears when there is a rule that
+  supports it**: a conversion that exists between those two types, a declared name very similar to the
+  one written, or the correct form of a construct. If there is none, nothing is suggested.
 
-Los mensajes están en inglés. Un mismo archivo puede producir varios diagnósticos en una sola
-pasada: tras un error de sintaxis el analizador continúa en la sentencia o función siguiente, y el
-análisis estático comunica todos los errores independientes que encuentra. Cada etapa comunica
-como máximo 100 errores por archivo; al alcanzar ese número se detiene, y el resumen final del
-comando lo indica.
+Messages are in English. A single file can produce several diagnostics in one
+pass: after a syntax error the parser continues at the next statement or function, and the
+static analysis reports all the independent errors it finds. Every stage reports
+at most 100 errors per file; when it reaches that number it stops, and the final summary of the
+command says so.
 
-La última línea que escriben `nex check` y `nex run` cuando hay errores (`error: archivo: …`) es
-un resumen del comando, no un diagnóstico.
+The last line that `nex check` and `nex run` write when there are errors (`error: file: …`) is
+a summary of the command, not a diagnostic.
 
-### 11.2 Categorías
+### 11.2 Categories
 
-| Categoría | Significado | Se detecta |
-|-----------|-------------|------------|
-| `file` | El archivo no pudo cargarse | Antes de analizar |
-| `lexical` | El texto contiene algo que no es un token del lenguaje | Sin ejecutar |
-| `syntax` | Los tokens no siguen la gramática | Sin ejecutar |
-| `semantic` | Nombres, ámbitos o estructura del programa | Sin ejecutar |
-| `type` | Tipos | Sin ejecutar |
-| `runtime` | Depende de los valores calculados | Al ejecutar |
-| `contract` | Una regla que el programa declara se incumplió: `requires`, `ensures`, la condición de un tipo refinado, un `invariant` o una medida | Al ejecutar |
-| `test` | Un ejemplo evaluado por `nex test` resultó falso | Al ejecutar `nex test` |
+| Category | Meaning | Detected |
+|----------|---------|----------|
+| `file` | The file could not be loaded | Before analyzing |
+| `lexical` | The text contains something that is not a token of the language | Without running |
+| `syntax` | The tokens do not follow the grammar | Without running |
+| `semantic` | Names, scopes or structure of the program | Without running |
+| `type` | Types | Without running |
+| `runtime` | Depends on computed values | When running |
+| `contract` | A rule that the program declares was broken: `requires`, `ensures`, the condition of a refined type, an `invariant` or a measure | When running |
+| `test` | An example evaluated by `nex test` turned out false | When running `nex test` |
 
-### 11.3 Códigos de error
+### 11.3 Error codes
 
-Un código nunca cambia de significado. Si deja de usarse se retira, no se reutiliza.
+A code never changes its meaning. If it stops being used it is retired, not reused.
 
-| Código | Título | Categoría | Cuándo aparece |
-|--------|--------|-----------|----------------|
-| `E0001` | Cannot read file | `file` | El archivo no existe o no puede leerse |
-| `E0002` | File is not valid UTF-8 | `file` | El archivo no está codificado en UTF-8 |
-| `E1001` | Unexpected character | `lexical` | Un carácter que no pertenece al lenguaje (`;`, `'`, `!`, `@`…) |
-| `E1002` | Unterminated string | `lexical` | Un texto sin comilla de cierre en su línea |
-| `E1003` | Invalid escape sequence | `lexical` | Un escape desconocido, como `\q` |
-| `E1004` | Invalid number literal | `lexical` | Número mal escrito o fuera de rango: `007`, `1_`, `12abc` |
-| `E1005` | Unescaped '{' in string | `lexical` | Una `{` sin escapar dentro de un texto |
-| `E1101` | Unexpected token | `syntax` | El código no sigue la gramática; el mensaje dice qué se esperaba |
-| `E1102` | Unclosed block | `syntax` | Falta una `}` al llegar al final del archivo |
-| `E1103` | Reserved word | `syntax` | Se usa una palabra reservada para una versión futura |
-| `E1105` | Expression too deeply nested | `syntax` | Se superan los límites de anidamiento de la sección 3 |
-| `E1106` | Misplaced contract clause | `syntax` | `requires`, `ensures` o `example` fuera del principio del cuerpo de una función, o `invariant` o `decreases` fuera del principio del cuerpo de un bucle |
-| `E2001` | Missing main function | `semantic` | El programa no declara `main` |
-| `E2002` | Duplicate function | `semantic` | Dos funciones con el mismo nombre, o con el de una integrada |
-| `E2004` | Invalid return type | `type` | `main` declara un tipo de retorno distinto de `Void` |
-| `E2005` | Unknown variable | `semantic` | Se usa un nombre que no está declarado o no es visible |
-| `E2006` | Name already declared | `semantic` | Se declara un nombre que ya es visible, o el de una función |
-| `E2007` | Cannot reassign variable | `semantic` | Se intenta dar un valor nuevo a una variable declarada con `let`, a un parámetro o al iterador de un `for` |
-| `E2008` | Unknown function | `semantic` | Se llama a una función que no existe |
-| `E2009` | Wrong number of arguments | `type` | Una llamada no pasa tantos argumentos como parámetros hay |
-| `E2010` | Unused value | `semantic` | Un valor calculado que se pierde |
-| `E2011` | Type mismatch | `type` | Un tipo no es el que exige la regla correspondiente |
-| `E2012` | Invalid type | `type` | Un nombre que no es un tipo, `List` sin argumento, `Void` donde hace falta un tipo de valor, o un argumento de tipo que no existe |
-| `E2013` | Invalid parameter | `semantic` | `main` con parámetros, o un parámetro llamado `result` |
-| `E2014` | Missing return | `semantic` | Una función que devuelve un valor puede terminar sin `return` |
-| `E2015` | Unreachable code | `semantic` | Código situado después de un `return` |
-| `E2016` | Invalid type declaration | `semantic` | Un tipo refinado con nombre en minúscula, repetido o de un tipo integrado, una cadena de tipos sin fin, o una base que es una lista. También un registro con nombre inválido o repetido, un campo repetido, o un registro que se contiene a sí mismo |
-| `E2017` | Value outside refined type | `type` | Una constante usada como valor de un tipo refinado no cumple su condición |
-| `E2018` | Invalid refinement condition | `semantic` | La condición de un tipo refinado llama a una función del programa o comprueba otro tipo refinado |
-| `E2019` | Too many refinement checks | `semantic` | Comprobar las constantes contra sus tipos refinados supera el límite de trabajo del análisis (sección 4.4) |
-| `E2020` | Example without its function | `semantic` | Un ejemplo no contiene ninguna llamada a su función (sección 9.4) |
-| `E2021` | Missing loop measure | `semantic` | Un `while` sin `decreases`, o con más de uno (sección 9.5) |
-| `E2022` | Unsupported loop clause | `semantic` | Un `decreases` en un `for`, que no lo admite (sección 9.6) |
-| `E2023` | Invalid record construction | `type` | Una construcción de un registro a la que le falta un campo, le sobra uno o se le da dos veces el mismo (sección 4.6) |
-| `E2024` | Invalid field access | `type` | Se lee un campo de un valor que no es un registro, o de un registro que no tiene ese campo (sección 4.6) |
-| `E2025` | Cannot reassign a field | `semantic` | Se asigna a un campo de un registro, que es inmutable (sección 4.6) |
-| `E2026` | Missing capability declaration | `semantic` | Se lee o se escribe un archivo sin declararlo con `uses` (sección 8.3) |
-| `E2027` | Unknown module | `semantic` | Se usa el nombre de un módulo que el programa no importa (sección 7.6) |
-| `E2028` | Private name | `semantic` | Se usa de otro módulo un nombre que ese módulo no declara con `pub` (sección 7.6) |
-| `E2029` | Circular import | `semantic` | Los módulos se importan unos a otros, de forma que ninguno puede analizarse antes que el que necesita (sección 7.6) |
-| `E2030` | Module name clash | `semantic` | Dos archivos distintos se importan como el mismo módulo, porque tienen el mismo nombre (sección 7.6) |
-| `E3001` | Division by zero | `runtime` | División por cero |
-| `E3002` | Integer overflow | `runtime` | Un resultado `Int` fuera del rango de 64 bits |
-| `E3003` | Float result out of range | `runtime` | Un resultado `Float` demasiado grande |
-| `E3004` | Too many nested calls | `runtime` | Más de 1000 llamadas anidadas |
-| `E3005` | Conversion out of range | `runtime` | `to_int` de un `Float` que no cabe en un `Int` |
-| `E3006` | Text too long | `runtime` | Un `Text` construido con `+` supera el límite fijado por el entorno. `nex run` no fija ninguno; el playground sí |
-| `E3007` | Out of memory | `runtime` | El programa agota la memoria mientras se ejecuta. Sin posición ([decisión 0009](decisions/0009-memoria-agotada.md)) |
-| `E3008` | Permission denied | `runtime` | El programa intenta usar un archivo que no puede usar: no lo declara, no está permitido por quien lo ejecuta, o el entorno no admite archivos (sección 8.3) |
-| `E3009` | No more input | `runtime` | `input()` se llama cuando la entrada estándar ya se ha terminado (sección 8.3) |
-| `E3010` | File error | `runtime` | El archivo se podía usar, pero no se ha podido leer o escribir: no existe, no es un texto UTF-8, o el sistema operativo lo ha impedido |
-| `E3011` | Option has no value | `runtime` | `Option.unwrap` se llama con un `None`: la variante no lleva el valor (sección 8.4) |
-| `E3012` | Result is an error | `runtime` | `Result.unwrap` se llama con un `Err`: la variante no lleva el valor (sección 8.4) |
-| `E3013` | Result is not an error | `runtime` | `Result.error` se llama con un `Ok`: la variante no lleva el error (sección 8.4) |
-| `E4001` | Precondition violated | `contract` | Una condición `requires` es falsa en una llamada |
-| `E4002` | Postcondition violated | `contract` | Una condición `ensures` es falsa al terminar una función |
-| `E4003` | Refinement violated | `contract` | Un valor comprobado con `Tipo(x)` no cumple la condición del tipo refinado |
-| `E4005` | Loop invariant violated | `contract` | Un `invariant` es falso antes de una vuelta o después de la última de su bucle (sección 9.5 y 9.6) |
-| `E4006` | Loop measure did not decrease | `contract` | La medida de un bucle es negativa o no es menor que en la vuelta anterior (sección 9.5) |
-| `E4004` | Example failed | `test` | Un ejemplo evaluado por `nex test` vale `false` (sección 9.4) |
+| Code | Title | Category | When it appears |
+|------|-------|----------|-----------------|
+| `E0001` | Cannot read file | `file` | The file does not exist or cannot be read |
+| `E0002` | File is not valid UTF-8 | `file` | The file is not encoded in UTF-8 |
+| `E1001` | Unexpected character | `lexical` | A character that does not belong to the language (`;`, `'`, `!`, `@`…) |
+| `E1002` | Unterminated string | `lexical` | A text without a closing quote on its line |
+| `E1003` | Invalid escape sequence | `lexical` | An unknown escape, such as `\q` |
+| `E1004` | Invalid number literal | `lexical` | A badly written or out-of-range number: `007`, `1_`, `12abc` |
+| `E1005` | Unescaped '{' in string | `lexical` | An unescaped `{` inside a text |
+| `E1101` | Unexpected token | `syntax` | The code does not follow the grammar; the message says what was expected |
+| `E1102` | Unclosed block | `syntax` | A `}` is missing when the end of the file is reached |
+| `E1103` | Reserved word | `syntax` | A word reserved for a future version is used |
+| `E1105` | Expression too deeply nested | `syntax` | The nesting limits of section 3 are exceeded |
+| `E1106` | Misplaced contract clause | `syntax` | `requires`, `ensures` or `example` outside the beginning of the body of a function, or `invariant` or `decreases` outside the beginning of the body of a loop |
+| `E2001` | Missing main function | `semantic` | The program does not declare `main` |
+| `E2002` | Duplicate function | `semantic` | Two functions with the same name, or with that of a built-in one |
+| `E2004` | Invalid return type | `type` | `main` declares a return type other than `Void` |
+| `E2005` | Unknown variable | `semantic` | A name is used that is not declared or not visible |
+| `E2006` | Name already declared | `semantic` | A name is declared that is already visible, or that of a function |
+| `E2007` | Cannot reassign variable | `semantic` | An attempt to give a new value to a variable declared with `let`, to a parameter or to the iterator of a `for` |
+| `E2008` | Unknown function | `semantic` | A function that does not exist is called |
+| `E2009` | Wrong number of arguments | `type` | A call does not pass as many arguments as there are parameters |
+| `E2010` | Unused value | `semantic` | A computed value that is lost |
+| `E2011` | Type mismatch | `type` | A type is not the one the corresponding rule requires |
+| `E2012` | Invalid type | `type` | A name that is not a type, `List` without an argument, `Void` where a value type is needed, or a type argument that does not exist |
+| `E2013` | Invalid parameter | `semantic` | `main` with parameters, or a parameter named `result` |
+| `E2014` | Missing return | `semantic` | A function that returns a value can end without `return` |
+| `E2015` | Unreachable code | `semantic` | Code placed after a `return` |
+| `E2016` | Invalid type declaration | `semantic` | A refined type with a lowercase name, a repeated one or one of a built-in type, an endless chain of types, or a base that is a list. Also a record with an invalid or repeated name, a repeated field, or a record that contains itself |
+| `E2017` | Value outside refined type | `type` | A constant used as a value of a refined type does not meet its condition |
+| `E2018` | Invalid refinement condition | `semantic` | The condition of a refined type calls a function of the program or checks another refined type |
+| `E2019` | Too many refinement checks | `semantic` | Checking the constants against their refined types exceeds the work limit of the analysis (section 4.4) |
+| `E2020` | Example without its function | `semantic` | An example contains no call to its function (section 9.4) |
+| `E2021` | Missing loop measure | `semantic` | A `while` without `decreases`, or with more than one (section 9.5) |
+| `E2022` | Unsupported loop clause | `semantic` | A `decreases` in a `for`, which does not accept it (section 9.6) |
+| `E2023` | Invalid record construction | `type` | A construction of a record that is missing a field, has an extra one or is given the same one twice (section 4.6) |
+| `E2024` | Invalid field access | `type` | A field is read from a value that is not a record, or from a record that does not have that field (section 4.6) |
+| `E2025` | Cannot reassign a field | `semantic` | A field of a record, which is immutable, is assigned to (section 4.6) |
+| `E2026` | Missing capability declaration | `semantic` | A file is read or written without declaring it with `uses` (section 8.3) |
+| `E2027` | Unknown module | `semantic` | The name of a module that the program does not import is used (section 7.6) |
+| `E2028` | Private name | `semantic` | A name of another module is used that this module does not declare with `pub` (section 7.6) |
+| `E2029` | Circular import | `semantic` | Modules import each other, so that none can be analyzed before the one it needs (section 7.6) |
+| `E2030` | Module name clash | `semantic` | Two different files are imported as the same module, because they have the same name (section 7.6) |
+| `E3001` | Division by zero | `runtime` | Division by zero |
+| `E3002` | Integer overflow | `runtime` | An `Int` result out of the 64-bit range |
+| `E3003` | Float result out of range | `runtime` | A `Float` result that is too large |
+| `E3004` | Too many nested calls | `runtime` | More than 1000 nested calls |
+| `E3005` | Conversion out of range | `runtime` | `to_int` of a `Float` that does not fit in an `Int` |
+| `E3006` | Text too long | `runtime` | A `Text` built with `+` exceeds the limit set by the environment. `nex run` sets none; the playground does |
+| `E3007` | Out of memory | `runtime` | The program runs out of memory while it runs. No position ([decision 0009](decisions/0009-memoria-agotada.md)) |
+| `E3008` | Permission denied | `runtime` | The program tries to use a file it cannot use: it does not declare it, it is not allowed by whoever runs it, or the environment does not support files (section 8.3) |
+| `E3009` | No more input | `runtime` | `input()` is called when the standard input has already ended (section 8.3) |
+| `E3010` | File error | `runtime` | The file could be used, but it could not be read or written: it does not exist, it is not UTF-8 text, or the operating system prevented it |
+| `E3011` | Option has no value | `runtime` | `Option.unwrap` is called with a `None`: the variant does not carry the value (section 8.4) |
+| `E3012` | Result is an error | `runtime` | `Result.unwrap` is called with an `Err`: the variant does not carry the value (section 8.4) |
+| `E3013` | Result is not an error | `runtime` | `Result.error` is called with an `Ok`: the variant does not carry the error (section 8.4) |
+| `E4001` | Precondition violated | `contract` | A `requires` condition is false in a call |
+| `E4002` | Postcondition violated | `contract` | An `ensures` condition is false when a function ends |
+| `E4003` | Refinement violated | `contract` | A value checked with `Type(x)` does not meet the condition of the refined type |
+| `E4005` | Loop invariant violated | `contract` | An `invariant` is false before an iteration or after the last one of its loop (sections 9.5 and 9.6) |
+| `E4006` | Loop measure did not decrease | `contract` | The measure of a loop is negative or is not smaller than in the previous iteration (section 9.5) |
+| `E4004` | Example failed | `test` | An example evaluated by `nex test` is `false` (section 9.4) |
 
-Códigos retirados (existieron en la versión 0.1 y ya no se emiten):
+Retired codes (they existed in version 0.1 and are no longer emitted):
 
-| Código retirado | Título | Motivo |
-|-----------------|--------|--------|
-| E1104 | Unsupported syntax | Avisaba de que los parámetros y las anotaciones de tipo no existían; ahora existen |
-| E2003 | Unsupported function declaration | Avisaba de que solo podía declararse `main`; ahora se admiten funciones propias |
+| Retired code | Title | Reason |
+|--------------|-------|--------|
+| E1104 | Unsupported syntax | It warned that parameters and type annotations did not exist; now they exist |
+| E2003 | Unsupported function declaration | It warned that only `main` could be declared; now user functions are allowed |
 
-### 11.4 Formato JSON
+### 11.4 JSON format
 
-`nex check archivo.nex --format json` escribe un único documento JSON en la salida estándar.
-`nex run archivo.nex --format json` escribe el mismo documento en la salida de error, solo si el
-programa es inválido o falla.
+`nex check file.nex --format json` writes a single JSON document to the standard output.
+`nex run file.nex --format json` writes the same document to the standard error, only if the
+program is invalid or fails.
 
-Para el programa de la sección 11.1:
+For the program of section 11.1:
 
 <!-- nex:check-json -->
 ```nex
@@ -1810,52 +1810,52 @@ fn main() -> Void {
 }
 ```
 
-| Campo | Tipo | Significado |
-|-------|------|-------------|
-| `schema` | texto | Nombre y versión del formato |
-| `file` | texto | El archivo analizado, tal como se pasó al comando |
-| `ok` | booleano | `true` si no hay diagnósticos |
-| `diagnostics` | lista | Los diagnósticos, en el orden en que se encontraron |
-| `severity` | texto | Siempre `"error"` en esta versión |
-| `category` | texto | Una de las categorías de la sección 11.2 |
-| `code` | texto | Código estable (sección 11.3) |
-| `message` | texto | Título fijo del código |
-| `label` | texto | Explicación concreta de este caso |
-| `hint` | texto o `null` | Corrección sugerida, si existe una fundamentada |
-| `notes` | lista de textos | Información relacionada |
-| `line`, `column` | número o `null` | Inicio del fragmento señalado |
-| `end_line`, `end_column` | número o `null` | Final del fragmento (columna final excluida) |
+| Field | Type | Meaning |
+|-------|------|---------|
+| `schema` | text | Name and version of the format |
+| `file` | text | The analyzed file, as it was passed to the command |
+| `ok` | boolean | `true` if there are no diagnostics |
+| `diagnostics` | list | The diagnostics, in the order in which they were found |
+| `severity` | text | Always `"error"` in this version |
+| `category` | text | One of the categories of section 11.2 |
+| `code` | text | Stable code (section 11.3) |
+| `message` | text | Fixed title of the code |
+| `label` | text | Concrete explanation of this case |
+| `hint` | text or `null` | Suggested fix, if there is a well-founded one |
+| `notes` | list of texts | Related information |
+| `line`, `column` | number or `null` | Start of the fragment pointed at |
+| `end_line`, `end_column` | number or `null` | End of the fragment (end column excluded) |
 
-Los cuatro campos de posición son `null` cuando el diagnóstico no se refiere a un punto del archivo
-(por ejemplo, `E2001`). El número de versión de `schema` solo cambia si un campo se elimina, se
-renombra o cambia de significado; añadir campos no lo cambia.
+The four position fields are `null` when the diagnostic does not refer to a point in the file
+(for example, `E2001`). The version number of `schema` only changes if a field is removed,
+renamed or changes its meaning; adding fields does not change it.
 
-La representación del programa (`nex inspect`) está descrita en
+The representation of the program (`nex inspect`) is described in
 [`inspect-schema.md`](inspect-schema.md).
 
-### 11.5 Códigos de salida de `nex`
+### 11.5 Exit codes of `nex`
 
-| Código | Significado |
-|--------|-------------|
-| `0` | Correcto |
-| `1` | El programa tiene errores léxicos, sintácticos, semánticos o de tipos |
-| `2` | Uso incorrecto de la línea de comandos |
-| `3` | El programa falló durante la ejecución |
-| `4` | El archivo no pudo leerse |
-| `5` | El programa incumplió durante la ejecución una regla que declara: un contrato, la condición de un tipo refinado, un invariante o la medida de un bucle |
-| `6` | `nex test`: algún ejemplo no pasó, o no había ningún ejemplo que evaluar |
-| `70` | Error interno de NEXORA (un fallo de la herramienta, no del programa). Un programa que agota la memoria al ejecutarse no da `70`, sino el diagnóstico `E3007` ([decisión 0009](decisions/0009-memoria-agotada.md)) |
-| `130` | Interrumpido con Ctrl+C |
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | The program has lexical, syntax, semantic or type errors |
+| `2` | Wrong use of the command line |
+| `3` | The program failed while running |
+| `4` | The file could not be read |
+| `5` | While running, the program broke a rule that it declares: a contract, the condition of a refined type, an invariant or the measure of a loop |
+| `6` | `nex test`: some example did not pass, or there was no example to evaluate |
+| `70` | Internal error of NEXORA (a failure of the tool, not of the program). A program that runs out of memory while running does not give `70`, but the diagnostic `E3007` ([decision 0009](decisions/0009-memoria-agotada.md)) |
+| `130` | Interrupted with Ctrl+C |
 
-Los comandos, sus opciones y sus formatos de salida están descritos en la
-[referencia de la CLI](cli-reference.md).
+The commands, their options and their output formats are described in the
+[CLI reference](cli-reference.md).
 
-## 12. Ejemplos
+## 12. Examples
 
-Los programas de esta sección, y los de las secciones anteriores que incluyen una función `main`,
-se ejecutan en las pruebas automatizadas; la salida mostrada es la real.
+The programs of this section, and those of the previous sections that include a `main` function,
+are run by the automated tests; the output shown is the real one.
 
-### 12.1 Programas válidos
+### 12.1 Valid programs
 
 <!-- nex:run -->
 ```nex
@@ -1898,163 +1898,163 @@ factorial: 3628800
 true
 ```
 
-En [`examples/`](../examples/README.md) hay más programas, todos ejecutados por las pruebas:
+In [`examples/`](../examples/README.md) there are more programs, all of them run by the tests:
 
-| Archivo | Qué muestra | `nex run` termina con |
-|---------|-------------|-----------------------|
-| `hello.nex` | El primer programa | `0` |
-| `variables.nex` | Variables, textos, bloques y ámbitos | `0` |
-| `arithmetic.nex` | Precedencia, división entera y decimal, límites de `Int` | `0` |
-| `types.nex` | Inferencia, anotaciones, comparaciones, lógica y conversiones | `0` |
-| `functions.nex` | Funciones, `if`/`else`, recursividad | `0` |
-| `contracts.nex` | Contratos que se cumplen | `0` |
-| `loops.nex` | Variables `var` y bucles con su medida y sus invariantes | `0` |
-| `lists.nex` | Listas inmutables `List[T]`, sus funciones y un `for` con invariantes | `0` |
-| `invalid/syntax_error.nex` | Errores de sintaxis (incorrecto a propósito) | `1` |
-| `invalid/name_errors.nex` | Errores de nombres y estructura (incorrecto a propósito) | `1` |
-| `invalid/type_errors.nex` | Errores de tipos (incorrecto a propósito) | `1` |
-| `failing/runtime_error.nex` | Un error que solo aparece al ejecutar | `3` |
-| `failing/contract_violation.nex` | Un contrato incumplido al ejecutar | `5` |
-| `failing/loop_measure.nex` | Un bucle que no terminaría: su medida deja de disminuir | `5` |
+| File | What it shows | `nex run` ends with |
+|------|---------------|---------------------|
+| `hello.nex` | The first program | `0` |
+| `variables.nex` | Variables, texts, blocks and scopes | `0` |
+| `arithmetic.nex` | Precedence, integer and decimal division, limits of `Int` | `0` |
+| `types.nex` | Inference, annotations, comparisons, logic and conversions | `0` |
+| `functions.nex` | Functions, `if`/`else`, recursion | `0` |
+| `contracts.nex` | Contracts that hold | `0` |
+| `loops.nex` | `var` variables and loops with their measure and their invariants | `0` |
+| `lists.nex` | Immutable lists `List[T]`, their functions and a `for` with invariants | `0` |
+| `invalid/syntax_error.nex` | Syntax errors (wrong on purpose) | `1` |
+| `invalid/name_errors.nex` | Name and structure errors (wrong on purpose) | `1` |
+| `invalid/type_errors.nex` | Type errors (wrong on purpose) | `1` |
+| `failing/runtime_error.nex` | An error that only appears when running | `3` |
+| `failing/contract_violation.nex` | A contract broken while running | `5` |
+| `failing/loop_measure.nex` | A loop that would not end: its measure stops decreasing | `5` |
 
-### 12.2 Programas inválidos
+### 12.2 Invalid programs
 
-| Código | Error | Motivo |
-|--------|-------|--------|
-| `let = "Hello"` | `E1101` | Falta el nombre de la variable |
-| `let x = (1 + 2` | `E1101` | Falta `)` |
-| `let x = 1; let y = 2` | `E1001` | `;` no existe en el lenguaje |
-| `let x = 1 < 2 < 3` | `E1101` | Las comparaciones no se encadenan |
-| `break` | `E1103` | `break` es una palabra reservada |
-| `for x in 3 { }` | `E2011` | Un `for` solo recorre una `List[T]` |
-| `for x in xs { decreases 1 }` | `E2022` | Un `for` no lleva medida |
-| `for x in xs { x = 1 }` | `E2007` | El iterador de un `for` es inmutable |
-| `print(total)` sin declarar `total` | `E2005` | Variable desconocida |
-| `let x = 1` y después `let x = 2` | `E2006` | El nombre ya está declarado |
-| `let x = 1` y después `x = 2` | `E2007` | Una variable `let` no cambia; se declara con `var` |
-| `while i < n { i = i + 1 }` | `E2021` | Falta la medida: `decreases n - i` |
-| `let age: Int = "twenty"` | `E2011` | Se esperaba `Int` y el valor es `Text` |
-| `let total = 10 + 2.5` | `E2011` | `Int` y `Float` no se mezclan |
-| `let ok = true + 1` | `E2011` | Un `Bool` no admite aritmética |
-| `let same = 1 == 1.0` | `E2011` | Solo se comparan valores del mismo tipo |
-| `let xs = []` | `E2011` | Una lista vacía necesita un tipo esperado |
-| `let xs = [1, "a"]` | `E2011` | Todos los elementos de una lista tienen el mismo tipo |
-| `let xs: List[Int] = [1]` y `let ys: List[Text] = xs` | `E2011` | Los argumentos de `List` son invariantes |
-| `if count { }` con `count` de tipo `Int` | `E2011` | La condición debe ser `Bool` |
-| `let x: String = "a"` | `E2012` | El tipo se llama `Text` |
-| `let xs: List = []` | `E2012` | `List` necesita un argumento de tipo |
-| `type NonEmpty = List[Int] where value == value` | `E2016` | Un tipo refinado no puede tener una lista como base |
-| `print(read_file("datos.txt"))` sin `uses read` | `E2026` | El programa no declara que necesita ese archivo |
-| `print(input())` sin entrada que leer | `E3009` | La entrada estándar se ha terminado |
-| `type Point = { x: Int, y: Int }` y `Point(x: 1)` | `E2023` | Falta el campo `y` |
-| `type Point = { x: Int }` y `Point(x: 1, y: 2)` | `E2023` | El registro no tiene ningún campo `y` |
-| `type Point = { x: Int }` y `Point(x: 1, x: 2)` | `E2023` | El campo `x` está dado dos veces |
-| `type Point = { x: Int }` y `Point(x: "a")` | `E2011` | El campo `x` es de tipo `Int` |
-| `type Point = { x: Int }` y `let p = Point(x: 1)` y después `p.y` | `E2024` | El registro no tiene ningún campo `y` |
-| `type Point = { x: Int }` y `let p = Point(x: 1)` y después `p.x = 2` | `E2025` | Un registro es inmutable |
-| `type A = { a: A }` | `E2016` | Un registro no puede contenerse a sí mismo |
-| `add(1)` con `add(a: Int, b: Int)` | `E2009` | Falta un argumento |
-| `add(1, "2")` | `E2011` | El segundo argumento debe ser `Int` |
-| `add(1, 2)` como sentencia | `E2010` | El valor devuelto no se usa |
-| `launch()` sin declarar `launch` | `E2008` | La función no existe |
-| Una función `-> Int` sin `return` en alguna ruta | `E2014` | Falta un `return` |
-| `return "x"` en una función `-> Int` | `E2011` | El valor devuelto no es del tipo declarado |
-| `requires n` con `n` de tipo `Int` | `E2011` | La condición de un contrato debe ser `Bool` |
-| `print(10 / 0)` | `E3001` | División por cero (se detecta al ejecutar) |
-| `divide(1.0, 0.0)` con `requires b != 0.0` | `E4001` | Contrato incumplido (se detecta al ejecutar) |
-| `List.get([1, 2], 2)` | `E4001` | Índice fuera de la lista (se detecta al ejecutar) |
-| Un archivo sin `fn main` | `E2001` | Falta el punto de entrada |
+| Code | Error | Reason |
+|------|-------|--------|
+| `let = "Hello"` | `E1101` | The name of the variable is missing |
+| `let x = (1 + 2` | `E1101` | `)` is missing |
+| `let x = 1; let y = 2` | `E1001` | `;` does not exist in the language |
+| `let x = 1 < 2 < 3` | `E1101` | Comparisons do not chain |
+| `break` | `E1103` | `break` is a reserved word |
+| `for x in 3 { }` | `E2011` | A `for` only goes through a `List[T]` |
+| `for x in xs { decreases 1 }` | `E2022` | A `for` has no measure |
+| `for x in xs { x = 1 }` | `E2007` | The iterator of a `for` is immutable |
+| `print(total)` without declaring `total` | `E2005` | Unknown variable |
+| `let x = 1` and then `let x = 2` | `E2006` | The name is already declared |
+| `let x = 1` and then `x = 2` | `E2007` | A `let` variable does not change; declare it with `var` |
+| `while i < n { i = i + 1 }` | `E2021` | The measure is missing: `decreases n - i` |
+| `let age: Int = "twenty"` | `E2011` | `Int` was expected and the value is `Text` |
+| `let total = 10 + 2.5` | `E2011` | `Int` and `Float` do not mix |
+| `let ok = true + 1` | `E2011` | A `Bool` does not allow arithmetic |
+| `let same = 1 == 1.0` | `E2011` | Only values of the same type are compared |
+| `let xs = []` | `E2011` | An empty list needs an expected type |
+| `let xs = [1, "a"]` | `E2011` | All the elements of a list have the same type |
+| `let xs: List[Int] = [1]` and `let ys: List[Text] = xs` | `E2011` | The arguments of `List` are invariant |
+| `if count { }` with `count` of type `Int` | `E2011` | The condition must be `Bool` |
+| `let x: String = "a"` | `E2012` | The type is called `Text` |
+| `let xs: List = []` | `E2012` | `List` needs a type argument |
+| `type NonEmpty = List[Int] where value == value` | `E2016` | A refined type cannot have a list as its base |
+| `print(read_file("data.txt"))` without `uses read` | `E2026` | The program does not declare that it needs that file |
+| `print(input())` with no input to read | `E3009` | The standard input has ended |
+| `type Point = { x: Int, y: Int }` and `Point(x: 1)` | `E2023` | The field `y` is missing |
+| `type Point = { x: Int }` and `Point(x: 1, y: 2)` | `E2023` | The record has no field `y` |
+| `type Point = { x: Int }` and `Point(x: 1, x: 2)` | `E2023` | The field `x` is given twice |
+| `type Point = { x: Int }` and `Point(x: "a")` | `E2011` | The field `x` is of type `Int` |
+| `type Point = { x: Int }` and `let p = Point(x: 1)` and then `p.y` | `E2024` | The record has no field `y` |
+| `type Point = { x: Int }` and `let p = Point(x: 1)` and then `p.x = 2` | `E2025` | A record is immutable |
+| `type A = { a: A }` | `E2016` | A record cannot contain itself |
+| `add(1)` with `add(a: Int, b: Int)` | `E2009` | An argument is missing |
+| `add(1, "2")` | `E2011` | The second argument must be `Int` |
+| `add(1, 2)` as a statement | `E2010` | The returned value is not used |
+| `launch()` without declaring `launch` | `E2008` | The function does not exist |
+| A `-> Int` function without `return` on some path | `E2014` | A `return` is missing |
+| `return "x"` in a `-> Int` function | `E2011` | The returned value is not of the declared type |
+| `requires n` with `n` of type `Int` | `E2011` | The condition of a contract must be `Bool` |
+| `print(10 / 0)` | `E3001` | Division by zero (detected when running) |
+| `divide(1.0, 0.0)` with `requires b != 0.0` | `E4001` | Broken contract (detected when running) |
+| `List.get([1, 2], 2)` | `E4001` | Index outside the list (detected when running) |
+| A file without `fn main` | `E2001` | The entry point is missing |
 
-## 13. Limitaciones conocidas
+## 13. Known limitations
 
-Son limitaciones reales de esta versión, no fallos:
+These are real limitations of this version, not bugs:
 
-- Hay dos formas de bucle: `while`, que siempre declara su medida (`decreases`), y `for` sobre una
-  `List[T]`, que no la necesita. No hay `break` ni `continue`, ni asignaciones compuestas (`+=`).
-- Las listas `List[T]` son inmutables y finitas. No hay sintaxis de índice (`xs[i]`), mutación de
-  elementos, `List.set`, `map`, `filter`, ordenación ni una variante total de `List.get`: para leer
-  una posición se usa `List.get`, que exige un índice válido y detiene el programa con `E4001` si no
-  lo es.
-- Todos los elementos de una lista tienen el mismo tipo. `[]` y `for x in []` necesitan un tipo
-  esperado (`E2011`). No se puede refinar una lista (`type NonEmpty = List[Int] ...` es `E2016`).
-- El análisis de rutas no considera que un `for` siempre devuelve, aunque todas sus vueltas
-  contengan un `return`: si el `for` es la última sentencia, la función necesita un `return` después.
-- La medida de un `while` es un `Int`: no hay medidas compuestas (pares, textos).
-- Los parámetros no pueden reasignarse.
-- `if` es una sentencia, no una expresión: no puede usarse como valor.
-- No hay mapas, enumeraciones ni `for` sobre rangos o `Text`. Los registros (sección 4.6) tienen
-  campos inmutables y no admiten métodos, refinamientos ni recursión. Las listas `List[T]` son
-  inmutables y finitas. De `Option` y `Result` (sección 4.7) no hay `match` ni `if let`: las
-  variantes se reconocen con funciones, y el valor se lee con `unwrap_or`.
-- Las operaciones sobre textos son las de la sección 8.1: no hay `trim`, mayúsculas, `split`,
-  `replace` ni búsqueda de posiciones. Un carácter es un punto de código: no se cuentan grafemas.
-- No hay operador de resto (`%`).
-- Los requisitos de las funciones de un tipo se comprueban al ejecutar, como los del programa:
-  `nex check` no avisa de que `Text.slice("abc", 0, 5)` va a fallar.
-- No hay interpolación de textos, textos de varias líneas ni comentarios de bloque.
-- Los literales solo admiten notación decimal: no hay hexadecimal ni exponentes (`1e-3`).
-- El entero mínimo `-9223372036854775808` no puede escribirse como literal. Sí puede obtenerse:
+- There are two forms of loop: `while`, which always declares its measure (`decreases`), and `for` over a
+  `List[T]`, which does not need one. There is no `break` or `continue`, and no compound assignments (`+=`).
+- `List[T]` lists are immutable and finite. There is no index syntax (`xs[i]`), no mutation of
+  elements, no `List.set`, `map`, `filter`, sorting or total variant of `List.get`: to read
+  a position, use `List.get`, which requires a valid index and stops the program with `E4001` if it
+  is not.
+- All the elements of a list have the same type. `[]` and `for x in []` need an expected
+  type (`E2011`). A list cannot be refined (`type NonEmpty = List[Int] ...` is `E2016`).
+- The path analysis does not consider that a `for` always returns, even if all its iterations
+  contain a `return`: if the `for` is the last statement, the function needs a `return` after it.
+- The measure of a `while` is an `Int`: there are no compound measures (pairs, texts).
+- Parameters cannot be reassigned.
+- `if` is a statement, not an expression: it cannot be used as a value.
+- There are no maps, enumerations or `for` over ranges or `Text`. Records (section 4.6) have
+  immutable fields and allow no methods, refinements or recursion. `List[T]` lists are
+  immutable and finite. For `Option` and `Result` (section 4.7) there is no `match` or `if let`: the
+  variants are recognized with functions, and the value is read with `unwrap_or`.
+- The operations on texts are those of section 8.1: there is no `trim`, case conversion, `split`,
+  `replace` or search for positions. A character is a code point: graphemes are not counted.
+- There is no remainder operator (`%`).
+- The requirements of the functions of a type are checked when running, like those of the program:
+  `nex check` does not warn that `Text.slice("abc", 0, 5)` is going to fail.
+- There is no text interpolation, no multi-line texts and no block comments.
+- Literals only allow decimal notation: there is no hexadecimal and no exponents (`1e-3`).
+- The minimum integer `-9223372036854775808` cannot be written as a literal. It can be obtained:
   `-9223372036854775807 - 1`.
-- Una variable o un parámetro declarados y nunca usados no producen ningún aviso.
-- No existen avisos (*warnings*): todo diagnóstico es un error.
-- `print` recibe un solo argumento y siempre añade un salto de línea.
-- La entrada y los archivos son los de la sección 8.3. No se puede leer «hasta el final» de la
-  entrada estándar sin parar (`input()` falla con `E3009`), no hay directorios ni archivos que no
-  sean de texto, y no hay red, procesos ni variables de entorno.
-- Un programa es el archivo de entrada más los archivos que importa (sección 7.6). No hay alias de
-  módulo, ni importación selectiva, ni ruta de búsqueda fuera del árbol de carpetas del programa,
-  ni paquetes, ni versiones, ni reexportación. Un módulo se ejecuta solo como parte de otro: no hay
-  un comando que arranque un módulo directamente, y `nex test` solo evalúa los ejemplos del archivo
-  de entrada.
-- Los contratos no se verifican estáticamente (sección 9.3). De los tipos refinados, solo se
-  comprueban sin ejecutar las constantes.
-- La condición de un tipo refinado no puede llamar a funciones del programa.
-- No hay alias de tipos sin condición (`type Id = Int`): un tipo refinado siempre lleva `where`. Un
-  registro (sección 4.6) se declara sin `where`, porque sus campos no llevan condición.
-- `nex inspect` solo tiene salida JSON, y no muestra el árbol si el programa tiene errores léxicos
-  o sintácticos.
-- No hay formateador, servidor de lenguaje ni otras herramientas.
+- A variable or a parameter that is declared and never used produces no warning.
+- There are no warnings: every diagnostic is an error.
+- `print` receives a single argument and always adds a line break.
+- Input and files are those of section 8.3. It is not possible to read "until the end" of the
+  standard input without stopping (`input()` fails with `E3009`), there are no directories or files that are not
+  text, and there is no network, no processes and no environment variables.
+- A program is the entry file plus the files it imports (section 7.6). There are no module
+  aliases, no selective imports, no search path outside the folder tree of the program,
+  no packages, no versions and no re-exporting. A module only runs as part of another one: there is no
+  command that starts a module directly, and `nex test` only evaluates the examples of the entry
+  file.
+- Contracts are not verified statically (section 9.3). Of refined types, only
+  constants are checked without running.
+- The condition of a refined type cannot call functions of the program.
+- There are no type aliases without a condition (`type Id = Int`): a refined type always carries `where`. A
+  record (section 4.6) is declared without `where`, because its fields carry no condition.
+- `nex inspect` only has JSON output, and does not show the tree if the program has lexical
+  or syntax errors.
+- There is no formatter, no language server and no other tools.
 
-La lista completa, con los límites de la implementación y los riesgos conocidos, está en
-[Limitaciones](limitations.md).
+The complete list, with the limits of the implementation and the known risks, is in
+[Limitations](limitations.md).
 
-## 14. Funcionalidades previstas (no implementadas)
+## 14. Planned features (not implemented)
 
-Nada de lo que sigue funciona hoy. Es la dirección del diseño, tomada del borrador
-`docs/fase-1-diseno.md` de la raíz del repositorio, y puede cambiar:
+Nothing of what follows works today. It is the direction of the design, taken from the draft
+`docs/fase-1-diseno.md` at the root of the repository, and it may change:
 
-- `for` sobre rangos, `break` y `continue`.
-- `if` y `match` como expresiones.
-- Interpolación de textos (`"Hello {name}"`), para la que ya está reservada la `{`.
-  - Mapas y enumeraciones. Los registros (sección 4.6), las listas `List[T]` y los dos tipos
-    `Option[T]` y `Result[T, E]` (sección 4.7) ya existen, pero no los genéricos de usuario
-    (`fn f[T]`), las funciones de orden superior ni las funciones como valores.
-- Verificación estática de contratos, y bloques de prueba (`test`) fuera de las funciones.
-- Un sistema de efectos más amplio. Los efectos declarados (`uses`) ya existen para los archivos
-  (sección 8.3), pero un módulo no declara qué necesita y el resto del lenguaje no tiene efectos.
-- La red, los procesos externos y las variables de entorno.
-- Características relacionadas con IA (`ai fn`, `tool fn`). No existe ninguna integración con
-  modelos de IA: lo que hay son las representaciones estructuradas (`nex inspect`, diagnósticos en
-  JSON) que una herramienta externa podría consumir.
+- `for` over ranges, `break` and `continue`.
+- `if` and `match` as expressions.
+- Text interpolation (`"Hello {name}"`), for which the `{` is already reserved.
+  - Maps and enumerations. Records (section 4.6), `List[T]` lists and the two types
+    `Option[T]` and `Result[T, E]` (section 4.7) already exist, but not user generics
+    (`fn f[T]`), higher-order functions or functions as values.
+- Static verification of contracts, and test blocks (`test`) outside functions.
+- A broader effect system. Declared effects (`uses`) already exist for files
+  (section 8.3), but a module does not declare what it needs and the rest of the language has no effects.
+- The network, external processes and environment variables.
+- AI-related features (`ai fn`, `tool fn`). There is no integration with
+  AI models: what exists are the structured representations (`nex inspect`, diagnostics in
+  JSON) that an external tool could consume.
 
-### Diferencias con el borrador de diseño
+### Differences from the design draft
 
-Esta especificación manda sobre el borrador en lo que ya está implementado:
+This specification takes precedence over the draft in what is already implemented:
 
-| Aspecto | Borrador `fase-1-diseno.md` | Esta especificación |
-|---------|-----------------------------|---------------------|
-| Extensión de archivo | `.nx` | `.nex` |
-| Tipo de texto | `String` | `Text` |
-| Tipo "sin valor" | `Unit` | `Void` |
-| Concatenar textos | No permitido; se usa interpolación | `+` une dos `Text`, porque la interpolación aún no existe |
-| Valor de una función | La última expresión del bloque | Siempre con `return` |
-| Contratos | Entre la firma y el cuerpo | Al principio del cuerpo, con una explicación opcional tras una coma |
-| Ejemplos | `example` entre la firma y el cuerpo; `nexora test` | Al principio del cuerpo, con las mismas reglas que los contratos; `nex test` |
-| Valor dinámico a tipo refinado | `Percent.from(n)`, que devuelve un `Result` | `Percent(n)`, que detiene el programa con `E4003` si no se cumple la condición |
-| Alias sin condición | `type UserId = Int` | No existen |
-| Conversión entre números | `Int.to_float(x)` | `to_float(x)`, `to_int(x)` |
-| Variables sin usar | Son un error | No se comprueba todavía |
-| Bucles | `while` y `for`, sin requisitos | `while` con medida obligatoria (`decreases`) y `for` sobre `List[T]`; ambos con invariantes opcionales, comprobados en cada vuelta |
-| Convenciones de nombres | Obligatorias (`snake_case`…) | No se comprueban todavía |
-| Entrada | Un registro `Input` con `main(input)` | `args()` e `input()`, sin cambiar la forma de `main` (sección 8.3) |
-| Archivos | Sin regla: el programa puede leerlos | Hay que declararlos con `uses` y hay que permitirlos con `--allow-read` (sección 8.3) |
+| Aspect | Draft `fase-1-diseno.md` | This specification |
+|--------|--------------------------|--------------------|
+| File extension | `.nx` | `.nex` |
+| Text type | `String` | `Text` |
+| "No value" type | `Unit` | `Void` |
+| Joining texts | Not allowed; interpolation is used | `+` joins two `Text`, because interpolation does not exist yet |
+| Value of a function | The last expression of the block | Always with `return` |
+| Contracts | Between the signature and the body | At the beginning of the body, with an optional explanation after a comma |
+| Examples | `example` between the signature and the body; `nexora test` | At the beginning of the body, with the same rules as contracts; `nex test` |
+| Dynamic value to refined type | `Percent.from(n)`, which returns a `Result` | `Percent(n)`, which stops the program with `E4003` if the condition is not met |
+| Aliases without a condition | `type UserId = Int` | They do not exist |
+| Conversion between numbers | `Int.to_float(x)` | `to_float(x)`, `to_int(x)` |
+| Unused variables | They are an error | Not checked yet |
+| Loops | `while` and `for`, without requirements | `while` with a required measure (`decreases`) and `for` over `List[T]`; both with optional invariants, checked on every iteration |
+| Naming conventions | Required (`snake_case`…) | Not checked yet |
+| Input | An `Input` record with `main(input)` | `args()` and `input()`, without changing the form of `main` (section 8.3) |
+| Files | No rule: the program can read them | They have to be declared with `uses` and allowed with `--allow-read` (section 8.3) |

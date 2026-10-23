@@ -97,9 +97,9 @@ TASKS = [
         "question": "The check reported E2011. What does the official specification say that code means?",
         "source": None,
         "tool": "get_language_spec",
-        "arguments": {"section": "113-códigos-de-error"},
+        "arguments": {"section": "113-error-codes"},
         "answer": lambda d: next(line for line in d["section"]["text"].split("\n") if line.startswith("| `E2011`")),
-        "expected": "| `E2011` | Type mismatch | `type` | Un tipo no es el que exige la regla correspondiente |",
+        "expected": "| `E2011` | Type mismatch | `type` | A type is not the one the corresponding rule requires |",
     },
     {
         "id": "locate-a-broken-precondition",

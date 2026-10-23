@@ -1,63 +1,63 @@
-# Ejemplos
+# Examples
 
-Programas de referencia de NEXORA. Cada uno tiene un objetivo concreto, descrito en el comentario
-de su primera línea.
+Reference programs of NEXORA. Each one has a concrete goal, described in the comment
+on its first line.
 
-Todos se ejecutan en las pruebas automatizadas (`tests/test_examples.py`), que comparan su salida,
-sus diagnósticos y su código de salida, carácter a carácter, con los archivos de
-`tests/golden/examples/`. Si un cambio en el lenguaje altera el comportamiento de un ejemplo, las
-pruebas fallan.
+All of them are run by the automated tests (`tests/test_examples.py`), which compare their output,
+their diagnostics and their exit code, character by character, with the files in
+`tests/golden/examples/`. If a change in the language alters the behaviour of an example, the
+tests fail.
 
-Ejecuta cualquiera desde el directorio `nexora/`:
+Run any of them from the `nexora/` directory:
 
 ```bash
 nex run examples/hello.nex
 ```
 
-## Válidos
+## Valid
 
-Superan `nex check` y `nex run` termina con código `0`.
+They pass `nex check` and `nex run` ends with code `0`.
 
-| Archivo | Qué muestra |
-|---------|-------------|
-| [`hello.nex`](hello.nex) | El primer programa |
-| [`variables.nex`](variables.nex) | Variables, textos, bloques y ámbitos |
-| [`arithmetic.nex`](arithmetic.nex) | Precedencia, división entera y decimal, límites de `Int` |
-| [`types.nex`](types.nex) | Inferencia, anotaciones, comparaciones, lógica y conversiones |
-| [`functions.nex`](functions.nex) | Funciones, `if` / `else`, recursividad |
-| [`contracts.nex`](contracts.nex) | Contratos `requires` y `ensures` que se cumplen, con su explicación |
-| [`checked_examples.nex`](checked_examples.nex) | Funciones con sus propios ejemplos (`example`), que evalúa `nex test` |
-| [`refined_types.nex`](refined_types.nex) | Tipos refinados con `where`: constantes comprobadas sin ejecutar y comprobación explícita con `Percent(x)` |
-| [`loops.nex`](loops.nex) | Variables `var` y bucles `while` con su medida (`decreases`) y sus invariantes (`invariant`), comprobados en cada vuelta |
-| [`texts.nex`](texts.nex) | Textos: `Text.length`, `Text.slice` y la búsqueda dentro de un texto, el orden entre textos y la lectura de números con `Int.parse` y `Float.parse`, cada una con sus requisitos |
-| [`lists.nex`](lists.nex) | Listas inmutables `List[T]`: longitud, acceso por índice con su requisito, listas nuevas con `List.append` y `List.concat`, `List.contains`, y un `for` que recorre la lista con su `invariant` |
-| [`records.nex`](records.nex) | Registros nominales inmutables: declaración, construcción con campos nombrados en cualquier orden, lectura de campos y cadenas de acceso, igualdad por valor, un registro dentro de otro y una lista de registros |
-| [`option_result.nex`](option_result.nex) | `Option[T]` y `Result[T, E]`: `Some`, `None`, `Ok` y `Err`, las funciones que reconocen la variante, la lectura del valor con y sin defecto, y la igualdad entre variantes |
-| [`console.nex`](console.nex) | Un programa de consola: los argumentos con los que se ejecutó y la entrada estándar, con `args()` e `input()` |
-| [`files.nex`](files.nex) | Leer y escribir un archivo, con la capacidad que el programa declara (`uses`) y el permiso que hay que conceder (`--allow-read`, `--allow-write`) |
-| [`modules/main.nex`](modules/main.nex) | Módulos: un archivo que importa a otro (`import "models.nex"`), y cómo se usan sus nombres desde el programa: cualificados (`models.Point`, `models.area(p)`), con `pub` para lo que el módulo hace visible |
-| [`modules/models.nex`](modules/models.nex) | El módulo que importa el anterior: un registro, un tipo refinado, funciones públicas y una función privada. Se ejecuta solo y termina con `1`: un módulo no es un programa, no tiene `main` |
+| File | What it shows |
+|------|---------------|
+| [`hello.nex`](hello.nex) | The first program |
+| [`variables.nex`](variables.nex) | Variables, texts, blocks and scopes |
+| [`arithmetic.nex`](arithmetic.nex) | Precedence, integer and decimal division, limits of `Int` |
+| [`types.nex`](types.nex) | Inference, annotations, comparisons, logic and conversions |
+| [`functions.nex`](functions.nex) | Functions, `if` / `else`, recursion |
+| [`contracts.nex`](contracts.nex) | `requires` and `ensures` contracts that hold, with their explanation |
+| [`checked_examples.nex`](checked_examples.nex) | Functions with their own examples (`example`), which `nex test` evaluates |
+| [`refined_types.nex`](refined_types.nex) | Refined types with `where`: constants checked without running and explicit check with `Percent(x)` |
+| [`loops.nex`](loops.nex) | `var` variables and `while` loops with their measure (`decreases`) and their invariants (`invariant`), checked on every iteration |
+| [`texts.nex`](texts.nex) | Texts: `Text.length`, `Text.slice` and searching inside a text, the order between texts and reading numbers with `Int.parse` and `Float.parse`, each with its requirements |
+| [`lists.nex`](lists.nex) | Immutable lists `List[T]`: length, access by index with its requirement, new lists with `List.append` and `List.concat`, `List.contains`, and a `for` that goes through the list with its `invariant` |
+| [`records.nex`](records.nex) | Immutable nominal records: declaration, construction with named fields in any order, reading fields and access chains, equality by value, a record inside another one and a list of records |
+| [`option_result.nex`](option_result.nex) | `Option[T]` and `Result[T, E]`: `Some`, `None`, `Ok` and `Err`, the functions that recognize the variant, reading the value with and without a default, and equality between variants |
+| [`console.nex`](console.nex) | A console program: the arguments it was run with and the standard input, with `args()` and `input()` |
+| [`files.nex`](files.nex) | Reading and writing a file, with the capability that the program declares (`uses`) and the permission that has to be granted (`--allow-read`, `--allow-write`) |
+| [`modules/main.nex`](modules/main.nex) | Modules: a file that imports another one (`import "models.nex"`), and how its names are used from the program: qualified (`models.Point`, `models.area(p)`), with `pub` for what the module makes visible |
+| [`modules/models.nex`](modules/models.nex) | The module that the previous one imports: a record, a refined type, public functions and a private function. Run on its own it ends with `1`: a module is not a program, it has no `main` |
 
-## Inválidos (`invalid/`)
+## Invalid (`invalid/`)
 
-Incorrectos a propósito. El error se detecta **sin ejecutar**: `nex check` y `nex run` terminan con
-código `1` y el programa no llega a iniciarse.
+Wrong on purpose. The error is detected **without running**: `nex check` and `nex run` end with
+code `1` and the program never starts.
 
-| Archivo | Categoría de los errores |
-|---------|--------------------------|
-| [`invalid/syntax_error.nex`](invalid/syntax_error.nex) | `syntax`: el texto no sigue la gramática |
-| [`invalid/name_errors.nex`](invalid/name_errors.nex) | `semantic`: nombres, valores sin usar, rutas de retorno |
-| [`invalid/type_errors.nex`](invalid/type_errors.nex) | `type`: tipos incompatibles |
-| [`invalid/refinement_errors.nex`](invalid/refinement_errors.nex) | `semantic` y `type`: tipos refinados mal declarados y valores que no cumplen su condición |
+| File | Category of the errors |
+|------|------------------------|
+| [`invalid/syntax_error.nex`](invalid/syntax_error.nex) | `syntax`: the text does not follow the grammar |
+| [`invalid/name_errors.nex`](invalid/name_errors.nex) | `semantic`: names, unused values, return paths |
+| [`invalid/type_errors.nex`](invalid/type_errors.nex) | `type`: incompatible types |
+| [`invalid/refinement_errors.nex`](invalid/refinement_errors.nex) | `semantic` and `type`: badly declared refined types and values that do not meet their condition |
 
-## Fallan al ejecutarse (`failing/`)
+## Fail when running (`failing/`)
 
-Superan `nex check`, porque el fallo depende de valores que solo se conocen al ejecutar.
+They pass `nex check`, because the failure depends on values that are only known when running.
 
-| Archivo | Qué ocurre | `nex run` termina con |
-|---------|------------|-----------------------|
-| [`failing/runtime_error.nex`](failing/runtime_error.nex) | División por cero | `3` |
-| [`failing/contract_violation.nex`](failing/contract_violation.nex) | Una condición `requires` es falsa | `5` |
-| [`failing/refinement_violation.nex`](failing/refinement_violation.nex) | Un valor calculado no cumple la condición de un tipo refinado | `5` |
-| [`failing/loop_measure.nex`](failing/loop_measure.nex) | Un bucle que no terminaría: su medida deja de disminuir | `5` |
-| [`failing/parse_number.nex`](failing/parse_number.nex) | Lee un número de un texto que no lo es: incumple el `requires` de `Int.parse`, con una sugerencia | `5` |
+| File | What happens | `nex run` ends with |
+|------|--------------|---------------------|
+| [`failing/runtime_error.nex`](failing/runtime_error.nex) | Division by zero | `3` |
+| [`failing/contract_violation.nex`](failing/contract_violation.nex) | A `requires` condition is false | `5` |
+| [`failing/refinement_violation.nex`](failing/refinement_violation.nex) | A computed value does not meet the condition of a refined type | `5` |
+| [`failing/loop_measure.nex`](failing/loop_measure.nex) | A loop that would not end: its measure stops decreasing | `5` |
+| [`failing/parse_number.nex`](failing/parse_number.nex) | Reads a number from a text that is not one: it breaks the `requires` of `Int.parse`, with a suggestion | `5` |

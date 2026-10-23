@@ -1,47 +1,47 @@
-# 0002 — El intérprete solo ejecuta programas comprobados
+# 0002 — The interpreter only runs checked programs
 
-- **Estado:** aceptada
-- **Versión:** 0.2.0
+- **Status:** accepted
+- **Version:** 0.2.0
 
-## Contexto
+## Context
 
-En 0.1 el intérprete repetía las comprobaciones de nombres y tipos que ya hacía el comprobador
-estático, "por si acaso" se le pasaba un programa sin comprobar. Con funciones, retornos y
-contratos, mantener dos copias de las mismas reglas habría duplicado la lógica y abierto la puerta
-a que las dos copias dejaran de coincidir.
+In 0.1 the interpreter repeated the name and type checks that the static checker already did,
+"just in case" it was given a program that had not been checked. With functions, returns and
+contracts, keeping two copies of the same rules would have duplicated the logic and opened the door
+to the two copies drifting apart.
 
-## Decisión
+## Decision
 
-- Las reglas de nombres, ámbitos y tipos viven en un único módulo: `checker.py`.
-- El comprobador devuelve un `CheckedProgram`, y **eso es lo único que el intérprete acepta**.
-- El intérprete solo comprueba lo que no puede saberse antes de ejecutar: división por cero,
-  desbordamiento, conversiones fuera de rango, profundidad de llamadas y contratos.
-- Si el intérprete encuentra algo que el comprobador debería haber rechazado, es un defecto de
-  NEXORA y se comunica como error interno (código de salida 70), no como error del programa.
+- The rules for names, scopes and types live in a single module: `checker.py`.
+- The checker returns a `CheckedProgram`, and **that is the only thing the interpreter accepts**.
+- The interpreter only checks what cannot be known before running: division by zero,
+  overflow, out-of-range conversions, call depth and contracts.
+- If the interpreter finds something the checker should have rejected, it is a defect of
+  NEXORA and it is reported as an internal error (exit code 70), not as an error of the program.
 
-Las cuatro etapas quedan así:
+The four stages end up like this:
 
-| Etapa | Módulo | Depende de |
+| Stage | Module | Depends on |
 |-------|--------|------------|
-| Análisis léxico | `lexer.py` | — |
-| Análisis sintáctico | `parser.py` | tokens |
-| Análisis estático | `checker.py` | AST |
-| Ejecución | `interpreter.py` | `CheckedProgram` |
+| Lexical analysis | `lexer.py` | — |
+| Syntax analysis | `parser.py` | tokens |
+| Static analysis | `checker.py` | AST |
+| Execution | `interpreter.py` | `CheckedProgram` |
 
-`pipeline.analyze` encadena las tres primeras y es lo que usan todos los comandos (`run`, `check`,
-`inspect`), de modo que los tres ven exactamente el mismo programa.
+`pipeline.analyze` chains the first three and is what every command uses (`run`, `check`,
+`inspect`), so all three see exactly the same program.
 
-## Motivos
+## Reasons
 
-- Una sola definición de cada regla: lo que `nex check` acepta es exactamente lo que `nex run`
-  ejecuta.
-- La lista de errores posibles en ejecución es corta y cerrada (sección 10.3 de la especificación),
-  y puede documentarse como garantía.
+- A single definition of each rule: what `nex check` accepts is exactly what `nex run`
+  runs.
+- The list of possible runtime errors is short and closed (section 10.3 of the specification),
+  and it can be documented as a guarantee.
 
-## Consecuencias
+## Consequences
 
-- El módulo se sigue llamando `checker.py`; no se renombró a `type_checker.py` porque también
-  comprueba nombres, ámbitos y rutas de retorno.
-- Desaparecen las pruebas de 0.1 que ejecutaban el intérprete sin pasar por el comprobador. Su
-  cobertura la dan ahora las pruebas del comprobador.
-- Sin cambios visibles para quien usa el lenguaje.
+- The module is still called `checker.py`; it was not renamed to `type_checker.py` because it also
+  checks names, scopes and return paths.
+- The 0.1 tests that ran the interpreter without going through the checker are gone. Their
+  coverage now comes from the checker tests.
+- No visible changes for whoever uses the language.

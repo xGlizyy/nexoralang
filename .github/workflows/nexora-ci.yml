@@ -1,12 +1,12 @@
-# Integración continua de NEXORA: el núcleo (nexora/) y el paquete de npm (npm/). El servidor y la
-# web están en un repositorio privado aparte, con su propia integración continua.
+# Continuous integration for NEXORA: the core (nexora/) and the npm package (npm/). The server and
+# the web live in a separate private repository, with their own continuous integration.
 #
-# ESTADO: activo. Se ejecuta en cada cambio de `main` que toque los caminos de abajo.
+# STATUS: active. Runs on every change to `main` that touches the paths below.
 #
-# - No usa secretos ni servicios de pago: solo ejecutores gratuitos de GitHub.
-# - La rama principal se llama "main".
-# - Si nexora/ pasa a ser la raíz de su propio repositorio, elimina las dos líneas
-#   "working-directory" y los filtros "paths".
+# - It uses no secrets and no paid services: only free GitHub runners.
+# - The main branch is called "main".
+# - If nexora/ becomes the root of its own repository, delete the two
+#   "working-directory" lines and the "paths" filters.
 
 name: nexora-ci
 
@@ -39,22 +39,22 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      - name: Instalar NEXORA y las herramientas de desarrollo
+      - name: Install NEXORA and the development tools
         run: python -m pip install -e ".[dev]"
 
-      - name: Análisis estático del código
+      - name: Static analysis of the code
         run: python -m ruff check src tests
 
-      - name: Pruebas con cobertura
+      - name: Tests with coverage
         run: python -m pytest --cov
 
-      - name: El comando instalado funciona
+      - name: The installed command works
         run: |
           nex --version
           nex run examples/hello.nex
 
   package:
-    name: Paquete instalable
+    name: Installable package
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -66,12 +66,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Generar el paquete
+      - name: Build the package
         run: |
           python -m pip install build
           python -m build
 
-      - name: Instalar el paquete en un entorno limpio y usarlo
+      - name: Install the package in a clean environment and use it
         run: |
           python -m venv /tmp/clean
           /tmp/clean/bin/python -m pip install dist/*.whl
@@ -79,21 +79,21 @@ jobs:
           /tmp/clean/bin/nex run examples/hello.nex
 
   npm:
-    name: Paquete de npm · Node ${{ matrix.node }} · ${{ matrix.os }}
+    name: npm package · Node ${{ matrix.node }} · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    # Node 26 es una prueba no bloqueante (experimental): si falla, el flujo no falla.
+    # Node 26 is a non-blocking (experimental) run: if it fails, the workflow does not fail.
     continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        # 18: el mínimo que declara npm/package.json (engines ">=18"). Ya no tiene soporte oficial
-        # (desde el 30/04/2025), pero se prueba mientras el paquete lo declare; también es anterior a
-        # los patrones de `node --test` (Node 21). 22 y 24: las LTS con soporte. Node 20 se quitó por
-        # redundante para lo que comprueba este trabajo hoy: el caso anterior a Node 21 ya lo cubre 18.
+        # 18: the minimum declared by npm/package.json (engines ">=18"). It no longer has official
+        # support (since 2025-04-30), but it is tested while the package declares it; it is also earlier than
+        # the `node --test` patterns (Node 21). 22 and 24: the supported LTS lines. Node 20 was removed as
+        # redundant for what this job checks today: the case before Node 21 is already covered by 18.
         node: ["18", "22", "24"]
         include:
-          # Node 26, todavía sin probar: solo en Linux y sin bloquear.
+          # Node 26, still untested: only on Linux and non-blocking.
           - os: ubuntu-latest
             node: "26"
             experimental: true
@@ -111,10 +111,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
-      - name: Pruebas del lanzador
+      - name: Launcher tests
         run: npm test
 
-      - name: Instalar el paquete generado y usarlo
+      - name: Install the generated package and use it
         shell: bash
         run: |
           npm pack

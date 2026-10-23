@@ -1,194 +1,194 @@
-# Instalación
+# Installation
 
-NEXORA se instala desde el código fuente o desde el registro: el paquete `nexora-lang` está
-publicado en PyPI y en npm ([paquetes para pip y npm](#paquetes-para-pip-y-npm)).
+NEXORA is installed from the source code or from the registry: the `nexora-lang` package is
+published on PyPI and on npm ([packages for pip and npm](#packages-for-pip-and-npm)).
 
-## Requisitos
+## Requirements
 
-- **Python 3.11 o superior.** Compruébalo con `python --version` (en algunos sistemas, `python3 --version`).
-- `pip` y el módulo `venv`, que vienen con Python. En Debian y Ubuntu puede hacer falta instalarlos
-  aparte: `sudo apt install python3-venv python3-pip`.
-- Conexión a internet **solo durante la instalación**, para que `pip` descargue la herramienta de
-  empaquetado (`setuptools`) y, si vas a ejecutar las pruebas, `pytest`, `pytest-cov` y `ruff`.
+- **Python 3.11 or newer.** Check it with `python --version` (on some systems, `python3 --version`).
+- `pip` and the `venv` module, which come with Python. On Debian and Ubuntu they may have to be installed
+  separately: `sudo apt install python3-venv python3-pip`.
+- An internet connection **only during installation**, so that `pip` downloads the packaging
+  tool (`setuptools`) and, if you are going to run the tests, `pytest`, `pytest-cov` and `ruff`.
 
-El intérprete no tiene dependencias: solo usa la biblioteca estándar de Python. Una vez instalado,
-NEXORA funciona sin conexión.
+The interpreter has no dependencies: it only uses the Python standard library. Once installed,
+NEXORA works offline.
 
-## Qué se ha comprobado
+## What has been checked
 
-| Entorno | Estado |
-|---------|--------|
-| Windows 11, Python 3.12 | **Comprobado**: instalación en modo desarrollo en un entorno limpio, instalación desde el paquete generado, y batería de pruebas completa |
-| Windows 11, Node.js 24, paquete de npm | **Comprobado**: generado con `npm pack`, instalado desde el archivo y usado. Publicado en npm como `nexora-lang` 0.9.0 y 0.10.0 |
-| Linux (Ubuntu 24.04 en WSL 2), Python 3.12 | **Comprobado** el 17 de octubre de 2026: batería de pruebas completa, sin ninguna omitida, con un usuario que no es root; paquete generado e instalado desde el archivo en un entorno limpio, y `nex run` usado. Otras distribuciones y Linux sin WSL, no comprobados |
-| Linux, Node.js 24, paquete de npm | **Comprobado**: generado con `npm pack`, instalado desde el archivo y usado con `npx nex`. Publicado en npm como `nexora-lang` 0.9.0 y 0.10.0 |
-| macOS | **Ejecutado** en `macos-latest` por la [integración continua](testing.md#integración-continua): batería de pruebas con Python 3.11, 3.12 y 3.13, el paquete de npm y el servidor. En un Mac local, no comprobado |
-| Python 3.11 y 3.13 | **Ejecutados** en Linux, Windows y macOS por la integración continua, y **comprobados** a mano en Linux (3.11.17 y 3.13.16): batería de pruebas completa, sin instalar el paquete generado |
+| Environment | Status |
+|-------------|--------|
+| Windows 11, Python 3.12 | **Checked**: development-mode installation in a clean environment, installation from the built package, and full test suite |
+| Windows 11, Node.js 24, npm package | **Checked**: built with `npm pack`, installed from the file and used. Published on npm as `nexora-lang` 0.9.0, 0.10.0 and 0.11.0 |
+| Linux (Ubuntu 24.04 on WSL 2), Python 3.12 | **Checked** on 17 October 2026: full test suite, with none skipped, with a non-root user; package built and installed from the file in a clean environment, and `nex run` used. Other distributions and Linux without WSL, not checked |
+| Linux, Node.js 24, npm package | **Checked**: built with `npm pack`, installed from the file and used with `npx nex`. Published on npm as `nexora-lang` 0.9.0, 0.10.0 and 0.11.0 |
+| macOS | **Run** on `macos-latest` by the [continuous integration](testing.md#continuous-integration): test suite with Python 3.11, 3.12 and 3.13, the npm package and the server. On a local Mac, not checked |
+| Python 3.11 and 3.13 | **Run** on Linux, Windows and macOS by the continuous integration, and **checked** by hand on Linux (3.11.17 and 3.13.16): full test suite, without installing the built package |
 
-## Instalación paso a paso
+## Step-by-step installation
 
-Todos los comandos se ejecutan desde el directorio `nexora/` del repositorio (el que contiene
+All the commands are run from the `nexora/` directory of the repository (the one that contains
 `pyproject.toml`).
 
-### 1. Crea un entorno virtual
+### 1. Create a virtual environment
 
 ```bash
 python -m venv .venv
 ```
 
-Un entorno virtual es una carpeta (`.venv`) con una copia aislada de Python. NEXORA se instala
-dentro de ella y no toca el resto del sistema.
+A virtual environment is a folder (`.venv`) with an isolated copy of Python. NEXORA is installed
+inside it and does not touch the rest of the system.
 
-### 2. Activa el entorno
+### 2. Activate the environment
 
-| Sistema | Comando |
-|---------|---------|
+| System | Command |
+|--------|---------|
 | Windows (PowerShell) | `.venv\Scripts\Activate.ps1` |
 | Windows (cmd) | `.venv\Scripts\activate.bat` |
-| Linux y macOS (bash, zsh) | `source .venv/bin/activate` |
+| Linux and macOS (bash, zsh) | `source .venv/bin/activate` |
 
-Hay que activarlo en cada terminal nueva. Con el entorno activado, el nombre `(.venv)` suele
-aparecer al principio de la línea de comandos.
+It has to be activated in every new terminal. With the environment activated, the name `(.venv)` usually
+appears at the beginning of the command line.
 
-### 3. Instala NEXORA
+### 3. Install NEXORA
 
-Para usar el lenguaje:
+To use the language:
 
 ```bash
 python -m pip install -e .
 ```
 
-Para trabajar en el proyecto (añade las herramientas de pruebas y de análisis):
+To work on the project (adds the testing and analysis tools):
 
 ```bash
 python -m pip install -e ".[dev]"
 ```
 
-La opción `-e` instala en modo desarrollo: el comando `nex` usa directamente los archivos de
-`src/`, de modo que cualquier cambio en el código tiene efecto sin reinstalar.
+The `-e` option installs in development mode: the `nex` command uses the files of
+`src/` directly, so any change in the code takes effect without reinstalling.
 
-### 4. Comprueba la instalación
+### 4. Check the installation
 
 ```bash
 nex --version
 nex run examples/hello.nex
 ```
 
-Resultado esperado:
+Expected result:
 
 ```text
 NEXORA 0.11.0
 Hello from NEXORA
 ```
 
-## Dónde queda el comando `nex`
+## Where the `nex` command ends up
 
-El comando `nex` se instala **dentro del entorno virtual**, no en todo el sistema. Solo está
-disponible en las terminales donde el entorno está activado.
+The `nex` command is installed **inside the virtual environment**, not system-wide. It is only
+available in the terminals where the environment is activated.
 
-Sin activar el entorno hay dos alternativas:
+Without activating the environment there are two alternatives:
 
-| Alternativa | Windows | Linux y macOS |
-|-------------|---------|---------------|
-| Llamar al comando por su ruta | `.venv\Scripts\nex.exe run programa.nex` | `.venv/bin/nex run programa.nex` |
-| Usar el módulo de Python del entorno | `.venv\Scripts\python.exe -m nexora run programa.nex` | `.venv/bin/python -m nexora run programa.nex` |
+| Alternative | Windows | Linux and macOS |
+|-------------|---------|-----------------|
+| Call the command by its path | `.venv\Scripts\nex.exe run program.nex` | `.venv/bin/nex run program.nex` |
+| Use the Python module of the environment | `.venv\Scripts\python.exe -m nexora run program.nex` | `.venv/bin/python -m nexora run program.nex` |
 
-`python -m nexora` hace exactamente lo mismo que `nex`.
+`python -m nexora` does exactly the same as `nex`.
 
-## Instalar desde un paquete generado
+## Installing from a built package
 
-El proyecto puede empaquetarse en un archivo instalable (*wheel*). El que se publica en PyPI es
-este mismo: `python -m build` genera los dos archivos que se suben al registro.
+The project can be packaged into an installable file (*wheel*). The one published on PyPI is
+this very one: `python -m build` builds the two files that are uploaded to the registry.
 
 ```bash
 python -m pip install build
 python -m build
 ```
 
-Esto crea dos archivos en `dist/`: `nexora_lang-0.11.0-py3-none-any.whl` y `nexora_lang-0.11.0.tar.gz`. El
-primero puede instalarse en cualquier entorno con Python 3.11 o superior:
+This creates two files in `dist/`: `nexora_lang-0.11.0-py3-none-any.whl` and `nexora_lang-0.11.0.tar.gz`. The
+first one can be installed in any environment with Python 3.11 or newer:
 
 ```bash
 python -m pip install dist/nexora_lang-0.11.0-py3-none-any.whl
 ```
 
-El *wheel* contiene solo el intérprete y el comando `nex`. Los ejemplos, la documentación y las
-pruebas están en el archivo `.tar.gz` y en el repositorio.
+The *wheel* contains only the interpreter and the `nex` command. The examples, the documentation and the
+tests are in the `.tar.gz` file and in the repository.
 
-## Paquetes para pip y npm
+## Packages for pip and npm
 
-El comando `nex` puede distribuirse por dos vías. El paquete se llama **`nexora-lang`** en las dos,
-porque el nombre `nexora` ya pertenece a otros proyectos en PyPI y en npm. El comando sigue siendo
+The `nex` command can be distributed in two ways. The package is called **`nexora-lang`** in both,
+because the name `nexora` already belongs to other projects on PyPI and on npm. The command is still
 `nex`.
 
-**Los dos están publicados** (0.9.0 y 0.10.0): `pip install nexora-lang` y
-`npm install -g nexora-lang` los instalan. Antes de publicarlos se comprobó, en Windows 11, que los dos paquetes se generan, se instalan
-desde el archivo local y dejan un comando `nex` que funciona.
+**Both are published** (0.9.0, 0.10.0 and 0.11.0): `pip install nexora-lang` and
+`npm install -g nexora-lang` install them. Before publishing them it was checked, on Windows 11, that both packages are built, are installed
+from the local file and leave a `nex` command that works.
 
 | | pip | npm |
 |-|-----|-----|
-| Paquete | `nexora-lang` (directorio `nexora/`) | `nexora-lang` (directorio `npm/`, en la raíz del repositorio) |
-| Qué contiene | El intérprete y los comandos `nex` y `nex-mcp` | Una copia del intérprete y un lanzador en JavaScript |
-| Qué necesita | Python 3.11 o superior | Node.js 18 o superior **y Python 3.11 o superior** |
-| Instalar | `pipx install nexora-lang` | `npm install -g nexora-lang` |
+| Package | `nexora-lang` (directory `nexora/`) | `nexora-lang` (directory `npm/`, at the root of the repository) |
+| What it contains | The interpreter and the `nex` and `nex-mcp` commands | A copy of the interpreter and a JavaScript launcher |
+| What it needs | Python 3.11 or newer | Node.js 18 or newer **and Python 3.11 or newer** |
+| Install | `pipx install nexora-lang` | `npm install -g nexora-lang` |
 
-El paquete de npm **no elimina la dependencia de Python**: el intérprete está escrito en Python. El
-lanzador busca un Python 3.11+ en la máquina (`py -3` en Windows, `python3`, `python` y, en Windows,
-las carpetas del instalador oficial), ejecuta con él el intérprete incluido en el paquete, y pasa
-tal cual los argumentos, la salida y el código de salida. Si no encuentra ninguno lo explica y
-termina con el código `127`. La variable `NEXORA_PYTHON` permite elegir uno. No incluye el servidor
-MCP.
+The npm package **does not remove the dependency on Python**: the interpreter is written in Python. The
+launcher looks for a Python 3.11+ on the machine (`py -3` on Windows, `python3`, `python` and, on Windows,
+the folders of the official installer), runs the interpreter included in the package with it, and passes
+the arguments, the output and the exit code through unchanged. If it finds none it explains so and
+ends with code `127`. The `NEXORA_PYTHON` variable lets you choose one. It does not include the MCP
+server.
 
-### Generar e instalar el paquete de npm en local
+### Building and installing the npm package locally
 
-Desde el directorio `npm/`:
+From the `npm/` directory:
 
 ```bash
-npm test                 # copia el intérprete al paquete y ejecuta las pruebas del lanzador
-npm pack                 # genera nexora-lang-0.11.0.tgz
+npm test                 # copies the interpreter into the package and runs the launcher tests
+npm pack                 # builds nexora-lang-0.11.0.tgz
 npm install -g ./nexora-lang-0.11.0.tgz
 nex --version
 ```
 
-### Publicar
+### Publishing
 
-Requiere una cuenta en cada registro y es irreversible en la práctica (una versión publicada no
-puede reutilizarse). Antes, la batería de pruebas tiene que pasar.
+It requires an account in each registry and is irreversible in practice (a published version cannot
+be reused). Before that, the test suite has to pass.
 
 ```bash
-# PyPI, desde nexora/
+# PyPI, from nexora/
 python -m pip install build twine
 python -m build
 python -m twine upload dist/*
 
-# npm, desde npm/
+# npm, from npm/
 npm login
 npm publish
 ```
 
-Las credenciales se introducen al ejecutar esas órdenes; no se guardan en el repositorio. Las
-versiones 0.9.0 y 0.10.0 se publicaron así, con la batería de pruebas y la integración continua
-en verde.
+The credentials are entered when running those commands; they are not stored in the repository. Versions
+0.9.0, 0.10.0 and 0.11.0 were published this way, with the test suite and the continuous integration
+green.
 
-## Problemas frecuentes
+## Common problems
 
-| Síntoma | Causa y solución |
-|---------|------------------|
-| `nex` no se reconoce como comando | El entorno virtual no está activado en esa terminal. Actívalo (paso 2) o usa la ruta completa |
-| En Windows, `python` abre la Microsoft Store o dice que no se encontró Python | Python no está instalado, o solo existe el acceso directo de la Store. Instálalo desde [python.org](https://www.python.org/downloads/) y abre una terminal nueva |
-| En Linux o macOS, `python` no existe | Usa `python3` para crear el entorno (`python3 -m venv .venv`). Una vez activado, `python` ya funciona |
-| PowerShell se niega a ejecutar `Activate.ps1` ("la ejecución de scripts está deshabilitada") | Ejecuta una vez `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, o usa `nex` por su ruta sin activar el entorno |
-| `pip` dice `requires a different Python` | La versión de Python es anterior a la 3.11. Crea el entorno con una versión más reciente |
-| `error: externally-managed-environment` | Estás instalando fuera de un entorno virtual. Crea y activa uno (pasos 1 y 2) |
-| `The virtual environment was not created successfully because ensurepip is not available` | Falta el paquete `python3-venv` (Debian, Ubuntu) |
-| `pip` no puede descargar `setuptools` | La instalación necesita internet la primera vez. Después ya no |
-| Los acentos o el símbolo `✓` se ven mal al redirigir la salida en Windows | La salida de `nex` es siempre UTF-8. Configura la terminal para UTF-8: `[Console]::OutputEncoding = [Text.Encoding]::UTF8` en PowerShell |
-| `nex --version` muestra una versión antigua | Hay otra instalación de NEXORA en ese entorno. Reinstala con `python -m pip install -e .` |
+| Symptom | Cause and fix |
+|---------|---------------|
+| `nex` is not recognized as a command | The virtual environment is not activated in that terminal. Activate it (step 2) or use the full path |
+| On Windows, `python` opens the Microsoft Store or says Python was not found | Python is not installed, or only the Store shortcut exists. Install it from [python.org](https://www.python.org/downloads/) and open a new terminal |
+| On Linux or macOS, `python` does not exist | Use `python3` to create the environment (`python3 -m venv .venv`). Once it is activated, `python` works |
+| PowerShell refuses to run `Activate.ps1` ("running scripts is disabled") | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or use `nex` by its path without activating the environment |
+| `pip` says `requires a different Python` | The Python version is older than 3.11. Create the environment with a newer version |
+| `error: externally-managed-environment` | You are installing outside a virtual environment. Create and activate one (steps 1 and 2) |
+| `The virtual environment was not created successfully because ensurepip is not available` | The `python3-venv` package is missing (Debian, Ubuntu) |
+| `pip` cannot download `setuptools` | The installation needs internet the first time. Not afterwards |
+| Accents or the `✓` symbol look wrong when redirecting the output on Windows | The output of `nex` is always UTF-8. Set the terminal to UTF-8: `[Console]::OutputEncoding = [Text.Encoding]::UTF8` in PowerShell |
+| `nex --version` shows an old version | There is another installation of NEXORA in that environment. Reinstall with `python -m pip install -e .` |
 
-## Desinstalar
+## Uninstalling
 
 ```bash
 python -m pip uninstall nexora-lang
 ```
 
-O, simplemente, borra la carpeta `.venv`: todo lo instalado está dentro de ella.
+Or simply delete the `.venv` folder: everything installed is inside it.

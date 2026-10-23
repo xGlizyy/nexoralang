@@ -1,306 +1,306 @@
-# 0015 — Entrada, argumentos, archivos y permisos
+# 0015 — Input, arguments, files and permissions
 
-- **Estado:** aceptada
-- **Versión:** 0.9.0 (estado del repositorio; no se ha publicado en ningún paquete)
-- **Fecha:** 2026-10-21
-- **Rama de trabajo:** `feature/server-hardening`
-- **Relacionada con:** la [decisión 0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md)
-  (solo se ejecuta lo comprobado), la [0005](0005-diagnosticos-y-esquemas-json.md) (códigos de
-  diagnóstico estables), la [0009](0009-memoria-agotada.md) (errores de ejecución), la
-  [0011](0011-operaciones-sobre-textos.md) (funciones de un tipo) y la
-  [0014](0014-registros-nominales-inmutables.md) (registros nominales). **No modifica ninguna.**
-- **Sustituye a:** ninguna. **No modifica ni sustituye la
-  [0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md)**: su parte de entrada (D11)
-  y su sistema de efectos (`uses`) siguen siendo propuesta; esta decisión describe otra forma de
-  hacer lo mismo, y solo decide lo que se implementa.
-- **Implementación:** la 0.9.0. El código está en `capabilities.py` (el modelo de permisos, sin
-  sistema operativo), `host.py` (lo que un programa puede hacer además de calcular), `parser.py`,
-  `checker.py`, `interpreter.py`, `cli.py`, `api.py` y `worker.py`; la evidencia está en las
-  pruebas de la sección «Pruebas de regresión previstas».
+- **Status:** accepted
+- **Version:** 0.9.0 (state of the repository; not published in any package)
+- **Date:** 2026-10-21
+- **Working branch:** `feature/server-hardening`
+- **Related to:** [decision 0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md)
+  (only what has been checked runs), [0005](0005-diagnosticos-y-esquemas-json.md) (stable diagnostic
+  codes), [0009](0009-memoria-agotada.md) (runtime errors),
+  [0011](0011-operaciones-sobre-textos.md) (functions of a type) and
+  [0014](0014-registros-nominales-inmutables.md) (nominal records). **It modifies none.**
+- **Replaces:** none. **It neither modifies nor replaces
+  [0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md)**: its input part (D11)
+  and its effect system (`uses`) remain a proposal; this decision describes another way of
+  doing the same thing, and only decides what is implemented.
+- **Implementation:** 0.9.0. The code is in `capabilities.py` (the permission model, without the
+  operating system), `host.py` (what a program can do besides computing), `parser.py`,
+  `checker.py`, `interpreter.py`, `cli.py`, `api.py` and `worker.py`; the evidence is in the
+  tests of the section "Planned regression tests".
 
-## Contexto
+## Context
 
-Hasta la 0.8.0, NEXORA es un lenguaje de cálculo: un programa lee literales, llama a funciones
-propias e integradas y escribe con `print`. No lee nada de fuera. Es una decisión deliberada, no
-un descuido: la [decisión 0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md) hace
-que el intérprete solo ejecute programas comprobados, y el borrador de diseño
-(`docs/fase-1-diseno.md` de la raíz del repositorio) deja la entrada y los efectos para más
-adelante.
+Up to 0.8.0, NEXORA is a computation language: a program reads literals, calls its own and
+built-in functions and writes with `print`. It reads nothing from outside. It is a deliberate decision, not
+an oversight: [decision 0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md) makes
+the interpreter run only checked programs, and the design draft
+(`docs/fase-1-diseno.md` at the root of the repository) leaves input and effects for
+later.
 
-Esa limitación impide escribir aplicaciones de consola de verdad: un programa no puede recibir los
-argumentos con los que se invoca, ni leer de una tubería, ni abrir un archivo de datos.
+That limitation prevents writing real console applications: a program cannot receive the
+arguments it is invoked with, read from a pipe, or open a data file.
 
-El problema no es solo añadir una función de lectura. Es hacerlo **sin convertir el intérprete en
-algo que pueda tocar el sistema que lo ejecuta**. Un lenguaje que lee archivos por el motivo que sea
-es un problema de seguridad para quien lo ejecuta: el playground de la web ejecuta código de
-visitantes, y el servidor MCP analiza código que viene de un asistente.
+The problem is not only adding a read function. It is doing it **without turning the interpreter into
+something that can touch the system that runs it**. A language that reads files for whatever reason
+is a security problem for whoever runs it: the playground of the website runs code from
+visitors, and the MCP server analyzes code that comes from an assistant.
 
-De ahí la forma que se decide aquí: **el programa declara lo que necesita, quien lo ejecuta
-concede lo que permite, y el entorno decide qué se puede conceder**. Ninguna de las tres cosas
-basta sola, y el intérprete comprueba las tres en cada acceso, no solo al empezar.
+Hence the form decided here: **the program declares what it needs, whoever runs it
+grants what they allow, and the environment decides what can be granted**. None of the three things
+is enough on its own, and the interpreter checks all three on every access, not only at the start.
 
-## Decisión
+## Decision
 
-### 1. Qué puede hacer un programa
+### 1. What a program can do
 
-Se añaden cuatro funciones integradas:
+Four built-in functions are added:
 
-| Función | Qué hace | Permiso |
-|---------|----------|---------|
-| `args() -> List[Text]` | Los argumentos con los que se ejecutó el programa | Ninguno: siempre permitido |
-| `input() -> Text` | Lee **una línea** de la entrada estándar, sin el final de línea | Ninguno: siempre permitido |
-| `read_file(ruta: Text) -> Text` | Lee un archivo de texto completo | `uses read` **y** autorización del ejecutor |
-| `write_file(ruta: Text, texto: Text) -> Void` | Escribe un archivo de texto (lo crea si no existe) | `uses write` **y** autorización del ejecutor |
+| Function | What it does | Permission |
+|----------|--------------|------------|
+| `args() -> List[Text]` | The arguments the program was run with | None: always allowed |
+| `input() -> Text` | Reads **one line** from the standard input, without the line ending | None: always allowed |
+| `read_file(path: Text) -> Text` | Reads a whole text file | `uses read` **and** authorization from whoever runs it |
+| `write_file(path: Text, text: Text) -> Void` | Writes a text file (creates it if it does not exist) | `uses write` **and** authorization from whoever runs it |
 
-`print` sigue siendo la salida estándar y no cambia.
+`print` is still the standard output and does not change.
 
-Los argumentos y la entrada estándar **no necesitan declaración**: son la forma normal de invocar
-un programa de consola, y no dan acceso a nada que el ejecutor no haya dado ya. Los archivos sí, porque
-tocar el disco es lo que se restringe.
+The arguments and the standard input **need no declaration**: they are the normal way of invoking
+a console program, and they give access to nothing that whoever runs it has not already given. Files do, because
+touching the disk is what is restricted.
 
-### 2. Cómo declara el programa lo que necesita
+### 2. How the program declares what it needs
 
-Una declaración nueva, al nivel superior del archivo, junto a las funciones y los tipos:
+A new declaration, at the top level of the file, next to functions and types:
 
 ```nexora
-uses read "datos/entradas.txt"
-uses write "datos/salida.txt"
+uses read "data/inputs.txt"
+uses write "data/output.txt"
 ```
 
-`uses` declara una **capacidad**: «mi programa necesita leer esto». Declarar no concede nada: es la
-mitad del modelo, no el permiso.
+`uses` declares a **capability**: "my program needs to read this". Declaring grants nothing: it is
+half of the model, not the permission.
 
-La declaración es una ruta, escrita como un literal de texto. Las rutas relativas se resuelven
-respecto al **directorio de trabajo** del proceso, que es donde se espera que se ejecute el
-programa y donde quien lo ejecuta ve sus archivos.
+The declaration is a path, written as a text literal. Relative paths are resolved
+against the **working directory** of the process, which is where the program is expected to
+run and where whoever runs it sees their files.
 
-### 3. El modelo de permisos: la intersección
+### 3. The permission model: the intersection
 
-La capacidad efectiva de una operación es la **intersección** de tres cosas:
+The effective capability of an operation is the **intersection** of three things:
 
-1. **Lo que declara el programa**: un `uses read "ruta"` (o `uses write`) que cubra la ruta.
-2. **Lo que concede quien ejecuta**: `--allow-read=RUTA` (o `--allow-write=RUTA`) en la orden de
-   `nex run`, repetible.
-3. **Lo que permite el entorno**: si el entorno de ejecución admite archivos.
+1. **What the program declares**: a `uses read "path"` (or `uses write`) that covers the path.
+2. **What whoever runs it grants**: `--allow-read=PATH` (or `--allow-write=PATH`) in the
+   `nex run` command, repeatable.
+3. **What the environment allows**: whether the runtime environment supports files.
 
-Las tres tienen que estar. Consecuencias, que son el punto de la decisión:
+All three have to be there. Consequences, which are the point of the decision:
 
-- **Declarar no concede.** Un programa con `uses read "secreto.txt"` que se ejecuta sin
-  `--allow-read` recibe un error de permiso, no el archivo.
-- **Conceder no habilita.** `--allow-read=secreto.txt` no permite leerlo si el programa no lo
-  declara.
-- **El entorno manda.** En un entorno que no admite archivos, ninguna combinación los habilita.
+- **Declaring does not grant.** A program with `uses read "secret.txt"` that runs without
+  `--allow-read` gets a permission error, not the file.
+- **Granting does not enable.** `--allow-read=secret.txt` does not allow reading it if the program does not
+  declare it.
+- **The environment has the last word.** In an environment that does not support files, no combination enables them.
 
-Quien concede lo hace de forma **explícita, automatizable y reproducible**: la orden exacta es el
-permiso. No hay permisos interactivos, ni «¿quieres permitir este archivo?», ni un aviso que
-dependa de una respuesta: el mismo programa, con la misma orden, se comporta igual siempre.
+Whoever grants does so **explicitly, automatably and reproducibly**: the exact command is the
+permission. There are no interactive permissions, no "do you want to allow this file?", no warning that
+depends on an answer: the same program, with the same command, always behaves the same.
 
-La lectura y la escritura se conceden **por separado**: `--allow-read` no habilita la escritura, ni
-al revés.
+Reading and writing are granted **separately**: `--allow-read` does not enable writing, nor
+the other way round.
 
-### 4. Cómo se confinan las rutas
+### 4. How paths are confined
 
-El confineamiento se hace sobre la ruta **resuelta**, nunca sobre el texto escrito:
+Confinement is applied to the **resolved** path, never to the written text:
 
-- La ruta del programa y la ruta concedida se resuelven con `os.path.realpath`, que sigue los
-  enlaces simbólicos y las uniones de directorio de Windows. Una ruta que no existe todavía (al
-  escribir) se resuelve sobre su parte existente.
-- La comparación se hace entre rutas resueltas y **por segmentos**, de modo que `datos/secreto` no
-  cuela dentro de un ámbito `datos` solo porque el texto empiece igual.
-- Un `..` que sale del ámbito se resuelve fuera de él, y por lo tanto no está cubierto.
-- Un enlace simbólico dentro del ámbito que apunta fuera se resuelve fuera de él, y por lo tanto
-  tampoco está cubierto.
+- The path of the program and the granted path are resolved with `os.path.realpath`, which follows
+  symbolic links and Windows directory junctions. A path that does not exist yet (when
+  writing) is resolved on its existing part.
+- The comparison is between resolved paths and **by segments**, so that `data/secret` does not
+  slip into a scope `data` just because the text starts the same.
+- A `..` that leaves the scope is resolved outside it, and therefore it is not covered.
+- A symbolic link inside the scope that points outside is resolved outside it, and therefore it
+  is not covered either.
 
-**No se comprueba un prefijo de texto.** Un prefijo de texto no es un confineamiento: `datos2` no
-está dentro de `datos`, y un enlace simbólico puede apuntar a cualquier parte. La comprobación
-textual solo se usa en el análisis estático, como ayuda, nunca como frontera de seguridad.
+**A text prefix is not checked.** A text prefix is not a confinement: `data2` is not
+inside `data`, and a symbolic link can point anywhere. The textual check
+is only used in the static analysis, as a help, never as a security boundary.
 
-### 5. Qué hace el análisis estático y qué hace el intérprete
+### 5. What the static analysis does and what the interpreter does
 
-`nex check` puede avisar de lo que se ve en el texto:
+`nex check` can warn about what is seen in the text:
 
-- Una llamada a `read_file` o `write_file` **sin** una declaración `uses` que la cubra es el error
-  `E2026`. Cuando la ruta de la llamada es un literal y ninguna declaración la cubre, también se
-  avisa; si la ruta no es un literal (depende de una variable), el análisis no puede saberlo y no
-  avisa.
+- A call to `read_file` or `write_file` **without** a `uses` declaration that covers it is the error
+  `E2026`. When the path of the call is a literal and no declaration covers it, it also
+  warns; if the path is not a literal (it depends on a variable), the analysis cannot know it and does not
+  warn.
 
-Eso es una **ayuda**, no la seguridad. La frontera real la aplica el intérprete, en cada acceso:
+That is a **help**, not the security. The real boundary is applied by the interpreter, on every access:
 
-- Si el entorno no admite archivos, `read_file` y `write_file` fallan con `E3008`, aunque el
-  programa declare la capacidad y quien lo ejecuta haya concedido el permiso.
-- Si falta la declaración o falta la autorización, lo mismo: `E3008`.
+- If the environment does not support files, `read_file` and `write_file` fail with `E3008`, even if the
+  program declares the capability and whoever runs it has granted the permission.
+- If the declaration or the authorization is missing, the same: `E3008`.
 
-Un programa con `E2026` no llega a ejecutarse, porque el análisis estático es obligatorio
-(decisión 0002). Un programa sin `E2026` que intente algo no permitido se detiene en ejecución, con
-`E3008`. Los dos caminos cierran.
+A program with `E2026` never runs, because the static analysis is mandatory
+(decision 0002). A program without `E2026` that tries something not allowed stops at run time, with
+`E3008`. Both paths are closed.
 
-### 6. Los entornos restringidos
+### 6. Restricted environments
 
-| Entorno | Archivos | Argumentos | Entrada estándar |
-|----------|----------|------------|------------------|
-| `nex run` | Solo con `--allow-read` / `--allow-write` y con la declaración del programa | Los que se pasan tras `--` | La del proceso |
-| `nex test` | Igual que `nex run` (las ejemplos se ejecutan) | Los que se pasan tras `--` | La del proceso |
-| El worker del playground | **Nunca** | Los que el visitante envíe, si el protocolo los admite | La que el visitante envíe |
-| El servidor MCP | **Nunca** (solo analiza, no ejecuta) | — | — |
+| Environment | Files | Arguments | Standard input |
+|-------------|-------|-----------|----------------|
+| `nex run` | Only with `--allow-read` / `--allow-write` and with the declaration of the program | Those passed after `--` | That of the process |
+| `nex test` | Same as `nex run` (the examples run) | Those passed after `--` | That of the process |
+| The playground worker | **Never** | Those the visitor sends, if the protocol supports them | The one the visitor sends |
+| The MCP server | **Never** (it only analyzes, it does not run) | — | — |
 
-En el worker, el protocolo **no tiene** campos de permiso: aunque una petición intente concederlos,
-se ignoran, y el programa recibe `E3008` al tocar un archivo. El playground es público: no hay
-ninguna forma de que un visitante lo convierta en un entorno con acceso a archivos.
+In the worker, the protocol **has no** permission fields: even if a request tries to grant them,
+they are ignored, and the program gets `E3008` when it touches a file. The playground is public: there is
+no way for a visitor to turn it into an environment with access to files.
 
-### 7. La entrada estándar y su final
+### 7. The standard input and its end
 
-`input()` lee una línea y devuelve su texto sin el final de línea. Una línea vacía devuelve el
-texto vacío. Cuando ya no queda nada que leer, `input()` es un error de ejecución `E3009`: el
-programa se detiene y lo dice. Leer «hasta el final» sin parar no es expresable todavía; cuando
-existan `Option` o una función que devuelva todas las líneas, se añadirá.
+`input()` reads a line and returns its text without the line ending. An empty line returns the
+empty text. When there is nothing left to read, `input()` is a runtime error `E3009`: the
+program stops and says so. Reading "until the end" without stopping cannot be expressed yet; when
+`Option` or a function that returns all the lines exists, it will be added.
 
-### 8. Los argumentos
+### 8. Arguments
 
-`nex run programa.nex -- uno dos` da al programa los argumentos `uno` y `dos`. Sin `--`, no hay
-argumentos. `args()` devuelve una `List[Text]`, con el orden en que se pasaron.
+`nex run program.nex -- one two` gives the program the arguments `one` and `two`. Without `--`, there are no
+arguments. `args()` returns a `List[Text]`, in the order in which they were passed.
 
-### 9. La opción sin ruta, que no se incluye
+### 9. The option without a path, which is not included
 
-Conceder acceso general («a cualquier ruta») **no se incluye** en esta decisión. Si algún día se
-incluyera, tendría que ser una opción explícita, con una advertencia visible en cada ejecución,
-y seguiría siendo imposible en el playground y en el MCP. No se implementa por accidente: no hay
-ninguna forma de concederlo.
+Granting general access ("to any path") **is not included** in this decision. If it were ever
+included, it would have to be an explicit option, with a visible warning on every run,
+and it would still be impossible in the playground and in MCP. It is not implemented by accident: there is
+no way to grant it.
 
-## Hechos verificados en el repositorio
+## Facts verified in the repository
 
-| Hecho | Dónde |
-|-------|-------|
-| El intérprete solo ejecuta programas comprobados; `run` recibe un `CheckedProgram` | `src/nexora/interpreter.py`, `src/nexora/pipeline.py` |
-| Las etapas del lenguaje no tocan el sistema operativo: solo la CLI, el `__main__` y el worker pueden importar `os`, `pathlib` o `subprocess` | `tests/test_security.py:61-78` |
-| El servidor MCP solo analiza: ninguna de sus siete herramientas ejecuta un programa | `src/nexora/mcp_server.py:11`, `:72` |
-| El worker del playground es un proceso aparte que recibe un JSON y devuelve otro; su protocolo no tiene campos de permiso | `src/nexora/worker.py:9-17` |
-| La salida del programa la escribe la función que el intérprete recibe (`run(checked, write)`), no el intérprete | `src/nexora/interpreter.py:112-118`, `src/nexora/cli.py:253` |
-| `print` y las conversiones se resuelven en el intérprete, y las funciones de un tipo en `prelude.py` | `src/nexora/interpreter.py:590-632`, `src/nexora/prelude.py:145` |
-| Los códigos de diagnóstico tienen su número y su categoría en un registro único, y las pruebas comparan el registro con la especificación y con `docs/diagnostics.md` | `src/nexora/diagnostics.py:74`, `tests/test_diagnostics.py:103`, `tests/test_docs.py:294` |
-| Los últimos códigos en uso son `E2022` (semántico) y `E3007` (ejecución) | `src/nexora/diagnostics.py:74-127` |
-| La gramática es la de `docs/language-spec.md`, sección 3, y el analizador léxico ya reconoce `//` como comentario | `docs/language-spec.md:126-195`, `src/nexora/lexer.py` |
-| El playground ejecuta cada programa en un proceso aparte, con límites de tiempo y de salida | `servidor/src/playground/worker.js`, `servidor/src/playground/router.js` |
-| La 0012 propone un registro `Input` y `main(input)`, y aplaza el sistema de efectos `uses` | `docs/decisions/0012-…md:605-624`, `:642`, `:988` |
+| Fact | Where |
+|------|-------|
+| The interpreter only runs checked programs; `run` receives a `CheckedProgram` | `src/nexora/interpreter.py`, `src/nexora/pipeline.py` |
+| The stages of the language do not touch the operating system: only the CLI, `__main__` and the worker can import `os`, `pathlib` or `subprocess` | `tests/test_security.py:61-78` |
+| The MCP server only analyzes: none of its seven tools runs a program | `src/nexora/mcp_server.py:11`, `:72` |
+| The playground worker is a separate process that receives a JSON and returns another one; its protocol has no permission fields | `src/nexora/worker.py:9-17` |
+| The output of the program is written by the function the interpreter receives (`run(checked, write)`), not by the interpreter | `src/nexora/interpreter.py:112-118`, `src/nexora/cli.py:253` |
+| `print` and the conversions are resolved in the interpreter, and the functions of a type in `prelude.py` | `src/nexora/interpreter.py:590-632`, `src/nexora/prelude.py:145` |
+| Diagnostic codes have their number and their category in a single registry, and the tests compare the registry with the specification and with `docs/diagnostics.md` | `src/nexora/diagnostics.py:74`, `tests/test_diagnostics.py:103`, `tests/test_docs.py:294` |
+| The last codes in use are `E2022` (semantic) and `E3007` (runtime) | `src/nexora/diagnostics.py:74-127` |
+| The grammar is that of `docs/language-spec.md`, section 3, and the lexer already recognizes `//` as a comment | `docs/language-spec.md:126-195`, `src/nexora/lexer.py` |
+| The playground runs every program in a separate process, with time and output limits | `servidor/src/playground/worker.js`, `servidor/src/playground/router.js` |
+| 0012 proposes an `Input` record and `main(input)`, and postpones the `uses` effect system | `docs/decisions/0012-…md:605-624`, `:642`, `:988` |
 
-## Decisiones que se toman aquí, y por qué
+## Decisions taken here, and why
 
-| Decisión | Motivo |
+| Decision | Reason |
 |----------|--------|
-| Los argumentos y la entrada estándar no se declaran | No dan acceso a nada que el ejecutor no haya dado ya; declararlos sería ruido |
-| Los archivos se declaran con `uses` | Es lo que el programa dice que necesita: legible, revisable y comprobable por el análisis estático |
-| La capacidad efectiva es una intersección de tres | Ninguna de las tres basta sola; una sola decisión (del programa, del ejecutor o del entorno) nunca habilita por sí sola |
-| Las rutas se confinan sobre la ruta resuelta | Un prefijo de texto no es un confineamiento: `..` y los enlaces simbólicos lo esquivan |
-| La comprobación real la hace el intérprete, no el análisis | El análisis estático puede engañarse; el intérprete es la frontera |
-| `--allow-read` y `--allow-write` son independientes | Leer y escribir no es lo mismo, y una aplicación que solo lee no necesita permiso de escritura |
-| La opción sin ruta no se incluye | Acceso general a un disco desde un lenguaje no es una capacidad que se conceda por comodidad |
-| El playground y el MCP no admiten archivos, sin excepción | El playground ejecuta código de visitantes; el MCP analiza código de un asistente |
-| `input()` falla al llegar al final | Devolver un texto vacío no distinguiría el final de una línea vacía, y un programa que lee en un bucle no terminaría nunca |
-| `uses` es una declaración, no una expresión | Es una propiedad del programa, no un valor: no puede pasar por un parámetro ni construirse en ejecución |
+| Arguments and standard input are not declared | They give access to nothing that whoever runs the program has not already given; declaring them would be noise |
+| Files are declared with `uses` | It is what the program says it needs: readable, reviewable and checkable by the static analysis |
+| The effective capability is an intersection of three | None of the three is enough on its own; a single decision (of the program, of whoever runs it or of the environment) never enables on its own |
+| Paths are confined on the resolved path | A text prefix is not a confinement: `..` and symbolic links get around it |
+| The real check is done by the interpreter, not by the analysis | The static analysis can be fooled; the interpreter is the boundary |
+| `--allow-read` and `--allow-write` are independent | Reading and writing are not the same, and an application that only reads does not need write permission |
+| The option without a path is not included | General access to a disk from a language is not a capability granted for convenience |
+| The playground and MCP do not support files, without exception | The playground runs code from visitors; MCP analyzes code from an assistant |
+| `input()` fails when it reaches the end | Returning an empty text would not tell the end from an empty line, and a program that reads in a loop would never end |
+| `uses` is a declaration, not an expression | It is a property of the program, not a value: it cannot go through a parameter or be built at run time |
 
-## Lo que no garantiza
+## What it does not guarantee
 
-- Que el análisis estático detecte todos los usos indebidos: solo lo que se ve en el texto. La
-  seguridad no depende de él.
-- Que el confineamiento de rutas valga para un sistema de archivos que cambie mientras el programa
-  corre (un `..` resuelto en un momento y otro en otro).
-- Que leer un archivo granted sea seguro por sí mismo: el contenido es del archivo, y el programa
-  puede interpretarlo como quiera.
-- Que `input()` pueda leer «hasta el final» sin parar.
-- Que exista aislamiento frente a la red, los procesos o las variables de entorno: no existen
-  todavía.
-- Que los programas con acceso a archivos sean seguros en un servidor público: por eso el
-  playground no los admite.
+- That the static analysis detects every misuse: only what is seen in the text. Security
+  does not depend on it.
+- That path confinement holds for a file system that changes while the program
+  runs (a `..` resolved at one moment and another at another).
+- That reading a granted file is safe in itself: the content belongs to the file, and the program
+  can interpret it as it likes.
+- That `input()` can read "until the end" without stopping.
+- That there is isolation against the network, processes or environment variables: they do not exist
+  yet.
+- That programs with access to files are safe on a public server: that is why the
+  playground does not support them.
 
-## Fuera del alcance
+## Out of scope
 
-- La red, los procesos externos y las variables de entorno.
-- Los permisos interactivos por archivo y los avisos que dependen de una respuesta.
-- Escribir en un directorio, crear directorios, renombrar o borrar: solo leer y escribir un
-  archivo de texto.
-- Los archivos que no son de texto (binarios).
-- El acceso a la red, a los sockets o a las variables de entorno.
-- `Option`, `Result` y las demás construcciones de la 0012.
-- Los módulos y las importaciones.
+- The network, external processes and environment variables.
+- Interactive per-file permissions and warnings that depend on an answer.
+- Writing to a directory, creating directories, renaming or deleting: only reading and writing a
+  text file.
+- Files that are not text (binary).
+- Access to the network, to sockets or to environment variables.
+- `Option`, `Result` and the other constructs of 0012.
+- Modules and imports.
 
-## Alternativas descartadas
+## Alternatives ruled out
 
-| Alternativa | Por qué no |
-|-------------|------------|
-| Un registro `Input` con `main(input)`, como propone la 0012 | Cambia la forma de `main` y hace que cada programa que no lea nada declare un parámetro que no usa; además aplaza el problema de los permisos, que es el difícil |
-| Declarar el permiso solo en el programa | El programa podría pedir lo que quiera; quien lo ejecuta no podría negar nada |
-| Conceder solo desde el ejecutor | El ejecutor no puede saber qué va a leer el programa; conceder «de todo» por prudencia es lo contrario de explícito |
-| Una comprobación de prefijo de texto | `datos2` cuela dentro de `datos`, y un enlace simbólico dentro del ámbito puede apuntar fuera. No es un confineamiento |
-| Conceder el acceso a cualquier ruta con una opción | Es acceso general al disco con una palabra; el ejecutor deja de controlar lo que ocurre |
-| Un aviso interactivo por archivo | Depende de una respuesta: no es automatizable ni reproducible, y en un servidor no hay nadie que responda |
-| Dejar que el análisis estático sea la seguridad | Se puede engañar: rutas calculadas, literales construidos en ejecución, o una ruta que cambia entre el análisis y la ejecución |
+| Alternative | Why not |
+|-------------|---------|
+| An `Input` record with `main(input)`, as 0012 proposes | It changes the form of `main` and makes every program that reads nothing declare a parameter it does not use; besides, it postpones the problem of permissions, which is the hard one |
+| Declaring the permission only in the program | The program could ask for whatever it wanted; whoever runs it could deny nothing |
+| Granting only from whoever runs it | Whoever runs it cannot know what the program is going to read; granting "everything" out of caution is the opposite of explicit |
+| A text prefix check | `data2` slips into `data`, and a symbolic link inside the scope can point outside. It is not a confinement |
+| Granting access to any path with an option | It is general access to the disk with one word; whoever runs it stops controlling what happens |
+| An interactive warning per file | It depends on an answer: it is neither automatable nor reproducible, and on a server there is nobody to answer |
+| Letting the static analysis be the security | It can be fooled: computed paths, literals built at run time, or a path that changes between the analysis and the execution |
 
-## Compatibilidad
+## Compatibility
 
-**Programas.** Ningún programa válido en la 0.8.0 deja de serlo ni cambia de resultado. `print`,
-`to_text`, `to_float`, `to_int` y las funciones de `Text`, `Int`, `Float` y `List` siguen igual. Los
-programas que no usan las funciones nuevas no se ven afectados: `args()` devuelve una lista vacía y `input()` lee de la entrada estándar, que es lo que
-ya hacía el proceso.
+**Programs.** No program valid in 0.8.0 stops being so or changes its result. `print`,
+`to_text`, `to_float`, `to_int` and the functions of `Text`, `Int`, `Float` and `List` stay the same. The
+programs that do not use the new functions are not affected: `args()` returns an empty list and `input()` reads from the standard input, which is what
+the process already did.
 
-**Herramientas.** Los cambios son aditivos y no cambian el número de ningún formato JSON: un nodo
-`UsesDecl`, un campo más en `Program`, y el campo nuevo de `nexora.context/1`. Los esquemas se
-regeneran; un documento nuevo valida contra el esquema viejo, que ignora los campos que no conoce.
+**Tools.** The changes are additive and do not change the number of any JSON format: a
+`UsesDecl` node, one more field in `Program`, and the new field of `nexora.context/1`. The schemas are
+regenerated; a new document validates against the old schema, which ignores the fields it does not know.
 
-**Códigos.** Se añaden cuatro: `E2026` (falta la declaración de una capacidad), `E3008` (permiso
-denegado) y `E3009` (no queda entrada). Los anteriores no cambian de significado.
+**Codes.** Four are added: `E2026` (the declaration of a capability is missing), `E3008` (permission
+denied) and `E3009` (no input left). The previous ones do not change their meaning.
 
-## Cambios necesarios
+## Required changes
 
-- **Léxico y sintaxis**: la declaración `uses`, sus dos formas, y la gramática de `docs/language-spec.md`
-  (sección 3).
-- **Tipo**: el nodo `UsesDecl`, el campo `uses` en `Program`, y las cuatro funciones en el registro
-  de las integradas.
-- **Comprobación**: las declaraciones, el error `E2026` cuando una llamada no tiene declaración que
-  la cubra, y la tabla de diagnósticos.
-- **Intérprete**: `args`, `input`, `read_file` y `write_file`, con la comprobación de permisos en
-  cada acceso.
-- **Permisos**: el modelo de la intersección y el confineamiento de rutas, en un módulo aparte que
-  no toca el sistema: el intérprete pide, el entorno concede.
-- **CLI**: `--allow-read` y `--allow-write` en `nex run` y `nex test`, y los argumentos tras `--`.
-- **Entornos restringidos**: el worker del playground sin acceso a archivos, y el MCP igual.
-- **Herramientas**: `nexora.context/1` con las capacidades declaradas, y `nexora.inspect/2` con el
-  nodo nuevo.
-- **Documentación**: la especificación, `docs/diagnostics.md`, `types.md`, `limitations.md`,
-  `docs/playground.md`, `docs/cli-reference.md` y la guía del sitio.
-- **Ejemplos**: un programa que lee argumentos y un archivo autorizado, y uno que falla sin permiso.
+- **Lexicon and syntax**: the `uses` declaration, its two forms, and the grammar of `docs/language-spec.md`
+  (section 3).
+- **Type**: the `UsesDecl` node, the `uses` field in `Program`, and the four functions in the registry
+  of the built-in ones.
+- **Checking**: the declarations, the error `E2026` when a call has no declaration that
+  covers it, and the table of diagnostics.
+- **Interpreter**: `args`, `input`, `read_file` and `write_file`, with the permission check on
+  every access.
+- **Permissions**: the model of the intersection and path confinement, in a separate module that
+  does not touch the system: the interpreter asks, the environment grants.
+- **CLI**: `--allow-read` and `--allow-write` in `nex run` and `nex test`, and the arguments after `--`.
+- **Restricted environments**: the playground worker without access to files, and MCP the same.
+- **Tools**: `nexora.context/1` with the declared capabilities, and `nexora.inspect/2` with the
+  new node.
+- **Documentation**: the specification, `docs/diagnostics.md`, `types.md`, `limitations.md`,
+  `docs/playground.md`, `docs/cli-reference.md` and the guide of the site.
+- **Examples**: a program that reads arguments and an authorized file, and one that fails without permission.
 
-## Pruebas de regresión previstas
+## Planned regression tests
 
-| Archivo | Qué fija |
-|---------|----------|
-| `tests/test_input_arguments.py` | Argumentos vacíos y múltiples, con espacios y con Unicode; `args()` sin argumentos |
-| `tests/test_input_stdin.py` | Varias líneas, línea vacía, final de la entrada (`E3009`), y que la entrada se lee una vez y en orden |
-| `tests/test_permissions_files.py` | Declaraciones, permisos concedidos y denegados, lectura sin escritura y escritura sin lectura, rutas fuera del ámbito, `..`, rutas absolutas, enlaces simbólicos, y el error `E3008` en ejecución |
-| `tests/test_permissions_static.py` | El error `E2026` del análisis estático y su ausencia cuando la declaración cubre la ruta |
-| `tests/test_permissions_environments.py` | Que el worker y el MCP rechazan siempre el acceso a archivos, y que el playground no puede concederlo |
-| `tests/test_security.py` | Que las etapas del lenguaje siguen sin tocar el sistema, y que el módulo de permisos es el único que lo hace |
+| File | What it pins down |
+|------|-------------------|
+| `tests/test_input_arguments.py` | Empty and multiple arguments, with spaces and with Unicode; `args()` without arguments |
+| `tests/test_input_stdin.py` | Several lines, an empty line, the end of the input (`E3009`), and that the input is read once and in order |
+| `tests/test_permissions_files.py` | Declarations, granted and denied permissions, reading without writing and writing without reading, paths outside the scope, `..`, absolute paths, symbolic links, and the error `E3008` at run time |
+| `tests/test_permissions_static.py` | The error `E2026` of the static analysis and its absence when the declaration covers the path |
+| `tests/test_permissions_environments.py` | That the worker and MCP always reject access to files, and that the playground cannot grant it |
+| `tests/test_security.py` | That the stages of the language still do not touch the system, and that the permission module is the only one that does |
 
-## Relación con las decisiones anteriores y el índice
+## Relation to the previous decisions and the index
 
-- La [0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md) no cambia: el programa sigue
-  sin ejecutarse si tiene errores estáticos, y un programa sin declaración de capacidad no pasa el
-  análisis.
-- La [0005](0005-diagnosticos-y-esquemas-json.md) no cambia: los códigos nuevos siguen el mismo
-  registro, con su categoría y su texto fijo.
-- La [0014](0014-registros-nominales-inmutables.md) no cambia: los registros son valores, y un
-  registro puede guardarse en un archivo como cualquier otro texto.
-- La [0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) **no se reescribe**: su
-  parte de entrada (D11) y su sistema de efectos siguen siendo propuesta. Esta decisión describe
-  otra forma de resolver lo mismo, y solo decide lo que se implementa. La 0012 sigue siendo la
-  referencia para el resto de su contenido.
-- El índice [`README.md`](README.md) registrará la 0015 cuando se acepte.
+- [0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md) does not change: the program still
+  does not run if it has static errors, and a program without a capability declaration does not pass the
+  analysis.
+- [0005](0005-diagnosticos-y-esquemas-json.md) does not change: the new codes follow the same
+  registry, with their category and their fixed text.
+- [0014](0014-registros-nominales-inmutables.md) does not change: records are values, and a
+  record can be saved in a file like any other text.
+- [0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) **is not rewritten**: its
+  input part (D11) and its effect system remain a proposal. This decision describes
+  another way of solving the same thing, and only decides what is implemented. 0012 is still the
+  reference for the rest of its content.
+- The index [`README.md`](README.md) will record 0015 when it is accepted.
 
-## Cuestiones que siguen abiertas
+## Questions that remain open
 
-1. **Leer hasta el final.** `input()` falla al llegar al final; no hay forma de leer todas las
-   líneas. Se resolverá con `Option` o con una función que devuelva la lista, cuando existan.
-2. **La forma de la declaración.** `uses read "ruta"` es una lista de rutas. Cuando haya módulos,
-   la ruta podría ser relativa al módulo, y eso hay que decidirlo entonces.
-3. **El aviso visible de la opción sin ruta.** No se incluye ninguna; si algún día se incluye, la
-   forma del aviso también está por decidir.
-4. **Los directorios.** Hoy solo se leen y escriben archivos, no directorios. Ampliarlo cambia el
-   modelo de confineamiento y sería otra decisión.
+1. **Reading until the end.** `input()` fails when it reaches the end; there is no way to read all the
+   lines. It will be solved with `Option` or with a function that returns the list, when they exist.
+2. **The form of the declaration.** `uses read "path"` is a list of paths. When there are modules,
+   the path could be relative to the module, and that has to be decided then.
+3. **The visible warning of the option without a path.** None is included; if one ever is, the
+   form of the warning is also still to be decided.
+4. **Directories.** Today only files are read and written, not directories. Extending it changes the
+   confinement model and would be another decision.

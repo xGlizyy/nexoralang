@@ -42,7 +42,7 @@ DIAGNOSTICS_SCHEMA = "nexora.diagnostics/1"
 INSPECT_SCHEMA = "nexora.inspect/2"
 SYMBOLS_SCHEMA = "nexora.symbols/1"
 CONTEXT_SCHEMA = "nexora.context/1"
-SPEC_SCHEMA = "nexora.spec/1"
+SPEC_SCHEMA = "nexora.spec/2"
 CAPABILITIES_SCHEMA = "nexora.capabilities/1"
 
 DEFAULT_FILENAME = "source.nex"
@@ -688,7 +688,7 @@ def get_language_spec(section: str | None = None) -> dict:
     docs/language-spec.md of the project and from nowhere else: `section` is looked up in
     the list of headings, never used as a path.
 
-    Returns a `nexora.spec/1` document. `available` is false when NEXORA was installed
+    Returns a `nexora.spec/2` document. `available` is false when NEXORA was installed
     without its documentation (from a wheel), in which case there are no sections.
     Raises ToolingError("unknown_section") for an id that is not in the list.
     """
@@ -697,7 +697,7 @@ def get_language_spec(section: str | None = None) -> dict:
         "nexora_version": __version__,
         "available": False,
         "spec_version": None,
-        "language": "es",
+        "language": "en",
         "sections": [],
         "section": None,
     }
@@ -706,7 +706,7 @@ def get_language_spec(section: str | None = None) -> dict:
     except OSError:
         return document
 
-    version = re.search(r"\*\*Versión de la especificación:\*\*\s*([\d.]+)", text)
+    version = re.search(r"\*\*Specification version:\*\*\s*([\d.]+)", text)
     sections = _spec_sections(text)
     document.update(
         available=True,

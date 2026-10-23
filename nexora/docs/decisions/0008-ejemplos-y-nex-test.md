@@ -1,33 +1,33 @@
-# 0008 — Ejemplos en las funciones (`example`) y el comando `nex test`
+# 0008 — Examples in functions (`example`) and the `nex test` command
 
-- **Estado:** aceptada
-- **Versión:** 0.4.0
+- **Status:** accepted
+- **Version:** 0.4.0
 
-## Contexto
+## Context
 
-La [decisión 0006](0006-requisitos-verificables.md) hace de los requisitos verificables la
-característica principal de NEXORA. La 0.3 cubre dos clases de requisito: lo que un valor admite
-(tipos refinados) y la relación entre la entrada y la salida de una función (contratos). Falta la
-tercera: **qué resultado concreto debe dar una función con unas entradas concretas**.
+[Decision 0006](0006-requisitos-verificables.md) makes verifiable requirements the main
+feature of NEXORA. 0.3 covers two kinds of requirement: what a value accepts
+(refined types) and the relation between the input and the output of a function (contracts). The
+third one is missing: **what concrete result a function must give for some concrete inputs**.
 
-Los contratos, además, solo se comprueban en las llamadas que se ejecutan: una función que ningún
-`main` llama no se comprueba nunca. Y hoy, para saber si una edición rompió algo, hay que escribir
-un `main` que ejerza el código y leer lo que imprime.
+Contracts, moreover, are only checked in the calls that are executed: a function that no
+`main` calls is never checked. And today, to know whether an edit broke something, you have to write
+a `main` that exercises the code and read what it prints.
 
-Este es el paso 3 de la línea principal de la [hoja de ruta](../roadmap.md#línea-principal-requisitos-verificables).
+This is step 3 of the main line of the [roadmap](../roadmap.md#main-line-verifiable-requirements).
 
-Términos que usa esta decisión:
+Terms used by this decision:
 
-- **Ejemplo:** una cláusula `example` de una función.
-- **Función del ejemplo:** la función en cuyo cuerpo está escrita la cláusula.
-- **Llamada propia:** un nodo de llamada, dentro de la expresión del ejemplo, a la función del
-  ejemplo (sección 1.4).
-- **Evaluar un ejemplo:** calcular su expresión ejecutando las funciones a las que llama. Solo lo
-  hace `nex test`.
+- **Example:** an `example` clause of a function.
+- **Function of the example:** the function in whose body the clause is written.
+- **Own call:** a call node, inside the expression of the example, to the function of the
+  example (section 1.4).
+- **Evaluating an example:** computing its expression by running the functions it calls. Only
+  `nex test` does it.
 
-## Decisión
+## Decision
 
-### 1. La cláusula `example`
+### 1. The `example` clause
 
 ```text
 fn apply_discount(price: Cents, percent: Percent) -> Cents {
@@ -41,214 +41,214 @@ fn apply_discount(price: Cents, percent: Percent) -> Cents {
 }
 ```
 
-#### 1.1 Posición
+#### 1.1 Position
 
-`example` es una cláusula del principio del cuerpo, como `requires` y `ensures`: va antes de la
-primera sentencia, y las tres pueden mezclarse en cualquier orden. Puede haber cualquier número de
-ejemplos en una función. Una cláusula `example` después de una sentencia es el error existente
-`E1106` (*Misplaced contract clause*), cuyo mensaje ya nombra la palabra concreta:
+`example` is a clause at the start of the body, like `requires` and `ensures`: it goes before the
+first statement, and the three can be mixed in any order. A function can have any number of
+examples. An `example` clause after a statement is the existing error
+`E1106` (*Misplaced contract clause*), whose message already names the concrete word:
 `'example' must come at the start of a function body, before any other statement`.
 
-#### 1.2 Forma y gramática
+#### 1.2 Form and grammar
 
 ```ebnf
 contract = ( "requires" | "ensures" | "example" ) expression [ explanation ] end ;
 ```
 
-La explicación sigue exactamente las reglas de la 0.3.1 para `requires`, `ensures` y `where`: un
-único texto literal, no vacío, de una sola línea. Lo contrario es `E1101`.
+The explanation follows exactly the rules of 0.3.1 for `requires`, `ensures` and `where`: a
+single literal text, not empty, on a single line. Otherwise it is `E1101`.
 
-`example` pasa de palabra reservada a palabra clave.
+`example` goes from reserved word to keyword.
 
-#### 1.3 Tipo y nombres visibles
+#### 1.3 Type and visible names
 
-- La expresión es de tipo `Bool`. Si no lo es, el análisis estático da `E2011` con el mensaje
-  `The condition of 'example' must be Bool, found Int`, el mismo formato que `requires` y `ensures`.
-- Un ejemplo no ocurre dentro de una llamada: **no ve los parámetros de su función ni `result`**.
-  Usar cualquiera de ellos es `E2005` (*Unknown variable*), con la sugerencia
+- The expression is of type `Bool`. If it is not, static analysis gives `E2011` with the message
+  `The condition of 'example' must be Bool, found Int`, the same format as `requires` and `ensures`.
+- An example does not happen inside a call: **it does not see the parameters of its function nor `result`**.
+  Using any of them is `E2005` (*Unknown variable*), with the suggestion
   `An example has no parameters: write its inputs as values, for example: double(2)`.
-- Puede usar literales, operadores, las funciones integradas, **cualquier función del programa** y
-  comprobaciones de tipos refinados (`Percent(x)`).
-- Los argumentos constantes se comprueban contra los tipos refinados sin ejecutar, como cualquier
-  constante (`E2017`), y cuentan para el límite de trabajo del análisis (`E2019`).
-- Consecuencia: una función `Void` no puede tener ejemplos válidos, porque una llamada a ella no
-  produce ningún valor que pueda formar parte de una expresión `Bool` (`E2011`).
+- It can use literals, operators, the built-in functions, **any function of the program** and
+  refined type checks (`Percent(x)`).
+- Constant arguments are checked against refined types without running, like any
+  constant (`E2017`), and they count towards the work limit of the analysis (`E2019`).
+- Consequence: a `Void` function cannot have valid examples, because a call to it does not
+  produce any value that can be part of a `Bool` expression (`E2011`).
 
-#### 1.4 La llamada propia
+#### 1.4 The own call
 
-Una **llamada propia** es un nodo `Call` que está en el árbol de sintaxis de la expresión del ejemplo
-(en cualquier posición: como operando, como argumento de otra llamada, dentro de paréntesis) y cuyo
-nombre es el de la función del ejemplo.
+An **own call** is a `Call` node that is in the syntax tree of the expression of the example
+(in any position: as an operand, as an argument of another call, inside parentheses) and whose
+name is that of the function of the example.
 
-- NEXORA no tiene sobrecarga: dos funciones no pueden llamarse igual (`E2002`), y el nombre de una
-  función no puede ser el de un tipo (`E2006`). Por eso el nombre identifica la función sin ninguna
-  regla adicional de resolución.
-- Basta **una**. Puede haber varias, y pueden estar anidadas.
-- Una llamada que ocurre al ejecutar otra función **no cuenta**: se mira el texto del ejemplo, no su
-  ejecución, porque el análisis no ejecuta nada (sección 2).
-- Una llamada propia con errores (número de argumentos, tipos) cuenta como llamada propia: su error
-  es el suyo (`E2009`, `E2011`), no `E2020`.
+- NEXORA has no overloading: two functions cannot have the same name (`E2002`), and the name of a
+  function cannot be that of a type (`E2006`). That is why the name identifies the function without any
+  additional resolution rule.
+- **One** is enough. There can be several, and they can be nested.
+- A call that happens when running another function **does not count**: the text of the example is looked at, not its
+  execution, because the analysis does not run anything (section 2).
+- An own call with errors (number of arguments, types) counts as an own call: its error
+  is its own (`E2009`, `E2011`), not `E2020`.
 
-| Expresión en un ejemplo de `f` | ¿Tiene llamada propia? |
+| Expression in an example of `f` | Does it have an own call? |
 |--------------------------------|------------------------|
-| `f(2) == 4` | Sí |
-| `f(f(2)) == 16` | Sí, dos |
-| `f(1) + f(2) == 6` | Sí, dos |
-| `to_float(f(2)) > 3.5` | Sí |
-| `g(f(2)) == 1` | Sí: `f(2)` está en el árbol del ejemplo |
-| `g(2) == 4`, aunque `g` llame a `f` | No |
+| `f(2) == 4` | Yes |
+| `f(f(2)) == 16` | Yes, two |
+| `f(1) + f(2) == 6` | Yes, two |
+| `to_float(f(2)) > 3.5` | Yes |
+| `g(f(2)) == 1` | Yes: `f(2)` is in the tree of the example |
+| `g(2) == 4`, even if `g` calls `f` | No |
 | `2 + 2 == 4` | No |
 
-Sin ninguna llamada propia: **`E2020`** (*Example without its function*, categoría `semantic`).
-Señala la expresión completa del ejemplo; mensaje `This example of 'f' never calls 'f'`; sugerencia
-`Write the call with its inputs, for example: example f(2) == 4`. Si la expresión, además, no es
-`Bool`, se informan los dos errores: son dos problemas distintos.
+Without any own call: **`E2020`** (*Example without its function*, category `semantic`).
+It points at the whole expression of the example; message `This example of 'f' never calls 'f'`; suggestion
+`Write the call with its inputs, for example: example f(2) == 4`. If the expression, in addition, is not
+`Bool`, both errors are reported: they are two different problems.
 
-### 2. Analizar no es ejecutar
+### 2. Analysing is not running
 
-| Herramienta | Qué hace con los ejemplos |
+| Tool | What it does with the examples |
 |-------------|---------------------------|
-| `nex check`, `nex inspect`, `nex context`, `nex symbols` y el servidor MCP | Aplican las reglas de la sección 1. **No evalúan ningún ejemplo ni llaman a ninguna función** |
-| `nex run` | Nada. Ejecuta `main` como siempre |
-| `nex test` y `nexora.api.test_source` | Los evalúan |
+| `nex check`, `nex inspect`, `nex context`, `nex symbols` and the MCP server | They apply the rules of section 1. **They do not evaluate any example nor call any function** |
+| `nex run` | Nothing. It runs `main` as always |
+| `nex test` and `nexora.api.test_source` | They evaluate them |
 
-La 0.3.1 dejó escrito que el análisis no ejecuta el programa; lo único que evalúa son las
-condiciones de los tipos refinados sobre constantes, que no llaman a funciones del programa. Esta
-decisión no cambia esa frontera.
+0.3.1 put in writing that the analysis does not run the program; the only thing it evaluates is the
+conditions of refined types over constants, which do not call functions of the program. This
+decision does not change that boundary.
 
-**Grafo de llamadas.** Las llamadas que hay en un ejemplo **no son aristas** del grafo de llamadas de
-su función. Un ejemplo de `f` que llama a `f` no hace a `f` recursiva, y un ejemplo de `f` que llama
-a `g` no hace que `f` "llame" a `g`. En `nex context`, `calls`, `called_by` y `recursive` no cambian.
-Sí son **referencias** a la función llamada en `nex symbols`: el nombre se usa ahí.
+**Call graph.** The calls in an example **are not edges** of the call graph of
+its function. An example of `f` that calls `f` does not make `f` recursive, and an example of `f` that calls
+`g` does not make `f` "call" `g`. In `nex context`, `calls`, `called_by` and `recursive` do not change.
+They are **references** to the called function in `nex symbols`: the name is used there.
 
-### 3. Evaluación de los ejemplos
+### 3. Evaluation of the examples
 
-#### 3.1 Estados
+#### 3.1 States
 
-| Estado | Definición | Diagnóstico |
+| State | Definition | Diagnostic |
 |--------|------------|-------------|
-| `passed` | La evaluación termina sin error de ejecución ni regla incumplida, y la expresión vale `true` | Ninguno |
-| `failed` | La evaluación termina sin error de ejecución ni regla incumplida, y la expresión vale `false` | `E4004` |
-| `error` | La evaluación se detiene por un error de ejecución (`E3001`–`E3006`) o por una regla incumplida (`E4001`–`E4003`) | El original, con su código, más una nota |
+| `passed` | The evaluation ends without a runtime error or a broken rule, and the expression is `true` | None |
+| `failed` | The evaluation ends without a runtime error or a broken rule, and the expression is `false` | `E4004` |
+| `error` | The evaluation stops because of a runtime error (`E3001`–`E3006`) or a broken rule (`E4001`–`E4003`) | The original one, with its code, plus a note |
 
-Son excluyentes, y un `error` **nunca** se convierte en `failed`.
+They are mutually exclusive, and an `error` **never** turns into `failed`.
 
-**`E4004`** (*Example failed*, categoría nueva **`test`**): señala la expresión del ejemplo, con el
-mensaje `This example of 'f' is false`. Las notas son, en este orden: una por cada llamada propia que
-devolvió un valor (`f(2) returned 5`), en el orden en que se invocaron (sección 6.3), y, si existe,
-la explicación (`Reason: ...`).
+**`E4004`** (*Example failed*, new category **`test`**): it points at the expression of the example, with the
+message `This example of 'f' is false`. The notes are, in this order: one for each own call that
+returned a value (`f(2) returned 5`), in the order in which they were invoked (section 6.3), and, if it exists,
+the explanation (`Reason: ...`).
 
-**Nota de un `error`:** al diagnóstico original se le añade, como última nota,
-`While evaluating example 2 of 'f', at line 14.` El resto del diagnóstico (código, posición,
-mensaje, cadena de llamadas) no cambia.
+**Note of an `error`:** the original diagnostic gets, as its last note,
+`While evaluating example 2 of 'f', at line 14.` The rest of the diagnostic (code, position,
+message, call chain) does not change.
 
-#### 3.2 Qué se comprueba
+#### 3.2 What is checked
 
-Exactamente lo mismo que en `nex run`, a cualquier profundidad: los `requires` y `ensures` de toda
-función que se llame durante el ejemplo (la del ejemplo y las demás, aunque `--function` no las
-seleccione), las comprobaciones `Tipo(x)`, la división por cero, los desbordamientos, el límite de
-1000 llamadas anidadas. Una violación de `requires` en una llamada anidada (el ejemplo de `f` llama a
-`g`, y `g` incumple el `requires` de `h`) es un `error` con el `E4001` que señala la llamada a `h` y
-la cadena de llamadas de siempre.
+Exactly the same as in `nex run`, at any depth: the `requires` and `ensures` of every
+function called during the example (the one of the example and the others, even if `--function` does not
+select them), the `Type(x)` checks, division by zero, overflows, the limit of
+1000 nested calls. A `requires` violation in a nested call (the example of `f` calls
+`g`, and `g` breaks the `requires` of `h`) is an `error` with the `E4001` that points at the call to `h` and
+the usual call chain.
 
-#### 3.3 Aislamiento real
+#### 3.3 Real isolation
 
-Cada ejemplo se evalúa con **un intérprete nuevo**, en el orden del archivo (funciones en el orden
-en que se declaran; dentro de cada una, ejemplos en el orden en que se escriben). Lo que eso
-garantiza, con la arquitectura actual:
+Each example is evaluated with **a new interpreter**, in the order of the file (functions in the order
+in which they are declared; within each one, examples in the order in which they are written). What that
+guarantees, with the current architecture:
 
-- **Pila y variables propias.** El intérprete guarda la cadena de llamadas en curso y no la vacía
-  tras un error; uno nuevo por ejemplo evita que un fallo la contamine. Las variables viven en
-  entornos que se crean en cada llamada.
-- **Nada más que compartir.** Un programa NEXORA no tiene variables globales, no puede leer ni
-  escribir archivos, red ni entrada, y su único efecto es `print`, que se recoge por separado para
-  cada ejemplo. Por eso un ejemplo no puede influir en otro.
+- **Own stack and variables.** The interpreter keeps the chain of calls in progress and does not empty it
+  after an error; a new one per example prevents a failure from contaminating it. Variables live in
+  environments created on every call.
+- **Nothing else to share.** A NEXORA program has no global variables, cannot read nor
+  write files, network or input, and its only effect is `print`, which is collected separately for
+  each example. That is why an example cannot influence another.
 
-Lo que **no** garantiza: todos los ejemplos se evalúan en el mismo proceso, uno tras otro. No hay
-límite de tiempo ni de memoria por ejemplo, ni ningún aislamiento del sistema operativo. Un cálculo
-muy largo retrasa los siguientes; una recursividad sin fin se detiene en el límite de llamadas
-(`E3004`) y queda en `error`.
+What it does **not** guarantee: all the examples are evaluated in the same process, one after another. There is no
+time or memory limit per example, nor any operating system isolation. A very
+long computation delays the following ones; an endless recursion stops at the call limit
+(`E3004`) and ends up in `error`.
 
-#### 3.4 Continuar o detenerse
+#### 3.4 Continuing or stopping
 
-Tras un `failed` o un `error` se evalúa el ejemplo siguiente. Lo que ocurre al evaluar un ejemplo se
-clasifica así. **La regla general es que el código `70` corresponde a un fallo de NEXORA, con una
-única excepción heredada, `MemoryError`**, descrita en la tabla y en la sección "Cuestiones
-pendientes":
+After a `failed` or an `error` the next example is evaluated. What happens when evaluating an example is
+classified like this. **The general rule is that code `70` corresponds to a failure of NEXORA, with a
+single inherited exception, `MemoryError`**, described in the table and in the section "Open
+questions":
 
-| Lo que ocurre | Origen | Resultado |
+| What happens | Origin | Result |
 |---------------|--------|-----------|
-| Un diagnóstico de ejecución o de regla (`NexoraRuntimeError`: `E3001`–`E3006`, `E4001`–`E4003`) | El programa | Ejemplo en `error`; se sigue con el siguiente |
-| El programa agota la pila de Python antes del límite de 1000 llamadas (recursividad dentro de expresiones muy anidadas) | El programa | Se convierte en `E3004`, exactamente como hace hoy `Interpreter.run` con `RecursionError`. Ejemplo en `error`; se sigue |
-| `MemoryError` | El programa | **Excepción a la regla general.** `nex test` hereda el comportamiento actual de `nex run`, que no captura `MemoryError` y lo deja llegar al manejador de errores internos: se detiene, sin informe, con `70`. No es un fallo de NEXORA, pero en la 0.4.0 se informa igual que uno. Ver "Cuestiones pendientes". Este comportamiento cambia con la [decisión 0009](0009-memoria-agotada.md) |
-| Ctrl+C (`KeyboardInterrupt`) | Quien usa el comando | Se detiene, sin informe, con `130`, como los demás comandos |
-| Cualquier otra excepción de Python | **NEXORA** (un defecto) | Se detiene, sin informe, con `70` y el mismo mensaje de error interno que los demás comandos |
+| A runtime or rule diagnostic (`NexoraRuntimeError`: `E3001`–`E3006`, `E4001`–`E4003`) | The program | Example in `error`; it continues with the next one |
+| The program exhausts the Python stack before the limit of 1000 calls (recursion inside very nested expressions) | The program | It becomes `E3004`, exactly as `Interpreter.run` does today with `RecursionError`. Example in `error`; it continues |
+| `MemoryError` | The program | **Exception to the general rule.** `nex test` inherits the current behaviour of `nex run`, which does not catch `MemoryError` and lets it reach the internal error handler: it stops, without a report, with `70`. It is not a failure of NEXORA, but in 0.4.0 it is reported as one. See "Open questions". This behaviour changes with [decision 0009](0009-memoria-agotada.md) |
+| Ctrl+C (`KeyboardInterrupt`) | Whoever uses the command | It stops, without a report, with `130`, like the other commands |
+| Any other Python exception | **NEXORA** (a defect) | It stops, without a report, with `70` and the same internal error message as the other commands |
 
-El informe solo se escribe cuando han terminado **todos** los ejemplos. Por eso, cuando `nex test` se
-detiene, no queda ningún informe parcial que pueda tomarse por completo, ni en texto ni en JSON.
+The report is only written when **all** the examples have finished. That is why, when `nex test`
+stops, no partial report is left that could be taken as complete, neither in text nor in JSON.
 
-### 4. El comando `nex test`
+### 4. The `nex test` command
 
 ```text
 nex test <archivo> [--format text|json] [--function FUNCION]
 ```
 
-1. **Análisis estático.** El mismo de `nex check`, con una única diferencia: no exige `main`
-   (`E2001`). Si hay `main`, sus reglas se comprueban igual (`E2004`, `E2013`), pero **no se
-   ejecuta**.
-2. **Con errores estáticos no se evalúa nada:** estado `not_run`, código `1`.
-3. **Sin errores**, se evalúan los ejemplos seleccionados: todos, o los de la función de
+1. **Static analysis.** The same as `nex check`, with a single difference: it does not require `main`
+   (`E2001`). If there is a `main`, its rules are checked the same (`E2004`, `E2013`), but **it is not
+   run**.
+2. **With static errors nothing is evaluated:** state `not_run`, code `1`.
+3. **Without errors**, the selected examples are evaluated: all of them, or those of the function of
    `--function`.
-4. **`--function NOMBRE`** selecciona los ejemplos **declarados en** esa función. Las funciones a las
-   que esos ejemplos llaman se ejecutan y se comprueban como siempre (sección 3.2).
-   - Los errores estáticos se informan primero: con errores no se sabe con seguridad qué funciones
-     existen.
-   - Si la función no existe, es un error de uso: `error: <archivo> has no function named 'NOMBRE'`
-     en la salida de error (con `Did you mean 'X'?` si hay un nombre parecido), código `2`, sin
-     evaluar nada y sin documento, ni siquiera con `--format json`, igual que cualquier otro error
-     de uso.
-   - Si la función existe y no tiene ejemplos: estado `no_examples`.
-   - Diferencia deliberada con `nex symbols --function`, que con un nombre inexistente devuelve una
-     lista vacía: `nex symbols` **describe**, y "no hay símbolos con ese nombre" es una respuesta
-     correcta; `nex test` **verifica**, y "no se probó nada porque el nombre estaba mal" no puede
-     parecer un resultado.
-5. **Salida:** nada se escribe en la salida estándar hasta que han terminado todos los ejemplos
-   (sección 3.4). En texto, el resumen va a la salida estándar y los diagnósticos a la de error,
-   como en `nex run`. En JSON, un único documento en la salida estándar.
-6. No hay más filtros, ni ejecución en paralelo, ni botón "Test" en el playground en la 0.4.0.
+4. **`--function NAME`** selects the examples **declared in** that function. The functions that
+   those examples call are run and checked as always (section 3.2).
+   - Static errors are reported first: with errors it is not known for sure which functions
+     exist.
+   - If the function does not exist, it is a usage error: `error: <archivo> has no function named 'NOMBRE'`
+     on the error output (with `Did you mean 'X'?` if there is a similar name), code `2`, without
+     evaluating anything and without a document, not even with `--format json`, like any other usage
+     error.
+   - If the function exists and has no examples: state `no_examples`.
+   - Deliberate difference with `nex symbols --function`, which with a non-existent name returns an
+     empty list: `nex symbols` **describes**, and "there are no symbols with that name" is a correct
+     answer; `nex test` **verifies**, and "nothing was tested because the name was wrong" cannot
+     look like a result.
+5. **Output:** nothing is written to the standard output until all the examples have finished
+   (section 3.4). In text, the summary goes to the standard output and the diagnostics to the error output,
+   as in `nex run`. In JSON, a single document on the standard output.
+6. There are no more filters, nor parallel execution, nor a "Test" button in the playground in 0.4.0.
 
-#### 4.1 Estado global
+#### 4.1 Global state
 
-| Estado | Definición | Código de salida |
+| State | Definition | Exit code |
 |--------|------------|------------------|
-| `passed` | Se evaluó **al menos un** ejemplo y **todos** terminaron en `passed` | `0` |
-| `failed` | Se evaluó al menos un ejemplo y **alguno** terminó en `failed` o `error` | `6` |
-| `no_examples` | El análisis no tiene errores, pero no había ningún ejemplo seleccionado | `6` |
-| `not_run` | No se evaluó nada porque el análisis estático encontró errores, o porque el archivo no pudo leerse | `1`, o `4` si el archivo no pudo leerse |
+| `passed` | **At least one** example was evaluated and **all** ended in `passed` | `0` |
+| `failed` | At least one example was evaluated and **some** ended in `failed` or `error` | `6` |
+| `no_examples` | The analysis has no errors, but there was no selected example | `6` |
+| `not_run` | Nothing was evaluated because the static analysis found errors, or because the file could not be read | `1`, or `4` if the file could not be read |
 
-`no_examples` **no es un éxito**: un `0` significa "probado y correcto", y ahí no se ha probado
-nada.
+`no_examples` **is not a success**: a `0` means "tested and correct", and there nothing has been
+tested.
 
-#### 4.2 Códigos de salida
+#### 4.2 Exit codes
 
-Comprobados contra `nexora/src/nexora/cli.py` (0, 1, 2, 3, 4, 5, 70 y 130 existen; 6 está libre).
-Se conservan todos y se añade uno:
+Checked against `nexora/src/nexora/cli.py` (0, 1, 2, 3, 4, 5, 70 and 130 exist; 6 is free).
+All are kept and one is added:
 
-| Código | En `nex test` |
+| Code | In `nex test` |
 |--------|---------------|
-| `0` | Estado `passed` |
-| `1` | Estado `not_run` por errores estáticos |
-| `2` | Uso incorrecto, incluida una función inexistente en `--function` |
-| `4` | Estado `not_run` porque el archivo no pudo leerse, con el `E0001`/`E0002` en `diagnostics` (la misma convención que `nex inspect`, `nex context` y `nex symbols`) |
-| **`6`** | **Nuevo.** Estado `failed` o `no_examples`: la prueba no se superó |
-| `70` | Error interno de NEXORA, o el programa agotó la memoria (`MemoryError`, excepción heredada de `nex run`; sección 3.4); sin informe. Este comportamiento cambia con la [decisión 0009](0009-memoria-agotada.md) |
-| `130` | Interrumpido con Ctrl+C; sin informe |
+| `0` | State `passed` |
+| `1` | State `not_run` because of static errors |
+| `2` | Incorrect usage, including a non-existent function in `--function` |
+| `4` | State `not_run` because the file could not be read, with the `E0001`/`E0002` in `diagnostics` (the same convention as `nex inspect`, `nex context` and `nex symbols`) |
+| **`6`** | **New.** State `failed` or `no_examples`: the test was not passed |
+| `70` | Internal error of NEXORA, or the program ran out of memory (`MemoryError`, exception inherited from `nex run`; section 3.4); without a report. This behaviour changes with [decision 0009](0009-memoria-agotada.md) |
+| `130` | Interrupted with Ctrl+C; without a report |
 
-`nex test` **no devuelve `3` ni `5`**: un error de ejecución o una regla incumplida durante un ejemplo
-es un ejemplo en `error`, con su diagnóstico original, y el código global es `6`. `nex run` sigue
-devolviendo `3` y `5` como hasta ahora.
+`nex test` **does not return `3` nor `5`**: a runtime error or a broken rule during an example
+is an example in `error`, with its original diagnostic, and the global code is `6`. `nex run` still
+returns `3` and `5` as before.
 
-### 5. Formato de texto
+### 5. Text format
 
 ```text
 prices.nex: 5 examples in 3 functions
@@ -271,118 +271,118 @@ runtime error[E3001]: Division by zero
 error: prices.nex: 2 of 5 examples did not pass (1 failed, 1 error)
 ```
 
-- Sin ejemplos: `prices.nex: no examples to run`, y en la salida de error
+- Without examples: `prices.nex: no examples to run`, and on the error output
   `error: prices.nex: nothing was tested`.
-- Con `--function`: el resumen dice `examples of 'as_percent'`.
-- Los valores de las llamadas propias se muestran en las notas de `E4004`. Lo que imprimió un
-  ejemplo se muestra solo si no pasó.
-- Lo que no cambia es **qué** se informa; la redacción exacta se fija al implementar y queda cubierta
-  por las pruebas.
+- With `--function`: the summary says `examples of 'as_percent'`.
+- The values of the own calls are shown in the notes of `E4004`. What an
+  example printed is shown only if it did not pass.
+- What does not change is **what** is reported; the exact wording is fixed when implementing and is covered
+  by the tests.
 
-### 6. Formato JSON: `nexora.test/1`
+### 6. JSON format: `nexora.test/1`
 
-#### 6.1 Documento
+#### 6.1 Document
 
-Sigue las convenciones de [Protocolo JSON](../json-protocol.md): la cabecera común, objetos que
-pueden ganar campos sin cambiar de versión, campos que siempre aparecen (un valor ausente es `null`,
-nunca se omite el campo), salida determinista y un JSON Schema generado desde el código
+It follows the conventions of [JSON protocol](../json-protocol.md): the common header, objects that
+can gain fields without changing version, fields that always appear (an absent value is `null`,
+the field is never omitted), deterministic output and a JSON Schema generated from the code
 (`docs/schemas/nexora-test.schema.json`).
 
-| Campo | Tipo | Significado |
+| Field | Type | Meaning |
 |-------|------|-------------|
 | `schema` | `"nexora.test/1"` | |
-| `nexora_version` | texto | |
-| `file` | texto | Como en los demás formatos |
-| `ok` | booleano | Como en los demás formatos: **el análisis estático no encontró errores**. No dice nada de los ejemplos |
-| `diagnostics` | lista | Los diagnósticos **estáticos** (o el de archivo ilegible). Vacía si `ok` |
-| `status` | texto | Estado global (sección 4.1): `passed`, `failed`, `no_examples` o `not_run` |
-| `filter` | objeto | `{"function": texto o null}`, como el `filter` de `nexora.symbols/1` |
-| `summary` | objeto o `null` | `{"total", "passed", "failed", "error"}`, contando los ejemplos seleccionados. `null` si `not_run` |
-| `examples` | lista o `null` | Un resultado por ejemplo seleccionado, en el orden de evaluación. `[]` si `no_examples`; `null` si `not_run` |
+| `nexora_version` | text | |
+| `file` | text | As in the other formats |
+| `ok` | boolean | As in the other formats: **the static analysis found no errors**. It says nothing about the examples |
+| `diagnostics` | list | The **static** diagnostics (or the one of an unreadable file). Empty if `ok` |
+| `status` | text | Global state (section 4.1): `passed`, `failed`, `no_examples` or `not_run` |
+| `filter` | object | `{"function": text or null}`, like the `filter` of `nexora.symbols/1` |
+| `summary` | object or `null` | `{"total", "passed", "failed", "error"}`, counting the selected examples. `null` if `not_run` |
+| `examples` | list or `null` | One result per selected example, in the order of evaluation. `[]` if `no_examples`; `null` if `not_run` |
 
-**`ok` frente a `status`:** `ok: true` significa que el programa supera el análisis estático;
-`status: "passed"` significa que, además, se evaluó al menos un ejemplo y todos pasaron. Un documento
-con `ok: true` puede tener `status` `failed` o `no_examples`. `status: "passed"` implica `ok: true`.
+**`ok` versus `status`:** `ok: true` means that the program passes the static analysis;
+`status: "passed"` means that, in addition, at least one example was evaluated and all of them passed. A document
+with `ok: true` can have `status` `failed` or `no_examples`. `status: "passed"` implies `ok: true`.
 
-#### 6.2 Resultado de un ejemplo
+#### 6.2 Result of an example
 
-| Campo | Tipo | Significado |
+| Field | Type | Meaning |
 |-------|------|-------------|
-| `function` | texto | La función del ejemplo |
-| `index` | entero ≥ 1 | Su posición entre los ejemplos de esa función, en el orden del texto. Con `function`, identifica el ejemplo de forma estable mientras no se reordenen los ejemplos de esa función |
-| `span` | posición | La expresión del ejemplo (sin la palabra `example` ni la explicación) |
-| `expression` | texto | La expresión tal como está escrita |
-| `message` | texto o `null` | La explicación |
-| `status` | texto | `passed`, `failed` o `error` |
-| `values` | lista | Las llamadas propias que se invocaron, en el orden en que se invocaron (sección 6.3) |
-| `not_evaluated` | lista | Las llamadas propias que no llegaron a invocarse, en el orden del texto (sección 6.3) |
-| `diagnostic` | objeto o `null` | `null` si `passed`; el `E4004` si `failed`; el diagnóstico original, con la nota del ejemplo, si `error`. Mismo formato que en `nexora.diagnostics/1` |
-| `output` | texto | Lo que se imprimió durante el ejemplo; `""` si nada |
+| `function` | text | The function of the example |
+| `index` | integer ≥ 1 | Its position among the examples of that function, in the order of the text. Together with `function`, it identifies the example stably as long as the examples of that function are not reordered |
+| `span` | position | The expression of the example (without the word `example` nor the explanation) |
+| `expression` | text | The expression as written |
+| `message` | text or `null` | The explanation |
+| `status` | text | `passed`, `failed` or `error` |
+| `values` | list | The own calls that were invoked, in the order in which they were invoked (section 6.3) |
+| `not_evaluated` | list | The own calls that were never invoked, in the order of the text (section 6.3) |
+| `diagnostic` | object or `null` | `null` if `passed`; the `E4004` if `failed`; the original diagnostic, with the note of the example, if `error`. Same format as in `nexora.diagnostics/1` |
+| `output` | text | What was printed during the example; `""` if nothing |
 
-#### 6.3 Llamadas propias: `values` y `not_evaluated`
+#### 6.3 Own calls: `values` and `not_evaluated`
 
-Cada llamada propia de la expresión (sección 1.4) aparece **exactamente una vez**, en una de las dos
-listas. Una expresión no tiene bucles, así que cada nodo de llamada se invoca como mucho una vez.
-Las llamadas a la función que ocurren dentro del cuerpo de otras funciones, o dentro de la propia
-función al recursar, no son llamadas propias y no aparecen.
+Each own call of the expression (section 1.4) appears **exactly once**, in one of the two
+lists. An expression has no loops, so each call node is invoked at most once.
+The calls to the function that happen inside the body of other functions, or inside the function itself
+when it recurses, are not own calls and do not appear.
 
-**Invocar** una llamada es entrar en la función, después de haber evaluado todos sus argumentos y
-antes de comprobar sus `requires`. Es el momento que fija el orden.
+**Invoking** a call is entering the function, after having evaluated all its arguments and
+before checking its `requires`. It is the moment that fixes the order.
 
-**`values`: las llamadas que se invocaron, en el orden real de invocación.** El intérprete evalúa los
-argumentos de una llamada antes de invocarla, y los operandos de izquierda a derecha. Por eso:
+**`values`: the calls that were invoked, in the real order of invocation.** The interpreter evaluates the
+arguments of a call before invoking it, and the operands from left to right. That is why:
 
-| Expresión | Orden en `values` |
+| Expression | Order in `values` |
 |-----------|-------------------|
-| `f(f(2)) == 16` | `f(2)`, después `f(f(2))`: la interior se invoca y termina antes de que la exterior empiece |
-| `f(1) + f(2) == 6` | `f(1)`, después `f(2)` |
-| `g(f(2)) == 1` | `f(2)` (la llamada a `g` no es una llamada propia) |
+| `f(f(2)) == 16` | `f(2)`, then `f(f(2))`: the inner one is invoked and finishes before the outer one starts |
+| `f(1) + f(2) == 6` | `f(1)`, then `f(2)` |
+| `g(f(2)) == 1` | `f(2)` (the call to `g` is not an own call) |
 
-| Campo | Tipo | Significado |
+| Field | Type | Meaning |
 |-------|------|-------------|
-| `call` | texto | La llamada tal como está escrita |
-| `span` | posición | Su posición |
-| `type` | texto | Su tipo según el análisis estático: el tipo de retorno de la función |
-| `status` | texto | `returned`: devolvió un valor. `stopped`: se invocó, pero no devolvió nada porque la evaluación se detuvo dentro de ella (su `requires`, su cuerpo, una función a la que llamó o su `ensures`) |
-| `value` | texto o `null` | Si `returned`, el valor escrito como en el código (`"33"`, `"2.5"`, `"true"`, `"\"text\""`). Si `stopped`, `null` |
+| `call` | text | The call as written |
+| `span` | position | Its position |
+| `type` | text | Its type according to the static analysis: the return type of the function |
+| `status` | text | `returned`: it returned a value. `stopped`: it was invoked, but returned nothing because the evaluation stopped inside it (its `requires`, its body, a function it called or its `ensures`) |
+| `value` | text or `null` | If `returned`, the value written as in the code (`"33"`, `"2.5"`, `"true"`, `"\"text\""`). If `stopped`, `null` |
 
-Como una evaluación se detiene en el primer error, **como mucho una** entrada de `values` es
-`stopped`, y es la última de la lista. El ejemplo, en ese caso, está en `error`.
+Since an evaluation stops at the first error, **at most one** entry of `values` is
+`stopped`, and it is the last one of the list. The example, in that case, is in `error`.
 
-**`not_evaluated`: las llamadas que no llegaron a invocarse**, es decir, que no llegaron a ejecutarse
-en absoluto, **en el orden del texto** (por la columna en la que empiezan). Una llamada que sí se
-invocó nunca está aquí, aunque no devolviera nada: esa está en `values` como `stopped`.
+**`not_evaluated`: the calls that were never invoked**, that is, that were not run
+at all, **in the order of the text** (by the column where they start). A call that was
+invoked is never here, even if it returned nothing: that one is in `values` as `stopped`.
 
-| Campo | Tipo | Significado |
+| Field | Type | Meaning |
 |-------|------|-------------|
-| `call` | texto | La llamada tal como está escrita |
-| `span` | posición | Su posición |
-| `type` | texto | Su tipo según el análisis estático |
-| `reason` | texto | `short_circuit`: está en un operando que un `and` o un `or` no necesitó evaluar. `stopped_before`: la evaluación se detuvo por un error antes de llegar a invocarla (en otra llamada, en uno de sus argumentos o en un operando anterior) |
+| `call` | text | The call as written |
+| `span` | position | Its position |
+| `type` | text | Its type according to the static analysis |
+| `reason` | text | `short_circuit`: it is in an operand that an `and` or an `or` did not need to evaluate. `stopped_before`: the evaluation stopped because of an error before getting to invoke it (in another call, in one of its arguments or in a previous operand) |
 
-El motivo se determina de forma mecánica: al evaluar, cada operando que `and` u `or` se saltan marca
-como `short_circuit` las llamadas propias que contiene; al terminar, las llamadas que no se invocaron
-ni se marcaron son `stopped_before`, lo que solo puede ocurrir en un ejemplo en `error`.
+The reason is determined mechanically: when evaluating, each operand that `and` or `or` skip marks
+as `short_circuit` the own calls it contains; at the end, the calls that were neither invoked
+nor marked are `stopped_before`, which can only happen in an example in `error`.
 
-**Tres casos distintos, sin ambigüedad:**
+**Three different cases, without ambiguity:**
 
-| Situación | Dónde aparece |
+| Situation | Where it appears |
 |-----------|---------------|
-| Se invocó y devolvió un valor | `values`, `status: "returned"`, `value` con el valor |
-| Se invocó y no devolvió nada | `values`, `status: "stopped"`, `value: null` |
-| No se invocó | `not_evaluated`, con `reason` |
+| It was invoked and returned a value | `values`, `status: "returned"`, `value` with the value |
+| It was invoked and returned nothing | `values`, `status: "stopped"`, `value: null` |
+| It was not invoked | `not_evaluated`, with `reason` |
 
-NEXORA no tiene ningún valor nulo: sus valores son `Int`, `Float`, `Bool` y `Text`, y una llamada a una
-función `Void` no puede formar parte de un ejemplo (sección 1.3). Por eso un valor del lenguaje nunca
-se escribe como `null`, y `value: null` solo aparece en una llamada `stopped`. Las dos listas pueden
-estar vacías por separado, pero no a la vez: todo ejemplo tiene al menos una llamada propia.
+NEXORA has no null value: its values are `Int`, `Float`, `Bool` and `Text`, and a call to a
+`Void` function cannot be part of an example (section 1.3). That is why a value of the language is never
+written as `null`, and `value: null` only appears in a `stopped` call. The two lists can
+be empty separately, but not at the same time: every example has at least one own call.
 
-#### 6.4 Documentos de ejemplo
+#### 6.4 Example documents
 
-Cinco documentos completos y válidos según el esquema. Cada uno corresponde a una versión del archivo
-`double.nex`; los números de línea forman parte del ejemplo.
+Five complete documents, valid according to the schema. Each one corresponds to a version of the file
+`double.nex`; the line numbers are part of the example.
 
-**1. Todos aprobados** — código `0`.
+**1. All passed** — code `0`.
 
 ```text
 1  fn double(n: Int) -> Int {
@@ -440,7 +440,7 @@ Cinco documentos completos y válidos según el esquema. Cada uno corresponde a 
 }
 ```
 
-**2. Un ejemplo `failed`** — código `6`.
+**2. A `failed` example** — code `6`.
 
 ```text
 1  fn double(n: Int) -> Int {
@@ -501,7 +501,7 @@ Cinco documentos completos y válidos según el esquema. Cada uno corresponde a 
 }
 ```
 
-**3. Un ejemplo `error` por violación de contrato** — código `6`.
+**3. An `error` example because of a contract violation** — code `6`.
 
 ```text
 1  fn double(n: Int) -> Int {
@@ -567,10 +567,10 @@ Cinco documentos completos y válidos según el esquema. Cada uno corresponde a 
 }
 ```
 
-La llamada `double(-1)` figura como `stopped`: empezó, pero su `requires` la detuvo antes de
-devolver nada.
+The call `double(-1)` appears as `stopped`: it started, but its `requires` stopped it before
+returning anything.
 
-**4. Ningún ejemplo seleccionado** — código `6`.
+**4. No example selected** — code `6`.
 
 ```text
 1  fn double(n: Int) -> Int {
@@ -592,7 +592,7 @@ devolver nada.
 }
 ```
 
-**5. Análisis estático fallido** — código `1`.
+**5. Failed static analysis** — code `1`.
 
 ```text
 1  fn double(n: Int) -> Int {
@@ -624,12 +624,12 @@ devolver nada.
 }
 ```
 
-En el documento 1, `double(1)` figura antes que `double(double(1))`: se invocó primero (sección 6.3).
-Ninguno de los cinco tiene `main`: `nex test` no lo exige (sección 4).
+In document 1, `double(1)` appears before `double(double(1))`: it was invoked first (section 6.3).
+None of the five has a `main`: `nex test` does not require it (section 4).
 
-**Fragmentos: llamadas no invocadas.** No son documentos completos, sino el resultado de un ejemplo
-dentro de `examples`, para ver los dos motivos de `not_evaluated`. En una versión de `double.nex` con
-el ejemplo `double(1) == 3 and double(2) == 4` en la línea 3 (`failed`, porque `double(1)` vale `2`):
+**Fragments: calls not invoked.** They are not complete documents, but the result of an example
+inside `examples`, to show the two reasons of `not_evaluated`. In a version of `double.nex` with
+the example `double(1) == 3 and double(2) == 4` on line 3 (`failed`, because `double(1)` is `2`):
 
 ```json
 {
@@ -657,8 +657,8 @@ el ejemplo `double(1) == 3 and double(2) == 4` en la línea 3 (`failed`, porque 
 }
 ```
 
-Y con el ejemplo `double(double(-1)) == 4` en la línea 3 (`error`: la llamada interior incumple el
-`requires`, y la exterior no llega a invocarse):
+And with the example `double(double(-1)) == 4` on line 3 (`error`: the inner call breaks the
+`requires`, and the outer one is never invoked):
 
 ```json
 {
@@ -691,182 +691,182 @@ Y con el ejemplo `double(double(-1)) == 4` en la línea 3 (`error`: la llamada i
 }
 ```
 
-### 7. API de Python
+### 7. Python API
 
-`nexora.tooling` promete en su documentación que **nada se ejecuta** ("Nothing is executed"), y el
-servidor MCP se apoya en esa promesa. La evaluación va en **`nexora.api`**, el módulo que ya ejecuta
-código en memoria con `run_source`, y sigue sus convenciones (código como texto, `filename` solo como
-nombre, ningún archivo abierto, resultado como diccionario listo para `json.dumps`):
+`nexora.tooling` promises in its documentation that **nothing is executed** ("Nothing is executed"), and the
+MCP server relies on that promise. The evaluation goes in **`nexora.api`**, the module that already runs
+code in memory with `run_source`, and it follows its conventions (code as text, `filename` only as a
+name, no file opened, result as a dictionary ready for `json.dumps`):
 
 ```text
 nexora.api.test_source(source, filename="playground.nex", *, function=None) -> dict
 ```
 
-- Devuelve **el mismo documento `nexora.test/1`** que `nex test --format json`.
-- `function` hace lo mismo que `--function`. Si la función no existe (y el análisis no tiene
-  errores), lanza `nexora.tooling.ToolingError("unknown_function", ...)`, el mismo patrón que
-  `get_language_spec` usa para una sección inexistente (`"unknown_section"`).
-- Un error interno no se convierte en documento: la excepción llega a quien llama, que decide.
-- No acepta límites (`limits`) en la 0.4.0. `run_source` los tiene para el playground, que no tendrá
-  botón "Test" en esta versión; se añadirán con él, con la misma clase `Limits`.
-- `nexora.tooling` y el servidor MCP **no** ganan ninguna función de prueba.
+- It returns **the same `nexora.test/1` document** as `nex test --format json`.
+- `function` does the same as `--function`. If the function does not exist (and the analysis has no
+  errors), it raises `nexora.tooling.ToolingError("unknown_function", ...)`, the same pattern that
+  `get_language_spec` uses for a non-existent section (`"unknown_section"`).
+- An internal error is not turned into a document: the exception reaches the caller, who decides.
+- It does not accept limits (`limits`) in 0.4.0. `run_source` has them for the playground, which will not have
+  a "Test" button in this version; they will be added with it, with the same `Limits` class.
+- `nexora.tooling` and the MCP server do **not** gain any test function.
 
-### 8. Herramientas de análisis
+### 8. Analysis tools
 
-- **`nex inspect`:** nodo nuevo `Example` con los campos `condition` (expresión) y `message` (texto o
-  `null`), y campo nuevo `examples` (lista de `Example`) en `Function`, **al final**, después de `body`.
-  El formato **sigue siendo `nexora.inspect/2`**, por el contrato escrito, no por comodidad:
-  - [Esquema de `nex inspect`](../inspect-schema.md), "Estabilidad y evolución": *el número de
-    versión no cambia cuando se añade un campo a un nodo o un tipo de nodo nuevo*, y *las
-    herramientas deben ignorar los campos y los tipos de nodo que no conozcan*.
-    [Protocolo JSON](../json-protocol.md) dice lo mismo, y los esquemas no prohíben campos
-    adicionales.
-  - El mismo documento exige que *el orden de los campos sea estable dentro de una versión*. Añadir
-    `examples` **al final** de `Function` deja todos los campos existentes en el mismo orden.
-  - Ningún campo existente cambia de tipo ni de significado: `Contract.clause` sigue siendo
-    `requires` o `ensures`, y `type` en las expresiones sigue teniendo los valores de la 0.3. Lo
-    nuevo solo aparece dentro del campo nuevo.
-  - Contraste: la 0.3.0 sí pasó a `/2` porque cambió el significado de un campo existente (`type`
-    dejó de ser una lista cerrada de cinco tipos). Aquí no ocurre nada parecido.
-  - Consecuencia comprobable: un consumidor escrito para la 0.3.1 que siga la regla de ignorar lo que
-    no conoce lee igual que antes cualquier programa, tenga ejemplos o no (caso 38 de la matriz).
-- **`nex context`:** campo nuevo `examples` en cada función, al final (`condition`, `message`,
-  `line`), y valor nuevo `examples` en `features`. El formato sigue siendo `nexora.context/1`.
-- **`nex symbols`:** las llamadas de un ejemplo son referencias a las funciones llamadas.
-- **Diagnósticos:** `E2020` (`semantic`), `E4004` (`test`) y la categoría nueva `test`. Añadir un
-  código o una categoría no cambia la versión de `nexora.diagnostics/1` (Protocolo JSON). La API usa
-  la categoría `contract` para elegir el estado `contract_violation` en `run_source`; `E4004` solo
-  aparece en `nexora.test/1` y, con su propia categoría, no puede confundirse con un contrato.
+- **`nex inspect`:** new node `Example` with the fields `condition` (expression) and `message` (text or
+  `null`), and new field `examples` (list of `Example`) in `Function`, **at the end**, after `body`.
+  The format **is still `nexora.inspect/2`**, because of the written contract, not for convenience:
+  - [Schema of `nex inspect`](../inspect-schema.md), "Stability and evolution": *the version
+    number does not change when a field is added to a node or a new node type*, and *tools
+    must ignore the fields and node types they do not know*.
+    [JSON protocol](../json-protocol.md) says the same, and the schemas do not forbid additional
+    fields.
+  - The same document requires that *the order of the fields be stable within a version*. Adding
+    `examples` **at the end** of `Function` leaves all the existing fields in the same order.
+  - No existing field changes type or meaning: `Contract.clause` is still
+    `requires` or `ensures`, and `type` in the expressions still has the values of 0.3. What is
+    new only appears inside the new field.
+  - Contrast: 0.3.0 did move to `/2` because it changed the meaning of an existing field (`type`
+    stopped being a closed list of five types). Nothing like that happens here.
+  - Checkable consequence: a consumer written for 0.3.1 that follows the rule of ignoring what it
+    does not know reads any program as before, whether it has examples or not (case 38 of the matrix).
+- **`nex context`:** new field `examples` in each function, at the end (`condition`, `message`,
+  `line`), and new value `examples` in `features`. The format is still `nexora.context/1`.
+- **`nex symbols`:** the calls of an example are references to the called functions.
+- **Diagnostics:** `E2020` (`semantic`), `E4004` (`test`) and the new category `test`. Adding a
+  code or a category does not change the version of `nexora.diagnostics/1` (JSON protocol). The API uses
+  the category `contract` to choose the state `contract_violation` in `run_source`; `E4004` only
+  appears in `nexora.test/1` and, with its own category, cannot be confused with a contract.
 
-## Motivos
+## Reasons
 
-- **Por qué en la función y no en un archivo de pruebas aparte.** El requisito queda junto al código
-  que lo cumple: quien edita la función, persona o agente, lo tiene delante. Es la idea de los
-  contratos.
-- **Por qué una llamada en el árbol, y no "que la ejecución pase por la función".** Lo segundo solo
-  se sabe ejecutando, y el análisis no ejecuta. Lo primero se comprueba mirando el árbol.
-- **Por qué no se exige exactamente una llamada ni que esté en la raíz.** `f(f(2)) == 16` y
-  `f(1) + f(2) == 6` son ejemplos naturales; exigir más no protege nada.
-- **Por qué no ven los parámetros.** Un ejemplo es un caso cerrado. Si dependiera de los valores de
-  una llamada, sería un `ensures`.
-- **Por qué `failed` y `error` no se mezclan.** "La función devuelve otra cosa" y "la función no llegó
-  a devolver nada" se corrigen de forma distinta.
-- **Por qué la categoría `test`.** Un ejemplo falso no detuvo nada: el resultado no es el esperado.
-  Con `contract`, quien filtra por categoría lo confundiría con un contrato incumplido.
-- **Por qué `no_examples` termina con `6`.** Un `0` significa "probado y correcto".
-- **Por qué el informe solo al final.** Es la única forma de que un error interno no deje medio
-  informe que parezca completo.
+- **Why in the function and not in a separate test file.** The requirement stays next to the code
+  that meets it: whoever edits the function, person or agent, has it in front of them. It is the idea of
+  contracts.
+- **Why a call in the tree, and not "that the execution goes through the function".** The second one can only
+  be known by running, and the analysis does not run. The first one is checked by looking at the tree.
+- **Why exactly one call is not required, nor that it be at the root.** `f(f(2)) == 16` and
+  `f(1) + f(2) == 6` are natural examples; requiring more protects nothing.
+- **Why they do not see the parameters.** An example is a closed case. If it depended on the values of
+  a call, it would be an `ensures`.
+- **Why `failed` and `error` are not mixed.** "The function returns something else" and "the function never got
+  to return anything" are fixed in different ways.
+- **Why the category `test`.** A false example did not stop anything: the result is not the expected one.
+  With `contract`, whoever filters by category would confuse it with a broken contract.
+- **Why `no_examples` ends with `6`.** A `0` means "tested and correct".
+- **Why the report only at the end.** It is the only way for an internal error not to leave half a
+  report that looks complete.
 
-## Lo que no garantiza
+## What it does not guarantee
 
-- Los ejemplos comprueban **los casos escritos**, no todos. Para reglas generales están los contratos
-  y los tipos refinados.
-- No hay límite de tiempo ni de memoria por ejemplo (sección 3.3).
-- No hay pruebas fuera de las funciones (bloques `test` del borrador), ni comparación aproximada para
-  `Float`: `==` es exacto.
+- Examples check **the written cases**, not all of them. For general rules there are contracts
+  and refined types.
+- There is no time or memory limit per example (section 3.3).
+- There are no tests outside the functions (`test` blocks of the draft), nor approximate comparison for
+  `Float`: `==` is exact.
 
-## Alternativas descartadas
+## Alternatives ruled out
 
-- **Bloques `test "nombre" { ... }`** (borrador de diseño). Necesitan sentencias y `assert`, y separan
-  el caso de la función. Pueden añadirse después sin cambiar `example`.
-- **Evaluar los ejemplos en `nex check`, o en `nex run` antes de `main`.** Romperían la frontera entre
-  analizar y ejecutar.
-- **Reutilizar el nodo `Contract` con `clause: "example"`.** Cambiaría el significado de un campo que
-  las herramientas ya leen; un nodo nuevo es un añadido.
-- **`test_source` en `nexora.tooling`.** Rompería la promesa de ese módulo (sección 7).
+- **`test "name" { ... }` blocks** (design draft). They need statements and `assert`, and they separate
+  the case from the function. They can be added later without changing `example`.
+- **Evaluating the examples in `nex check`, or in `nex run` before `main`.** They would break the boundary between
+  analysing and running.
+- **Reusing the `Contract` node with `clause: "example"`.** It would change the meaning of a field that
+  tools already read; a new node is an addition.
+- **`test_source` in `nexora.tooling`.** It would break the promise of that module (section 7).
 
-## Compatibilidad
+## Compatibility
 
-- `example` pasa de palabra reservada a palabra clave. Ningún programa válido podía usarla como
-  nombre.
-- `nex run`, `nex check` y las herramientas de análisis no cambian con los programas sin ejemplos.
-- Formatos: `nexora.test/1` es nuevo. `nexora.inspect/2` y `nexora.context/1` ganan campos al final de
-  sus objetos. `nexora.diagnostics/1` gana una categoría y dos códigos. Ninguno cambia de versión.
-- Códigos de salida: se añade `6`; ninguno existente cambia de significado.
+- `example` goes from reserved word to keyword. No valid program could use it as a
+  name.
+- `nex run`, `nex check` and the analysis tools do not change with programs without examples.
+- Formats: `nexora.test/1` is new. `nexora.inspect/2` and `nexora.context/1` gain fields at the end of
+  their objects. `nexora.diagnostics/1` gains a category and two codes. None changes version.
+- Exit codes: `6` is added; no existing one changes meaning.
 
-## Condiciones para implementarlo
+## Conditions to implement it
 
-Lo que la implementación necesita y hoy no existe. No cambia ninguna decisión anterior:
+What the implementation needs and does not exist today. It does not change any previous decision:
 
-1. **El análisis sin `main`.** `pipeline.analyze` y el comprobador necesitan una forma de omitir
-   `E2001` que solo use `nex test`.
-2. **Ejemplos fuera del grafo de llamadas.** Al comprobar un ejemplo, el comprobador debe registrar
-   las referencias (para `nex symbols`) pero no las llamadas (`CheckedProgram.calls`).
-3. **Evaluar una expresión sin llamada.** El intérprete solo sabe ejecutar `main`. Necesita evaluar
-   una expresión con un entorno vacío, con el mismo ajuste del límite de recursividad de Python y
-   la misma conversión de `RecursionError` en `E3004` que hace `Interpreter.run` (sección 3.4).
-4. **Observar las llamadas propias.** Para `values` y `not_evaluated`, el intérprete tiene que poder
-   anotar, para los nodos de llamada propia de la expresión, el momento de su invocación y su valor,
-   y marcar como `short_circuit` las de un operando que `and` u `or` se saltan, sin cambiar cómo se
-   evalúa nada.
-5. **La salida por ejemplo.** Un recolector de `print` por ejemplo.
+1. **The analysis without `main`.** `pipeline.analyze` and the checker need a way of skipping
+   `E2001` that only `nex test` uses.
+2. **Examples outside the call graph.** When checking an example, the checker must record
+   the references (for `nex symbols`) but not the calls (`CheckedProgram.calls`).
+3. **Evaluating an expression without a call.** The interpreter only knows how to run `main`. It needs to evaluate
+   an expression with an empty environment, with the same adjustment of the Python recursion limit and
+   the same conversion of `RecursionError` into `E3004` that `Interpreter.run` does (section 3.4).
+4. **Observing the own calls.** For `values` and `not_evaluated`, the interpreter has to be able to
+   record, for the own call nodes of the expression, the moment of their invocation and their value,
+   and mark as `short_circuit` those of an operand that `and` or `or` skip, without changing how anything
+   is evaluated.
+5. **The output per example.** A `print` collector per example.
 
-## Matriz de pruebas de diseño
+## Design test matrix
 
-Se escribirán antes que la implementación y deben fallar hasta que exista. "Unidad" son pruebas del
-comprobador y del intérprete; "CLI" usa `nex test`; "API" usa `test_source`; "Docs" son ejemplos de
-la documentación comprobados por `tests/test_docs.py`.
+They will be written before the implementation and must fail until it exists. "Unit" are tests of the
+checker and of the interpreter; "CLI" uses `nex test`; "API" uses `test_source`; "Docs" are examples of
+the documentation checked by `tests/test_docs.py`.
 
-| # | Caso | Entrada (resumida) | Resultado esperado | Nivel |
+| # | Case | Input (summarized) | Expected result | Level |
 |---|------|--------------------|--------------------|-------|
-| 1 | Ejemplo válido | `example double(2) == 4` | `passed`; `values` con `"4"`; `status: passed`; código `0` | Unidad, CLI, Docs |
-| 2 | Expresión falsa | `example double(2) == 5` | `failed`, `E4004` en la expresión, notas `double(2) returned 4`; código `6` | Unidad, CLI, Docs |
-| 3 | Sin llamada propia | en `double`: `example 2 + 2 == 4` | `nex check`: `E2020` en la expresión completa. `nex test`: `not_run`, código `1` | Unidad, CLI |
-| 4 | Llamada solo desde otra función | en `double`: `example quad(1) == 4`, y `quad` llama a `double` | `E2020` | Unidad |
-| 5 | Varias llamadas propias | `double(double(1)) == 4`, `double(1) + double(2) == 6` | `passed`; `values` en orden de invocación: `double(1)` antes que `double(double(1))`; `double(1)` antes que `double(2)` | Unidad, API |
-| 6 | Expresión no `Bool` | `example double(2)` | `E2011` `The condition of 'example' must be Bool, found Int`; no `E2020` | Unidad |
-| 7 | No `Bool` y sin llamada propia | `example 2 + 2` | `E2011` y `E2020` | Unidad |
-| 8 | Usa un parámetro o `result` | `example double(n) == 4`, `example result == 4` | `E2005` con la sugerencia propia | Unidad |
-| 9 | Explicación | `example double(2) == 4, "Two doubled"` | `message` en `nex inspect`, `nex context` y el documento; `Reason:` en `E4004` si falla | Unidad, API |
-| 10 | Explicación mal formada | vacía, solo espacios, con `\n`, o no textual | `E1101` | Unidad |
-| 11 | Cláusula fuera de sitio | `example` después de una sentencia | `E1106` con `'example' must come at the start...` | Unidad |
-| 12 | `requires` incumplido | `requires n >= 0` y `example double(-1) == -2` | `error`, `E4001` en la llamada, nota del ejemplo al final, `values` con `double(-1)` `stopped` y `value: null`; código `6` | Unidad, CLI, API |
-| 13 | `ensures` incumplido | `ensures result > n` y `example double(0) == 0` | `error`, `E4002` en la cláusula, nota del ejemplo | Unidad, CLI |
-| 14 | Contrato incumplido en llamada anidada | ejemplo de `f` → `g` → `h`, y `g` incumple el `requires` de `h` | `error`, `E4001` en la llamada a `h`, cadena de llamadas y nota del ejemplo de `f` | Unidad |
-| 15 | Error de ejecución | ejemplo que llega a una división por cero en otra función | `error`, `E3001` en esa función, nota del ejemplo | Unidad, CLI |
-| 16 | Tipo refinado incumplido | `example f(Percent(150 - 1)) == 1` | `error`, `E4003`, nota del ejemplo | Unidad |
-| 17 | Constante fuera del tipo refinado | `example f(150) == 1` con parámetro `Percent` | `E2017` sin ejecutar; `not_run` | Unidad |
-| 18 | Resultados distintos | tres ejemplos: `failed`, `passed`, `error` | los tres evaluados, en orden; `summary` `3/1/1/1`; `status: failed`; código `6` | Unidad, CLI, API |
-| 19 | Aislamiento | un ejemplo provoca `E3004` por recursividad sin fin (se detiene en el límite de 1000 llamadas de NEXORA, que es determinista) y el siguiente es válido | el primero `error`, el segundo `passed`, con su pila limpia y su `output` propio | Unidad |
-| 20 | Cortocircuito | `example double(1) == 3 and double(2) == 4` | `failed`; `double(1)` en `values`; `double(2)` en `not_evaluated` con `reason: short_circuit` | Unidad, API |
-| 21 | Salida de `print` | la función imprime durante el ejemplo | `output` la contiene; en texto solo se muestra si no pasa | CLI, API |
-| 22 | Filtro válido | `--function triple` con ejemplos en `double` y `triple`; `triple` llama a `double` | solo los de `triple`; el `requires` de `double` se sigue comprobando | CLI, API |
-| 23 | Filtro inexistente | `--function nope` | mensaje de uso con sugerencia, código `2`, sin documento; en la API, `ToolingError("unknown_function")` | CLI, API |
-| 24 | Función sin ejemplos | `--function helper`, que no tiene | `no_examples`, `examples: []`, código `6` | CLI |
-| 25 | Archivo sin ejemplos | ninguna función los tiene | `no_examples`, texto `no examples to run`, código `6` | CLI, Docs |
-| 26 | Errores estáticos | cualquier error del análisis | `not_run`, `summary` y `examples` `null`, código `1`; con `--function` inexistente, también `1` | CLI, API |
-| 27 | Archivo ilegible | ruta inexistente | `not_run`, `E0001`, código `4` | CLI |
-| 28 | Sin `main` | solo funciones con ejemplos | `nex test` los evalúa; `nex check` sigue informando `E2001` | CLI |
-| 29 | `main` presente | un `main` que imprime | no se ejecuta: no aparece su salida | CLI |
-| 30 | Esquema JSON | todos los documentos anteriores | cumplen `nexora-test.schema.json`; `ok`, `status`, `summary` y `examples` coherentes entre sí | API, CLI |
-| 31 | Error interno | una excepción de Python simulada en el intérprete durante el segundo ejemplo | código `70`, mensaje de error interno, nada en la salida estándar (ni texto ni JSON) | CLI |
-| 32 | Grafo de llamadas | ejemplo de `f` que llama a `f` y a `g` | `nex context`: `f` no es `recursive`, `calls` de `f` no incluye `g`; `nex symbols`: las dos son referencias | Unidad |
-| 33 | El análisis no ejecuta | ejemplo que haría `E3001`, o que imprime | `nex check`, `nex inspect` y `nex context` terminan sin evaluarlo ni imprimir nada | CLI |
-| 34 | `nex inspect` y `nex context` | función con dos ejemplos | `Example` con `condition` y `message`, `examples` al final de `Function`; `examples` en `context` y en `features` | Unidad |
-| 35 | Llamada no invocada tras un error | `example double(double(-1)) == 4` | `error`; `double(-1)` en `values` como `stopped`; `double(double(-1))` en `not_evaluated` con `reason: stopped_before` | Unidad, API |
-| 36 | `RecursionError` durante un ejemplo | dos ejemplos; durante el primero, la prueba hace que el intérprete lance `RecursionError` (sustituyendo una función interna, como ya hace `test_refined_types.py` con `broken_rule`) | el primero en `error` con `E3004`; el segundo evaluado y `passed`; código global `6`, **no** `70`. No depende del límite de recursividad de Python, de la profundidad real de la pila ni del tiempo | Unidad, CLI |
-| 37 | Ctrl+C | interrupción durante un ejemplo | código `130`, sin informe | CLI |
-| 38 | Compatibilidad de `nexora.inspect/2` | un programa con ejemplos | el documento valida contra el esquema de `nexora.inspect/2` de la 0.3.1 (sin los campos nuevos), y todos los campos anteriores conservan su orden | Unidad |
+| 1 | Valid example | `example double(2) == 4` | `passed`; `values` with `"4"`; `status: passed`; code `0` | Unit, CLI, Docs |
+| 2 | False expression | `example double(2) == 5` | `failed`, `E4004` on the expression, notes `double(2) returned 4`; code `6` | Unit, CLI, Docs |
+| 3 | Without own call | in `double`: `example 2 + 2 == 4` | `nex check`: `E2020` on the whole expression. `nex test`: `not_run`, code `1` | Unit, CLI |
+| 4 | Call only from another function | in `double`: `example quad(1) == 4`, and `quad` calls `double` | `E2020` | Unit |
+| 5 | Several own calls | `double(double(1)) == 4`, `double(1) + double(2) == 6` | `passed`; `values` in order of invocation: `double(1)` before `double(double(1))`; `double(1)` before `double(2)` | Unit, API |
+| 6 | Non-`Bool` expression | `example double(2)` | `E2011` `The condition of 'example' must be Bool, found Int`; no `E2020` | Unit |
+| 7 | Not `Bool` and without own call | `example 2 + 2` | `E2011` and `E2020` | Unit |
+| 8 | Uses a parameter or `result` | `example double(n) == 4`, `example result == 4` | `E2005` with its own suggestion | Unit |
+| 9 | Explanation | `example double(2) == 4, "Two doubled"` | `message` in `nex inspect`, `nex context` and the document; `Reason:` in `E4004` if it fails | Unit, API |
+| 10 | Malformed explanation | empty, only spaces, with `\n`, or not textual | `E1101` | Unit |
+| 11 | Misplaced clause | `example` after a statement | `E1106` with `'example' must come at the start...` | Unit |
+| 12 | Broken `requires` | `requires n >= 0` and `example double(-1) == -2` | `error`, `E4001` on the call, note of the example at the end, `values` with `double(-1)` `stopped` and `value: null`; code `6` | Unit, CLI, API |
+| 13 | Broken `ensures` | `ensures result > n` and `example double(0) == 0` | `error`, `E4002` on the clause, note of the example | Unit, CLI |
+| 14 | Contract broken in a nested call | example of `f` → `g` → `h`, and `g` breaks the `requires` of `h` | `error`, `E4001` on the call to `h`, call chain and note of the example of `f` | Unit |
+| 15 | Runtime error | example that reaches a division by zero in another function | `error`, `E3001` in that function, note of the example | Unit, CLI |
+| 16 | Broken refined type | `example f(Percent(150 - 1)) == 1` | `error`, `E4003`, note of the example | Unit |
+| 17 | Constant outside the refined type | `example f(150) == 1` with a `Percent` parameter | `E2017` without running; `not_run` | Unit |
+| 18 | Different results | three examples: `failed`, `passed`, `error` | the three evaluated, in order; `summary` `3/1/1/1`; `status: failed`; code `6` | Unit, CLI, API |
+| 19 | Isolation | an example causes `E3004` because of endless recursion (it stops at the NEXORA limit of 1000 calls, which is deterministic) and the next one is valid | the first one `error`, the second `passed`, with its clean stack and its own `output` | Unit |
+| 20 | Short circuit | `example double(1) == 3 and double(2) == 4` | `failed`; `double(1)` in `values`; `double(2)` in `not_evaluated` with `reason: short_circuit` | Unit, API |
+| 21 | `print` output | the function prints during the example | `output` contains it; in text it is only shown if it does not pass | CLI, API |
+| 22 | Valid filter | `--function triple` with examples in `double` and `triple`; `triple` calls `double` | only those of `triple`; the `requires` of `double` is still checked | CLI, API |
+| 23 | Non-existent filter | `--function nope` | usage message with a suggestion, code `2`, without a document; in the API, `ToolingError("unknown_function")` | CLI, API |
+| 24 | Function without examples | `--function helper`, which has none | `no_examples`, `examples: []`, code `6` | CLI |
+| 25 | File without examples | no function has them | `no_examples`, text `no examples to run`, code `6` | CLI, Docs |
+| 26 | Static errors | any error of the analysis | `not_run`, `summary` and `examples` `null`, code `1`; with a non-existent `--function`, also `1` | CLI, API |
+| 27 | Unreadable file | non-existent path | `not_run`, `E0001`, code `4` | CLI |
+| 28 | Without `main` | only functions with examples | `nex test` evaluates them; `nex check` still reports `E2001` | CLI |
+| 29 | `main` present | a `main` that prints | it is not run: its output does not appear | CLI |
+| 30 | JSON schema | all the previous documents | they meet `nexora-test.schema.json`; `ok`, `status`, `summary` and `examples` consistent with each other | API, CLI |
+| 31 | Internal error | a Python exception simulated in the interpreter during the second example | code `70`, internal error message, nothing on the standard output (neither text nor JSON) | CLI |
+| 32 | Call graph | example of `f` that calls `f` and `g` | `nex context`: `f` is not `recursive`, `calls` of `f` does not include `g`; `nex symbols`: both are references | Unit |
+| 33 | The analysis does not run | example that would give `E3001`, or that prints | `nex check`, `nex inspect` and `nex context` finish without evaluating it nor printing anything | CLI |
+| 34 | `nex inspect` and `nex context` | function with two examples | `Example` with `condition` and `message`, `examples` at the end of `Function`; `examples` in `context` and in `features` | Unit |
+| 35 | Call not invoked after an error | `example double(double(-1)) == 4` | `error`; `double(-1)` in `values` as `stopped`; `double(double(-1))` in `not_evaluated` with `reason: stopped_before` | Unit, API |
+| 36 | `RecursionError` during an example | two examples; during the first one, the test makes the interpreter raise `RecursionError` (replacing an internal function, as `test_refined_types.py` already does with `broken_rule`) | the first one in `error` with `E3004`; the second one evaluated and `passed`; global code `6`, **not** `70`. It does not depend on the Python recursion limit, on the real depth of the stack nor on time | Unit, CLI |
+| 37 | Ctrl+C | interruption during an example | code `130`, without a report | CLI |
+| 38 | Compatibility of `nexora.inspect/2` | a program with examples | the document validates against the `nexora.inspect/2` schema of 0.3.1 (without the new fields), and all the previous fields keep their order | Unit |
 
-## Decisiones cerradas en la revisión
+## Decisions closed in the review
 
-1. **`nex check` sigue exigiendo `main` (`E2001`).** Un archivo solo con funciones y ejemplos pasa
-   `nex test` y no pasa `nex check`. Es coherente con lo que `nex check` promete: que el programa
-   puede ejecutarse con `nex run`, y sin `main` no puede. `nex test` no exige `main` porque no
-   ejecuta el programa, solo sus ejemplos. Una forma de comprobar "bibliotecas" sin `main` (por
-   ejemplo, `nex check --library`) queda para una decisión futura, si hace falta.
-2. **`no_examples` termina con `6`**, el mismo código que `failed`: los dos significan "la prueba no se
-   superó". No se encontró nada en el contrato actual que obligue a otro código. Quien necesite
-   distinguirlos lee `status` en el documento JSON.
+1. **`nex check` still requires `main` (`E2001`).** A file with only functions and examples passes
+   `nex test` and does not pass `nex check`. It is consistent with what `nex check` promises: that the program
+   can be run with `nex run`, and without `main` it cannot. `nex test` does not require `main` because it does not
+   run the program, only its examples. A way of checking "libraries" without `main` (for
+   example, `nex check --library`) is left for a future decision, if needed.
+2. **`no_examples` ends with `6`**, the same code as `failed`: both mean "the test was not
+   passed". Nothing was found in the current contract that forces another code. Whoever needs to
+   tell them apart reads `status` in the JSON document.
 
-## Cuestiones pendientes
+## Open questions
 
-1. **`MemoryError` y el código `70`.** `MemoryError` lo provoca el programa, no NEXORA, pero hoy
-   `nex run` lo trata como error interno (`70`): no lo captura y llega al manejador general de
-   `cli.py`. La API, en cambio, lo convierte en el estado `memory_limit` (`api.py`, `worker.py`).
-   - En la 0.4.0, `nex test` **hereda** el comportamiento de `nex run` (sección 3.4). Es la única
-     excepción a la regla de que el `70` corresponde a un fallo de NEXORA, y está escrita como tal.
-   - Lo coherente es decidirlo para todos los comandos a la vez, por ejemplo con un diagnóstico de
-     ejecución propio para el agotamiento de memoria. Esa decisión afecta también a `nex run` y queda
-     **fuera del alcance de la 0.4.0**, para una decisión futura.
-   - Resuelta en la [decisión 0009](0009-memoria-agotada.md).
+1. **`MemoryError` and code `70`.** `MemoryError` is caused by the program, not by NEXORA, but today
+   `nex run` treats it as an internal error (`70`): it does not catch it and it reaches the general handler of
+   `cli.py`. The API, on the other hand, turns it into the state `memory_limit` (`api.py`, `worker.py`).
+   - In 0.4.0, `nex test` **inherits** the behaviour of `nex run` (section 3.4). It is the only
+     exception to the rule that `70` corresponds to a failure of NEXORA, and it is written as such.
+   - The consistent thing is to decide it for all the commands at once, for example with a runtime
+     diagnostic of its own for running out of memory. That decision also affects `nex run` and is
+     **out of the scope of 0.4.0**, for a future decision.
+   - Resolved in [decision 0009](0009-memoria-agotada.md).

@@ -1,155 +1,155 @@
-# 0017 — Un editor: la extensión de VS Code
+# 0017 — One editor: the VS Code extension
 
-- **Estado:** aceptada
-- **Versión:** 0.10.0 (estado del repositorio; la extensión se distribuye aparte, en su propio `.vsix`)
-- **Fecha:** 2026-10-22
-- **Rama de trabajo:** `feature/server-hardening`
-- **Relacionada con:** la [decisión 0005](0005-diagnosticos-y-esquemas-json.md) (los diagnósticos
-  tienen código y categoría estables) y la [0013](0013-listas-y-for.md) (el modelo de tipos que
-  sostiene la comprobación). **No modifica ninguna.**
-- **Implementación:** el servidor de lenguaje y el formateador están en el núcleo
-  (`nexora/src/nexora/lsp.py` y `nexora/src/nexora/formatter.py`), y la extensión, en TypeScript, en
-  `vscode-nexora/`. La evidencia está en `tests/test_lsp.py`, `tests/test_formatter.py` y
+- **Status:** accepted
+- **Version:** 0.10.0 (state of the repository; the extension is distributed separately, in its own `.vsix`)
+- **Date:** 2026-10-22
+- **Working branch:** `feature/server-hardening`
+- **Related to:** [decision 0005](0005-diagnosticos-y-esquemas-json.md) (diagnostics
+  have a stable code and category) and [0013](0013-listas-y-for.md) (the type model that
+  supports the checking). **It modifies neither.**
+- **Implementation:** the language server and the formatter are in the core
+  (`nexora/src/nexora/lsp.py` and `nexora/src/nexora/formatter.py`), and the extension, in TypeScript, in
+  `vscode-nexora/`. The evidence is in `tests/test_lsp.py`, `tests/test_formatter.py` and
   `tests/test_vscode_extension.py`.
 
-## Contexto
+## Context
 
-NEXORA se usa hoy desde la línea de órdenes (`nex check`, `nex run`, `nex test`) y desde el
-navegador (el playground). Falta la herramienta de la que todo programador sale: el editor.
+NEXORA is used today from the command line (`nex check`, `nex run`, `nex test`) and from the
+browser (the playground). The tool every programmer starts from is missing: the editor.
 
-Escribir un editor para NEXORA sin el analizador sería escribir un analizador dos veces. El
-lenguaje ya tiene todo lo que un editor necesita: un léxico, un analizador sintáctico, un
-comprobador de nombres y tipos con sus diagnósticos, y una tabla de símbolos con las
-referencias de cada nombre. La [decisión 0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md)
-ya obliga a que todo lo que se ejecuta pase por el comprobador; un editor que no lo usara
-daría diagnósticos distintos de los de la línea de órdenes, y dos verdades sobre el mismo
-programa.
+Writing an editor for NEXORA without the analyzer would mean writing an analyzer twice. The
+language already has everything an editor needs: a lexer, a parser, a
+checker of names and types with its diagnostics, and a symbol table with the
+references of every name. [Decision 0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md)
+already requires everything that runs to go through the checker; an editor that did not use it
+would give different diagnostics from those of the command line, and two truths about the same
+program.
 
-## Decisión
+## Decision
 
-### 1. El servidor de lenguaje es un proceso de Python del propio paquete
+### 1. The language server is a Python process of the package itself
 
-`python -m nexora.lsp` habla LSP por la entrada y la salida estándar. Es el mismo patrón que
-el [servidor MCP](../mcp.md) del proyecto, y usa la biblioteca estándar: no necesita instalar
-nada para funcionar.
+`python -m nexora.lsp` speaks LSP over the standard input and output. It is the same pattern as
+the [MCP server](../mcp.md) of the project, and it uses the standard library: it needs nothing
+installed to work.
 
-El servidor **no reimplementa el lenguaje**. Todo lo que responde sale de
-`pipeline.analyze`, el mismo camino que usa `nex check`, así que el código de un diagnóstico
-(E2011, E3004…), su categoría, su posición y su sugerencia son los mismos.
+The server **does not reimplement the language**. Everything it answers comes from
+`pipeline.analyze`, the same path that `nex check` uses, so the code of a diagnostic
+(E2011, E3004…), its category, its position and its suggestion are the same.
 
-### 2. La extensión es TypeScript y solo habla con el servidor
+### 2. The extension is TypeScript and only talks to the server
 
-`vscode-nexora/` es una extensión de VS Code de lo habitual: el cliente del protocolo, el
-lenguaje, la gramática y los comandos. No contiene una línea de análisis del lenguaje.
+`vscode-nexora/` is an ordinary VS Code extension: the protocol client, the
+language, the grammar and the commands. It contains not a single line of language analysis.
 
-### 3. La gramática se escribe sobre el léxico real
+### 3. The grammar is written over the real lexer
 
-La gramática TextMate nombra las palabras clave, los tipos, las funciones integradas y las
-palabras reservadas **que el lenguaje tiene hoy**, y una prueba comprueba que la gramática y el
-léxico no se separan. Un archivo `.nex` se reconoce sin que nadie lo declare.
+The TextMate grammar names the keywords, the types, the built-in functions and the
+reserved words **that the language has today**, and a test checks that the grammar and the
+lexer do not drift apart. A `.nex` file is recognized without anyone declaring it.
 
-### 4. El formateador vive en el lenguaje, no en la extensión
+### 4. The formatter lives in the language, not in the extension
 
-`nexora/src/nexora/formatter.py` reescribe un programa con la forma canónica. Trabaja sobre
-los **tokens del léxico**, nunca sobre el texto: solo cambian la sangría y el espaciado, así
-que el programa significa lo mismo. No une líneas ni las parte (el lenguaje se escribe por
-líneas), no reescribe el interior de un texto y no toca los comentarios.
+`nexora/src/nexora/formatter.py` rewrites a program with the canonical shape. It works on
+the **tokens of the lexer**, never on the text: only indentation and spacing change, so
+the program means the same. It does not join or split lines (the language is written line by
+line), it does not rewrite the inside of a text and it does not touch comments.
 
-Un formateador en la extensión habría sido un formateador en TypeScript, con un segundo
-léxico que mantener.
+A formatter in the extension would have been a formatter in TypeScript, with a second
+lexer to maintain.
 
-### 5. Lo que el editor ofrece
+### 5. What the editor offers
 
 | | |
 |---|---|
-| Diagnósticos | Los de `nex check`, en el panel *Problems* |
-| Autocompletado | Palabras clave, funciones integradas, los nombres en alcance y las palabras reservadas |
-| Hover | El tipo de un valor y la firma de una función |
-| Ir a definición, referencias, renombrado | Sobre funciones, parámetros y variables |
-| Símbolos del documento | Las funciones y las variables, con su tipo |
-| Ayuda de firma | Los parámetros de la función que se está llamando |
-| Formateador | Documento entero o selección; opcionalmente al guardar |
+| Diagnostics | Those of `nex check`, in the *Problems* panel |
+| Completion | Keywords, built-in functions, the names in scope and the reserved words |
+| Hover | The type of a value and the signature of a function |
+| Go to definition, references, rename | On functions, parameters and variables |
+| Document symbols | Functions and variables, with their type |
+| Signature help | The parameters of the function being called |
+| Formatter | Whole document or selection; optionally on save |
 
-## Hechos verificados en el repositorio
+## Facts verified in the repository
 
-| Hecho | Dónde |
-|-------|-------|
-| El comprobador sabe el tipo de cada expresión y cada símbolo con sus referencias | `checker.py` (`CheckedProgram`) |
-| Los diagnósticos tienen código, categoría, posición y sugerencia | `diagnostics.py` |
-| El MCP ya es un proceso externo del propio paquete | `mcp_server.py` |
-| La gramática y el manifiesto se comprueban contra el léxico | `tests/test_vscode_extension.py` |
+| Fact | Where |
+|------|-------|
+| The checker knows the type of every expression and every symbol with its references | `checker.py` (`CheckedProgram`) |
+| Diagnostics have a code, category, position and suggestion | `diagnostics.py` |
+| The MCP server is already an external process of the package itself | `mcp_server.py` |
+| The grammar and the manifest are checked against the lexer | `tests/test_vscode_extension.py` |
 
-## Decisiones que se toman aquí, y por qué
+## Decisions taken here, and why
 
-| Decisión | Por qué |
-|----------|---------|
-| El servidor en Python, la extensión en TypeScript | Reutilizar el analizador es lo que hace que los diagnósticos sean los mismos; la extensión es lo que VS Code espera |
-| Sin dependencias de Python | El servidor se escribe con la biblioteca estándar: un servidor que no hay que instalar es un servidor que siempre funciona |
-| El formateador en el núcleo | Un solo formateador, reutilizable desde la línea de órdenes, y que por construcción no rompe la sintaxis |
-| La gramática comprobada contra el léxico | Si el lenguaje añade una palabra clave, la prueba falla hasta que la gramática la nombra |
-| El servidor decide el formato | La extensión solo decide si se usa: el formato canónico es una decisión del lenguaje |
+| Decision | Why |
+|----------|-----|
+| The server in Python, the extension in TypeScript | Reusing the analyzer is what makes the diagnostics the same; the extension is what VS Code expects |
+| No Python dependencies | The server is written with the standard library: a server that does not need installing is a server that always works |
+| The formatter in the core | A single formatter, reusable from the command line, and one that by construction does not break the syntax |
+| The grammar checked against the lexer | If the language adds a keyword, the test fails until the grammar names it |
+| The server decides the format | The extension only decides whether it is used: the canonical format is a decision of the language |
 
-## Lo que no garantiza
+## What it does not guarantee
 
-- El analizador no resuelve todavía los miembros de un registro por tipo, así que la navegación y
-  el renombrado no llegan a los campos de un registro.
-- No hayCompletion con tipos variables: el tipo de error de un `Ok` lo dice el contexto, y el
-  formateador no inventa nada.
-- El formateador no reformatea un texto, no mueve comentarios y no reescribe la estructura de
-  un programa: solo la sangría y el espaciado.
-- La extensión no trae el paquete `nexora` instalado: hace falta un Python con el paquete
-  (o el ajuste `nexora.python.path`).
+- The analyzer does not yet resolve the members of a record by type, so navigation and
+  renaming do not reach the fields of a record.
+- There is no completion with type variables: the error type of an `Ok` is given by the context, and the
+  formatter makes nothing up.
+- The formatter does not reformat a text, does not move comments and does not rewrite the structure of
+  a program: only indentation and spacing.
+- The extension does not bring the `nexora` package installed: a Python with the package is needed
+  (or the `nexora.python.path` setting).
 
-## Fuera del alcance
+## Out of scope
 
-- Otros editores (Neovim, Emacs, JetBrains): el servidor habla LSP, así que lo que falta es el
-  cliente, no el servidor.
-- Un lenguaje de servidor para el servidor MCP: es otro protocolo y otra integración.
-- Formatear los comentarios, o reescribir el interior de un texto.
+- Other editors (Neovim, Emacs, JetBrains): the server speaks LSP, so what is missing is the
+  client, not the server.
+- A language server for the MCP server: it is another protocol and another integration.
+- Formatting comments, or rewriting the inside of a text.
 
-## Alternativas descartadas
+## Alternatives ruled out
 
-| Alternativa | Por qué no |
-|-------------|-----------|
-| Escribir el analizador en TypeScript | Sería un segundo analizador, con otros diagnósticos; el proyecto ya tiene el suyo |
-| El servidor en Node, con el analizador invocado como proceso aparte | Cada respuesta costaría un proceso y un análisis; el servidor en Python tiene el analizador en la misma memoria |
-| Un formateador en la extensión | Duplicaría el formateador y sería el único que no conoce la gramática del lenguaje |
-| Resaltado escrito a mano sin comprobarlo | La gramática se separaría del lenguaje en la primera palabra clave nueva |
+| Alternative | Why not |
+|-------------|---------|
+| Writing the analyzer in TypeScript | It would be a second analyzer, with other diagnostics; the project already has its own |
+| The server in Node, with the analyzer invoked as a separate process | Every answer would cost a process and an analysis; the server in Python has the analyzer in the same memory |
+| A formatter in the extension | It would duplicate the formatter and would be the only one that does not know the grammar of the language |
+| Highlighting written by hand without checking it | The grammar would drift from the language at the first new keyword |
 
-## Compatibilidad
+## Compatibility
 
-- El lenguaje no cambia: el formateador solo reescribe la forma, y las pruebas comprueban que
-  los tokens de un programa formateado son los mismos que antes de formatearlo.
-- Los diagnósticos del editor son los de la línea de órdenes, con los mismos códigos.
-- La extensión no modifica el paquete que se publica: vive en `vscode-nexora/` y se distribuye
-  como un `.vsix` aparte.
+- The language does not change: the formatter only rewrites the shape, and the tests check that
+  the tokens of a formatted program are the same as before formatting it.
+- The diagnostics of the editor are those of the command line, with the same codes.
+- The extension does not modify the package that is published: it lives in `vscode-nexora/` and is distributed
+  as a separate `.vsix`.
 
-## Cambios necesarios
+## Required changes
 
-- `nexora/src/nexora/lsp.py`: el servidor de lenguaje.
-- `nexora/src/nexora/formatter.py`: el formateador.
-- `nexora/pyproject.toml`: la orden `nexora-lsp`.
-- `vscode-nexora/`: la extensión, con su icono (la misma marca del sitio) y lo que el marketplace
-  pide: licencia, bandeja, descripción, categorías y palabras clave.
-- `nexora/tests/test_lsp.py`, `test_formatter.py`, `test_vscode_extension.py`: las pruebas.
+- `nexora/src/nexora/lsp.py`: the language server.
+- `nexora/src/nexora/formatter.py`: the formatter.
+- `nexora/pyproject.toml`: the `nexora-lsp` command.
+- `vscode-nexora/`: the extension, with its icon (the same brand as the site) and what the marketplace
+  asks for: licence, banner, description, categories and keywords.
+- `nexora/tests/test_lsp.py`, `test_formatter.py`, `test_vscode_extension.py`: the tests.
 
-## Pruebas de regresión previstas
+## Planned regression tests
 
-| Archivo | Qué fija |
-|---------|----------|
-| `tests/test_lsp.py` | Que los diagnósticos del servidor son los de `nex check`, y que el autocompletado, el hover, la definición, las referencias, el renombrado, los símbolos, la firma y el formateo responden lo que deben |
-| `tests/test_formatter.py` | Que el formateador no cambia lo que significa un programa (los mismos tokens), que es idempotente y que aguanta todos los ejemplos del repositorio |
-| `tests/test_vscode_extension.py` | Que el manifiesto y la gramática siguen al léxico |
+| File | What it pins down |
+|------|-------------------|
+| `tests/test_lsp.py` | That the diagnostics of the server are those of `nex check`, and that completion, hover, definition, references, rename, symbols, signature and formatting answer what they should |
+| `tests/test_formatter.py` | That the formatter does not change what a program means (the same tokens), that it is idempotent and that it copes with all the examples of the repository |
+| `tests/test_vscode_extension.py` | That the manifest and the grammar follow the lexer |
 
-## Relación con las decisiones anteriores y el índice
+## Relation to the previous decisions and the index
 
-Se añade al índice de decisiones como aceptada. No modifica ninguna: usa el analizador que las
-decisiones anteriores definieron.
+It is added to the decision index as accepted. It modifies none: it uses the analyzer that the
+previous decisions defined.
 
-## Cuestiones que siguen abiertas
+## Questions that remain open
 
-- ¿Debería el servidor resolver los campos de un registro por tipo, para que la navegación
-  llegue a ellos? Depende del analizador, no del editor.
-- ¿Un formateador que reorganice los bloques, como el que tienen algunos lenguajes? El lenguaje
-  se escribe por líneas y con un bloque por construcción; reorganizarlo sería decidir sobre el
-  lenguaje, no sobre la herramienta.
+- Should the server resolve the fields of a record by type, so that navigation
+  reaches them? It depends on the analyzer, not on the editor.
+- A formatter that reorganizes blocks, like the one some languages have? The language
+  is written line by line and with one block per construct; reorganizing it would be deciding about the
+  language, not about the tool.

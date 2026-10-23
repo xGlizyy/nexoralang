@@ -317,7 +317,7 @@ def test_the_documents_of_the_decision_are_the_real_output():                   
     import re
 
     text = DECISION.read_text(encoding="utf-8")
-    section = text[text.index("#### 6.4"):text.index("### 7. API de Python")]
+    section = text[text.index("#### 6.4"):text.index("### 7. Python API")]
     blocks = re.findall(r"```(text|json)\n(.*?)```", section, re.S)
     programs = [body for kind, body in blocks if kind == "text"]
     documents = [json.loads(body) for kind, body in blocks if kind == "json"]

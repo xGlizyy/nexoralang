@@ -1,78 +1,78 @@
-# 0018 — Módulos e importaciones
+# 0018 — Modules and imports
 
-- **Estado:** aceptada
-- **Versión:** 0.11.0 (estado del repositorio; no se ha publicado en ningún paquete)
-- **Fecha:** 2026-10-22
-- **Rama de trabajo:** `feature/server-hardening`
-- **Relacionada con:** la [decisión 0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md)
-  (solo se ejecuta lo comprobado), la [0005](0005-diagnosticos-y-esquemas-json.md) (los diagnósticos
-  tienen código estable) y la [0014](0014-registros-nominales-inmutables.md) (los registros son
-  nominales). **No modifica ninguna.**
-- **Relacionada con el borrador de diseño:** implementa su §8 («Módulos») y su regla R14 (no hay
-  importaciones circulares) **en el alcance que el lenguaje tiene hoy**. El borrador es de la v0.1 y
-  escribe otra sintaxis; aquí se decide la que encaja con el lenguaje actual.
-- **Implementación:** la 0.11.0. El cargador de módulos está en `modules.py`; el resto del trabajo
-  está en `tokens.py`, `ast_nodes.py`, `parser.py`, `checker.py`, `pipeline.py`, `interpreter.py`,
-  `cli.py` y `lsp.py`. La evidencia está en `tests/test_modules.py` y en los ejemplos de
+- **Status:** accepted
+- **Version:** 0.11.0 (state of the repository; not published in any package)
+- **Date:** 2026-10-22
+- **Working branch:** `feature/server-hardening`
+- **Related to:** [decision 0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md)
+  (only what has been checked runs), [0005](0005-diagnosticos-y-esquemas-json.md) (diagnostics
+  have a stable code) and [0014](0014-registros-nominales-inmutables.md) (records are
+  nominal). **It modifies none.**
+- **Related to the design draft:** it implements its §8 ("Modules") and its rule R14 (no
+  circular imports) **within the scope the language has today**. The draft is from v0.1 and
+  writes another syntax; here the one that fits the current language is decided.
+- **Implementation:** 0.11.0. The module loader is in `modules.py`; the rest of the work
+  is in `tokens.py`, `ast_nodes.py`, `parser.py`, `checker.py`, `pipeline.py`, `interpreter.py`,
+  `cli.py` and `lsp.py`. The evidence is in `tests/test_modules.py` and in the examples of
   `examples/modules/`.
 
-## Contexto
+## Context
 
-Un programa de NEXORA es **un único archivo**. Todo lo que el lenguaje tiene hoy cabe en un
-fichero, y por eso el lenguaje no tiene módulos: no los necesitaba.
+A NEXORA program is **a single file**. Everything the language has today fits in one
+file, and that is why the language has no modules: it did not need them.
 
-En cuanto un proyecto crece, un archivo se queda corto, y el estilo de resolverlo importando
-trozos de código de otra parte tiene un coste que no es solo de longitud: el analizador no puede
-saber qué nombres existen, así que no puede comprobar nada. Un programa que importa el código de
-otro sitio no está comprobado, y la [decisión 0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md)
-no permite ejecutar lo que no está comprobado.
+As soon as a project grows, one file falls short, and the style of solving it by importing
+pieces of code from somewhere else has a cost that is not only about length: the analyzer cannot
+know which names exist, so it cannot check anything. A program that imports code from
+somewhere else is not checked, and [decision 0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md)
+does not allow running what is not checked.
 
-El borrador de diseño (`docs/fase-1-diseno.md` de la raíz del repositorio) lo anticipa en su §8:
+The design draft (`docs/fase-1-diseno.md` at the root of the repository) anticipates it in its §8:
 
 ```nexora
 import http
 import app/models.{User, Order}
 ```
 
-- Un archivo es un módulo; su nombre es el del archivo.
-- Todo es privado salvo lo marcado con `pub`.
-- Cada tipo es también un espacio de nombres.
-- No se permiten importaciones circulares.
-- El punto de entrada es `fn main()` en el archivo que se ejecuta.
+- A file is a module; its name is that of the file.
+- Everything is private except what is marked with `pub`.
+- Every type is also a namespace.
+- Circular imports are not allowed.
+- The entry point is `fn main()` in the file that runs.
 
-La [especificación](../language-spec.md) lo recoge como limitación conocida (§13: «Un programa es un
-único archivo: no hay módulos ni importaciones») y como funcionalidad prevista (§14).
+The [specification](../language-spec.md) records it as a known limitation (§13: "A program is a
+single file: there are no modules or imports") and as a planned feature (§14).
 
-## Decisión
+## Decision
 
-Se implementan los módulos como **un archivo es un módulo**, con las importaciones al principio
-del archivo, un espacio de nombres por módulo y la privacidad con `pub`.
+Modules are implemented as **a file is a module**, with the imports at the beginning
+of the file, one namespace per module and privacy with `pub`.
 
-### 1. La sintaxis
+### 1. The syntax
 
 ```
 import "app/models.nex"
 ```
 
-Una importación es una **declaración de nivel superior** y va **antes que cualquier otra
-declaración** del archivo, como en el borrador (`program = { import } { item }`).
+An import is a **top-level declaration** and goes **before any other
+declaration** of the file, as in the draft (`program = { import } { item }`).
 
-La ruta es un **literal de texto**, con la extensión del fichero, y se resuelve **respecto al
-fichero que importa**, no respecto al directorio de trabajo:
+The path is a **text literal**, with the extension of the file, and it is resolved **relative to the
+file that imports**, not relative to the working directory:
 
-- Es un literal de texto, y no una palabra, porque el lenguaje ya trata las rutas así: las
-  capacidades se declaran `uses read "datos.txt"`, con un literal de texto y con la ruta escrita.
-- La extensión se escribe porque el lenguaje no adivina: `List` no es `List[T]`, y un fichero no es
-  un fichero sin nombre.
-- La ruta es relativa al fichero que importa, y no al directorio de trabajo, porque un programa
-  tiene que depender de donde está, no de donde se ejecuta.
+- It is a text literal, and not a word, because the language already treats paths that way: the
+  capabilities are declared `uses read "data.txt"`, with a text literal and with the path written.
+- The extension is written because the language does not guess: `List` is not `List[T]`, and a file is not
+  a file without a name.
+- The path is relative to the file that imports, and not to the working directory, because a program
+  has to depend on where it is, not on where it is run from.
 
-Lo que **no** hay en esta versión: los alias (`import "x.nex" as y`) y la importación selectiva
-(`import "x.nex".{A, B}`) del borrador. Se explican más abajo.
+What there is **not** in this version: the aliases (`import "x.nex" as y`) and the selective import
+(`import "x.nex".{A, B}`) of the draft. They are explained further down.
 
-### 2. El espacio de nombres
+### 2. The namespace
 
-Una importación ata un **espacio de nombres** al nombre del fichero importado, sin su extensión:
+An import binds a **namespace** to the name of the imported file, without its extension:
 
 ```
 import "app/models.nex"
@@ -80,16 +80,16 @@ import "app/models.nex"
 let p = models.Point(x: 1, y: 2)
 ```
 
-Los nombres de un módulo se usan **cualificados**: `models.add(1, 2)`, `models.Point(...)`,
-`models.Percent`. Un módulo nunca suelta sus nombres en el ámbito de quien lo importa.
+The names of a module are used **qualified**: `models.add(1, 2)`, `models.Point(...)`,
+`models.Percent`. A module never drops its names into the scope of whoever imports it.
 
-El nombre del espacio de nombres es el del fichero sin la extensión. Si dos módulos importados
-tuvieran el mismo nombre, es un error (`E2030`): renombrar el fichero lo resuelve, y el lenguaje
-no decide todavía cómo se llama un módulo que no coincide con su fichero.
+The name of the namespace is that of the file without the extension. If two imported modules
+had the same name, it is an error (`E2030`): renaming the file solves it, and the language
+does not decide yet what a module whose name does not match its file is called.
 
-### 3. La privacidad
+### 3. Privacy
 
-Todo lo que un módulo declara es **privado** salvo que lo marque con `pub`:
+Everything a module declares is **private** unless it marks it with `pub`:
 
 ```
 pub fn add(a: Int, b: Int) -> Int {
@@ -101,187 +101,187 @@ fn helper(x: Int) -> Int {
 }
 ```
 
-`models.add` se puede llamar desde fuera; `models.helper` no, y llamarlo es un error (`E2028`).
+`models.add` can be called from outside; `models.helper` cannot, and calling it is an error (`E2028`).
 
-`pub` vale para las funciones y para los tipos, incluidos los registros: `pub type Point = { x:
-Int, y: Int }` hace que el registro y su constructor sean públicos.
+`pub` applies to functions and to types, including records: `pub type Point = { x:
+Int, y: Int }` makes the record and its constructor public.
 
-El archivo que se ejecuta es la excepción: sus nombres son los del programa, y todos son
-visibles, porque son su punto de entrada.
+The file that runs is the exception: its names are those of the program, and all of them are
+visible, because they are its entry point.
 
-### 4. Las importaciones circulares
+### 4. Circular imports
 
-No se permiten, y son un error (`E2029`), con los módulos implicados en el mensaje. Es la
-regla R14 del borrador.
+They are not allowed, and they are an error (`E2029`), with the modules involved in the message. It is
+rule R14 of the draft.
 
-Un módulo A importa a B y B importa a A: no hay un orden en que se puedan definir los dos, y
-permitirlo daría dos lecturas distintas del mismo programa según por dónde se empiece.
+A module A imports B and B imports A: there is no order in which both can be defined, and
+allowing it would give two different readings of the same program depending on where you start.
 
-### 5. Los tipos cruzan los módulos
+### 5. Types cross modules
 
-Un registro de otro módulo es un registro como cualquier otro, y **nominal**: el registro
-`Point` del módulo `models` no es el mismo tipo que un `Point` de otro módulo, y un valor de uno no
-se acepta donde se espera el otro.
+A record of another module is a record like any other, and **nominal**: the record
+`Point` of the module `models` is not the same type as a `Point` of another module, and a value of one is not
+accepted where the other is expected.
 
-En el análisis, los nombres de un módulo van cualificados (`models.Point`), de modo que dos
-módulos pueden declarar registros con el mismo nombre sin que el analizador los confunda. El
-nombre que ve quien escribe el código es el que escribe: `models.Point`.
+In the analysis, the names of a module are qualified (`models.Point`), so that two
+modules can declare records with the same name without the analyzer mixing them up. The
+name that whoever writes the code sees is the one they write: `models.Point`.
 
-### 6. Lo que se carga, y cuándo
+### 6. What is loaded, and when
 
-Los módulos se cargan cuando se **analiza** el programa, no cuando se ejecuta: son parte del
-programa, y el programa tiene que estar comprobado antes de ejecutarse (decisión 0002).
+Modules are loaded when the program is **analyzed**, not when it runs: they are part of the
+program, and the program has to be checked before running (decision 0002).
 
-El cargador (`modules.py`) resuelve las rutas, lee los ficheros, analiza cada módulo una sola vez
-(cada fichero se lee una vez, aunque lo importen varios) y detecta los ciclos.
+The loader (`modules.py`) resolves the paths, reads the files, analyzes each module only once
+(every file is read once, even if several import it) and detects cycles.
 
-Un módulo que no se puede leer es un diagnóstico, con el mismo código que usa el comando de
-línea cuando el programa principal no se puede leer (`E0001`).
+A module that cannot be read is a diagnostic, with the same code the command
+line uses when the main program cannot be read (`E0001`).
 
-### 7. El alcance de esta versión
+### 7. The scope of this version
 
-Lo que **funciona**:
+What **works**:
 
-- `import "ruta/fichero.nex"` al principio del archivo.
-- Un espacio de nombres por módulo, con los nombres cualificados.
-- `pub` y la privacidad.
-- Los registros y las funciones de otros módulos, con su identidad nominal.
-- Las importaciones circulares, detectadas y explicadas.
+- `import "path/file.nex"` at the beginning of the file.
+- One namespace per module, with qualified names.
+- `pub` and privacy.
+- The records and functions of other modules, with their nominal identity.
+- Circular imports, detected and explained.
 
-Lo que **no** funciona todavía, y por qué:
+What does **not** work yet, and why:
 
-- **Los alias y la importación selectiva.** El borrador los tiene; aquí no, porque los dos hacen
-  falta por la misma razón: evitar que dos módulos con el mismo nombre se estorben. Con el
-  espacio de nombres y el nombre del fichero, un clash es un error claro, no un conflicto
-  silencioso. Cuando haga falta, un alias es una palabra clave más y una regla más.
-- **El playground.** El playground recibe el programa como texto y lo ejecuta en un contenedor; no
-  tiene los ficheros de al lado, así que un programa con importaciones no se puede ejecutar ahí.
-  La limitación está escrita en la documentación del playground.
-- **Los ejemplos (`example`) de los módulos importados.** Se comprueban, porque el módulo se
-  analiza entero, pero `nex test` solo ejecuta los del archivo que se le pasó.
-- **`nex inspect`** describe solo el árbol del archivo que se le pasó (con sus `imports`); el
-  árbol de los módulos importados no aparece. **`nex symbols` y `nex context`** sí incluyen los
-  nombres y las funciones de los módulos importados, cada uno con un campo nuevo `file`, al final
-  del objeto (decisión 0008, §8): el archivo que lo declara, con la ruta relativa al programa y `/`
-  como separador, nunca la ruta absoluta del equipo. Los esquemas lo recogen: `nexora.inspect/2`
-  (`imports`, `public`, `qualifier`), y el campo `file` en `nexora.context/1` y `nexora.symbols/1`.
+- **Aliases and selective import.** The draft has them; here they are not there, because both are
+  needed for the same reason: to keep two modules with the same name from getting in each other's way. With the
+  namespace and the name of the file, a clash is a clear error, not a silent
+  conflict. When it is needed, an alias is one more keyword and one more rule.
+- **The playground.** The playground receives the program as text and runs it in a container; it does not
+  have the files next to it, so a program with imports cannot run there.
+  The limitation is written in the documentation of the playground.
+- **The examples (`example`) of the imported modules.** They are checked, because the module is
+  analyzed entirely, but `nex test` only runs those of the file it was given.
+- **`nex inspect`** only describes the tree of the file it was given (with its `imports`); the
+  tree of the imported modules does not appear. **`nex symbols` and `nex context`** do include the
+  names and functions of the imported modules, each one with a new `file` field, at the end
+  of the object (decision 0008, §8): the file that declares it, with the path relative to the program and `/`
+  as the separator, never the absolute path of the machine. The schemas record it: `nexora.inspect/2`
+  (`imports`, `public`, `qualifier`), and the `file` field in `nexora.context/1` and `nexora.symbols/1`.
 
-## Hechos verificados en el repositorio
+## Facts verified in the repository
 
-| Hecho | Dónde |
-|-------|-------|
-| `import` y `pub` ya estaban reservados para esto | `tokens.py` (`RESERVED_WORDS`) |
-| El borrador de diseño ya propone los módulos y su sintaxis | `docs/fase-1-diseno.md` (§8, R14) |
-| La especificación ya lo marca como limitación y como previsto | `docs/language-spec.md` (§13, §14) |
-| El analizador ya resuelve las llamadas cualificadas de un tipo | `checker.py` (`_qualified_call`), `parser.py` (`_qualified_call`) |
-| El intérprete ya resuelve las funciones por nombre | `interpreter.py` (`_call`) |
-| Las rutas ya se declaran con literales de texto | `parser.py` (`_uses_declaration`), el ejemplo `uses read "datos.txt"` |
-| El comando de línea ya lee el programa de un fichero | `cli.py` (`_load`) |
+| Fact | Where |
+|------|-------|
+| `import` and `pub` were already reserved for this | `tokens.py` (`RESERVED_WORDS`) |
+| The design draft already proposes modules and their syntax | `docs/fase-1-diseno.md` (§8, R14) |
+| The specification already marks it as a limitation and as planned | `docs/language-spec.md` (§13, §14) |
+| The analyzer already resolves the qualified calls of a type | `checker.py` (`_qualified_call`), `parser.py` (`_qualified_call`) |
+| The interpreter already resolves functions by name | `interpreter.py` (`_call`) |
+| Paths are already declared with text literals | `parser.py` (`_uses_declaration`), the example `uses read "data.txt"` |
+| The command line already reads the program from a file | `cli.py` (`_load`) |
 
-## Decisiones que se toman aquí, y por qué
+## Decisions taken here, and why
 
-| Decisión | Por qué |
-|----------|---------|
-| La ruta es un literal de texto, con la extensión | Como `uses read "datos.txt"`: el lenguaje escribe las rutas, no las adivina |
-| La ruta es relativa al fichero que importa | Un programa depende de donde está, no de donde se ejecuta |
-| Un espacio de nombres por módulo | Los nombres de otro módulo no se sueltan en el ámbito de quien importa: no hay clashes silenciosos |
-| El espacio de nombres es el nombre del fichero | Es lo que dice el borrador, y no hace falta una palabra clave más |
-| `pub` y nada más | Todo privado por defecto es lo más seguro; el borrador dice lo mismo |
-| Las importaciones circulares son un error | R14 del borrador: no hay un orden de definición posible |
-| Los módulos se cargan al analizar | Son parte del programa: lo que no se comprueba no se ejecuta (decisión 0002) |
-| El nombre interno de los tipos es cualificado | Los registros son nominales: dos `Point` de módulos distintos son tipos distintos |
-| Sin alias ni importación selectiva | Hacen falta por lo mismo, y se pueden añadir después sin romper nada |
-| El playground no los admite | Recibe el programa como texto; no tiene los ficheros de al lado |
+| Decision | Why |
+|----------|-----|
+| The path is a text literal, with the extension | Like `uses read "data.txt"`: the language writes paths, it does not guess them |
+| The path is relative to the file that imports | A program depends on where it is, not on where it is run from |
+| One namespace per module | The names of another module are not dropped into the scope of whoever imports: there are no silent clashes |
+| The namespace is the name of the file | It is what the draft says, and no extra keyword is needed |
+| `pub` and nothing else | Everything private by default is the safest; the draft says the same |
+| Circular imports are an error | R14 of the draft: there is no possible order of definition |
+| Modules are loaded when analyzing | They are part of the program: what is not checked does not run (decision 0002) |
+| The internal name of types is qualified | Records are nominal: two `Point` from different modules are different types |
+| No aliases or selective import | They are needed for the same thing, and they can be added later without breaking anything |
+| The playground does not support them | It receives the program as text; it does not have the files next to it |
 
-## Lo que no garantiza
+## What it does not guarantee
 
-- No hay alias, ni importación selectiva, ni `import *`: los nombres de un módulo se usan
-  cualificados y solo.
-- No hay paquetes, ni registros de módulos, ni rutas de búsqueda: la única forma de importar es
-  una ruta relativa a un fichero.
-- No hay un `main` por módulo: el punto de entrada es el del archivo que se ejecuta, y un módulo
-  importado no lo necesita.
-- El árbol de los módulos importados no se ve en `nex inspect`; sus nombres y funciones sí se ven en
-  `nex symbols` y `nex context`, con el archivo que los declara.
-- El playground no ejecuta programas con importaciones.
-- Dos módulos importados con el mismo nombre de fichero son un error; no hay forma de renombrarlos
-  al importarlos.
+- There are no aliases, no selective import and no `import *`: the names of a module are used
+  qualified and only qualified.
+- There are no packages, no module registries and no search paths: the only way to import is
+  a path relative to a file.
+- There is no `main` per module: the entry point is that of the file that runs, and an imported
+  module does not need one.
+- The tree of the imported modules is not seen in `nex inspect`; their names and functions are seen in
+  `nex symbols` and `nex context`, with the file that declares them.
+- The playground does not run programs with imports.
+- Two imported modules with the same file name are an error; there is no way to rename them
+  when importing them.
 
-## Fuera del alcance
+## Out of scope
 
-- Los alias y la importación selectiva: se deciden cuando haya dos módulos con el mismo nombre.
-- El `pub` en los refinamientos de tipo y en los contratos.
-- Un gestor de paquetes o de dependencias: el lenguaje no tiene ni el `cargo` ni el `npm`; las
-  importaciones son rutas a ficheros.
-- Los módulos anidados (un módulo dentro de otro) y las bibliotecas estándar como módulos.
-- El `match` y los enums del usuario: siguen siendo la parte grande de la
-  [0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md), que sigue siendo propuesta.
+- Aliases and selective import: they will be decided when there are two modules with the same name.
+- `pub` on type refinements and on contracts.
+- A package or dependency manager: the language has neither a `cargo` nor an `npm`; the
+  imports are paths to files.
+- Nested modules (a module inside another one) and standard libraries as modules.
+- `match` and user enums: they are still the big part of
+  [0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md), which is still a proposal.
 
-## Alternativas descartadas
+## Alternatives ruled out
 
-| Alternativa | Por qué no |
-|-------------|-----------|
-| `import models` (una palabra, como en el borrador) | El lenguaje escribe las rutas con literales de texto; una palabra dejaría la extensión y el directorio a la interpretación |
-| `import models.nex` sin comillas | Una ruta sin comillas es indistinguible de un nombre; el lenguaje no tiene esa ambigüedad en ningún sitio |
-| Traer los nombres al ámbito de quien importa (`from x import y`) | Los nombres de dos módulos se estorbarían; el espacio de nombres hace que el clash se vea |
-| Un único espacio de nombres plano para todo el programa | Un `Point` de un módulo y otro de otro serían el mismo nombre, y los registros son nominales |
-| Un `main` por módulo y el que se ejecuta elegido por nombre | No hay forma de saber qué módulo es el de entrada sin otra regla; el archivo que se ejecuta lo dice |
-| Cargar los módulos al ejecutar | Lo que no se comprueba no se ejecuta (decisión 0002): el módulo es parte del programa |
-| Ignorar los ciclos y dejarlos para la ejecución | Dos lecturas del mismo programa según por dónde se empiece; el error tiene que salir antes |
-| Dejar los módulos para después de los enums y el `match` | Los módulos no necesitan `match`: son un espacio de nombres y una resolución de nombres, y la comprobación de tipos ya sabe hacerlo |
+| Alternative | Why not |
+|-------------|---------|
+| `import models` (a word, as in the draft) | The language writes paths with text literals; a word would leave the extension and the directory open to interpretation |
+| `import models.nex` without quotes | A path without quotes is indistinguishable from a name; the language has that ambiguity nowhere |
+| Bringing the names into the scope of whoever imports (`from x import y`) | The names of two modules would get in each other's way; the namespace makes the clash visible |
+| A single flat namespace for the whole program | A `Point` of one module and another of another would be the same name, and records are nominal |
+| A `main` per module and the one that runs chosen by name | There is no way to know which module is the entry one without another rule; the file that runs says so |
+| Loading the modules when running | What is not checked does not run (decision 0002): the module is part of the program |
+| Ignoring cycles and leaving them for execution | Two readings of the same program depending on where you start; the error has to come out before |
+| Leaving modules until after enums and `match` | Modules do not need `match`: they are a namespace and a name resolution, and the type checking already knows how to do it |
 
-## Compatibilidad
+## Compatibility
 
-- Los programas que ya existen siguen comprobando lo mismo: no había importaciones, así que no
-  hay ningún programa cuyo resultado cambie.
-- `import` y `pub` pasan a ser palabras clave del lenguaje. Antes eran palabras reservadas, que
-  ya no se podían usar como nombres: un programa que usara `import` como nombre no compilaba
-  antes, y sigue sin compilar, con el mismo código (`E1103`).
-- Los nombres de los módulos son cualificados en el análisis: un tipo que antes se llamaba
-  `Point` y se escribía `Point` se sigue escribiendo igual, y ahora se puede llamar `models.Point`
-  si viene de un módulo.
-- La especificación pasa a la versión 0.11 y la implementación de referencia a la 0.11.0. La
-  0.10.0 ya publicada en npm y en PyPI no se toca.
+- The programs that already exist keep checking the same: there were no imports, so there
+  is no program whose result changes.
+- `import` and `pub` become keywords of the language. Before they were reserved words, which
+  could already not be used as names: a program that used `import` as a name did not compile
+  before, and it still does not compile, with the same code (`E1103`).
+- The names of modules are qualified in the analysis: a type that used to be called
+  `Point` and was written `Point` is still written the same way, and now it can be called `models.Point`
+  if it comes from a module.
+- The specification moves to version 0.11 and the reference implementation to 0.11.0. The
+  0.10.0 already published on npm and on PyPI is not touched.
 
-## Cambios necesarios
+## Required changes
 
-- `tokens.py`: `import` y `pub` pasan de palabras reservadas a palabras clave.
-- `ast_nodes.py`: `ImportDecl`; `Program.imports`; el campo `public` de las funciones, los
-  registros y los tipos refinados.
-- `parser.py`: las declaraciones de importación, el `pub`, y los tipos cualificados
+- `tokens.py`: `import` and `pub` go from reserved words to keywords.
+- `ast_nodes.py`: `ImportDecl`; `Program.imports`; the `public` field of functions,
+  records and refined types.
+- `parser.py`: the import declarations, `pub`, and qualified types
   (`models.Point`).
-- `checker.py`: el prefijo de los nombres de un módulo, la privacidad, las llamadas cualificadas
-  a un módulo y los tipos cualificados.
-- `modules.py` (nuevo): el cargador, el grafo de importaciones y la detección de ciclos.
-- `pipeline.py`: el análisis de un programa con sus módulos.
-- `interpreter.py`: las funciones públicas de los módulos importados, con su nombre cualificado.
-- `cli.py` y `lsp.py`: el cargador, con el directorio del fichero como base.
-- `diagnostics.py`: `E2027` (módulo desconocido), `E2028` (nombre privado), `E2029` (importación
-  circular) y `E2030` (dos módulos con el mismo nombre).
+- `checker.py`: the prefix of the names of a module, privacy, the qualified calls
+  to a module and qualified types.
+- `modules.py` (new): the loader, the import graph and the detection of cycles.
+- `pipeline.py`: the analysis of a program with its modules.
+- `interpreter.py`: the public functions of the imported modules, with their qualified name.
+- `cli.py` and `lsp.py`: the loader, with the directory of the file as the base.
+- `diagnostics.py`: `E2027` (unknown module), `E2028` (private name), `E2029` (circular
+  import) and `E2030` (two modules with the same name).
 
-## Pruebas de regresión previstas
+## Planned regression tests
 
-| Archivo | Qué fija |
-|---------|----------|
-| `tests/test_modules.py` | La sintaxis, el espacio de nombres, la privacidad, los ciclos, los registros cruzados, las rutas relativas y el error de lectura |
-| `tests/test_modules_syntax.py` | Que una importación mal escrita es un error de sintaxis |
-| `examples/modules/` | Un programa con módulos, y su salida registrada |
-| `tests/test_diagnostics.py` | Que los cuatro códigos nuevos tienen texto, posición y sugerencia |
+| File | What it pins down |
+|------|-------------------|
+| `tests/test_modules.py` | The syntax, the namespace, privacy, cycles, records across modules, relative paths and the read error |
+| `tests/test_modules_syntax.py` | That a badly written import is a syntax error |
+| `examples/modules/` | A program with modules, and its recorded output |
+| `tests/test_diagnostics.py` | That the four new codes have a text, a position and a suggestion |
 
-## Relación con las decisiones anteriores y el índice
+## Relation to the previous decisions and the index
 
-Se añade al índice de decisiones como aceptada. No modifica ninguna: usa el analizador y el
-intérprete que las decisiones anteriores definieron, y los módulos son la parte del borrador de
-diseño que faltaba.
+It is added to the decision index as accepted. It modifies none: it uses the analyzer and the
+interpreter that the previous decisions defined, and modules are the part of the design
+draft that was missing.
 
-## Cuestiones que siguen abiertas
+## Questions that remain open
 
-- ¿Los alias y la importación selectiva entran con el `match` y los enums, o antes? La regla R6
-  del borrador dice que una importación sin usar es un error: ¿cuenta como sin usar una
-  importación cuyo único uso es un tipo?
-- ¿Un módulo puede declarar un `main`? Hoy se ignora, porque el punto de entrada es el del
-  archivo que se ejecuta.
-- ¿La ruta de una importación debería poder ser un identificador (`import math`) además de un
-  literal? Sería más corto, y menos explícito.
-- ¿Los tipos refinados y los contratos de un módulo público se comprueban igual que los privados?
-  Hoy sí, porque el módulo se analiza entero.
+- Do aliases and selective import come with `match` and enums, or before? Rule R6
+  of the draft says that an unused import is an error: does an
+  import whose only use is a type count as unused?
+- Can a module declare a `main`? Today it is ignored, because the entry point is that of the
+  file that runs.
+- Should the path of an import be able to be an identifier (`import math`) as well as a
+  literal? It would be shorter, and less explicit.
+- Are the refined types and contracts of a public module checked the same way as the private ones?
+  Today yes, because the module is analyzed entirely.

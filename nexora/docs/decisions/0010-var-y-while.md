@@ -1,104 +1,104 @@
-# 0010 — Variables reasignables (`var`) y bucles con requisitos (`while`, `invariant`, `decreases`)
+# 0010 — Reassignable variables (`var`) and loops with requirements (`while`, `invariant`, `decreases`)
 
-- **Estado:** aceptada
-- **Versión:** 0.5.0
-- **Relacionada con:** la [decisión 0003](0003-funciones-retorno-e-if.md) (rutas de retorno), la
-  [0004](0004-contratos-en-ejecucion.md) (los parámetros en `ensures`), la
-  [0006](0006-requisitos-verificables.md) (la línea principal), la
-  [0007](0007-contratos-estables-y-tipos-refinados.md) (la garantía de los tipos refinados y la
-  forma de las cláusulas) y la [0008](0008-ejemplos-y-nex-test.md) (`nex test`). **No modifica
-  ninguna**: las conserva, y esta decisión explica cómo.
+- **Status:** accepted
+- **Version:** 0.5.0
+- **Related to:** [decision 0003](0003-funciones-retorno-e-if.md) (return paths),
+  [0004](0004-contratos-en-ejecucion.md) (parameters in `ensures`),
+  [0006](0006-requisitos-verificables.md) (the main line),
+  [0007](0007-contratos-estables-y-tipos-refinados.md) (the guarantee of refined types and the
+  form of the clauses) and [0008](0008-ejemplos-y-nex-test.md) (`nex test`). **It modifies
+  none**: it keeps them, and this decision explains how.
 
-## Contexto
+## Context
 
-Hoy toda variable es inmutable (`language-spec.md`, 5.1) y no hay bucles: la única forma de repetir
-algo es la recursividad, limitada a 1000 llamadas anidadas (`E3004`, sección 7.5). Es el primer
-punto de "Planificado" en la [hoja de ruta](../roadmap.md): "Van juntos: uno no sirve sin el otro.
-Eliminan la dependencia de la recursividad."
+Today every variable is immutable (`language-spec.md`, 5.1) and there are no loops: the only way to repeat
+something is recursion, limited to 1000 nested calls (`E3004`, section 7.5). It is the first
+point of "Planned" in the [roadmap](../roadmap.md): "They go together: one is no use without the other.
+They remove the dependence on recursion."
 
-| Necesidad | Hoy | Problema |
-|-----------|-----|----------|
-| Sumar los números de 1 a 5000 | Una función recursiva | `E3004`: más de 1000 llamadas anidadas |
-| Repetir hasta que se cumpla una condición | Recursividad con el estado en los parámetros | El límite lo pone la implementación, no el problema |
-| Acumular un resultado | Una variable nueva en cada paso o una función auxiliar | Código que nadie escribiría en otro lenguaje |
+| Need | Today | Problem |
+|------|-------|---------|
+| Adding the numbers from 1 to 5000 | A recursive function | `E3004`: more than 1000 nested calls |
+| Repeating until a condition holds | Recursion with the state in the parameters | The limit is set by the implementation, not by the problem |
+| Accumulating a result | A new variable at every step or a helper function | Code nobody would write in another language |
 
-El borrador de diseño (`docs/fase-1-diseno.md`) proponía `var`, `while` y la regla R3: "Todo es
-inmutable por defecto; solo `var` permite reasignar". Ambas palabras están reservadas desde la 0.1.
+The design draft (`docs/fase-1-diseno.md`) proposed `var`, `while` and rule R3: "Everything is
+immutable by default; only `var` allows reassigning". Both words have been reserved since 0.1.
 
-### El problema que introducen los bucles
+### The problem that loops introduce
 
-En los lenguajes habituales un bucle es el sitio donde más fácil es equivocarse sin que nada lo
-señale: no termina, termina una vuelta antes o después, o rompe en una vuelta intermedia una regla
-que el código daba por supuesta. En NEXORA, además:
+In the usual languages a loop is the place where it is easiest to get things wrong without anything
+pointing it out: it does not end, it ends one iteration too early or too late, or it breaks in an intermediate iteration a rule
+that the code took for granted. In NEXORA, also:
 
-- **Hasta hoy toda repetición sin fin acababa en `E3004`.** Con un `while` corriente, `while true { }`
-  no terminaría nunca sin agotar ni la pila ni la memoria. `nex run` y `nex test` se quedarían
-  esperando, y un agente que ejecuta `nex test` sin supervisión no recibiría nunca el informe.
-- **Un programa NEXORA no puede leer entradas** (sección 8 de la especificación). No existe ningún
-  programa correcto que necesite un bucle sin fin: no hay un servidor ni un menú que esperar. Un
-  bucle que no termina es siempre un defecto.
-- **La línea principal del proyecto** ([0006](0006-requisitos-verificables.md)) es que los requisitos
-  forman parte verificable del programa. Una función los declara con `requires` y `ensures`; un bucle,
-  que es la parte del código donde más se necesitan, no tendría ninguno.
+- **Until today every endless repetition ended in `E3004`.** With an ordinary `while`, `while true { }`
+  would never end without exhausting either the stack or the memory. `nex run` and `nex test` would keep
+  waiting, and an agent that runs `nex test` unsupervised would never receive the report.
+- **A NEXORA program cannot read input** (section 8 of the specification). There is no
+  correct program that needs an endless loop: there is no server or menu to wait for. A
+  loop that does not end is always a defect.
+- **The main line of the project** ([0006](0006-requisitos-verificables.md)) is that requirements
+  are a verifiable part of the program. A function declares them with `requires` and `ensures`; a loop,
+  which is the part of the code where they are most needed, would have none.
 
-## Decisión
+## Decision
 
-### 1. `var`: una variable que puede cambiar de valor
+### 1. `var`: a variable that can change its value
 
 ```text
 var count = 0
 var total: Int = 0
 ```
 
-- Misma forma que `let`: `var` NOMBRE [`:` TIPO] `=` EXPRESIÓN. Se inicializa siempre al declararla.
-- **Su tipo es fijo.** Se infiere del valor inicial o se anota, con las mismas reglas que `let`
-  (`E2011`, `E2012`). Cambia el valor, nunca el tipo.
-- Mismas reglas de ámbito que `let` (`language-spec.md`, 5.2): existe desde la sentencia siguiente
-  hasta el final de su bloque; sin ocultación (`E2006`); un único espacio de nombres (`E2006`).
-- `let` sigue siendo inmutable. **Lo inmutable es lo que se escribe por defecto**; `var` señala en la
-  declaración que el valor puede cambiar más abajo.
+- Same form as `let`: `var` NAME [`:` TYPE] `=` EXPRESSION. It is always initialized when declared.
+- **Its type is fixed.** It is inferred from the initial value or annotated, with the same rules as `let`
+  (`E2011`, `E2012`). The value changes, never the type.
+- Same scope rules as `let` (`language-spec.md`, 5.2): it exists from the next statement
+  to the end of its block; no shadowing (`E2006`); a single namespace (`E2006`).
+- `let` is still immutable. **What is immutable is what is written by default**; `var` signals in the
+  declaration that the value can change further down.
 
-### 2. La asignación
+### 2. Assignment
 
 ```text
 count = count + 1
 ```
 
-- Es una **sentencia**, no una expresión. `a = b = 1` e `if x = 1 { }` son `E1101`.
-- Solo existe `=`. **No hay `+=`, `-=` ni `++`**: una sola forma de escribir cada cosa.
-- Se evalúa el valor y después se guarda.
+- It is a **statement**, not an expression. `a = b = 1` and `if x = 1 { }` are `E1101`.
+- Only `=` exists. **There is no `+=`, `-=` or `++`**: one way of writing each thing.
+- The value is evaluated and then stored.
 
-| Destino | Resultado |
-|---------|-----------|
-| Una variable `var` visible en ese punto (también desde un bloque interior) | Correcto |
-| Una variable `let` | `E2007`, con una nota que señala la declaración y la sugerencia de usar `var` |
-| Un parámetro | `E2007` (sección 3) |
-| Un nombre que no es una variable visible | Como hoy: `E2005` |
+| Target | Result |
+|--------|--------|
+| A `var` variable visible at that point (also from an inner block) | Correct |
+| A `let` variable | `E2007`, with a note that points at the declaration and the suggestion to use `var` |
+| A parameter | `E2007` (section 3) |
+| A name that is not a visible variable | As today: `E2005` |
 
-El valor tiene que ser compatible con el tipo de la variable, con la regla de siempre
+The value has to be compatible with the type of the variable, with the usual rule
 (`language-spec.md`, 4.2).
 
-### 3. Los parámetros siguen siendo inmutables
+### 3. Parameters remain immutable
 
-Un parámetro no puede reasignarse (`E2007`). Es lo que mantiene la regla de los contratos "en
-`ensures` [los parámetros] tienen el mismo valor que al entrar" (9.1) y que la nota "It was called
-with: …" de los diagnósticos diga la verdad. Quien necesite cambiarlo escribe `var n = start`.
+A parameter cannot be reassigned (`E2007`). It is what keeps the rule of contracts "in
+`ensures` [the parameters] have the same value as on entry" (9.1) and makes the note "It was called
+with: …" of the diagnostics tell the truth. Whoever needs to change it writes `var n = start`.
 
-### 4. Los tipos refinados conservan su garantía
+### 4. Refined types keep their guarantee
 
-Una asignación a una variable de tipo refinado llega por uno de los dos caminos que ya existen
+An assignment to a variable of a refined type comes through one of the two paths that already exist
 (`language-spec.md`, 4.4):
 
 ```text
 var p: Percent = 20
-p = 30                 // constante: se comprueba sin ejecutar (E2017 si no cumple)
-p = Percent(p + 10)    // comprobación explícita: al ejecutar (E4003 si no cumple)
-p = p + 10             // E2011: un Int no es un Percent; la sugerencia propone Percent(...)
+p = 30                 // constant: checked without running (E2017 if it does not hold)
+p = Percent(p + 10)    // explicit check: when running (E4003 if it does not hold)
+p = p + 10             // E2011: an Int is not a Percent; the suggestion proposes Percent(...)
 ```
 
-Las constantes de las asignaciones cuentan en el mismo presupuesto de análisis (`E2019`).
+The constants of assignments count towards the same analysis budget (`E2019`).
 
-### 5. `while`, con sus requisitos al principio del cuerpo
+### 5. `while`, with its requirements at the beginning of the body
 
 ```text
 fn sum_to(n: Int) -> Int {
@@ -116,55 +116,55 @@ fn sum_to(n: Int) -> Int {
 }
 ```
 
-Un bucle es `while` CONDICIÓN `{` CLÁUSULAS SENTENCIAS `}`. Las cláusulas van al principio del cuerpo,
-una por línea, con la forma de los contratos de una función: expresión y, tras una coma, la
-explicación opcional.
+A loop is `while` CONDITION `{` CLAUSES STATEMENTS `}`. The clauses go at the beginning of the body,
+one per line, with the form of the contracts of a function: an expression and, after a comma, the
+optional explanation.
 
-| Cláusula | Cuántas | Qué declara | Tipo |
-|----------|---------|-------------|------|
-| `decreases` | **Exactamente una** | La **medida**: una cantidad que no baja de 0 y que disminuye en cada vuelta. Es la razón por la que el bucle termina | `Int` |
-| `invariant` | Cero o más | Una condición que se cumple **antes de cada evaluación de la condición** del bucle: al llegar, después de cada vuelta y, por tanto, al salir | `Bool` |
+| Clause | How many | What it declares | Type |
+|--------|----------|------------------|------|
+| `decreases` | **Exactly one** | The **measure**: a quantity that does not go below 0 and that decreases on every iteration. It is the reason why the loop ends | `Int` |
+| `invariant` | Zero or more | A condition that holds **before every evaluation of the condition** of the loop: on arrival, after every iteration and, therefore, on exit | `Bool` |
 
-Reglas:
+Rules:
 
-- **Todo bucle declara su medida.** Un `while` sin `decreases` es `E2021`; con dos o más, `E2021`.
-- Las cláusulas ven todo lo que es visible en el punto del bucle (parámetros, `let`, `var`) y nada
-  declarado dentro del cuerpo. Pueden llamar a funciones, como los contratos.
-- `invariant` y `decreases` fuera del principio del cuerpo de un `while` son `E1106`, igual que
-  `requires`, `ensures` y `example` fuera del principio de una función. Y al revés: `requires`,
-  `ensures` y `example` dentro de un `while` son `E1106`.
-- La condición del bucle es `Bool` (`E2011`).
-- **Cada vuelta abre un ámbito nuevo**: lo declarado dentro del cuerpo existe solo en esa vuelta.
-- Un `return` dentro del cuerpo termina la función, como en cualquier bloque; la vuelta en curso
-  no se completa y no se comprueba nada más del bucle.
-- **Las vueltas no son llamadas.** No cuentan para el límite de 1000 llamadas ni consumen la pila de
-  Python: el intérprete ejecuta el bucle de forma iterativa.
-- No hay `break`, `continue` ni `for` (siguen reservadas; ver "Fuera del alcance").
+- **Every loop declares its measure.** A `while` without `decreases` is `E2021`; with two or more, `E2021`.
+- The clauses see everything that is visible at the point of the loop (parameters, `let`, `var`) and nothing
+  declared inside the body. They can call functions, like contracts.
+- `invariant` and `decreases` outside the beginning of the body of a `while` are `E1106`, just like
+  `requires`, `ensures` and `example` outside the beginning of a function. And the other way round: `requires`,
+  `ensures` and `example` inside a `while` are `E1106`.
+- The condition of the loop is `Bool` (`E2011`).
+- **Every iteration opens a new scope**: what is declared inside the body exists only in that iteration.
+- A `return` inside the body ends the function, as in any block; the current iteration
+  is not completed and nothing else of the loop is checked.
+- **Iterations are not calls.** They do not count towards the limit of 1000 calls and do not use the
+  Python stack: the interpreter runs the loop iteratively.
+- There is no `break`, `continue` or `for` (they remain reserved; see "Out of scope").
 
-### 6. Qué se comprueba en cada vuelta
+### 6. What is checked on every iteration
 
-El intérprete ejecuta un `while` así:
+The interpreter runs a `while` like this:
 
-1. Comprueba los `invariant`, en orden. Si uno es falso: **`E4005` Loop invariant violated**.
-2. Evalúa la condición. Si es `false`, el bucle termina.
-3. Evalúa la medida. Si es negativa, o si no es **estrictamente menor** que la medida de la vuelta
-   anterior de esta misma ejecución del bucle: **`E4006` Loop measure did not decrease**.
-4. Ejecuta el cuerpo, en un ámbito nuevo, y vuelve al paso 1.
+1. It checks the `invariant` clauses, in order. If one is false: **`E4005` Loop invariant violated**.
+2. It evaluates the condition. If it is `false`, the loop ends.
+3. It evaluates the measure. If it is negative, or if it is not **strictly smaller** than the measure of the
+   previous iteration of this same run of the loop: **`E4006` Loop measure did not decrease**.
+4. It runs the body, in a new scope, and goes back to step 1.
 
-Consecuencias:
+Consequences:
 
-- **Un bucle siempre termina, o se detiene con un diagnóstico que dice por qué no lo hacía.** La
-  medida es un entero que no baja de 0 y baja en cada vuelta; no puede hacerlo indefinidamente. Es un
-  argumento matemático, no un límite de tiempo: el mismo programa da siempre el mismo resultado.
-- El invariante se comprueba también al salir: el código que sigue al bucle puede contar con él.
-- La medida se compara con la de la vuelta anterior de **esa ejecución** del bucle. Un bucle interior
-  vuelve a empezar su comparación cada vez que se entra en él.
-- Como en los contratos, si evaluar una cláusula produce un error de ejecución (`E3xxx`), el error
-  que se comunica es ese.
+- **A loop always ends, or stops with a diagnostic that says why it would not.** The
+  measure is an integer that does not go below 0 and goes down on every iteration; it cannot do so indefinitely. It is a
+  mathematical argument, not a time limit: the same program always gives the same result.
+- The invariant is also checked on exit: the code that follows the loop can rely on it.
+- The measure is compared with that of the previous iteration of **that run** of the loop. An inner loop
+  starts its comparison again every time it is entered.
+- As in contracts, if evaluating a clause produces a runtime error (`E3xxx`), the error
+  that is reported is that one.
 
-### 7. Los diagnósticos de un bucle dicen en qué vuelta y con qué valores
+### 7. The diagnostics of a loop say in which iteration and with which values
 
-`E4005` y `E4006` son de categoría `contract` (código de salida `5`, como `E4001`–`E4003`):
+`E4005` and `E4006` are of category `contract` (exit code `5`, like `E4001`–`E4003`):
 
 ```text
 contract error[E4006]: Loop measure did not decrease
@@ -179,198 +179,198 @@ contract error[E4006]: Loop measure did not decrease
    = note: In 'count_even', called at line 21, column 11.
 ```
 
-| Campo | `E4005` Loop invariant violated | `E4006` Loop measure did not decrease |
+| Field | `E4005` Loop invariant violated | `E4006` Loop measure did not decrease |
 |-------|--------------------------------|---------------------------------------|
-| Posición | La condición de la cláusula `invariant` | La expresión de la cláusula `decreases` |
-| Etiqueta | `This condition is false` | `The measure was A and is now B` · `The measure was A and is still A` · `The measure is B; it must be 0 or more` |
-| Notas, en orden | `The condition at line N is false: invariant …` · `Reason: …` (si tiene explicación) · `Before the first turn of the loop at line L.` o `After turn K of the loop at line L.` · `The values: …` · la cadena de llamadas | `The measure at line N: decreases …` · `Reason: …` (si tiene explicación) · `Before turn K of the loop at line L.` · `The values: …` · la cadena de llamadas |
+| Position | The condition of the `invariant` clause | The expression of the `decreases` clause |
+| Label | `This condition is false` | `The measure was A and is now B` · `The measure was A and is still A` · `The measure is B; it must be 0 or more` |
+| Notes, in order | `The condition at line N is false: invariant …` · `Reason: …` (if it has an explanation) · `Before the first turn of the loop at line L.` or `After turn K of the loop at line L.` · `The values: …` · the chain of calls | `The measure at line N: decreases …` · `Reason: …` (if it has an explanation) · `Before turn K of the loop at line L.` · `The values: …` · the chain of calls |
 
-El orden sigue al de los contratos (`E4001`): primero la regla y su motivo, después cuándo y con qué
-valores. Un invariante se comprueba antes de evaluar la condición, así que en ese momento no se sabe
-si el bucle va a salir: la nota dice después de qué vuelta, no si era la última.
+The order follows that of contracts (`E4001`): first the rule and its reason, then when and with which
+values. An invariant is checked before evaluating the condition, so at that moment it is not known
+whether the loop is going to exit: the note says after which iteration, not whether it was the last one.
 
-**`The values:`** muestra las variables y los parámetros visibles en el punto del bucle, en el
-orden en que se declararon, con el formato de los valores de los contratos (los textos, entre
-comillas). Es lo que una persona o un agente necesita para saber qué vuelta falló y por qué, sin
-añadir `print` para depurar. No incluye lo declarado dentro del cuerpo, que no existe entre vueltas.
+**`The values:`** shows the variables and parameters visible at the point of the loop, in the
+order in which they were declared, with the format of the values of contracts (texts, in
+quotes). It is what a person or an agent needs to know which iteration failed and why, without
+adding `print` to debug. It does not include what is declared inside the body, which does not exist between iterations.
 
-**Otros errores dentro de un bucle.** Cualquier diagnóstico de ejecución (`E3xxx` o `E4xxx`) producido
-dentro del cuerpo, de la condición o de las cláusulas de un bucle gana una nota al final, una por cada
-bucle que lo contiene, del más interior al más exterior: `In turn K of the loop at line L.` (en el
-cuerpo), `Before turn K …` (en la medida) o `Before the first turn …` / `After turn K …` (en la
-condición o en un invariante). Como la cadena de llamadas, se muestran como máximo seis; si hay más,
-una nota `... and more loops.` Ningún otro campo cambia.
+**Other errors inside a loop.** Any runtime diagnostic (`E3xxx` or `E4xxx`) produced
+inside the body, the condition or the clauses of a loop gains a note at the end, one for each
+loop that contains it, from the innermost to the outermost: `In turn K of the loop at line L.` (in the
+body), `Before turn K …` (in the measure) or `Before the first turn …` / `After turn K …` (in the
+condition or in an invariant). Like the chain of calls, at most six are shown; if there are more,
+a note `... and more loops.` No other field changes.
 
-### 8. Rutas de retorno y código inalcanzable
+### 8. Return paths and unreachable code
 
-La regla de la [decisión 0003](0003-funciones-retorno-e-if.md) no evalúa condiciones, y se mantiene:
+The rule of [decision 0003](0003-funciones-retorno-e-if.md) does not evaluate conditions, and it is kept:
 
-| Sentencia | Siempre devuelve si… |
-|-----------|----------------------|
-| `while` | **Nunca** (la condición puede ser falsa desde el principio) |
-| Asignación | Nunca |
+| Statement | Always returns if… |
+|-----------|--------------------|
+| `while` | **Never** (the condition may be false from the start) |
+| Assignment | Never |
 
-- Una función con valor cuyo único `return` está dentro de un `while` es `E2014`.
-- El código después de un bucle nunca es inalcanzable (`E2015` no se aplica): todo bucle termina.
-- `E2015` sí se aplica dentro del cuerpo, después de un `return`.
+- A function with a value whose only `return` is inside a `while` is `E2014`.
+- The code after a loop is never unreachable (`E2015` does not apply): every loop ends.
+- `E2015` does apply inside the body, after a `return`.
 
-### 9. Diagnósticos nuevos y cambiados
+### 9. New and changed diagnostics
 
-| Código | Título | Categoría | Cuándo |
-|--------|--------|-----------|--------|
-| `E2021` | Missing loop measure | `semantic` | Un `while` sin `decreases`, o con más de uno. Sugerencia para el caso que falta: `Add 'decreases <expression>' with an Int that gets smaller on every turn and never goes below 0, for example 'decreases n - i'.` |
-| `E4005` | Loop invariant violated | `contract` | Sección 6, paso 1 |
-| `E4006` | Loop measure did not decrease | `contract` | Sección 6, paso 3 |
+| Code | Title | Category | When |
+|------|-------|----------|------|
+| `E2021` | Missing loop measure | `semantic` | A `while` without `decreases`, or with more than one. Suggestion for the missing case: `Add 'decreases <expression>' with an Int that gets smaller on every turn and never goes below 0, for example 'decreases n - i'.` |
+| `E4005` | Loop invariant violated | `contract` | Section 6, step 1 |
+| `E4006` | Loop measure did not decrease | `contract` | Section 6, step 3 |
 
-`E1106` (Misplaced contract clause) cubre también `invariant` y `decreases` mal colocadas; su título
-no cambia. `E2007` conserva código y título; cambian su etiqueta y su sugerencia:
+`E1106` (Misplaced contract clause) also covers misplaced `invariant` and `decreases`; its title
+does not change. `E2007` keeps its code and title; its label and its suggestion change:
 
-| Caso | Etiqueta | Sugerencia |
-|------|----------|------------|
-| Variable `let` | `'x' was declared with 'let' and cannot be given a new value` | `Declare it with 'var' if its value has to change.` |
-| Parámetro | `'n' is a parameter and cannot be given a new value` | `Copy it into a variable: 'var name = n'.` |
+| Case | Label | Suggestion |
+|------|-------|------------|
+| `let` variable | `'x' was declared with 'let' and cannot be given a new value` | `Declare it with 'var' if its value has to change.` |
+| Parameter | `'n' is a parameter and cannot be given a new value` | `Copy it into a variable: 'var name = n'.` |
 
-### 10. Lo que no cambia
+### 10. What does not change
 
-- **Contratos de función:** `requires` y `ensures` siguen viendo solo los parámetros y `result`.
-- **Ejemplos:** no ven variables; su evaluación no cambia.
-- **Funciones:** no ven las variables de quien las llama. Sin funciones anónimas ni variables
-  globales, una `var` solo cambia desde su propia función: no hay estado compartido.
-- **Valores:** siguen siendo inmutables. `var` cambia a qué valor se refiere un nombre.
+- **Function contracts:** `requires` and `ensures` still see only the parameters and `result`.
+- **Examples:** they do not see variables; their evaluation does not change.
+- **Functions:** they do not see the variables of their caller. Without anonymous functions or global
+  variables, a `var` only changes from its own function: there is no shared state.
+- **Values:** they are still immutable. `var` changes which value a name refers to.
 
-### 11. Herramientas
+### 11. Tools
 
-| Formato | Cambio | Versión |
-|---------|--------|---------|
-| `nexora.inspect/2` | Nodos nuevos `Var` (campos de `Let`), `While` (`condition`, `clauses`, `body`) y `LoopClause` (`clause`: `"invariant"` o `"decreases"`, `condition`, `message`; como en `Contract`, no se llama `kind` porque ese es el nombre del tipo de nodo). Las cláusulas se guardan todas, en el orden del código, para que un programa con dos medidas pueda representarse. `Assign` no cambia de campos; su descripción deja de decir que siempre va con `E2007` | Sigue en `/2`: solo se añaden tipos de nodo, como `Example` en la 0.4.0 |
-| `nexora.symbols/1` | Campos `mutable` (`true` solo en las `var`) y `assignments` (la posición de cada asignación, que también está en `references`) en cada símbolo | Sin cambio: campos añadidos |
-| `nexora.context/1` | Campo `mutable` en cada variable; campo `loops` al final de cada función, con `line`, `condition`, `invariants` y `measure` (cada cláusula con `condition` tal como está escrita, `message` y `line`; `measure` es `null` solo si falta); valores `mutable_variables`, `loops` y `loop_invariants` en `features`; con bucles, la nota: `Every loop declares a measure ('decreases') that is checked on every turn: a loop ends, or stops with E4006. Invariants are checked before every evaluation of the loop condition (E4005). This analysis verified their types, not that they hold.` | Sin cambio: campos y valores añadidos |
-| `nexora.diagnostics/1`, `nexora.result/1`, `nexora.test/1` | Solo códigos nuevos | Sin cambio |
+| Format | Change | Version |
+|--------|--------|---------|
+| `nexora.inspect/2` | New nodes `Var` (fields of `Let`), `While` (`condition`, `clauses`, `body`) and `LoopClause` (`clause`: `"invariant"` or `"decreases"`, `condition`, `message`; as in `Contract`, it is not called `kind` because that is the name of the node kind). All the clauses are stored, in the order of the code, so that a program with two measures can be represented. `Assign` does not change its fields; its description no longer says that it always comes with `E2007` | Still `/2`: only node kinds are added, like `Example` in 0.4.0 |
+| `nexora.symbols/1` | Fields `mutable` (`true` only for `var`) and `assignments` (the position of each assignment, which is also in `references`) in every symbol | No change: added fields |
+| `nexora.context/1` | `mutable` field in every variable; `loops` field at the end of every function, with `line`, `condition`, `invariants` and `measure` (each clause with `condition` as written, `message` and `line`; `measure` is `null` only if it is missing); values `mutable_variables`, `loops` and `loop_invariants` in `features`; with loops, the note: `Every loop declares a measure ('decreases') that is checked on every turn: a loop ends, or stops with E4006. Invariants are checked before every evaluation of the loop condition (E4005). This analysis verified their types, not that they hold.` | No change: added fields and values |
+| `nexora.diagnostics/1`, `nexora.result/1`, `nexora.test/1` | Only new codes | No change |
 
-Un nodo `Var` en lugar de un campo `mutable` en `Let`: una herramienta escrita para la 0.4 nota un
-tipo de nodo desconocido, pero ignora en silencio un campo nuevo y trataría la variable como
-inmutable.
+A `Var` node instead of a `mutable` field in `Let`: a tool written for 0.4 notices an
+unknown node kind, but silently ignores a new field and would treat the variable as
+immutable.
 
-## Motivos
+## Reasons
 
-- **Elimina un límite de la implementación del lenguaje.** El límite de 1000 llamadas deja de decidir
-  qué programas se pueden escribir.
-- **Ningún bucle se queda colgado.** Se resuelve de forma determinista, sin límites de tiempo que
-  dependan de la máquina, y por eso `nex test` y `nex run` siempre terminan con un resultado cuando
-  el programa usa bucles. Para un agente que ejecuta `nex test` sin supervisión es la diferencia
-  entre recibir un informe y no recibir nada.
-- **El bucle explica por qué es correcto.** La medida y el invariante son los dos argumentos que se
-  usan para razonar sobre un bucle; aquí se escriben en el código, con su explicación, y se
-  comprueban. Es la [decisión 0006](0006-requisitos-verificables.md) aplicada al sitio donde más se
-  necesita.
-- **Los diagnósticos dicen la vuelta y los valores.** Un fallo en la vuelta 4 de 10 se entiende sin
-  depurar.
-- **Coherente con lo que existe.** Las cláusulas tienen la forma, la posición y el tipo de
-  explicación de `requires`/`ensures`; los errores son `contract` con salida `5`.
-- **Lo inmutable sigue siendo lo normal**, y ninguna regla existente se debilita (parámetros, tipos
-  refinados, ámbitos).
+- **It removes a limit of the implementation of the language.** The limit of 1000 calls stops deciding
+  which programs can be written.
+- **No loop hangs.** It is solved deterministically, without time limits that
+  depend on the machine, and that is why `nex test` and `nex run` always end with a result when
+  the program uses loops. For an agent that runs `nex test` unsupervised it is the difference
+  between receiving a report and receiving nothing.
+- **The loop explains why it is correct.** The measure and the invariant are the two arguments that are
+  used to reason about a loop; here they are written in the code, with their explanation, and they are
+  checked. It is [decision 0006](0006-requisitos-verificables.md) applied to the place where it is most
+  needed.
+- **The diagnostics say the iteration and the values.** A failure on iteration 4 of 10 is understood without
+  debugging.
+- **Coherent with what exists.** The clauses have the form, the position and the kind of
+  explanation of `requires`/`ensures`; the errors are `contract` with exit `5`.
+- **Immutable is still the norm**, and no existing rule is weakened (parameters, refined
+  types, scopes).
 
-## Lo que no garantiza
+## What it does not guarantee
 
-- **Que un programa termine pronto.** Una medida inicial de `1_000_000_000` permite mil millones de
-  vueltas. La garantía es que el bucle termina o se detiene con `E4006`, no que lo haga en un tiempo
-  razonable. Tampoco cubre la recursividad: una función recursiva puede seguir tardando mucho
-  (`fib(40)`), como hoy.
-- **Que la medida o el invariante sean los adecuados.** Se comprueba lo que está escrito, en las
-  vueltas que se ejecutan. Un invariante trivial (`invariant true`) se cumple siempre.
-- **Verificación estática.** Nada de esto se demuestra sin ejecutar; `nex check` comprueba que las
-  cláusulas estén bien formadas.
-- **Que una `var` cambie alguna vez.** No existen los avisos.
+- **That a program ends soon.** An initial measure of `1_000_000_000` allows a billion
+  iterations. The guarantee is that the loop ends or stops with `E4006`, not that it does so in a reasonable
+  time. It does not cover recursion either: a recursive function can still take a long time
+  (`fib(40)`), as today.
+- **That the measure or the invariant are the right ones.** What is written is checked, on the
+  iterations that run. A trivial invariant (`invariant true`) always holds.
+- **Static verification.** None of this is proven without running; `nex check` checks that the
+  clauses are well formed.
+- **That a `var` ever changes.** Warnings do not exist.
 
-## Fuera del alcance
+## Out of scope
 
-- `break` y `continue`. Con una medida obligatoria, salir antes no rompe nada, pero cada salida es
-  otro punto en el que el invariante tiene que valer; se decidirá cuando haga falta.
-- `for` y los rangos, que esperan a las listas.
-- Asignaciones compuestas (`+=`) y de incremento.
-- Medidas que no sean un `Int` (pares, textos).
-- Un límite de tiempo en `nex test` para la recursividad lenta.
-- `if` como expresión.
+- `break` and `continue`. With a required measure, leaving early breaks nothing, but every exit is
+  another point where the invariant has to hold; it will be decided when it is needed.
+- `for` and ranges, which wait for lists.
+- Compound assignments (`+=`) and increments.
+- Measures that are not an `Int` (pairs, texts).
+- A time limit in `nex test` for slow recursion.
+- `if` as an expression.
 
-## Alternativas descartadas
+## Alternatives ruled out
 
-- **Un `while` sin medida, como en otros lenguajes.** Era el primer borrador de esta decisión. Deja
-  sin respuesta los programas que no terminan, en un lenguaje en el que nunca son correctos, y obliga
-  a `nex test` a depender de un límite de tiempo.
-- **Un límite fijo de vueltas.** Rompe programas correctos que necesitan muchas, y el número no
-  explica nada.
-- **Un límite de tiempo.** Depende de la máquina: el mismo programa daría resultados distintos.
-- **Deducir la medida sin escribirla.** Funciona en los casos sencillos y falla sin explicación en
-  los demás; una regla que a veces se aplica sola es más difícil de entender que una que siempre se
-  escribe. Escrita, además, es un requisito más que un agente no puede borrar sin que se note.
-- **Medida opcional.** Volvería a permitir bucles sin fin, y su ausencia no se notaría.
-- **Hacer reasignable cualquier variable.** Rompe R3 y la regla de que cada nombre significa una
-  sola cosa (5.2).
-- **Permitir reasignar parámetros.** Cambiaría su significado en `ensures` y en los diagnósticos.
-- **La asignación como expresión.** Permite `if x = 1`, un error clásico.
-- **Palabras contextuales en lugar de palabras clave.** `invariant` y `decreases` podrían seguir
-  siendo nombres fuera de un bucle, pero `invariant(x)` al principio de un bucle sería ambiguo entre
-  una cláusula y una llamada. Palabras clave, como `requires` y `ensures`.
+- **A `while` without a measure, as in other languages.** It was the first draft of this decision. It leaves
+  programs that do not end without an answer, in a language in which they are never correct, and it forces
+  `nex test` to depend on a time limit.
+- **A fixed limit of iterations.** It breaks correct programs that need many, and the number does not
+  explain anything.
+- **A time limit.** It depends on the machine: the same program would give different results.
+- **Deducing the measure without writing it.** It works in the simple cases and fails without explanation in
+  the others; a rule that sometimes applies on its own is harder to understand than one that is always
+  written. Written, besides, it is one more requirement that an agent cannot delete without it being noticed.
+- **An optional measure.** It would allow endless loops again, and its absence would not be noticed.
+- **Making any variable reassignable.** It breaks R3 and the rule that every name means a
+  single thing (5.2).
+- **Allowing parameters to be reassigned.** It would change their meaning in `ensures` and in the diagnostics.
+- **Assignment as an expression.** It allows `if x = 1`, a classic error.
+- **Contextual words instead of keywords.** `invariant` and `decreases` could remain
+  names outside a loop, but `invariant(x)` at the beginning of a loop would be ambiguous between
+  a clause and a call. Keywords, like `requires` and `ensures`.
 
-## Compatibilidad
+## Compatibility
 
-- **Cambio incompatible:** `invariant` y `decreases` pasan a ser palabras clave. Un programa que los
-  use como nombre de variable, parámetro o función deja de ser válido (`E1101`); se renombran.
-- `var` y `while` pasan de palabras reservadas a palabras clave: antes usarlas era `E1103`.
-- **`E2007`:** mismo código y título; etiqueta y sugerencia nuevas.
-- **Formatos JSON:** solo añadidos (sección 11). Ninguna versión cambia.
-- **Playground:** el resaltado de sintaxis gana `var`, `while`, `invariant` y `decreases`.
+- **Incompatible change:** `invariant` and `decreases` become keywords. A program that
+  uses them as the name of a variable, parameter or function stops being valid (`E1101`); they are renamed.
+- `var` and `while` go from reserved words to keywords: before, using them was `E1103`.
+- **`E2007`:** same code and title; new label and suggestion.
+- **JSON formats:** only additions (section 11). No version changes.
+- **Playground:** syntax highlighting gains `var`, `while`, `invariant` and `decreases`.
 
-## Cambios necesarios
+## Required changes
 
-| Archivo | Cambio |
-|---------|--------|
-| `nexora/src/nexora/tokens.py` | `var`, `while`, `invariant`, `decreases` como palabras clave |
+| File | Change |
+|------|--------|
+| `nexora/src/nexora/tokens.py` | `var`, `while`, `invariant`, `decreases` as keywords |
 | `nexora/src/nexora/ast_nodes.py` | `Var`, `While`, `LoopClause` |
-| `nexora/src/nexora/parser.py` | `var`; `while` con sus cláusulas; `E1106` para cláusulas mal colocadas |
-| `nexora/src/nexora/checker.py` | Mutabilidad de los símbolos; asignación; `while` y sus cláusulas; `E2021`; rutas de retorno |
-| `nexora/src/nexora/interpreter.py` | `Environment.assign`; `while` iterativo con las comprobaciones de la sección 6; notas de vuelta y valores |
+| `nexora/src/nexora/parser.py` | `var`; `while` with its clauses; `E1106` for misplaced clauses |
+| `nexora/src/nexora/checker.py` | Mutability of symbols; assignment; `while` and its clauses; `E2021`; return paths |
+| `nexora/src/nexora/interpreter.py` | `Environment.assign`; iterative `while` with the checks of section 6; notes of iteration and values |
 | `nexora/src/nexora/diagnostics.py` | `E2021`, `E4005`, `E4006` |
-| `nexora/src/nexora/tooling.py`, `schemas.py` | Sección 11 |
-| `nexora/docs/*` | Especificación, diagnósticos, esquema de `inspect`, herramientas, limitaciones, hoja de ruta |
-| `nexora/examples/loops.nex` | Ejemplo nuevo |
-| `web/js/playground/syntax.js` | Palabras clave |
+| `nexora/src/nexora/tooling.py`, `schemas.py` | Section 11 |
+| `nexora/docs/*` | Specification, diagnostics, `inspect` schema, tools, limitations, roadmap |
+| `nexora/examples/loops.nex` | New example |
+| `web/js/playground/syntax.js` | Keywords |
 
-## Pruebas de regresión
+## Regression tests
 
-**Sintaxis**
+**Syntax**
 
-1. `var`, asignación y `while` con cláusulas se analizan con los nodos nuevos.
-2. `var` y `while` ya no dan `E1103`; `break`, `continue` y `for` sí.
-3. `invariant` o `decreases` fuera del principio de un `while`, y `requires`/`ensures`/`example` dentro
-   de uno, dan `E1106`.
-4. `a = b = 1` e `if x = 1 { }` dan `E1101`; `let invariant = 1` da `E1101`.
+1. `var`, assignment and `while` with clauses are parsed with the new nodes.
+2. `var` and `while` no longer give `E1103`; `break`, `continue` and `for` do.
+3. `invariant` or `decreases` outside the beginning of a `while`, and `requires`/`ensures`/`example` inside
+   one, give `E1106`.
+4. `a = b = 1` and `if x = 1 { }` give `E1101`; `let invariant = 1` gives `E1101`.
 
-**Comprobación**
+**Checking**
 
-5. Asignar a una `var` del mismo bloque y de uno exterior es correcto.
-6. Asignar a una `let` o a un parámetro da `E2007` con la etiqueta y la sugerencia de la sección 9.
-7. Asignaciones de otro tipo (`E2011`) y a tipos refinados (sección 4), incluido el presupuesto `E2019`.
-8. `while` sin `decreases` o con dos da `E2021`; medida no `Int`, invariante o condición no `Bool`,
+5. Assigning to a `var` of the same block and of an outer one is correct.
+6. Assigning to a `let` or to a parameter gives `E2007` with the label and the suggestion of section 9.
+7. Assignments of another type (`E2011`) and to refined types (section 4), including the `E2019` budget.
+8. `while` without `decreases` or with two gives `E2021`; a measure that is not `Int`, an invariant or condition that is not `Bool`,
    `E2011`.
-9. Las cláusulas no ven lo declarado dentro del cuerpo (`E2005`).
-10. Rutas de retorno (sección 8).
+9. The clauses do not see what is declared inside the body (`E2005`).
+10. Return paths (section 8).
 
-**Ejecución**
+**Execution**
 
-11. Un bucle de 100 000 vueltas termina con el resultado correcto y sin `E3004`.
-12. Lo declarado dentro del cuerpo no sobrevive a la vuelta.
-13. Medida que no baja, que sube y que llega a ser negativa: `E4006` con cada etiqueta, la vuelta y
-    los valores.
-14. Invariante falso al llegar, en una vuelta intermedia y al salir: `E4005` con cada nota.
-15. Un bucle interior vuelve a empezar la comparación de la medida en cada entrada.
-16. Un `E3001` dentro de dos bucles anidados lleva las dos notas de vuelta, de dentro afuera; con
-    más de seis bucles, la séptima nota es `... and more loops.`
-17. `return` dentro de un bucle termina la función y se comprueban sus `ensures`.
-18. `while true { decreases 1 }` se detiene con `E4006` en la segunda vuelta; `nex test` con un
-    ejemplo así termina con el ejemplo en `error` y sigue con los demás.
+11. A loop of 100,000 iterations ends with the correct result and without `E3004`.
+12. What is declared inside the body does not survive the iteration.
+13. A measure that does not go down, that goes up and that becomes negative: `E4006` with each label, the iteration and
+    the values.
+14. An invariant that is false on arrival, in an intermediate iteration and on exit: `E4005` with each note.
+15. An inner loop starts the comparison of the measure again on every entry.
+16. An `E3001` inside two nested loops carries the two iteration notes, from the inside out; with
+    more than six loops, the seventh note is `... and more loops.`
+17. `return` inside a loop ends the function and its `ensures` are checked.
+18. `while true { decreases 1 }` stops with `E4006` on the second iteration; `nex test` with an
+    example like that ends with the example as `error` and continues with the others.
 
-**Herramientas y documentación**
+**Tools and documentation**
 
-19. `nex inspect`, `nex symbols` y `nex context` (sección 11), validados con sus esquemas.
-20. Las pruebas de documentación ejecutan los ejemplos nuevos.
+19. `nex inspect`, `nex symbols` and `nex context` (section 11), validated with their schemas.
+20. The documentation tests run the new examples.
