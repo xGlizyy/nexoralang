@@ -16,38 +16,10 @@ What distinguishes NEXORA: a program's requirements are written in the code itse
 
 - [npm/](npm/): npm package (`nexora-lang`) that installs the `nex` command. Requires Python 3.11 or higher on the machine. Published on PyPI and npm.
 
-- [web/](web/): Language webpage, with the playground (`/playground`) and a guide (`/guide`).
-
-- [servidor/](servidor/): Node.js server that hosts the webpage, user accounts (MySQL), and the playground API, which runs each program with the actual interpreter in a separate process. It has only been tested locally: [nexora/docs/playground.md](nexora/docs/playground.md).
+- Website: <https://nexoralang.org>, with a guide (`/guide`) and the playground (`/playground`, disabled for now). Its server and webpage live in a separate private repository; this repository holds the language.
 
 - [vscode-nexora/](vscode-nexora/): Visual Studio Code extension for the language: highlighting, diagnostics, navigation, and formatting. Its language server and formatter are those of the core ([decision 0017](nexora/docs/decisions/0017-un-editor-la-extension-de-vs-code.md)).
 
 Tools for AI editors and agents (JSON parsing, `nex context`, `nex symbols`, Python API, and optional MCP server): [nexora/docs/ai-tooling.md](nexora/docs/ai-tooling.md). NEXORA does not call any AI models.
 
 License: [MIT](LICENSE).
-
-## Starting the server
-
-Requires Node.js 22.23.2 or later on branch 22, or 24.18.1 or later on branch 24, and a MySQL or MariaDB database. Use the latest version of your branch.
-
-```
-cd servidor
-npm install
-cp .env.example .env     # populates the database data
-npm run migrate          # creates the users, sessions, and oauth_accounts tables
-npm start
-```
-
-With the configuration copied from `.env.example`, the playground is disabled (`PLAYGROUND_ENABLED=false`) and its API responds 503. To test it on your machine, set `PLAYGROUND_ENABLED=true` in `servidor/.env` and restart the server.
-
-Enable it only for controlled local tests. Since the server listens on all network interfaces, keep the playground disabled on Internet-accessible servers until completing the [isolation check](nexora/docs/playground.md#comprobar-el-aislamiento).
-
-## Login with Google and GitHub
-
-This is optional: without credentials, the buttons lead to a warning, and email registration still works.
-
-1. Create an OAuth application for each provider (the links are in `servidor/.env.example`).
-
-2. Register `{PUBLIC_URL}/api/auth/google/callback` and `{PUBLIC_URL}/api/auth/github/callback` as the return URLs.
-
-3. Copy the ID and secret of each application to `servidor/.env` and restart the server.

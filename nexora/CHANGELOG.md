@@ -27,6 +27,12 @@ Esta versión **no está etiquetada ni publicada**: es el estado del repositorio
 [decisión 0018](docs/decisions/0018-modulos-e-importaciones.md): un programa puede estar hecho de
 varios archivos.
 
+### Repositorio
+
+- El servidor (`servidor/`), la web (`web/`) y su despliegue salen de este repositorio, que queda
+  con el lenguaje: intérprete, paquete de npm, extensión de VS Code y documentación. Viven en un
+  repositorio privado aparte. La web está en <https://nexoralang.org>.
+
 ### Añadido
 
 - **`import "ruta/fichero.nex"`**, al principio del archivo. La ruta se resuelve respecto al archivo

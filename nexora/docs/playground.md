@@ -8,6 +8,10 @@ implementación del lenguaje en JavaScript.
 Esta página describe la arquitectura, la API, los límites, el aislamiento real que existe, cómo
 ejecutarlo en local y cómo desplegarlo en un servidor propio.
 
+> El código del servidor (`servidor/`) y de la web (`web/`) que se cita aquí está, desde el 23 de
+> octubre de 2026, en un repositorio privado aparte. Esta página sigue describiendo su diseño y su
+> aislamiento; el intérprete y el worker (`nexora.worker`) siguen en este repositorio.
+
 ## Estado
 
 | Parte | Estado |

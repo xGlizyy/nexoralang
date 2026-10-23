@@ -1,2 +1,0 @@
-# /etc/sudoers.d/nexora-deploy: lo único que nexora-deploy puede hacer como root.
-nexora-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl start nexora-migrate@staging.service, /usr/bin/systemctl start nexora-migrate@production.service, /usr/bin/systemctl restart nexora@staging.service, /usr/bin/systemctl restart nexora@production.service, /usr/bin/systemctl stop nexora@staging.service, /usr/bin/systemctl stop nexora@production.service
