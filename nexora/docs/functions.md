@@ -15,15 +15,15 @@ fn add(a: Int, b: Int) gives Int {
 |------|------|
 | `fn add` | The name. It cannot be repeated or match that of a built-in function |
 | `(a: Int, b: Int)` | The parameters. Each one declares its type, which has to be a value type |
-| `-> Int` | The return type. It is always written; `Void` if the function returns nothing |
-| `{ ... }` | The body |
+| `gives Int` | The result type. A function that returns nothing has no `gives` |
+| `{ ... }` | The body. Between the signature and the `{`, a function can declare its contracts and examples, one per line ([contracts](contracts.md)) |
 
 Functions are declared at the top level of the file, in any order: a function can
 call another one declared further down. Functions cannot be declared inside other functions.
 
 ## The `main` function
 
-Every program has a `main` function, with no parameters and with return type `Void`. It is where
+Every program has a `main` function, with no parameters and without `gives`. It is where
 execution starts.
 
 <!-- nex:run -->
@@ -143,9 +143,9 @@ semantic error[E2010]: Unused value
 error: program.nex: check failed with 1 error
 ```
 
-## `Void` functions
+## Functions that return nothing
 
-A `Void` function returns no value. It ends when it reaches the end of the body, or before with a
+A function without `gives` returns no value. It ends when it reaches the end of the body, or before with a
 `return` without a value:
 
 <!-- nex:run -->
@@ -169,8 +169,9 @@ invalid score
 score: 80
 ```
 
-A call to a `Void` function is a statement: it cannot be stored in a variable, printed
-or passed as an argument. In a `Void` function, `return` followed by a value is an error (`E2011`).
+A call to a function without `gives` is a statement: its type is `Void`, so it cannot be stored in a
+variable, printed or passed as an argument. In such a function, `return` followed by a value is an error
+(`E2011`).
 
 ## `if` and `else`
 
@@ -253,7 +254,7 @@ error (`E2015`).
 ## Recursion
 
 A function can call itself, and two functions can call each other. To repeat something
-many times a `while` loop is better ([contracts](contracts.md#loops-invariant-and-decreases)): its
+many times a `while` loop is better ([contracts](contracts.md#loops-keeps-and-shrinks)): its
 iterations are not calls and do not have the limit of 1000.
 
 <!-- nex:run -->

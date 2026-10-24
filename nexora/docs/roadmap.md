@@ -25,12 +25,12 @@ there is a test that fails if it stops working.
 | Arithmetic, comparisons and logical operators | `tests/test_types.py`, `tests/test_interpreter.py` |
 | Explicit conversions (`to_float`, `to_int`, `to_text`) | `tests/test_types.py` |
 | Immutable (`let`) and reassignable (`var`) variables, blocks and scopes | `tests/test_checker.py`, `tests/test_loops.py` |
-| **`while` loops** with their measure (`decreases`) and invariants (`invariant`), checked on every iteration | `tests/test_loops.py` |
+| **`while` loops** with their measure (`shrinks`) and invariants (`keeps`), checked on every iteration | `tests/test_loops.py` |
 | **`for` over lists**, with an immutable iterator, invariants and per-iteration scopes | `tests/test_for.py` |
 | **Operations on texts**: `Text.length`, `Text.slice`, searching, ordering between texts and reading numbers (`Int.parse`, `Float.parse`), with their requirements checked on every call | `tests/test_text_operations.py` |
 | Functions with parameters, `return`, return paths, recursion | `tests/test_functions.py` |
 | `if` / `else if` / `else` | `tests/test_functions.py` |
-| **Contracts** (`requires`, `ensures`), stable since 0.3.0 | `tests/test_contracts.py` |
+| **Contracts** (`needs`, `promises`, `trust`) in the header of the function since 0.12; before, `requires` and `ensures` from 0.3.0 | `tests/test_contracts.py` |
 | **Explanation of every rule**, shown in the diagnostic when it is broken | `tests/test_contracts.py`, `tests/test_refined_types.py` |
 | **Refined types** (`type ... where ...`): constants checked without running, `Type(x)` when running, chains of types | `tests/test_refined_types.py` |
 | **Examples in functions** (`example`), evaluated with `nex test` | `tests/test_example_clauses.py`, `tests/test_nex_test.py` |

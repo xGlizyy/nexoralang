@@ -96,7 +96,7 @@ it shows «Disabled» and leaves Run and Check disabled.
 
 ```json
 {
-  "code": "fn main() -> Void {\n    print(\"Hello from NEXORA\")\n}",
+  "code": "fn main() {\n    print(\"Hello from NEXORA\")\n}",
   "filename": "playground.nex"
 }
 ```
@@ -140,7 +140,7 @@ whether the program has errors or not.
 | `success` | `check`: no errors. `run`: the program finished | Full output |
 | `invalid` | Lexical, syntax, semantic or type errors. **The program was not started** | Empty |
 | `runtime_error` | The program failed while running | What was written until the failure |
-| `contract_violation` | A `requires` or `ensures` condition was false | What was written until the failure |
+| `contract_violation` | A `needs` or `promises` condition was false | What was written until the failure |
 | `timeout` | It exceeded the maximum time and was stopped | Empty: the process was killed |
 | `output_limit` | It wrote more than allowed and was stopped | The first bytes, up to the limit |
 | `memory_limit` | It needed more memory than allowed (only where the operating system limits it). If memory ran out while the program was running, `diagnostics` contains the `E3007` | What was written until then |
@@ -310,7 +310,7 @@ Quick check of the API, without a browser:
 curl -s http://localhost:3000/api/playground/info
 curl -s -X POST http://localhost:3000/api/playground/run \
   -H "Content-Type: application/json" \
-  --data '{"code": "fn main() -> Void {\n    print(6 * 7)\n}"}'
+  --data '{"code": "fn main() {\n    print(6 * 7)\n}"}'
 ```
 
 The second command has to return `"status":"success"` and `"output":"42\n"`.
@@ -744,7 +744,7 @@ start: review `PLAYGROUND_WORKER_COMMAND`, that the image exists and that the us
 ```bash
 curl -s -X POST https://tu-dominio.example/api/playground/run \
   -H "Content-Type: application/json" \
-  --data '{"code": "fn main() -> Void {\n    print(6 * 7)\n}"}'
+  --data '{"code": "fn main() {\n    print(6 * 7)\n}"}'
 ```
 
 It has to return `"output":"42\n"`. Then open `/playground` in the browser and run the
@@ -760,7 +760,7 @@ service.
 
 | Check | How | Expected result |
 |--------------|------|--------------------|
-| The worker works in the container | The command of `PLAYGROUND_WORKER_COMMAND`, written by hand as in the comment of `servidor/playground/Dockerfile`, with a name of your own instead of `{container}` (for example `--name nexora-prueba`: only the server replaces the placeholder, and Docker does not accept it as a name), and with `{"action":"run","code":"fn main() -> Void {\n    print(1)\n}"}` on the standard input | A JSON with `"output":"1\n"` |
+| The worker works in the container | The command of `PLAYGROUND_WORKER_COMMAND`, written by hand as in the comment of `servidor/playground/Dockerfile`, with a name of your own instead of `{container}` (for example `--name nexora-prueba`: only the server replaces the placeholder, and Docker does not accept it as a name), and with `{"action":"run","code":"fn main() {\n    print(1)\n}"}` on the standard input | A JSON with `"output":"1\n"` |
 | No network | `docker run --rm --pull never --network none --entrypoint python nexora-worker -c "import socket; socket.create_connection(('1.1.1.1', 53), 2)"` | It fails |
 | Read-only file system | Add `--read-only --entrypoint python … -c "open('/x','w')"` | It fails |
 | Unprivileged user | `… --entrypoint id nexora-worker` | `uid=65534` |

@@ -600,8 +600,8 @@ runs in some test; not that all combinations of inputs have been tested.
 | `test_checker.py` | 56 | `main`, variables, scopes, duplicate declarations, calls, order of the stages |
 | `test_types.py` | 140 | Inference, annotations, every operator with every combination of types, conversions, conditions |
 | `test_refined_types.py` | 68 | Refined types (`type Name = Base where condition`): that constants are checked by the static analysis (`E2017`) and any other value only when checked with `Name(x)` while the program runs (`E4003`) |
-| `test_functions.py` | 56 | Parameters, arguments, returns, return paths, `if` / `else`, `Void` functions, recursion and its limit |
-| `test_contracts.py` | 50 | `requires` and `ensures` that hold and that fail, types of the conditions, `result`, content of the diagnostics |
+| `test_functions.py` | 56 | Parameters, arguments, returns, return paths, `if` / `else`, functions that return nothing, recursion and its limit |
+| `test_contracts.py` | 50 | `needs` and `promises` that hold and that fail, types of the conditions, `result`, content of the diagnostics |
 | `test_example_clauses.py` | 43 | The `example` clause as the static analysis sees it: syntax, types, names, the own-call rule and the call graph. It evaluates no example ([decision 0008](decisions/0008-ejemplos-y-nex-test.md)) |
 | `test_text_operations.py` | 184 | The functions of a type (`Text.length`, `Int.parse`…) and the ordering between texts: every case of the decision, their requirements and suggestions, huge texts, rounding and limits of `Float`, the syntax of the dot and its errors, that 0.5.1 programs do not change, and `inspect`, `symbols`, `context` and the capabilities ([decision 0011](decisions/0011-operaciones-sobre-textos.md)) |
 | `test_loops.py` | 96 | `var`, assignments, loops with their measure and their invariants: analysis, every diagnostic with its iteration and its values, that no loop hangs (not in `nex test` either), and what `inspect`, `symbols` and `context` show ([decision 0010](decisions/0010-var-y-while.md)) |

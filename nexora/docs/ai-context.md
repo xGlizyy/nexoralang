@@ -76,7 +76,7 @@ Notes:
 | Variables in each function, their type, and whether they can change (`mutable`, `true` for `var`) | The symbols recorded by the checker. If the variable has no annotation, it is the type inferred by the checker |
 | `loops`: the loops in each function (`while` and `for`), with their condition or iterable, invariants, and measure exactly as written | The syntax tree and the file text. `kind` is `while` or `for`; for a `for`, `condition` is `x in xs`. `measure` is `null` for every `for` and when missing in a `while` (`E2021`) |
 | `calls`, `called_by` | Calls the checker resolved. No text is searched: a call counts when the checker associated it with a function |
-| `builtins_called` | Built-in functions called by each function, using their fully qualified names (`print`, `Text.length`). In the text output, the `requires` of each one appear underneath, with their explanation |
+| `builtins_called` | Built-in functions called by each function, using their fully qualified names (`print`, `Text.length`). In the text output, the `needs` of each one appear underneath, with their explanation |
 | `recursive` | Whether the function can reach itself again through those calls, directly or indirectly |
 | `features` | Which constructs appear in the tree (see the next table) |
 | `reserved_words_used` | Reserved words for unimplemented features that appear in the text |
@@ -89,7 +89,7 @@ Features that `features` may list:
 |-------|---------------------------|
 | `user_functions` | declares any function besides `main` |
 | `conditionals` | uses `if` |
-| `contracts` | has any `requires` or `ensures` clause |
+| `contracts` | has any `needs`, `promises` or `trust` clause |
 | `recursion` | has any recursive function |
 | `type_annotations` | annotates the type of any variable |
 | `arithmetic` | uses `+ - * /` on numbers |
@@ -102,7 +102,7 @@ Features that `features` may list:
 | `examples` | has any `example` clause |
 | `mutable_variables` | declares any variable with `var` |
 | `loops` | uses `while` or `for` |
-| `loop_invariants` | a loop declares an `invariant` |
+| `loop_invariants` | a loop declares a `keeps` |
 | `text_operations` | calls a method on a type (`Text.length`, `Int.parse`…) or compares texts with `< <= > >=` |
 
 The **notes** are not opinions about the code. Each one is a language rule that is added only if the
@@ -876,7 +876,7 @@ Each symbol has:
 | `assignments` | Position of each assignment that gives it a new value. Empty for anything that is not a `var` |
 | `signature`, `params`, `return_type` | Only for functions |
 
-`builtins` lists separately the functions provided by the language (`print`, `to_text`…, and type methods, with their fully qualified names: `Text.length`, `Int.parse`…), which do not have a declaration in the file. Each one carries `contracts`: its `requires` and `ensures`, with the condition written in NEXORA, its explanation, and `checked_at_run_time`, which is `true` for `requires` (checked at each call) and `false` for `ensures` (the implementation guarantees them and tests verify them, but the program does not check them). A variable named `length` is just another symbol, unrelated to `Text.length` ([decision 0011](decisions/0011-operaciones-sobre-textos.md)).
+`builtins` lists separately the functions provided by the language (`print`, `to_text`…, and type methods, with their fully qualified names: `Text.length`, `Int.parse`…), which do not have a declaration in the file. Each one carries `contracts`: its `needs` and `promises`, with the condition written in NEXORA, its explanation, and `checked_at_run_time`, which is `true` for `needs` (checked at each call) and `false` for `promises` (the implementation guarantees them and tests verify them, but the program does not check them). `nexora.capabilities/1` lists the same contracts with the words it was published with, `requires` and `ensures`. A variable named `length` is just another symbol, unrelated to `Text.length` ([decision 0011](decisions/0011-operaciones-sobre-textos.md)).
 
 How it is computed: the checker records each declaration as it processes it and, each time it resolves a name according to the language's scoping rules, it annotates that position on the corresponding symbol. That is why two variables with the same name in different blocks are two different symbols, each with its own references. **Nothing is inferred from the name** of a variable or a function.
 

@@ -17,11 +17,11 @@ explains it with examples; all of them are checked by the tests of the project.
 | `Text` | Unicode text, immutable | `"Hello"` |
 | `List[T]` | Immutable and finite sequence of values of type `T` | `[1, 2, 3]`, `[]` (with an expected type) |
 | A record | The values built with `Name(field: value, ...)` | `Point(x: 1, y: 2)` |
-| `Void` | No value | It has no literals |
+| `Void` | No value | The type of a call to a function without `gives`. It is never written |
 
 `Int`, `Float`, `Bool` and `Text` are the built-in **value types**. `List[T]` is a compound value
-type, and a program can declare refined types over the built-in ones and records. `Void`
-can only be used as the return type of a function that returns nothing.
+type, and a program can declare refined types over the built-in ones and records. `Void` is
+the type of a call to a function that returns nothing, which has no `gives`; it is never written.
 
 Details of each one:
 
@@ -97,7 +97,7 @@ The rule applies in the four places where a value has to have a concrete type:
 |-------|---------------|
 | The annotation of a variable | `let n: Int = 2.0` |
 | An argument of a call | `half(4)` if `half` expects a `Float` |
-| The value of a `return` | `return "x"` in a `-> Int` function |
+| The value of a `return` | `return "x"` in a `gives Int` function |
 | The operands of an operator | `1 + 1.5` |
 
 ## Lists
@@ -250,7 +250,7 @@ type error[E2011]: Type mismatch
 error: program.nex: check failed with 1 error
 ```
 
-Using a name that is not a type, or `Void` where a value type is needed, is the error `E2012`:
+Using a name that is not a type, or writing `Void` as a type, is the error `E2012`:
 
 <!-- nex:body-fails codes=E2012 -->
 ```nex
@@ -302,7 +302,8 @@ let c = to_int("12")       // there is no conversion from Text
 
 ## `Void`
 
-`Void` means "no value". A call to a `Void` function cannot be used where a
+`Void` means "no value": it is the type of a call to a function that has no `gives`. It is never
+written, not even after `gives` (`gives Void` is `E2012`). A call like that cannot be used where a
 value is needed:
 
 <!-- nex:body-fails codes=E2011 -->
@@ -532,8 +533,9 @@ if Option.is_some(found) {
 }
 ```
 
-`Option.unwrap_or(x, default)` returns the value of `x` if it has one, and `default` otherwise. `Option.unwrap(x)`
-reads the value without a default: if there is none, the program stops with `E3011` and says so.
+`Option.value_or(x, fallback)` returns the value of `x` if it has one, and `fallback` otherwise. `Option.value(x)`
+reads the value without a fallback: if there is none, the program stops with `E3011` and says so. (Until
+0.11 they were called `unwrap_or` and `unwrap`.)
 
 ### `Result[T, E]`: something can fail
 
@@ -578,8 +580,8 @@ if Result.is_err(failed) {
 }
 ```
 
-`Result.unwrap_or(x, default)` returns the value of `x` if it succeeded, and `default` if it failed.
-`Result.unwrap(x)` and `Result.error(x)` read without a default: if the variant does not carry that, the program
+`Result.value_or(x, fallback)` returns the value of `x` if it succeeded, and `fallback` if it failed.
+`Result.value(x)` and `Result.error(x)` read without a fallback: if the variant does not carry that, the program
 stops with `E3012` or `E3013`.
 
 ### Which of the two

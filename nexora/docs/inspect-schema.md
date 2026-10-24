@@ -135,7 +135,7 @@ nothing has type `"Void"`.
 | `TextLiteral` | `value`: text, with the escapes already resolved | |
 | `BoolLiteral` | `value`: boolean | |
 | `ListLiteral` | `elements`: list of expressions | A list literal: `[1, 2, 3]` or `[]` |
-| `Name` | `name`: text | Use of a variable, a parameter, `result` (in `ensures`) or `value` (in the condition of a refined type) |
+| `Name` | `name`: text | Use of a variable, a parameter, `result` (in `promises`) or `value` (in the condition of a refined type) |
 | `Unary` | `operator`: `"-"` or `"not"` · `operand`: expression | |
 | `Binary` | `operator`: text · `operator_span`: position · `left`: expression · `right`: expression | `operator` is one of `+ - * / == != < <= > >= and or` |
 | `Group` | `expression`: expression | An expression in parentheses |

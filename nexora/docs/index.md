@@ -19,7 +19,7 @@ these pages is run by the automated tests and compared against the real output o
 |-------|----------|
 | [Types](types.md) | Types, `List[T]` lists, inference, annotations, operators, conversions, refined types (`where`) and records |
 | [Functions](functions.md) | Parameters, `return`, return paths, `if` / `else`, recursion |
-| [Contracts](contracts.md) | `requires` and `ensures`, with the explanation of each rule |
+| [Contracts](contracts.md) | `needs`, `promises` and `trust`, with the explanation of each rule |
 
 ## Reference
 

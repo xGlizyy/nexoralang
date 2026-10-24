@@ -272,6 +272,8 @@ def test_links_to_headings_point_to_headings_that_exist(document):
         for heading in re.findall(r"^#+\s+(.*)$", text, flags=re.M):
             slug = re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
             found.add(slug)
+        # An explicit anchor on its own line keeps an old link working after a heading is renamed.
+        found.update(re.findall(r'^<a id="([\w-]+)"></a>$', text, flags=re.M))
         return found
 
     text = re.sub(r"```.*?```", "", document.read_text(encoding="utf-8"), flags=re.S)
