@@ -19,6 +19,19 @@ Each version groups its changes into these sections, when they contain content:
 
 ## Unreleased
 
+Work of the branch of 0.12.0, phase 1 of [decision 0019](docs/decisions/0019-identidad-propia-del-lenguaje.md): a syntax that says what each clause is, and the evidence behind it. The version number stays 0.11.0 until it is published.
+
+### Added
+
+- **Header clauses.** The clauses of a function go between its signature and the `{` of its body, one per line: `needs` (was `requires`), `promises` (was `ensures`) and the new `trust`. Loops use `keeps` (was `invariant`) and `shrinks` (was `decreases`) the same way. Every clause can have a name, `needs fits: part <= 92233720368547758`; names are optional, unique within the function and its loops, and different from the parameters and `result` (new code `E2031`).
+- **`gives T`** for the result type, instead of `-> T`. A function that gives nothing has no `gives`; `gives Void` is `E2012`, and `main` has no `gives` (`E2004`).
+- **`trust`**: a condition the program relies on and the language does not check. It is type-checked as a `Bool` and never evaluated, and its explanation is required.
+- **`Option.value`, `Option.value_or`, `Result.value` and `Result.value_or`**, the names of `unwrap` and `unwrap_or` from 0.12.
+- **`nex migrate <file> [--write]`** rewrites a 0.11 program, with every module it imports, in the syntax of 0.12. Without `--write` it shows the edits and the migrated text; with it, it writes the files. It only edits the words and braces that change, keeps every other byte (comments, blank lines, line endings, a byte-order mark), checks the structure of every file before writing anything, and refuses, with the file and the position, what it cannot decide for the person ([CLI reference](docs/cli-reference.md#nex-migrate)).
+- **`nex check --evidence`**: what backs every `needs`, `promises`, `trust`, `keeps` and `shrinks` of the program. This version computes only the enforcement: `checked` for a clause the language evaluates when the program runs, `trusted` for a `trust`. With `--format json`, the new format `nexora.evidence/1` ([JSON protocol](docs/json-protocol.md)). Nothing is run.
+- **New diagnostics**: `E1107` (a clause word of 0.11), `E1108` (`->` before the result type), both with the hint `nex migrate`, and `E2031` (a clause name used twice, or equal to a parameter or `result`).
+- **Equivalence tests**: the 86 programs of the corpus of the decision (8.9.1) give the same results after migration, compared with the published 0.11.0: the same syntax tree after the mapping of the decision (T1), the same exit code, output and diagnostics (T2), the same result of every example (T3), and the same bytes outside the edits (T4).
+
 ### Fixed
 
 - **The formatter no longer removes comments.** It rebuilt the program from the tokens of the lexer, which has no comments, so formatting a document in the editor deleted every comment and every blank line, joined expressions written across lines inside parentheses, and turned `\r\n` and `\r` into `\n`. It now works line by line: every comment stays on its line after the code of that line, blank lines stay, every line keeps its own line ending, and a line that holds anything other than tokens and a comment leaves the program unformatted instead of losing it. An expression across lines inside parentheses or brackets keeps its lines, one step further in. One space is left before a comment at the end of a line.
@@ -26,12 +39,25 @@ Each version groups its changes into these sections, when they contain content:
 
 ### Incompatible changes
 
+- **The syntax of 0.11 is no longer accepted.** `requires`, `ensures`, `invariant` and `decreases` are `E1107`, and `->` before the result type is `E1108`. Those four words stay reserved for this minor version and cannot be names. How to update: `nex migrate program.nex --write`. The front end of 0.11 that `nex migrate` uses, `E1107` and `E1108` are only in 0.12.x: they are removed in 0.13.0.
+- **`needs`, `gives`, `promises`, `keeps`, `shrinks` and `trust` are keywords.** A program that used one of them as a name no longer compiles (`E1101`); `nex migrate` refuses it and says which name to change.
+- **`Option.unwrap`, `Option.unwrap_or`, `Result.unwrap` and `Result.unwrap_or` are now called `value` and `value_or`**: the old names are `E2008`. `nex migrate` renames the calls.
+- **`ai` and `tool` are no longer reserved**: they are ordinary names.
+- **`nex inspect` moves to `nexora.inspect/3`.** `Function.header`, one ordered list of `Contract` and `Example`, replaces `contracts` and `examples`; `return_type` is `null` when the function has no `gives`; `Contract.clause` is `needs`, `promises` or `trust`, `LoopClause.clause` is `keeps` or `shrinks`, and both have a `name` field ([inspect schema](docs/inspect-schema.md)).
+- **`nex context` moves to `nexora.context/2`** and **`nex symbols` to `nexora.symbols/2`**: the clauses take the new names, and the contracts of `nexora.context/2` and its loop clauses have a `name` field. How to update, for the three formats: read the new clause words, and in `nexora.inspect/3` read the clauses from `header`. `nexora.capabilities/1` keeps `requires` and `ensures` for the contracts of the built-in functions, so that its version does not change.
 - **The specification is written in English, and `get_language_spec` moves to `nexora.spec/2`.** `language` is `"en"` (it was `"es"`), and the section ids come from the English headings (`7-functions` instead of `7-funciones`). How to update: read the ids again from the index the tool returns, or from `docs/language-spec.md`. The rest of the document does not change ([JSON protocol](docs/json-protocol.md)).
 
 ### Documentation
 
 - The whole documentation is in English: the READMEs, `docs/` (guides, reference and `decisions/`), this changelog, `CONTRIBUTING.md`, `SECURITY.md` and `CODE_OF_CONDUCT.md`. Decision files keep their Spanish filenames.
 - [LSP](docs/lsp.md) describes the language server that exists since the editor work (`nexora-lsp`), instead of calling it planned.
+- The examples, the programs of the documentation and the golden outputs are written in the syntax of 0.12. The decisions are records: their programs keep the syntax of their time and are checked with the front end of 0.11.
+
+### Limitations
+
+- `nex check --evidence` computes only the enforcement of each clause. What the examples observe (`nex test --evidence`) and what is decided at the call sites without running are later phases of decision 0019; the document says so in each clause (`not_computed`, with its reason).
+- `nex migrate` writes the files of a program one by one: replacing several files is not one atomic operation, and after a failed write the files already replaced stay replaced.
+- The equivalence tests measure the corpus of the decision, and nothing broader. They need to reach PyPI the first time, to install the published 0.11.0 in an environment of their own.
 
 ## 0.11.0 — Modules and imports
 

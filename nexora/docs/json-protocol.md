@@ -11,9 +11,9 @@ a **JSON Schema** in [`schemas/`](schemas/), and the tests validate the real out
 | `schema` | What it is | Produced by | JSON Schema |
 |----------|------------|-------------|-------------|
 | `nexora.diagnostics/1` | The result of the static analysis | `nex check --format json`, `nex run --format json`, `tooling.check_source` | [`nexora-diagnostics.schema.json`](schemas/nexora-diagnostics.schema.json) |
-| `nexora.inspect/2` | The syntax tree, with types | `nex inspect`, `tooling.inspect_source` | [`nexora-inspect.schema.json`](schemas/nexora-inspect.schema.json) |
-| `nexora.symbols/1` | The declared names and their uses | `nex symbols --format json`, `tooling.get_symbols` | [`nexora-symbols.schema.json`](schemas/nexora-symbols.schema.json) |
-| `nexora.context/1` | A technical summary of the program | `nex context --format json`, `tooling.get_context` | [`nexora-context.schema.json`](schemas/nexora-context.schema.json) |
+| `nexora.inspect/3` | The syntax tree, with types | `nex inspect`, `tooling.inspect_source` | [`nexora-inspect.schema.json`](schemas/nexora-inspect.schema.json) |
+| `nexora.symbols/2` | The declared names and their uses | `nex symbols --format json`, `tooling.get_symbols` | [`nexora-symbols.schema.json`](schemas/nexora-symbols.schema.json) |
+| `nexora.context/2` | A technical summary of the program | `nex context --format json`, `tooling.get_context` | [`nexora-context.schema.json`](schemas/nexora-context.schema.json) |
 | `nexora.spec/2` | The specification of the language, or a section | `tooling.get_language_spec` | [`nexora-spec.schema.json`](schemas/nexora-spec.schema.json) |
 | `nexora.capabilities/1` | What this version of NEXORA is | `tooling.get_capabilities` | [`nexora-capabilities.schema.json`](schemas/nexora-capabilities.schema.json) |
 | `nexora.evidence/1` | What backs every clause of the program | `nex check --evidence --format json`, `tooling.get_evidence` | [`nexora-evidence.schema.json`](schemas/nexora-evidence.schema.json) |
@@ -167,16 +167,62 @@ Guarantees about the content:
   ([full list](diagnostics.md#all-the-codes)) and `tooling.get_capabilities` lists them.
 - **A suggestion is not a guaranteed fix.** `hint` is a text for people, and it only
   appears when a rule of the language backs it (that conversion exists, there is a declared name
-  that is similar). If it is `null`, NEXORA has nothing well-founded to suggest. There are no automatic
-  edits: no tool modifies a file.
+  that is similar). If it is `null`, NEXORA has nothing well-founded to suggest. A diagnostic never
+  edits a file: the only command that writes a program is `nex migrate --write`, and only when asked.
 - **Errors of the program and failures of NEXORA do not mix.** A diagnostic always describes
   the analyzed program. A defect of the tool is not a diagnostic (see "Clean JSON").
 - What is stable is `code`, `category` and the positions. The wording of `message`, `label`, `hint` and
   `notes` is in English and may improve between versions: do not compare it as text.
 
+## Evidence
+
+`nex check --evidence --format json` and `tooling.get_evidence` return a `nexora.evidence/1` document:
+what backs every `needs`, `promises`, `trust`, `keeps` and `shrinks` of the program
+([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), section 5). It starts with the header
+of every document, with the same `ok` and `diagnostics` as `nex check`, and adds:
+
+| Field | Meaning |
+|-------|---------|
+| `computed` | Which dimensions the command computed besides the enforcement, which is always computed: `{"static": false, "observed": false}` in this version |
+| `clauses` | One entry per clause, ordered by the path of its module and then as written in the file: the clauses of the header of each function, then those of its loops. `example` clauses have no entry. `null` when the program has errors |
+
+Each entry:
+
+```json
+{
+  "id": {"module": "", "function": "percentage", "name": "whole_positive", "kind": "needs",
+         "stable": true},
+  "condition": "whole > 0",
+  "message": "A percentage of nothing is not defined",
+  "enforcement": "checked",
+  "static": {"status": "not_computed", "reason": "phase_not_implemented"},
+  "observed": {"status": "not_computed", "reason": "analysis_only"},
+  "summary": "checked"
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `id.module` | The path of the file, relative to the directory of the program and with `/`; `""` for the program itself |
+| `id.function` | The function that declares the clause, without its module |
+| `id.name`, `id.stable` | The name of the clause, or `null`. `stable` is `true` exactly when there is a name: `(module, function, name)` then identifies the clause across edits. A clause without a name has no identity of its own |
+| `id.kind` | `needs`, `promises`, `trust`, `keeps` or `shrinks` |
+| `condition`, `message` | The condition as written, and its explanation or `null` |
+| `enforcement` | `checked`: the language evaluates the condition when the program runs, and a false one stops it. `trusted`: a `trust`, never evaluated |
+| `static`, `observed` | Objects with a `status`, never `null`: `not_applicable` (this kind of clause can never have that dimension), `not_computed` with a `reason`, or `computed` |
+| `summary` | One word, from a single dimension: in this version `checked`, or `trusted` for a `trust` |
+
+The values of `reason` are `analysis_only` (the command only analyses: `observed` in `nex check`),
+`phase_not_implemented` (`static`, which no version decides yet) and `static_errors` (reserved for
+`nex test --evidence`, a later phase). A reason a
+tool does not know means "not computed". The words `broken`, `proved` and `exemplified` of `summary`
+belong to the later phases of the decision; this version never produces them.
+
+`checked` does not say that a condition holds, and `trusted` does not say that anything checked it.
+
 ## Versions and compatibility
 
-Every format carries its version in its own name: `nexora.context/1`.
+Every format carries its version in its own name: `nexora.context/2`.
 
 | Change | Does the number change? | What whoever consumes it must do |
 |--------|-------------------------|----------------------------------|
@@ -203,11 +249,15 @@ History:
 | `nexora.spec/2` | Unreleased | **Incompatible change:** the specification is now written in English. `language` is `"en"` (it was `"es"`), and the section ids come from the English headings (`7-functions` instead of `7-funciones`). The rest of the document does not change |
 | `nexora.result/1` | Current version | |
 | `nexora.test/1` | 0.4.0 | First version |
+| `nexora.inspect/3` | Unreleased | **Incompatible change** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), 8.8): `Function.header`, one ordered list of `Contract` and `Example`, replaces `contracts` and `examples`; `Function.return_type` is `null` when the function has no `gives`; `Contract.clause` is `needs`, `promises` or `trust`, `LoopClause.clause` is `keeps` or `shrinks`, and both have a `name` field ([inspect schema](inspect-schema.md)) |
+| `nexora.context/2` | Unreleased | **Incompatible change** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), 8.8): the `clause` of a contract is `needs`, `promises` or `trust` (it was `requires` or `ensures`), and every contract and loop clause has a `name` field, `null` when the clause has none |
+| `nexora.symbols/2` | Unreleased | **Incompatible change** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), 8.8): the contracts of the built-in functions use `needs` and `promises` |
+| `nexora.capabilities/1` | Unreleased | Kept at `/1`: the contracts of the built-in functions keep `requires` and `ensures`, as published. `schemas` gains the value `nexora.evidence/1`; `keywords` and `reserved_words` describe the language of 0.12 (the four clause words of 0.11 are reserved words, `ai` and `tool` are not) |
 | `nexora.evidence/1` | Unreleased | First version, with the enforcement dimension only ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), section 5) |
-| `nexora.symbols/1`, `nexora.context/1`, `nexora.capabilities/1` | Current version | |
 
-Almost all the changes have been added fields. The exceptions are `nexora.spec/2`, which changes the
-value of `language` and the section ids and therefore changes the number, and `program` in `nexora.inspect/1`:
+Almost all the changes have been added fields. The exceptions are `nexora.inspect/3`, `nexora.context/2`
+and `nexora.symbols/2`, whose fields change meaning with the syntax of 0.12, and `nexora.spec/2`, which
+changes the value of `language` and the section ids: all four change the number. The other exception is `program` in `nexora.inspect/1`:
 its type does not change (tree or `null`), but with syntax errors it used to be `null` and now it is a partial
 tree. The number was kept because the format only existed in 0.2.0, which has not been
 published, and because the type of the field is the same; even so it is a **change of behaviour**, and
