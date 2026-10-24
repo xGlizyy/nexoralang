@@ -43,8 +43,10 @@ import json
 import os
 import re
 import shutil
+import site
 import subprocess
 import sys
+import sysconfig
 import venv
 from ast import literal_eval
 from dataclasses import dataclass
@@ -149,6 +151,44 @@ print(json.dumps({"version": nexora.__version__, "metadata_version": dist.versio
 """
 
 
+def _development_places() -> list[Path]:
+    """Where the code under development can be imported from: the package directories of the
+    environment that runs the tests, the checkout of nexora/ (an editable install points there) and,
+    when it is here, the repository around it (npm/python/ holds another copy of the package).
+
+    The standard library of the base Python is not among them: the environment of 0.11.0 is made from
+    that Python and shares it legitimately, even when the tests run without a virtual environment and
+    the standard library is under their own sys.prefix (as on the runners of GitHub Actions)."""
+    places = {Path(site.getusersitepackages()), *(Path(sysconfig.get_paths()[key]) for key in ("purelib", "platlib"))}
+    # Only package directories: outside a virtual environment, on Windows, getsitepackages() also
+    # names the bare prefix of the base Python, where its standard library is.
+    places.update(Path(path) for path in site.getsitepackages() if Path(path).name in ("site-packages", "dist-packages"))
+    places.add(ROOT)
+    if (ROOT.parent / ".github").is_dir():
+        places.add(ROOT.parent)
+    return sorted({place.resolve() for place in places})
+
+
+def _isolation_problems(probe: dict, forbidden: list[Path]) -> list[str]:
+    """What the Python of 0.11.0 could import from the code under development, as described by the
+    probe: every entry of its import path and the file of the `nexora` it imports. Its own
+    environment is allowed, even inside the checkout (.equivalence/), and nothing else that is in
+    `forbidden`; the `nexora` it imports has to come from that environment."""
+    environment = Path(probe["prefix"]).resolve()
+    forbidden = [place.resolve() for place in forbidden]
+    problems = []
+    for entry in [probe["file"], *probe["path"]]:
+        if not entry:
+            continue
+        resolved = Path(entry).resolve()
+        if resolved.is_relative_to(environment):
+            continue
+        problems += [f"{entry} is inside {place}" for place in forbidden if resolved.is_relative_to(place)]
+    if not Path(probe["file"]).resolve().is_relative_to(environment):
+        problems.append(f"nexora comes from {probe['file']}, outside the environment of 0.11.0")
+    return problems
+
+
 @pytest.fixture(scope="module")
 def old_python() -> Path:
     python = _old_python()
@@ -159,15 +199,8 @@ def old_python() -> Path:
     # The published package, unmodified: version, metadata and every file against its wheel.
     assert (probe["version"], probe["metadata_version"]) == ("0.11.0", "0.11.0"), probe
     assert probe["checked"] > 0 and probe["changed"] == [], probe
-    # Isolated: nothing of this repository, or of the environment that runs the tests, is importable.
-    environment = Path(probe["prefix"]).resolve()
-    for entry in [probe["file"], *probe["path"]]:
-        if not entry:
-            continue
-        resolved = Path(entry).resolve()
-        assert not resolved.is_relative_to(Path(sys.prefix).resolve()), entry
-        assert not resolved.is_relative_to(ROOT.resolve()) or resolved.is_relative_to(environment), entry
-    assert Path(probe["file"]).resolve().is_relative_to(environment), probe["file"]
+    # Isolated: no package of the environment that runs the tests, and nothing of the checkout, is importable.
+    assert _isolation_problems(probe, _development_places()) == [], probe
     if not os.environ.get("NEXORA_011_PYTHON"):
         configuration = (ENVIRONMENT / "pyvenv.cfg").read_text(encoding="utf-8")
         assert re.search(r"^include-system-site-packages\s*=\s*false\s*$", configuration, re.M), configuration
@@ -315,6 +348,57 @@ def corpus(tmp_path_factory) -> Corpus:
             original, _ = _decode((old / key).read_bytes())
             migrations[key] = Migration(original, edits)
     return Corpus(old, new, migrations)
+
+
+# The isolation check of the environment of 0.11.0
+
+# The layout of the runners of GitHub Actions: the tests run on the Python of setup-python, not in a
+# virtual environment, and the environment of 0.11.0 is made from that same Python.
+_BASE = Path("/opt/python/3.12")
+_REPOSITORY = Path("/work/nexoralang")
+_FORBIDDEN = [_BASE / "lib/python3.12/site-packages", _REPOSITORY / "nexora", _REPOSITORY]
+
+
+def _probe(environment: Path, file: Path, *path: Path) -> dict:
+    return {"prefix": str(environment), "file": str(file), "path": [str(entry) for entry in path]}
+
+
+def test_the_isolation_check_allows_the_standard_library_of_the_base_python():
+    environment = Path("/runner/temp/nexora-0.11.0")
+    probe = _probe(environment, environment / "lib/python3.12/site-packages/nexora/__init__.py",
+                   _BASE / "lib/python312.zip", _BASE / "lib/python3.12", _BASE / "lib/python3.12/lib-dynload",
+                   environment / "lib/python3.12/site-packages")
+    assert _isolation_problems(probe, _FORBIDDEN) == []
+    # The environment may also be inside the checkout, as .equivalence/ is when the tests make it.
+    inside = _REPOSITORY / "nexora/.equivalence/nexora-0.11.0"
+    probe = _probe(inside, inside / "lib/python3.12/site-packages/nexora/__init__.py",
+                   _BASE / "lib/python3.12", inside / "lib/python3.12/site-packages")
+    assert _isolation_problems(probe, _FORBIDDEN) == []
+
+
+@pytest.mark.parametrize("leak", [
+    _BASE / "lib/python3.12/site-packages",           # the packages of the environment of the tests
+    _REPOSITORY / "nexora/src",                       # the checkout, where an editable install points
+    _REPOSITORY / "npm/python",                       # the copy that the npm package bundles
+])
+def test_the_isolation_check_refuses_the_code_under_development(leak):
+    environment = Path("/runner/temp/nexora-0.11.0")
+    good = environment / "lib/python3.12/site-packages/nexora/__init__.py"
+    assert _isolation_problems(_probe(environment, good, _BASE / "lib/python3.12", leak), _FORBIDDEN) != []
+    # And a nexora imported from there, instead of the one of 0.11.0.
+    assert _isolation_problems(_probe(environment, leak / "nexora/__init__.py", _BASE / "lib/python3.12"),
+                               _FORBIDDEN) != []
+
+
+def test_the_places_refused_are_those_of_this_environment_and_not_its_standard_library():
+    import nexora
+
+    places = _development_places()
+    # The package under development, as this process imports it, is refused.
+    assert any(Path(nexora.__file__).resolve().is_relative_to(place) for place in places), (nexora.__file__, places)
+    # The standard library of the Python that runs the tests is not.
+    standard = Path(sysconfig.get_paths()["stdlib"]).resolve()
+    assert not any(standard.is_relative_to(place) for place in places), (standard, places)
 
 
 # The corpus and what 0.11.0 says of it
