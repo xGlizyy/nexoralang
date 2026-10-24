@@ -136,6 +136,14 @@ def test_unwrap_and_unwrap_or_become_value_and_value_or():
     assert kinds == ["E1", "E4", "E4", "E4", "E4"]
 
 
+def test_the_other_functions_of_option_and_result_are_not_renamed():
+    original = ("fn f(x: Option[Int], y: Result[Int, Text]) -> Bool {\n"
+                "    return Option.is_some(x) and Result.is_ok(y) and Result.error(y) == \"\"\n}\n")
+    output, kinds = migrated(original)
+    assert output == original.replace("-> Bool", "gives Bool")
+    assert kinds == ["E1"]
+
+
 def test_a_function_without_clauses_only_changes_its_arrow():
     output, kinds = migrated("fn main() -> Void {\n    print(1)\n}\n")
     assert output == "fn main() {\n    print(1)\n}\n"
@@ -147,8 +155,10 @@ def test_a_function_without_clauses_only_changes_its_arrow():
 REFUSALS = {
     "a clause on the line of the brace": (
         "fn f(x: Int) -> Int { requires x > 0\n    return x\n}\n", (1, 23), "Put 'requires' on its own line"),
-    "the last clause before a brace on its line": (
+    "a clause and the closing brace on the line of the opening one": (
         "fn g(x: Int) -> Void { requires x > 0 }\n", (1, 24), "Put 'requires' on its own line"),
+    "the last clause followed by the closing brace": (
+        "fn g(x: Int) -> Void {\n    requires x > 0 }\n", (2, 5), "Put 'requires' on its own line"),
     "a comment after a brace alone, without clauses": (
         "fn one() -> Int\n{ // note\n    return 1\n}\n", (2, 1), "Move this comment"),
     "a statement after a brace alone, without clauses": (
@@ -167,6 +177,47 @@ def test_a_case_that_needs_a_choice_is_refused(name):
     assert result.edits == ()
     assert (result.refusals[0].line, result.refusals[0].column) == position
     assert result.refusals[0].message.startswith(message)
+
+
+def test_a_loop_without_clauses_is_left_as_it_is():
+    original = "fn s(xs: List[Int]) -> Int {\n    var t = 0\n    for x in xs {\n        t = t + x\n    }\n    return t\n}\n"
+    output, kinds = migrated(original)
+    assert output == original.replace("-> Int", "gives Int")
+    assert kinds == ["E1"]
+
+
+def _plan_with_modules(tmp_path, files: dict[str, str]) -> migrate.FilePlan:
+    """A program and the modules it imports, read from disk as `nex` reads them."""
+    from nexora import cli
+    from nexora.legacy011.diagnostics import Diagnostic
+
+    for name, text in files.items():
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text(text, encoding="utf-8")
+    entry = tmp_path / "main.nex"
+    source = Source(str(entry), files["main.nex"])
+    analysis = analyze(source, require_main=False, read=cli._module_reader(source, Source, Diagnostic))
+    assert analysis.ok, [d.code for d in analysis.diagnostics]   # all of them pass the 0.11 check
+    return migrate.plan(files["main.nex"], analysis.tokens, analysis.program)
+
+
+def test_a_module_named_like_a_new_keyword_is_refused_even_if_it_is_never_used(tmp_path):
+    result = _plan_with_modules(tmp_path, {
+        "main.nex": 'import "m/needs.nex"\nfn main() -> Void {\n    print(1)\n}\n',
+        "m/needs.nex": "type T = Int where value > 0\n",
+    })
+    assert result.edits == ()
+    assert [(r.line, r.column, r.message) for r in result.refusals] == [
+        (1, 8, "'needs' is a keyword from 0.12: rename the file 'needs.nex'")]
+
+
+def test_a_module_named_like_option_is_refused_because_e4_could_not_tell_the_calls_apart(tmp_path):
+    result = _plan_with_modules(tmp_path, {
+        "main.nex": 'import "m/Option.nex"\nfn main() -> Void {\n    print(Option.unwrap_or(Some(1), 0))\n}\n',
+        "m/Option.nex": "type T = Int where value > 0\n",
+    })
+    assert result.edits == ()
+    assert result.refusals[0].message.startswith("A module named 'Option' hides the built-in type")
 
 
 def test_every_use_of_a_new_keyword_is_listed():
