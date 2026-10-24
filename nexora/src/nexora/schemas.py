@@ -180,6 +180,27 @@ _BUILTIN = {
                    "contracts": {"type": "array", "items": _BUILTIN_CONTRACT}},
 }
 
+# `nexora.capabilities/1` keeps the clause names it was published with, so its schema does not
+# change (see tooling.py).
+_BUILTIN_CONTRACT_OF_CAPABILITIES_1 = {
+    **_BUILTIN_CONTRACT,
+    "properties": {
+        **_BUILTIN_CONTRACT["properties"],
+        "clause": {"enum": ["requires", "ensures"]},
+        "checked_at_run_time": {
+            "type": "boolean",
+            "description": "True for 'requires', checked on every call. False for 'ensures', which the "
+                           "implementation keeps and the tests check, but the program does not.",
+        },
+    },
+}
+
+_BUILTIN_OF_CAPABILITIES_1 = {
+    **_BUILTIN,
+    "properties": {**_BUILTIN["properties"],
+                   "contracts": {"type": "array", "items": _BUILTIN_CONTRACT_OF_CAPABILITIES_1}},
+}
+
 _CONTEXT_FUNCTION = {
     "type": "object",
     "required": ["name", "signature", "params", "return_type", "span", "contracts", "variables", "calls",
@@ -449,7 +470,7 @@ def all_schemas() -> dict[str, dict]:
                             "evaluates the conditions of refined types on literal constants; those conditions call "
                             "no function of the program, and the work is bounded (limit max_refinement_steps)."}},
         ["schema", "nexora_version", "language", "diagnostics", "limits", "schemas", "analysis_executes_code"],
-        {"param": _PARAM, "builtin": _BUILTIN},
+        {"param": _PARAM, "builtin": _BUILTIN_OF_CAPABILITIES_1},
     )
     test = _document(
         "nexora-test", "nexora.test/1: the outcome of evaluating the 'example' clauses of a program (nex test)",

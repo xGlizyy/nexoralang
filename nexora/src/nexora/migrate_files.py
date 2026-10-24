@@ -76,13 +76,16 @@ class Planned:
 @dataclass(frozen=True)
 class Report:
     """What happened when writing. `changed` is set when the re-read found a difference, and then
-    nothing was written; otherwise `failed` names the first failed write, if any."""
+    nothing was written; otherwise `failed` names the first failed write, if any. An interruption
+    that arrives once a file is already in place has no failed file: it stopped before the next."""
 
     replaced: tuple[str, ...] = ()
     failed: tuple[str, str] | None = None        # (path, the error of the system)
     not_written: tuple[str, ...] = ()
     changed: tuple[str, ...] = ()
     interrupted: bool = False
+    # A temporary file that could not be removed after the failure, and why: it stays on disk.
+    left: tuple[str, str] | None = None
 
     @property
     def ok(self) -> bool:
@@ -118,31 +121,44 @@ def write_all(planned: list[Planned], files: Files | None = None) -> Report:
     replaced: list[str] = []
     for position, item in enumerate(ordered):
         temporary = None
-        created = False
+        created = renaming = False
         try:
             temporary = files.temporary_name(item.path)
             files.create(temporary)
             created = True
             files.write(temporary, item.output)
             files.copy_permissions(item.path, temporary)
+            renaming = True
             files.replace(temporary, item.path)
             created = False
             replaced.append(item.path)
         except (OSError, KeyboardInterrupt) as stop:
-            if created and temporary is not None:
-                _remove(files, temporary)
             rest = tuple(other.path for other in ordered[position + 1:])
-            if isinstance(stop, KeyboardInterrupt):
-                return Report(tuple(replaced), (item.path, "interrupted"), rest, interrupted=True)
-            reason = stop.strerror or type(stop).__name__
-            return Report(tuple(replaced), (item.path, reason), rest)
+            interrupted = isinstance(stop, KeyboardInterrupt)
+            if interrupted and renaming and created and _in_place(files, item):
+                # Ctrl+C arrived once the rename was done: this file is replaced.
+                return Report((*replaced, item.path), None, rest, interrupted=True)
+            left = _remove(files, temporary) if created and temporary is not None else None
+            reason = "interrupted" if interrupted else (stop.strerror or type(stop).__name__)
+            return Report(tuple(replaced), (item.path, reason), rest, interrupted=interrupted, left=left)
     return Report(tuple(replaced))
 
 
-def _remove(files: Files, temporary: str) -> None:
-    """Removes a temporary file after a failure. If even that fails, the file stays: its name does
-    not end in `.nex`, so no program imports it (decision 0019, section 11)."""
+def _in_place(files: Files, item: Planned) -> bool:
+    """Whether the file already holds its migrated bytes."""
+    try:
+        return files.read(item.path) == item.output
+    except OSError:
+        return False
+
+
+def _remove(files: Files, temporary: str) -> tuple[str, str] | None:
+    """Removes a temporary file after a failure. If even that fails, the file stays, and the report
+    says so: its name does not end in `.nex`, so no program imports it (decision 0019, section 11)."""
     try:
         files.delete(temporary)
-    except OSError:
-        pass
+    except FileNotFoundError:
+        return None             # it is not there: the rename had already moved it
+    except OSError as error:
+        return temporary, error.strerror or type(error).__name__
+    return None

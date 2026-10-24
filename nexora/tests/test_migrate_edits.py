@@ -235,3 +235,49 @@ def test_kept_outside_notices_a_changed_character():
     result = plan(text)
     output = migrate.apply(text, result.edits).replace("print(1)", "print(2)")
     assert not migrate.kept_outside(text, result.edits, output)
+
+
+# G3 (8.4): structural equivalence, between the 0.11 tree and the 0.12 tree of the migrated text
+
+def tree_012(text: str):
+    from nexora.diagnostics import Source as Source012
+    from nexora.pipeline import analyze as analyze012
+
+    analysis = analyze012(Source012("program.nex", text), require_main=False)
+    assert analysis.program is not None
+    return analysis.program
+
+
+def test_every_case_of_the_decision_is_structurally_equivalent_after_migration():
+    for name, (original, expected, _) in CASES.items():
+        old = analyze(Source("program.nex", original), require_main=False).program
+        assert migrate.equivalent(old, tree_012(expected)), name
+
+
+@pytest.mark.parametrize("migrated", [
+    "fn f(x: Int) gives Int\n    needs x >= 0\n{\n    return x\n}\n",            # another condition
+    "fn f(x: Int) gives Int\n    promises x > 0\n{\n    return x\n}\n",            # another kind of clause
+    "fn f(x: Int) gives Int\n    needs positive: x > 0\n{\n    return x\n}\n",     # a name the original has not
+    "fn f(x: Int) gives Text\n    needs x > 0\n{\n    return x\n}\n",              # another result type
+    "fn f(x: Int)\n    needs x > 0\n{\n    print(x)\n}\n",                          # another body
+])
+def test_structural_equivalence_notices_what_changed(migrated):
+    old = analyze(Source("program.nex", "fn f(x: Int) -> Int {\n    requires x > 0\n    return x\n}\n"),
+                  require_main=False).program
+    assert not migrate.equivalent(old, tree_012(migrated))
+
+
+def test_the_order_of_the_needs_is_compared_and_the_place_of_the_examples_is_not():
+    original = "fn f(x: Int) -> Int {\n    requires x > 0\n    example f(1) == 1\n    requires x < 9\n    return x\n}\n"
+    old = analyze(Source("program.nex", original), require_main=False).program
+    assert migrate.equivalent(old, tree_012(
+        "fn f(x: Int) gives Int\n    example f(1) == 1\n    needs x > 0\n    needs x < 9\n{\n    return x\n}\n"))
+    assert not migrate.equivalent(old, tree_012(
+        "fn f(x: Int) gives Int\n    needs x < 9\n    needs x > 0\n    example f(1) == 1\n{\n    return x\n}\n"))
+
+
+def test_renamed_functions_of_option_are_the_same_call_and_others_are_not():
+    original = "fn f(x: Option[Int]) -> Int {\n    return Option.unwrap_or(x, 0)\n}\n"
+    old = analyze(Source("program.nex", original), require_main=False).program
+    assert migrate.equivalent(old, tree_012("fn f(x: Option[Int]) gives Int {\n    return Option.value_or(x, 0)\n}\n"))
+    assert not migrate.equivalent(old, tree_012("fn f(x: Option[Int]) gives Int {\n    return Option.value(x)\n}\n"))

@@ -250,3 +250,45 @@ def test_a_broken_named_clause_is_named_in_the_diagnostic(tmp_path, monkeypatch,
     assert code == 5
     assert "This call breaks needs 'positive' of 'f'" in err
     assert "The condition at line 2 is false: needs positive: x > 0" in err
+
+
+# The clause words of 0.11 are reserved during the transition (decision 0019, section 9)
+
+@pytest.mark.parametrize("program, line", [
+    ("fn f(x: Int) gives Int\n    requires x > 0\n{\n    return x\n}\n", 2),            # in a header
+    ("fn f(x: Int) gives Int\n    ensures result > 0\n{\n    return x\n}\n", 2),
+    ("fn w(n: Int) {\n    var i = 0\n    while i < n\n        decreases n - i\n    {\n        i = i + 1\n    }\n}\n", 4),
+    ("fn w(xs: List[Int]) {\n    for x in xs\n        invariant x > 0\n    {\n        print(x)\n    }\n}\n", 3),
+    ("fn requires() {\n}\n", 1),                                                     # as a name
+    ("fn f(ensures: Int) {\n}\n", 1),
+    ("type R = { invariant: Int }\n", 1),
+])
+def test_an_old_clause_word_is_reserved_and_is_never_a_clause_of_0_12(program, line):
+    diagnostics = diagnostics_of(program)
+    assert ("E1107", line) in [(d.code, d.span.line) for d in diagnostics]
+    assert all(d.code in ("E1107", "E1101", "E2021") for d in diagnostics), [d.code for d in diagnostics]
+
+
+def test_the_tools_list_the_old_clause_words_as_reserved_and_not_as_keywords():
+    from nexora import api, tooling
+
+    old = {"requires", "ensures", "invariant", "decreases"}
+    for language in (api.language_info(), tooling.get_capabilities()["language"]):
+        assert old <= set(language["reserved_words"])
+        assert not old & set(language["keywords"])
+
+
+# `nexora.capabilities/1` keeps the clause names it was published with (decision of 2026-10-24)
+
+def test_capabilities_1_keeps_requires_and_ensures_and_symbols_2_uses_the_new_words():
+    import jsonschema
+
+    from nexora import schemas, tooling
+
+    capabilities = tooling.get_capabilities()
+    assert capabilities["schema"] == "nexora.capabilities/1"
+    jsonschema.validate(capabilities, schemas.all_schemas()["nexora-capabilities.schema.json"])
+    clauses = {c["clause"] for b in capabilities["language"]["builtins"] for c in b["contracts"]}
+    assert clauses == {"requires", "ensures"}
+    symbols = tooling.get_symbols("fn main() {\n}\n")
+    assert {c["clause"] for b in symbols["builtins"] for c in b["contracts"]} == {"needs", "promises"}

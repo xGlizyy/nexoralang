@@ -151,6 +151,35 @@ def test_a_temporary_file_that_cannot_be_removed_is_left_without_hiding_the_fail
     assert report.failed == (planned[0].path, "No space left on device")
     left = [name for name in contents(directory) if name.endswith(".tmp")]
     assert len(left) == 1 and not left[0].endswith(".nex")
+    # The report says which temporary file stayed, and why.
+    assert report.left is not None and os.path.basename(report.left[0]) == left[0]
+    assert report.left[1] == "Permission denied"
+
+
+def test_a_removed_temporary_file_is_not_reported_as_left(program):
+    report = write_all(program[1], Faulty(fail="write", at=2))
+    assert report.left is None
+
+
+class LateInterrupt(Faulty):
+    """Ctrl+C that arrives once the rename of the N-th file is done."""
+
+    def replace(self, source, target):
+        super().replace(source, target)
+        if [kind for kind, _ in self.calls].count("replace") == self.at:
+            raise KeyboardInterrupt
+
+
+def test_an_interruption_after_a_rename_counts_that_file_as_replaced(program):
+    directory, planned = program
+    report = write_all(planned, LateInterrupt(at=2))
+    paths = [item.path for item in planned]
+    assert report.interrupted and report.failed is None
+    assert report.replaced == tuple(paths[:2]) and report.not_written == (paths[2],)
+    found = contents(directory)
+    assert sorted(found) == ["a.nex", "b.nex", "c.nex"]
+    assert [found[name] for name in ("a.nex", "b.nex", "c.nex")] == [planned[0].output, planned[1].output,
+                                                                    planned[2].original]
 
 
 def test_only_nex_files_are_written(tmp_path):
@@ -186,3 +215,20 @@ def test_a_change_to_a_file_without_edits_still_stops_everything(program):
     report = write_all([planned[0], same], Faulty(change=same.path))
     assert report.changed == (same.path,) and report.not_written == (planned[0].path,)
     assert contents(directory) == before
+
+
+def test_a_file_that_cannot_be_read_after_the_interruption_is_not_counted_as_replaced(program):
+    # If the check after a late Ctrl+C cannot read the file, it is reported as the failed one.
+    directory, planned = program
+
+    class Unreadable(LateInterrupt):
+        def read(self, path):
+            if [kind for kind, _ in self.calls].count("replace") >= self.at:
+                raise OSError(5, "Input/output error")
+            return super().read(path)
+
+    report = write_all(planned, Unreadable(at=1))
+    assert report.interrupted and report.failed == (planned[0].path, "interrupted")
+    assert report.replaced == ()
+    assert report.left is None        # the temporary file was already renamed: nothing is left behind
+    assert not [name for name in contents(directory) if name.endswith(".tmp")]

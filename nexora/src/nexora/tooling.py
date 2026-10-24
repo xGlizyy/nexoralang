@@ -189,7 +189,14 @@ def _symbol_entries(facts: CheckedProgram, files: dict[str, str], entry_file: st
     return entries
 
 
-def _builtin_entries() -> list[dict]:
+# `nexora.capabilities/1` keeps the clause names of 0.11 for the contracts of the built-in
+# functions: adopting `needs` and `promises` there is a change of that format, to be versioned
+# explicitly (decision of the person responsible, 2026-10-24). `nexora.symbols/2` uses the new ones
+# (decision 0019, 8.8).
+_CLAUSES_OF_CAPABILITIES_1 = {"needs": "requires", "promises": "ensures"}
+
+
+def _builtin_entries(clause_names: dict[str, str] | None = None) -> list[dict]:
     def describe(signature: Signature) -> dict:
         return {
             "name": signature.name,
@@ -198,7 +205,8 @@ def _builtin_entries() -> list[dict]:
             "return_type": signature.return_type,
             # Decision 0011, 7.4: an agent must not take a `promises` for something checked.
             "contracts": [
-                {"clause": contract.clause, "condition": contract.source, "message": contract.message,
+                {"clause": (clause_names or {}).get(contract.clause, contract.clause),
+                 "condition": contract.source, "message": contract.message,
                  "checked_at_run_time": contract.checked_at_run_time}
                 for contract in CONTRACTS.get(signature.name, ())
             ],
@@ -742,7 +750,7 @@ def get_capabilities() -> dict:
             "keywords": sorted(KEYWORDS),
             "reserved_words": sorted(RESERVED_WORDS | OLD_CLAUSE_WORDS.keys()),
             "types": [VOID, *VALUE_TYPES],
-            "builtins": _builtin_entries(),
+            "builtins": _builtin_entries(_CLAUSES_OF_CAPABILITIES_1),
         },
         "diagnostics": [
             {"code": code, "message": CODES[code], "category": CATEGORIES[code]} for code in sorted(CODES)
