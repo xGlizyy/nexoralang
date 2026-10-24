@@ -236,6 +236,35 @@ def test_the_header_of_a_loop_goes_one_step_in_and_its_brace_goes_back():
     )
 
 
+def test_the_headers_of_a_for_loop_and_of_a_function_without_gives_keep_their_layout():
+    source = (
+        "fn show(xs: List[Int])\n"
+        "trust small:List.length(xs)<100,\"Callers pass short lists\"\n"
+        "  // the body\n"
+        "{\n"
+        "for x in xs\n"
+        "keeps List.length(xs)>=0\n"
+        "{\n"
+        "print(to_text(x))\n"
+        "}\n"
+        "}\n"
+    )
+    expected = (
+        "fn show(xs: List[Int])\n"
+        "    trust small: List.length(xs) < 100, \"Callers pass short lists\"\n"
+        "    // the body\n"
+        "{\n"
+        "    for x in xs\n"
+        "        keeps List.length(xs) >= 0\n"
+        "    {\n"
+        "        print(to_text(x))\n"
+        "    }\n"
+        "}\n"
+    )
+    assert formatter.format_source(source).text == expected
+    assert formatter.format_source(expected).text == expected
+
+
 def test_a_named_condition_across_lines_keeps_its_parenthesis_apart_from_the_name():
     source = "fn g(x: Int) gives Int\nneeds ok:(x > 0 and\nx < 10)\n{\nreturn x\n}\n"
     assert formatter.format_source(source).text == (
