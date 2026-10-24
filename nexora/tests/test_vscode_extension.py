@@ -10,10 +10,25 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from nexora.checker import BUILTINS
 from nexora.tokens import KEYWORDS, OLD_CLAUSE_WORDS, RESERVED_WORDS
 
+from helpers import in_continuous_integration
+
 EXTENSION = Path(__file__).resolve().parents[2] / "vscode-nexora"
+
+# The extension lives next to nexora/ in the repository; a source distribution carries only
+# nexora/, so from an extracted sdist there is no extension to check. In continuous integration,
+# which runs on a checkout of the repository, a missing extension is a failure, never a skip.
+if not EXTENSION.is_dir():
+    if in_continuous_integration():
+        pytest.fail(f"the VS Code extension is missing ({EXTENSION}); in continuous integration these "
+                    "tests must run", pytrace=False)
+    pytest.skip(f"no VS Code extension at {EXTENSION}: it is in the repository, next to nexora/, and not "
+                "in a source distribution; these tests run on a checkout of the repository",
+                allow_module_level=True)
 
 
 def _manifest() -> dict:
