@@ -23,20 +23,22 @@ says what relation the arguments and the result of a concrete function have.
 
 <!-- nex:run -->
 ```nex
-fn divide(a: Float, b: Float) -> Float {
-    requires b != 0.0
+fn divide(a: Float, b: Float) gives Float
+    needs b != 0.0
+{
     return a / b
 }
 
-fn absolute(value: Int) -> Int {
-    ensures result >= 0
+fn absolute(value: Int) gives Int
+    promises result >= 0
+{
     if value < 0 {
         return -value
     }
     return value
 }
 
-fn main() -> Void {
+fn main() {
     print(divide(9.0, 2.0))
     print(absolute(-42))
 }
@@ -78,14 +80,15 @@ or an agent, does not have to work out where it comes from:
 
 <!-- nex:fails exit=5 -->
 ```nex
-fn withdraw(balance: Int, amount: Int) -> Int {
-    requires amount > 0, "A withdrawal moves some money"
-    requires amount <= balance, "An account cannot go below zero"
-    ensures result >= 0, "The balance after a withdrawal is never negative"
+fn withdraw(balance: Int, amount: Int) gives Int
+    needs amount > 0, "A withdrawal moves some money"
+    needs amount <= balance, "An account cannot go below zero"
+    promises result >= 0, "The balance after a withdrawal is never negative"
+{
     return balance - amount
 }
 
-fn main() -> Void {
+fn main() {
     print(withdraw(100, 30))
     print(withdraw(100, 300))
 }
@@ -94,11 +97,11 @@ fn main() -> Void {
 ```text
 70
 contract error[E4001]: Precondition violated
-  --> program.nex:10:11
+  --> program.nex:11:11
    |
-10 |     print(withdraw(100, 300))
-   |           ^^^^^^^^^^^^^^^^^^ This call breaks a 'requires' condition of 'withdraw'
-   = note: The condition at line 3 is false: requires amount <= balance
+11 |     print(withdraw(100, 300))
+   |           ^^^^^^^^^^^^^^^^^^ This call breaks a 'needs' condition of 'withdraw'
+   = note: The condition at line 3 is false: needs amount <= balance
    = note: Reason: An account cannot go below zero
    = note: It was called with: balance = 100, amount = 300
 
@@ -121,30 +124,31 @@ a single sentence: an empty text or one with a line break is an error (`E1101`).
 
 <!-- nex:check-fails -->
 ```nex
-fn half(n: Int) -> Int {
-    requires n
-    ensures result == "small"
+fn half(n: Int) gives Int
+    needs n
+    promises result == "small"
+{
     return n / 2
 }
 
-fn main() -> Void {
+fn main() {
     print(half(8))
 }
 ```
 
 ```text
 type error[E2011]: Type mismatch
- --> program.nex:2:14
+ --> program.nex:2:11
   |
-2 |     requires n
-  |              ^ The condition of 'requires' must be Bool, found Int
+2 |     needs n
+  |           ^ The condition of 'needs' must be Bool, found Int
   = hint: A number is not a condition. Compare it explicitly, for example: x != 0
 
 type error[E2011]: Type mismatch
- --> program.nex:3:20
+ --> program.nex:3:21
   |
-3 |     ensures result == "small"
-  |                    ^^ Cannot apply '==' to Int and Text
+3 |     promises result == "small"
+  |                     ^^ Cannot apply '==' to Int and Text
   = hint: Both sides of '==' must have the same type.
 
 error: program.nex: check failed with 2 errors
@@ -157,16 +161,17 @@ call**, because the caller is the one who breaks it, and it shows the condition 
 
 <!-- nex:fails exit=5 -->
 ```nex
-fn divide(a: Float, b: Float) -> Float {
-    requires b != 0.0
+fn divide(a: Float, b: Float) gives Float
+    needs b != 0.0
+{
     return a / b
 }
 
-fn average(total: Float, count: Float) -> Float {
+fn average(total: Float, count: Float) gives Float {
     return divide(total, count)
 }
 
-fn main() -> Void {
+fn main() {
     print(average(90.0, 4.0))
     print(average(90.0, 0.0))
 }
@@ -175,13 +180,13 @@ fn main() -> Void {
 ```text
 22.5
 contract error[E4001]: Precondition violated
- --> program.nex:7:12
+ --> program.nex:8:12
   |
-7 |     return divide(total, count)
-  |            ^^^^^^^^^^^^^^^^^^^^ This call breaks a 'requires' condition of 'divide'
-  = note: The condition at line 2 is false: requires b != 0.0
+8 |     return divide(total, count)
+  |            ^^^^^^^^^^^^^^^^^^^^ This call breaks a 'needs' condition of 'divide'
+  = note: The condition at line 2 is false: needs b != 0.0
   = note: It was called with: a = 90.0, b = 0.0
-  = note: In 'average', called at line 12, column 11.
+  = note: In 'average', called at line 13, column 11.
 
 error: program.nex: the program stopped because a contract was broken
 ```
@@ -198,12 +203,13 @@ own function:
 
 <!-- nex:run -->
 ```nex
-fn quantity(written: Text) -> Int {
-    requires Int.can_parse(written), "The quantity has to be written as a whole number"
+fn quantity(written: Text) gives Int
+    needs Int.can_parse(written), "The quantity has to be written as a whole number"
+{
     return Int.parse(written)
 }
 
-fn main() -> Void {
+fn main() {
     print(quantity("12") * 2)
 }
 ```
@@ -222,13 +228,14 @@ it shows the returned value:
 
 <!-- nex:fails exit=5 -->
 ```nex
-fn discount(price: Int, percent: Int) -> Int {
-    requires percent >= 0
-    ensures result <= price
+fn discount(price: Int, percent: Int) gives Int
+    needs percent >= 0
+    promises result <= price
+{
     return price * (100 + percent) / 100
 }
 
-fn main() -> Void {
+fn main() {
     print(discount(200, 0))
     print(discount(200, 25))
 }
@@ -239,12 +246,12 @@ fn main() -> Void {
 contract error[E4002]: Postcondition violated
  --> program.nex:3:5
   |
-3 |     ensures result <= price
-  |     ^^^^^^^^^^^^^^^^^^^^^^^ 'discount' breaks its own 'ensures' condition
-  = note: 'discount' finished, but its condition is false: ensures result <= price
+3 |     promises result <= price
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^ 'discount' breaks its own 'promises' condition
+  = note: 'discount' finished, but its condition is false: promises result <= price
   = note: It returned: result = 250
   = note: It was called with: price = 200, percent = 25
-  = note: In 'discount', called at line 9, column 11.
+  = note: In 'discount', called at line 10, column 11.
 
 error: program.nex: the program stopped because a contract was broken
 ```
@@ -259,10 +266,11 @@ form, and `nex test` evaluates it ([decision 0008](decisions/0008-ejemplos-y-nex
 
 <!-- nex:test exit=0 -->
 ```nex
-fn double(n: Int) -> Int {
-    requires n >= 0, "Only natural numbers"
+fn double(n: Int) gives Int
+    needs n >= 0, "Only natural numbers"
     example double(2) == 4, "Two doubled"
     example double(double(1)) == 4
+{
     return n * 2
 }
 ```
@@ -284,10 +292,11 @@ If an example turns out false, `nex test` says what the function returned and en
 
 <!-- nex:test exit=6 -->
 ```nex
-fn double(n: Int) -> Int {
-    requires n >= 0, "Only natural numbers"
+fn double(n: Int) gives Int
+    needs n >= 0, "Only natural numbers"
     example double(3) == 7, "Three doubled is seven"
     example double(-1) == -2
+{
     return n * 2
 }
 ```
@@ -308,8 +317,8 @@ contract error[E4001]: Precondition violated
  --> program.nex:4:13
   |
 4 |     example double(-1) == -2
-  |             ^^^^^^^^^^ This call breaks a 'requires' condition of 'double'
-  = note: The condition at line 2 is false: requires n >= 0
+  |             ^^^^^^^^^^ This call breaks a 'needs' condition of 'double'
+  = note: The condition at line 2 is false: needs n >= 0
   = note: Reason: Only natural numbers
   = note: It was called with: n = -1
   = note: While evaluating example 2 of 'double', at line 4.
@@ -325,7 +334,7 @@ A file without examples is not taken as tested:
 
 <!-- nex:test exit=6 -->
 ```nex
-fn double(n: Int) -> Int {
+fn double(n: Int) gives Int {
     return n * 2
 }
 ```
@@ -347,14 +356,16 @@ A `while` loop declares its requirements at the beginning of its body, just like
 
 <!-- nex:run -->
 ```nex
-fn gcd(a: Int, b: Int) -> Int {
-    requires a >= 0 and b >= 0, "Only natural numbers"
-    requires a > 0 or b > 0, "gcd(0, 0) is not defined"
+fn gcd(a: Int, b: Int) gives Int
+    needs a >= 0 and b >= 0, "Only natural numbers"
+    needs a > 0 or b > 0, "gcd(0, 0) is not defined"
+{
     var x = a
     var y = b
-    while y != 0 {
-        invariant x >= 0 and y >= 0
-        decreases y, "The remainder is always smaller than the divisor"
+    while y != 0
+        keeps x >= 0 and y >= 0
+        shrinks y, "The remainder is always smaller than the divisor"
+    {
         let remainder = x - x / y * y
         x = y
         y = remainder
@@ -362,7 +373,7 @@ fn gcd(a: Int, b: Int) -> Int {
     return x
 }
 
-fn main() -> Void {
+fn main() {
     print(gcd(1071, 462))
 }
 ```
@@ -381,35 +392,37 @@ explanation of the rule, like that of a contract:
 
 <!-- nex:fails exit=5 -->
 ```nex
-fn average(total: Int, count: Int) -> Int {
-    requires count > 0, "There is nothing to average"
+fn average(total: Int, count: Int) gives Int
+    needs count > 0, "There is nothing to average"
+{
     var quotient = 0
     var rest = total
-    while rest >= count {
-        invariant quotient * count + rest == total, "No unit is lost while dividing"
-        decreases rest
+    while rest >= count
+        keeps quotient * count + rest == total, "No unit is lost while dividing"
+        shrinks rest
+    {
         rest = rest - count
         quotient = quotient + 2
     }
     return quotient
 }
 
-fn main() -> Void {
+fn main() {
     print(average(10, 3))
 }
 ```
 
 ```text
 contract error[E4005]: Loop invariant violated
- --> program.nex:6:19
+ --> program.nex:7:15
   |
-6 |         invariant quotient * count + rest == total, "No unit is lost while dividing"
-  |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ This condition is false
-  = note: The condition at line 6 is false: invariant quotient * count + rest == total
+7 |         keeps quotient * count + rest == total, "No unit is lost while dividing"
+  |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ This condition is false
+  = note: The condition at line 7 is false: keeps quotient * count + rest == total
   = note: Reason: No unit is lost while dividing
-  = note: After turn 1 of the loop at line 5.
+  = note: After turn 1 of the loop at line 6.
   = note: The values: total = 10, count = 3, quotient = 2, rest = 7
-  = note: In 'average', called at line 15, column 11.
+  = note: In 'average', called at line 17, column 11.
 
 error: program.nex: the program stopped because a contract was broken
 ```

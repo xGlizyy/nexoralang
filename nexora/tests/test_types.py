@@ -241,4 +241,4 @@ def test_to_int_out_of_range_is_a_runtime_error():
 
 def test_builtin_names_cannot_be_reused():
     assert check_codes(in_main("let to_text = 1")) == ["E2006"]
-    assert check_codes("fn to_int(x: Float) -> Int {\n    return 1\n}\nfn main() -> Void {}") == ["E2002"]
+    assert check_codes("fn to_int(x: Float) gives Int {\n    return 1\n}\nfn main() {}") == ["E2002"]

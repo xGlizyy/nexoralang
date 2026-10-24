@@ -1,6 +1,6 @@
 // The type system: inference, annotations, operators and explicit conversions.
 
-fn main() -> Void {
+fn main() {
     // The type of a variable is inferred from its value...
     let name = "NEXORA"
     let age = 25

@@ -34,14 +34,14 @@ from .interpreter import MAX_CALL_DEPTH
 from .parser import MAX_EXPRESSION_DEPTH, MAX_NESTING
 from .pipeline import Analysis, analyze
 from .prelude import CONTRACTS, IMPLEMENTATIONS, requirements
-from .tokens import KEYWORDS, RESERVED_WORDS, TokenType
+from .tokens import KEYWORDS, OLD_CLAUSE_WORDS, RESERVED_WORDS, TokenType
 from .values import INT, INT_MAX, INT_MIN, TEXT, VALUE_TYPES, VOID
 from .version import __version__
 
 DIAGNOSTICS_SCHEMA = "nexora.diagnostics/1"
-INSPECT_SCHEMA = "nexora.inspect/2"
-SYMBOLS_SCHEMA = "nexora.symbols/1"
-CONTEXT_SCHEMA = "nexora.context/1"
+INSPECT_SCHEMA = "nexora.inspect/3"
+SYMBOLS_SCHEMA = "nexora.symbols/2"
+CONTEXT_SCHEMA = "nexora.context/2"
 SPEC_SCHEMA = "nexora.spec/2"
 CAPABILITIES_SCHEMA = "nexora.capabilities/1"
 
@@ -89,7 +89,14 @@ def diagnostics_document(filename: str, diagnostics, *, files: Sequence[str] | N
 
 def _signature_text(function: ast.Function) -> str:
     params = ", ".join(f"{param.name}: {param.type.name}" for param in function.params)
-    return f"fn {function.name}({params}) -> {function.return_type.name}"
+    if function.return_type is None:
+        return f"fn {function.name}({params})"
+    return f"fn {function.name}({params}) gives {function.return_type.name}"
+
+
+def _return_type_name(function: ast.Function) -> str:
+    """The type a function gives: Void when it has no 'gives' (decision 0019)."""
+    return VOID if function.return_type is None else function.return_type.name
 
 
 def _text_of(source: Source, span: Span) -> str:
@@ -117,7 +124,7 @@ def inspect_document(analysis: Analysis) -> dict:
 def inspect_source(source: str, filename: str = DEFAULT_FILENAME) -> dict:
     """The syntax tree of a program, with the type of every expression the checker could type.
 
-    Returns a `nexora.inspect/2` document. With syntax errors the tree is partial and
+    Returns a `nexora.inspect/3` document. With syntax errors the tree is partial and
     `complete` is false: the statements with errors, and the functions whose declaration has
     them, are missing. `program` is null when the text has lexical errors.
     """
@@ -175,7 +182,7 @@ def _symbol_entries(facts: CheckedProgram, files: dict[str, str], entry_file: st
             if declaration is not None:
                 entry["signature"] = _signature_text(declaration)
                 entry["params"] = [{"name": param.name, "type": param.type.name} for param in declaration.params]
-                entry["return_type"] = declaration.return_type.name
+                entry["return_type"] = _return_type_name(declaration)
         # Last: a field added to an object goes at the end (decision 0008, section 8).
         entry["file"] = entry_file if symbol.module is None else files.get(symbol.module, entry_file)
         entries.append(entry)
@@ -189,7 +196,7 @@ def _builtin_entries() -> list[dict]:
             "signature": signature.describe(),
             "params": [{"name": name, "type": kind} for name, kind in signature.params],
             "return_type": signature.return_type,
-            # Decision 0011, 7.4: an agent must not take an `ensures` for something checked.
+            # Decision 0011, 7.4: an agent must not take a `promises` for something checked.
             "contracts": [
                 {"clause": contract.clause, "condition": contract.source, "message": contract.message,
                  "checked_at_run_time": contract.checked_at_run_time}
@@ -224,7 +231,7 @@ def get_symbols(source: str, filename: str = DEFAULT_FILENAME, *, name: str | No
                 function: str | None = None) -> dict:
     """The functions, parameters and variables a program declares, and where each is used.
 
-    Returns a `nexora.symbols/1` document. Every symbol and every reference was resolved by
+    Returns a `nexora.symbols/2` document. Every symbol and every reference was resolved by
     the checker with the scoping rules of the language; nothing is inferred from names.
     `name` keeps only the symbols with that name; `function` keeps a function and what is
     declared inside it. With syntax errors the list covers only the code that parsed and
@@ -268,7 +275,7 @@ _FEATURES = (
     ("examples", lambda node, types: isinstance(node, ast.Example)),
     ("mutable_variables", lambda node, types: isinstance(node, ast.Var)),
     ("loops", lambda node, types: isinstance(node, (ast.While, ast.For))),
-    ("loop_invariants", lambda node, types: isinstance(node, ast.LoopClause) and node.clause == "invariant"),
+    ("loop_invariants", lambda node, types: isinstance(node, ast.LoopClause) and node.clause == "keeps"),
     ("type_annotations", lambda node, types: isinstance(node, ast.Let) and node.declared_type is not None),
     ("arithmetic", lambda node, types: isinstance(node, ast.Binary) and node.operator in ("+", "-", "*", "/")
         and types.get(id(node)) != TEXT),
@@ -317,8 +324,9 @@ def _notes(analysis: Analysis, features: list[str], reserved_used: list[str]) ->
     something found in it; none is a judgement about the code."""
     notes = []
     if "contracts" in features:
-        notes.append("Contracts ('requires', 'ensures') are checked while the program runs, on the calls "
-                     "that execute. This analysis verified their types, not that they hold.")
+        notes.append("Contracts ('needs', 'promises') are checked while the program runs, on the calls "
+                     "that execute; a 'trust' is never checked. This analysis verified their types, not that "
+                     "they hold.")
     if "refined_types" in features:
         notes.append("Every value of a refined type satisfies its condition. This analysis checked the "
                      "constants given to refined types; any other value is checked by 'Type(x)' while the "
@@ -327,7 +335,7 @@ def _notes(analysis: Analysis, features: list[str], reserved_used: list[str]) ->
         notes.append("A record is a type the program declares: its fields never change, and two records "
                      "are different types even when they have the same fields.")
     if "loops" in features:
-        notes.append("Every 'while' declares a measure ('decreases') that is checked on every turn: a loop ends, or "
+        notes.append("Every 'while' declares a measure ('shrinks') that is checked on every turn: a loop ends, or "
                      "stops with E4006. A 'for' walks a finite list and needs no measure. Invariants are checked "
                      "before every turn and once after the last one (E4005). This analysis verified their types, "
                      "not that they hold.")
@@ -377,11 +385,11 @@ def _function_context(key: str, function: ast.Function, analysis: Analysis, call
         "name": function.name,
         "signature": _signature_text(function),
         "params": [{"name": param.name, "type": param.type.name} for param in function.params],
-        "return_type": function.return_type.name,
+        "return_type": _return_type_name(function),
         "span": _span(function.span),
         "contracts": [
             {"clause": contract.clause, "condition": _text_of(analysis.source, contract.condition.span),
-             "message": contract.message, "line": contract.span.line}
+             "message": contract.message, "line": contract.span.line, "name": contract.name}
             for contract in function.contracts
         ],
         "variables": variables,
@@ -405,9 +413,10 @@ def _function_context(key: str, function: ast.Function, analysis: Analysis, call
 
 def _loop_context(loop: ast.While | ast.For, source: Source) -> dict:
     def clause(node: ast.LoopClause) -> dict:
-        return {"condition": _text_of(source, node.condition.span), "message": node.message, "line": node.span.line}
+        return {"condition": _text_of(source, node.condition.span), "message": node.message, "line": node.span.line,
+                "name": node.name}
 
-    measures = [] if isinstance(loop, ast.For) else [node for node in loop.clauses if node.clause == "decreases"]
+    measures = [] if isinstance(loop, ast.For) else [node for node in loop.clauses if node.clause == "shrinks"]
     if isinstance(loop, ast.For):
         kind = "for"
         header = f"{loop.name} in {_text_of(source, loop.iterable.span)}"
@@ -418,7 +427,7 @@ def _loop_context(loop: ast.While | ast.For, source: Source) -> dict:
         "line": loop.span.line,
         "kind": kind,
         "condition": header,
-        "invariants": [clause(node) for node in loop.clauses if node.clause == "invariant"],
+        "invariants": [clause(node) for node in loop.clauses if node.clause == "keeps"],
         "measure": clause(measures[0]) if measures else None,
     }
 
@@ -540,7 +549,7 @@ def get_context(source: str, filename: str = DEFAULT_FILENAME) -> dict:
     read or modify it: functions and their signatures, contracts, variables with their types,
     who calls whom, the language features in use, and the current diagnostics.
 
-    Returns a `nexora.context/1` document. It is computed by the same static analysis as
+    Returns a `nexora.context/2` document. It is computed by the same static analysis as
     `check_source`. The program is not run and no model is involved; the same source always
     gives the same document.
     """
@@ -548,7 +557,7 @@ def get_context(source: str, filename: str = DEFAULT_FILENAME) -> dict:
 
 
 def render_context(document: dict) -> str:
-    """A `nexora.context/1` document as text for people (what `nex context` prints)."""
+    """A `nexora.context/2` document as text for people (what `nex context` prints)."""
     lines = [f"{document['file']} | NEXORA {document['nexora_version']} | {document['lines']} lines"]
     count = len(document["diagnostics"])
     lines.append("Static analysis: no errors." if document["ok"]
@@ -586,7 +595,8 @@ def render_context(document: dict) -> str:
         for function in document["functions"]:
             lines.append(f"  {function['signature']}    [line {function['span']['line']}]")
             for contract in function["contracts"]:
-                lines.append(f"      {contract['clause']} {contract['condition']}")
+                name = f"{contract['name']}: " if contract["name"] else ""
+                lines.append(f"      {contract['clause']} {name}{contract['condition']}")
                 if contract["message"]:
                     lines.append(f"          reason: {contract['message']}")
             if function["variables"]:
@@ -595,9 +605,10 @@ def render_context(document: dict) -> str:
                 lines.append(f"      variables: {variables}")
             for loop in function["loops"]:
                 lines.append(f"      loop at line {loop['line']}: {loop['kind']} {loop['condition']}")
-                for clause, entry in [*(("invariant", item) for item in loop["invariants"]),
-                                      *([("decreases", loop["measure"])] if loop["measure"] else [])]:
-                    lines.append(f"          {clause} {entry['condition']}")
+                for clause, entry in [*(("keeps", item) for item in loop["invariants"]),
+                                      *([("shrinks", loop["measure"])] if loop["measure"] else [])]:
+                    name = f"{entry['name']}: " if entry["name"] else ""
+                    lines.append(f"          {clause} {name}{entry['condition']}")
                     if entry["message"]:
                         lines.append(f"              reason: {entry['message']}")
             if function["calls"]:
@@ -606,7 +617,7 @@ def render_context(document: dict) -> str:
                 lines.append(f"      built-ins: {', '.join(function['builtins_called'])}")
                 for name in function["builtins_called"]:
                     for contract in requirements(name):
-                        lines.append(f"          {name} requires {contract.source}")
+                        lines.append(f"          {name} needs {contract.source}")
                         lines.append(f"              reason: {contract.message}")
             if function["called_by"]:
                 lines.append(f"      called by: {', '.join(function['called_by'])}")
@@ -633,7 +644,7 @@ def render_context(document: dict) -> str:
 
 
 def render_symbols(document: dict) -> str:
-    """A `nexora.symbols/1` document as text for people (what `nex symbols` prints)."""
+    """A `nexora.symbols/2` document as text for people (what `nex symbols` prints)."""
     if document["symbols"] is None:
         return "No symbols: the text could not be read as NEXORA code."
     partial = "Partial list: the program has syntax errors, and the code with errors is not included."
@@ -729,7 +740,7 @@ def get_capabilities() -> dict:
         "nexora_version": __version__,
         "language": {
             "keywords": sorted(KEYWORDS),
-            "reserved_words": sorted(RESERVED_WORDS),
+            "reserved_words": sorted(RESERVED_WORDS | OLD_CLAUSE_WORDS.keys()),
             "types": [VOID, *VALUE_TYPES],
             "builtins": _builtin_entries(),
         },

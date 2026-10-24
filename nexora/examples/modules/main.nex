@@ -7,7 +7,7 @@
 
 import "models.nex"
 
-fn main() -> Void {
+fn main() {
     // The record of the module, built with its fields.
     let rectangle = models.Point(x: 3, y: 4)
     print(rectangle)
@@ -26,7 +26,8 @@ fn main() -> Void {
 // The examples of this file can call the module, like the rest of the code. `pub` marks
 // what a module makes visible: in the file that runs, its names are already its own, and
 // it only says what would be public if another program imported this file.
-pub fn ratio(part: models.Point, whole: models.Point) -> Int {
+pub fn ratio(part: models.Point, whole: models.Point) gives Int
     example ratio(models.Point(x: 2, y: 2), models.Point(x: 2, y: 1)) == 2
+{
     return models.area(part) / models.area(whole)
 }

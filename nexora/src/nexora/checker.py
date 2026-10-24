@@ -89,7 +89,9 @@ class Signature:
 
     def describe(self) -> str:
         params = ", ".join(f"{name}: {kind or '?'}" for name, kind in self.params)
-        return f"fn {self.name}({params}) -> {self.return_type or '?'}"
+        if self.return_type == VOID:
+            return f"fn {self.name}({params})"
+        return f"fn {self.name}({params}) gives {self.return_type or '?'}"
 
 
 # The item variable shared by the signatures of the functions of List. `unify` returns a
@@ -186,12 +188,12 @@ BUILTINS: dict[str, Signature] = {
             "Option.is_none", (("value", type_model.option_of(_OPTION_ITEM)),), type_model.BOOL,
         ),
         _parametric_signature(
-            "Option.unwrap_or",
+            "Option.value_or",
             (("value", type_model.option_of(_OPTION_ITEM)), ("fallback", _OPTION_ITEM)),
             _OPTION_ITEM,
         ),
         _parametric_signature(
-            "Option.unwrap", (("value", type_model.option_of(_OPTION_ITEM)),), _OPTION_ITEM,
+            "Option.value", (("value", type_model.option_of(_OPTION_ITEM)),), _OPTION_ITEM,
         ),
         _parametric_signature(
             "Result.is_ok", (("value", type_model.result_of(_RESULT_ITEM, _RESULT_ERROR)),), type_model.BOOL,
@@ -200,12 +202,12 @@ BUILTINS: dict[str, Signature] = {
             "Result.is_err", (("value", type_model.result_of(_RESULT_ITEM, _RESULT_ERROR)),), type_model.BOOL,
         ),
         _parametric_signature(
-            "Result.unwrap_or",
+            "Result.value_or",
             (("value", type_model.result_of(_RESULT_ITEM, _RESULT_ERROR)), ("fallback", _RESULT_ITEM)),
             _RESULT_ITEM,
         ),
         _parametric_signature(
-            "Result.unwrap", (("value", type_model.result_of(_RESULT_ITEM, _RESULT_ERROR)),), _RESULT_ITEM,
+            "Result.value", (("value", type_model.result_of(_RESULT_ITEM, _RESULT_ERROR)),), _RESULT_ITEM,
         ),
         _parametric_signature(
             "Result.error", (("value", type_model.result_of(_RESULT_ITEM, _RESULT_ERROR)),), _RESULT_ERROR,
@@ -1265,6 +1267,17 @@ class Checker:
             (param.name, self._value_type(param.type, f"The parameter '{param.name}'"))
             for param in function.params
         )
+        if function.return_type is None:
+            return Signature(function.name, params, VOID)
+        if function.return_type.name == VOID and function.return_type.qualifier is None:
+            # `gives Void` is not written (decision 0019, 4.1); the function still gives nothing.
+            self._report(
+                "E2012",
+                "'Void' is not written after 'gives'",
+                function.return_type.span,
+                hint="A function that gives nothing has no 'gives'",
+            )
+            return Signature(function.name, params, VOID)
         return Signature(function.name, params, self._known_type(function.return_type))
 
     def _main(self, main: ast.Function | None) -> None:
@@ -1273,7 +1286,7 @@ class Checker:
                 "E2001",
                 "This program has no 'main' function, so there is nothing to run",
                 None,
-                hint="Add the entry point: fn main() -> Void { ... }",
+                hint="Add the entry point: fn main() { ... }",
             )
             return
         if main.params:
@@ -1281,11 +1294,11 @@ class Checker:
                 "E2013",
                 "'main' cannot have parameters",
                 main.params[0].span.to(main.params[-1].span),
-                hint="Write: fn main() -> Void",
+                hint="Write: fn main() {",
             )
         signature = self._signatures.get(self._key("main"))
         if signature is not None and signature.return_type not in (None, VOID):
-            self._report("E2004", "'main' must return Void", main.return_type.span, hint="Write: fn main() -> Void")
+            self._report("E2004", "'main' gives nothing", main.return_type.span, hint="Write: fn main() {")
 
     def _function(self, function: ast.Function, signature: Signature) -> None:
         self._function_name = function.name
@@ -1299,15 +1312,16 @@ class Checker:
                     "E2013",
                     "A parameter cannot be named 'result'",
                     param.name_span,
-                    hint="'result' is the name of the return value inside an 'ensures' clause.",
+                    hint="'result' is the name of the value a function gives, inside a 'promises' clause.",
                 )
             elif not self._name_is_free(param.name, param.name_span, scope):
                 continue
             self._declare(scope, param.name, "parameter", param_type, param.name_span)
 
+        self._clause_names(function)
         for contract in function.contracts:
             contract_scope = scope
-            if contract.clause == "ensures" and signature.return_type not in (None, VOID):
+            if contract.clause == "promises" and signature.return_type not in (None, VOID):
                 # 'result' exists only here, and only when there is a value to name.
                 contract_scope = _Scope(scope)
                 # Not a declared symbol: it only names the return value inside this clause.
@@ -1329,6 +1343,41 @@ class Checker:
                 hint="Make sure every path through the function ends with 'return'. "
                      "An 'if' without 'else' can be skipped, and a loop may not run at all.",
             )
+
+    def _clause_names(self, function: ast.Function) -> None:
+        """E2031: a clause name is used once in a function, its loops included, and is neither a
+        parameter nor `result` (decision 0019, 4.1). A name is not a variable."""
+        clauses = [*function.contracts, *(clause for loop in _loops(function.body) for clause in loop.clauses)]
+        clauses.sort(key=lambda clause: (clause.span.line, clause.span.column))
+        params = {param.name for param in function.params}
+        seen: dict[str, Span] = {}
+        for clause in clauses:
+            if clause.name is None:
+                continue
+            if clause.name in seen:
+                first = seen[clause.name]
+                self._report(
+                    "E2031",
+                    f"The promise name '{clause.name}' is used twice in '{function.name}'",
+                    clause.span,
+                    hint="Give each clause of a function, and of its loops, its own name.",
+                    notes=(f"It is first used at line {first.line}, column {first.column}.",),
+                )
+            elif clause.name in params:
+                self._report(
+                    "E2031",
+                    f"The promise name '{clause.name}' is also a parameter of '{function.name}'",
+                    clause.span,
+                    hint="A clause name says what the clause is about; choose one that is not a parameter.",
+                )
+            elif clause.name == "result":
+                self._report(
+                    "E2031",
+                    "'result' cannot be the name of a clause",
+                    clause.span,
+                    hint="'result' is the value the function gives; choose another name.",
+                )
+            seen.setdefault(clause.name, clause.span)
 
     def _example(self, example: ast.Example, function: str) -> None:
         """An 'example' clause (decision 0008). It is checked, never evaluated. It does not happen
@@ -1594,7 +1643,7 @@ class Checker:
 
     def _assign(self, statement: ast.Assign, scope: _Scope) -> None:
         """`name = value`: only a variable declared with 'var' takes a new value, and only of its type.
-        Parameters stay immutable, so 'ensures' and the diagnostics see the values a call received."""
+        Parameters stay immutable, so 'promises' and the diagnostics see the values a call received."""
         name, span = statement.name, statement.name_span
         target = scope.find(name)
         # The variable's type is the expected type of the value: `xs = []` needs it to
@@ -1640,10 +1689,10 @@ class Checker:
         not what its body declares. A loop never counts as always returning: the analysis does not
         evaluate conditions, and the condition may be false from the start."""
         self._condition(statement.condition, scope, "'while'")
-        measures = [clause for clause in statement.clauses if clause.clause == "decreases"]
+        measures = [clause for clause in statement.clauses if clause.clause == "shrinks"]
         for clause in statement.clauses:
-            if clause.clause == "invariant":
-                self._condition(clause.condition, scope, "'invariant'")
+            if clause.clause == "keeps":
+                self._condition(clause.condition, scope, "'keeps'")
                 continue
             found = self._expression(clause.condition, scope)
             if found is not None:
@@ -1654,7 +1703,7 @@ class Checker:
                 if measure_model is None or not type_model.equal(measure_model, type_model.INT):
                     self._report(
                         "E2011",
-                        f"The measure of 'decreases' must be Int, found {found}",
+                        f"The measure of 'shrinks' must be Int, found {found}",
                         clause.condition.span,
                         hint="The measure is a whole number that gets smaller on every turn and never goes below 0.",
                     )
@@ -1664,8 +1713,8 @@ class Checker:
                 "E2021",
                 "This loop does not say why it ends",
                 Span(keyword.line, keyword.column, keyword.line, keyword.column + len("while")),
-                hint="Add 'decreases <expression>' with an Int that gets smaller on every turn and never goes "
-                     "below 0, for example 'decreases n - i'.",
+                hint="Add 'shrinks <expression>' to the header of the loop, with an Int that gets smaller on "
+                     "every turn and never goes below 0, for example 'shrinks n - i'.",
             )
         for extra in measures[1:]:
             first = measures[0].span
@@ -1674,7 +1723,7 @@ class Checker:
                 "A loop has exactly one measure",
                 extra.span,
                 hint="Combine them into one Int that gets smaller on every turn.",
-                notes=(f"The first 'decreases' is at line {first.line}, column {first.column}.",),
+                notes=(f"The first 'shrinks' is at line {first.line}, column {first.column}.",),
             )
         self._block(statement.body, _Scope(scope))
 
@@ -1697,14 +1746,14 @@ class Checker:
                     hint="Write the list the loop walks over, for example: for x in xs { ... }.",
                 )
         for clause in statement.clauses:
-            if clause.clause == "invariant":
-                self._condition(clause.condition, scope, "'invariant'")
+            if clause.clause == "keeps":
+                self._condition(clause.condition, scope, "'keeps'")
             else:
                 self._report(
                     "E2022",
-                    "'decreases' has no meaning in a 'for' loop",
+                    "'shrinks' has no meaning in a 'for' loop",
                     clause.span,
-                    hint="A 'for' loop ends when the list is exhausted; remove the 'decreases' clause.",
+                    hint="A 'for' loop ends when the list is exhausted; remove the 'shrinks' clause.",
                 )
         body_scope = _Scope(scope)
         body_scope.span = statement.body.span
@@ -1792,7 +1841,7 @@ class Checker:
                 "E2005",
                 "There is no variable named 'result' here",
                 span,
-                hint="'result' only exists inside an 'ensures' clause of a function that returns a value.",
+                hint="'result' only exists inside a 'promises' clause of a function that gives a value.",
             )
             return
         close = difflib.get_close_matches(name, scope.visible(), n=1)
@@ -2088,7 +2137,7 @@ class Checker:
                 f"The condition of '{self._refining}' cannot call the function '{node.callee}'",
                 node.callee_span,
                 hint="A refinement only describes the value itself: it can use operators, literals and the "
-                     "built-in conversions. Write the rule there, or check it with 'requires'.",
+                     "built-in conversions. Write the rule there, or check it with 'needs'.",
             )
             return None
         signature = BUILTINS.get(node.callee) or self._signatures.get(key)
@@ -2375,3 +2424,19 @@ def check(program: ast.Program, *, require_main: bool = True) -> tuple[CheckedPr
     checker = Checker()
     checker.require_main = require_main
     return checker.check(program)
+
+
+def _loops(node) -> list[ast.While | ast.For]:
+    """The loops inside a block, at any depth, in the order they are written."""
+    found: list[ast.While | ast.For] = []
+    if isinstance(node, ast.Block):
+        for statement in node.statements:
+            found.extend(_loops(statement))
+    elif isinstance(node, (ast.While, ast.For)):
+        found.append(node)
+        found.extend(_loops(node.body))
+    elif isinstance(node, ast.If):
+        found.extend(_loops(node.then_block))
+        if node.else_branch is not None:
+            found.extend(_loops(node.else_branch))
+    return found

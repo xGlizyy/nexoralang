@@ -1,27 +1,30 @@
 // Lists: an immutable List[T], its length, one element by index, and new lists built from it.
 //
-// Every element of a list has the same type. List.get is partial: its 'requires' is checked
+// Every element of a list has the same type. List.get is partial: its 'needs' is checked
 // on every call, exactly like the requirement of a function of the program.
 // List.append and List.concat build a new list; they never change the list they receive.
 // A 'for' walks the list and declares each element as an immutable name.
 
-fn total(numbers: List[Int]) -> Int {
-    requires List.length(numbers) > 0, "There is something to add"
+fn total(numbers: List[Int]) gives Int
+    needs List.length(numbers) > 0, "There is something to add"
+{
     var sum = 0
     var i = 0
-    while i < List.length(numbers) {
-        invariant i <= List.length(numbers)
-        decreases List.length(numbers) - i, "Each turn reads one more element"
+    while i < List.length(numbers)
+        keeps i <= List.length(numbers)
+        shrinks List.length(numbers) - i, "Each turn reads one more element"
+    {
         sum = sum + List.get(numbers, i)
         i = i + 1
     }
     return sum
 }
 
-fn count_positive(numbers: List[Int]) -> Int {
+fn count_positive(numbers: List[Int]) gives Int {
     var count = 0
-    for number in numbers {
-        invariant count >= 0, "A count never goes down"
+    for number in numbers
+        keeps count >= 0, "A count never goes down"
+    {
         if number > 0 {
             count = count + 1
         }
@@ -29,7 +32,7 @@ fn count_positive(numbers: List[Int]) -> Int {
     return count
 }
 
-fn main() -> Void {
+fn main() {
     let numbers = [1, 2, 3]
     print(List.length(numbers))
     print(List.get(numbers, 0))

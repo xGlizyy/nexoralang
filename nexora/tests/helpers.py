@@ -23,7 +23,7 @@ def parse_text(text: str) -> tuple[ast.Program, list[Diagnostic]]:
 def in_main(body: str) -> str:
     """Wraps statements in a main function, one per line."""
     lines = "\n".join(f"    {line}" for line in body.strip().splitlines())
-    return f"fn main() -> Void {{\n{lines}\n}}\n"
+    return f"fn main() {{\n{lines}\n}}\n"
 
 
 def with_main(functions: str, body: str) -> str:

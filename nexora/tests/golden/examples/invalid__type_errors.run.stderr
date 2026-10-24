@@ -53,7 +53,7 @@ type error[E2011]: Type mismatch
    |
 20 |     print(half(4))
    |                ^ Expected Float, found Int
-   = note: This is the argument for 'value' in: fn half(value: Float) -> Float
+   = note: This is the argument for 'value' in: fn half(value: Float) gives Float
    = hint: Convert the Int explicitly with to_float(...).
 
 type error[E2009]: Wrong number of arguments
@@ -61,7 +61,7 @@ type error[E2009]: Wrong number of arguments
    |
 21 |     print(half(1.0, 2.0))
    |           ^^^^^^^^^^^^^^ 'half' takes 1 argument, but 2 were given
-   = note: Its signature is: fn half(value: Float) -> Float
+   = note: Its signature is: fn half(value: Float) gives Float
 
 type error[E2011]: Type mismatch
   --> examples/invalid/type_errors.nex:22:8

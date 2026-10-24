@@ -1,6 +1,6 @@
 # `nex inspect` schema
 
-- **Name and version of the schema:** `nexora.inspect/2`
+- **Name and version of the schema:** `nexora.inspect/3`
 - **Available since:** `nexora` 0.3.0 (version 1 existed in 0.2.0; the changes are in the
   [history](#history))
 
@@ -19,8 +19,8 @@ AI assistants). NEXORA includes none of those tools: it only provides the data.
 
 ```json
 {
-  "schema": "nexora.inspect/2",
-  "nexora_version": "0.7.0",
+  "schema": "nexora.inspect/3",
+  "nexora_version": "0.12.0",
   "file": "hello.nex",
   "ok": true,
   "diagnostics": [],
@@ -97,12 +97,12 @@ The fields of each node always appear, in the order given. An optional field wit
 | `RecordDecl` | `name`: text · `name_span`: position · `fields`: list of `FieldDecl` · `public`: `true` or `false` | A record: `type Point = { x: Int, y: Int }`. `public` is `true` when the declaration carries `pub` |
 | `FieldDecl` | `name`: text · `name_span`: position · `type`: `TypeRef` | A field of a record |
 | `UsesDecl` | `capability`: `"read"` or `"write"` · `path`: text · `path_span`: position | The capability that the program declares it needs ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
-| `Function` | `name`: text · `name_span`: position · `params`: list of `Param` · `return_type`: `TypeRef` · `contracts`: list of `Contract` · `body`: `Block` · `examples`: list of `Example` · `public`: `true` or `false` | A function. `examples` is the last field before `public`, which is `true` when the declaration carries `pub` |
-| `Example` | `condition`: expression · `message`: text or `null` | An `example` clause. `nex inspect` never evaluates it |
+| `Function` | `name`: text · `name_span`: position · `params`: list of `Param` · `return_type`: `TypeRef` or `null` · `header`: list of `Contract` and `Example`, in the order of the code · `body`: `Block` · `public`: `true` or `false` | A function. `return_type` is the type after `gives`, and `null` when the function has no `gives`: it gives nothing. `header` holds the clauses between the signature and the body. `public` is `true` when the declaration carries `pub` |
+| `Example` | `condition`: expression · `message`: text or `null` | An `example` clause of the header. `nex inspect` never evaluates it |
 | `Param` | `name`: text · `name_span`: position · `type`: `TypeRef` | A parameter |
 | `TypeRef` | `name`: text · `arguments`: list of `TypeRef` · `qualifier`: text or `null` | A type written in the code: `Int`, `Float`, `Bool`, `Text`, `Void`, a refined type or `List[T]`. `arguments` is empty for a name without square brackets; `List[Int]` has one argument `Int`. `qualifier` is the module of a type from another file, `null` otherwise: `models.Point` has `qualifier` `models` and `name` `Point` |
-| `Contract` | `clause`: `"requires"` or `"ensures"` · `condition`: expression · `message`: text or `null` | A contract clause. `message` is the explanation written after the comma |
-| `LoopClause` | `clause`: `"invariant"` or `"decreases"` · `condition`: expression (`Bool` in an invariant, `Int` in a measure) · `message`: text or `null` | A clause at the beginning of the body of a `While` or a `For` |
+| `Contract` | `clause`: `"needs"`, `"promises"` or `"trust"` · `name`: text or `null` · `condition`: expression · `message`: text or `null` | A contract clause of the header. `name` is the name written before `:`; `message` is the explanation written after the comma. A `trust` is never evaluated |
+| `LoopClause` | `clause`: `"keeps"` or `"shrinks"` · `name`: text or `null` · `condition`: expression (`Bool` in `keeps`, `Int` in a measure) · `message`: text or `null` | A clause of the header of a `While` or a `For`, between its head and its body |
 
 ### Statements
 
@@ -149,8 +149,9 @@ nothing has type `"Void"`.
 For this program:
 
 ```nex
-fn double(n: Int) -> Int {
-    requires n >= 0
+fn double(n: Int) gives Int
+    needs n >= 0
+{
     return n * 2
 }
 ```
@@ -160,7 +161,7 @@ the node of the function is (the inner positions are omitted for brevity):
 ```json
 {
   "kind": "Function",
-  "span": {"line": 1, "column": 1, "end_line": 4, "end_column": 2},
+  "span": {"line": 1, "column": 1, "end_line": 5, "end_column": 2},
   "name": "double",
   "name_span": {"line": 1, "column": 4, "end_line": 1, "end_column": 10},
   "params": [
@@ -168,8 +169,8 @@ the node of the function is (the inner positions are omitted for brevity):
      "type": {"kind": "TypeRef", "span": "...", "name": "Int", "arguments": []}}
   ],
   "return_type": {"kind": "TypeRef", "span": "...", "name": "Int", "arguments": []},
-  "contracts": [
-    {"kind": "Contract", "span": "...", "clause": "requires",
+  "header": [
+    {"kind": "Contract", "span": "...", "clause": "needs", "name": null,
      "condition": {"kind": "Binary", "span": "...", "operator": ">=", "operator_span": "...",
                    "left": {"kind": "Name", "span": "...", "name": "n", "type": "Int"},
                    "right": {"kind": "IntLiteral", "span": "...", "value": 0, "type": "Int"},
@@ -185,7 +186,8 @@ the node of the function is (the inner positions are omitted for brevity):
                  "right": {"kind": "IntLiteral", "span": "...", "value": 2, "type": "Int"},
                  "type": "Int"}}
     ]
-  }
+  },
+  "public": false
 }
 ```
 
@@ -202,12 +204,13 @@ The schema carries a name and a version number in the `schema` field.
   file always produces the same document.
 
 An automated test (`tests/test_inspect.py`) pins the exact list of nodes and fields of
-version 2, and another one checks that this document mentions all of them.
+version 3, and another one checks that this document mentions all of them.
 
 ### History
 
 | Version | Published in | Changes |
 |---------|--------------|---------|
+| `nexora.inspect/3` | `nexora` 0.12.0 (not published yet) | **Incompatible change** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), 8.8): `Function.header`, one ordered list of `Contract` and `Example`, replaces `contracts` and `examples`; `Function.return_type` is `null` when the function has no `gives`; `Contract.clause` takes `needs`, `promises` and `trust`, `LoopClause.clause` takes `keeps` and `shrinks`, and both get the field `name` |
 | `nexora.inspect/2` | `nexora` 0.11.0 | Added, without changing the version: the `ImportDecl` node (`path`, `path_span`) for the declaration `import "app/models.nex"`, the `imports` field at the end of `Program`, the `public` field (`true` or `false`) at the end of `TypeDecl`, `RecordDecl` and `Function`, and the `qualifier` field (text or `null`) at the end of `TypeRef` and of `RecordConstruction` for the types and records of another module, `models.Point` ([decision 0018](decisions/0018-modulos-e-importaciones.md)). A program without imports produces the same document as in 0.10.0, plus `"imports": []`, `"public": false` in every declaration and `"qualifier": null` in every type |
 | `nexora.inspect/2` | `nexora` 0.10.0 | Added, without changing the version: the `UsesDecl` node (`capability`, `path`, `path_span`) for the declaration `uses read "path"`, and the `uses` field at the end of `Program` ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
 | `nexora.inspect/2` | `nexora` 0.8.0 | Added, without changing the version: the nodes `RecordDecl` (`name`, `name_span`, `fields`), `FieldDecl` (`name`, `name_span`, `type`), `RecordConstruction` (`name`, `name_span`, `fields`), `FieldInitializer` (`name`, `name_span`, `value`) and `FieldAccess` (`target`, `name`, `name_span`); the statement `FieldAssign` (`target`, `name`, `name_span`, `value`); the `records` field at the end of `Program`; and `type` can be the name of a record ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) |

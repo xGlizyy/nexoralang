@@ -1,5 +1,5 @@
 // Values, variables, arithmetic and scopes.
-fn main() -> Void {
+fn main() {
     let name = "NEXORA"
     let age = 1
     let active = true

@@ -53,7 +53,7 @@ def test_a_nested_list_type_in_a_var_annotation_is_built() -> None:
 
 
 def test_list_types_in_parameters_and_return_type() -> None:
-    program = parsed("fn copy(xs: List[Int]) -> List[List[Int]] {\n    return xs\n}\n")
+    program = parsed("fn copy(xs: List[Int]) gives List[List[Int]] {\n    return xs\n}\n")
 
     function = program.functions[0]
     (parameter,) = function.params
@@ -64,7 +64,7 @@ def test_list_types_in_parameters_and_return_type() -> None:
 
 
 def test_a_plain_type_has_no_arguments() -> None:
-    program = parsed('fn f(x: Int) -> Text {\n    return ""\n}\n')
+    program = parsed('fn f(x: Int) gives Text {\n    return ""\n}\n')
 
     assert program.functions[0].params[0].type.arguments == ()
     assert program.functions[0].return_type.arguments == ()
@@ -84,7 +84,7 @@ def test_inspect_exposes_the_type_arguments() -> None:
 
 
 def test_inspect_keeps_an_empty_arguments_list_for_a_plain_type() -> None:
-    document = tooling.inspect_source("fn f(x: Int) -> Void {\n}\n")
+    document = tooling.inspect_source("fn f(x: Int) {\n}\n")
     reference = document["program"]["functions"][0]["params"][0]["type"]
 
     assert list(reference) == ["kind", "span", "name", "arguments", "qualifier"]
@@ -104,16 +104,16 @@ def test_the_inspect_schema_defines_the_type_arguments() -> None:
 @pytest.mark.parametrize(
     ("text", "label"),
     [
-        ("fn f(xs: List[]) -> Void {\n}\n", "needs a type argument"),
-        ("fn f(xs: List[Int, Text]) -> Void {\n}\n", "exactly one type argument"),
-        ("fn f(xs: List[Void]) -> Void {\n}\n", "Void cannot be an argument"),
-        ("fn f(xs: Result[Int]) -> Void {\n}\n", "exactly two type arguments"),
-        ("fn f(xs: Foo[Int]) -> Void {\n}\n", "cannot take type arguments"),
-        ("fn f(xs: Int[Text]) -> Void {\n}\n", "cannot take type arguments"),
-        ("fn f(xs: List[Int) -> Void {\n}\n", "']' to close the type arguments"),
-        ("fn f(xs: List[, Int]) -> Void {\n}\n", "Expected a type argument"),
-        ("fn f(xs: List[Int,]) -> Void {\n}\n", "Expected a type argument"),
-        ("fn f(xs: List[Int][Text]) -> Void {\n}\n", "Expected ')'"),
+        ("fn f(xs: List[]) {\n}\n", "needs a type argument"),
+        ("fn f(xs: List[Int, Text]) {\n}\n", "exactly one type argument"),
+        ("fn f(xs: List[Void]) {\n}\n", "Void cannot be an argument"),
+        ("fn f(xs: Result[Int]) {\n}\n", "exactly two type arguments"),
+        ("fn f(xs: Foo[Int]) {\n}\n", "cannot take type arguments"),
+        ("fn f(xs: Int[Text]) {\n}\n", "cannot take type arguments"),
+        ("fn f(xs: List[Int) {\n}\n", "']' to close the type arguments"),
+        ("fn f(xs: List[, Int]) {\n}\n", "Expected a type argument"),
+        ("fn f(xs: List[Int,]) {\n}\n", "Expected a type argument"),
+        ("fn f(xs: List[Int][Text]) {\n}\n", "Expected ')'"),
     ],
 )
 def test_malformed_list_types_are_syntax_errors(text: str, label: str) -> None:
@@ -128,8 +128,8 @@ def test_malformed_list_types_are_syntax_errors(text: str, label: str) -> None:
     [
         in_main("let xs: List = 1"),
         in_main("var xs: List = 1"),
-        "fn f(xs: List) -> Void {\n}\n\nfn main() -> Void {\n}\n",
-        "fn f() -> List {\n    return 1\n}\n\nfn main() -> Void {\n}\n",
+        "fn f(xs: List) {\n}\n\nfn main() {\n}\n",
+        "fn f() gives List {\n    return 1\n}\n\nfn main() {\n}\n",
     ],
 )
 def test_the_bare_list_constructor_is_rejected_in_every_type_context(text: str) -> None:
@@ -156,9 +156,14 @@ def test_an_unknown_element_name_parses_but_the_checker_rejects_it() -> None:
 
 def test_a_refined_type_named_list_does_not_hide_the_list_constructor() -> None:
     text = (
-        "type List = Int where value > 0\n\n"
-        "fn f(xs: List[Int]) -> Void {\n}\n\n"
-        "fn main() -> Void {\n    let n: List = 1\n}\n"
+        "type List = Int where value > 0\n"
+        "\n"
+        "fn f(xs: List[Int]) {\n"
+        "}\n"
+        "\n"
+        "fn main() {\n"
+        "    let n: List = 1\n"
+        "}\n"
     )
 
     diagnostics = diagnostics_of(text)
@@ -168,8 +173,10 @@ def test_a_refined_type_named_list_does_not_hide_the_list_constructor() -> None:
 
 def test_a_refined_type_cannot_refine_a_list() -> None:
     text = (
-        "type NonEmpty = List[Int] where value == value\n\n"
-        "fn main() -> Void {\n}\n"
+        "type NonEmpty = List[Int] where value == value\n"
+        "\n"
+        "fn main() {\n"
+        "}\n"
     )
 
     diagnostics = diagnostics_of(text)
@@ -180,9 +187,9 @@ def test_a_refined_type_cannot_refine_a_list() -> None:
 
 def test_type_nesting_uses_the_parser_limit() -> None:
     name = "List[" * 64 + "Int" + "]" * 64
-    _, diagnostics = parse_text(f"fn f(x: {name}) -> Void {{\n}}\n")
+    _, diagnostics = parse_text(f"fn f(x: {name}) {{\n}}\n")
     assert diagnostics == []
 
     too_deep = "List[" * 65 + "Int" + "]" * 65
-    _, diagnostics = parse_text(f"fn f(x: {too_deep}) -> Void {{\n}}\n")
+    _, diagnostics = parse_text(f"fn f(x: {too_deep}) {{\n}}\n")
     assert [diagnostic.code for diagnostic in diagnostics] == ["E1105"]

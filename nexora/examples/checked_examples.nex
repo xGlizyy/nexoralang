@@ -7,20 +7,22 @@
 type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
 type Cents = Int where value >= 0, "An amount of money cannot be negative"
 
-fn apply_discount(price: Cents, percent: Percent) -> Cents {
-    ensures result <= price, "A discount never raises the price"
+fn apply_discount(price: Cents, percent: Percent) gives Cents
+    promises result <= price, "A discount never raises the price"
     example apply_discount(10000, 20) == 8000, "Twenty percent off"
     example apply_discount(999, 0) == 999, "No discount keeps the price"
+{
     return Cents(price * (100 - percent) / 100)
 }
 
-fn total(price: Cents, units: Int) -> Cents {
-    requires units > 0, "An order has at least one unit"
+fn total(price: Cents, units: Int) gives Cents
+    needs units > 0, "An order has at least one unit"
     example total(250, 4) == 1000
     example total(apply_discount(1000, 50), 3) == 1500
+{
     return Cents(price * units)
 }
 
-fn main() -> Void {
+fn main() {
     print(total(apply_discount(1200, 25), 2))
 }

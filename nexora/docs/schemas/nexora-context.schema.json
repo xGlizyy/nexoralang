@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://nexora.invalid/schemas/nexora-context.schema.json",
-  "title": "nexora.context/1: a technical summary of a program",
+  "title": "nexora.context/2: a technical summary of a program",
   "type": "object",
   "required": [
     "schema",
@@ -23,7 +23,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "nexora.context/1"
+      "const": "nexora.context/2"
     },
     "nexora_version": {
       "type": "string",
@@ -337,14 +337,17 @@
               "clause",
               "condition",
               "message",
-              "line"
+              "line",
+              "name"
             ],
             "properties": {
               "clause": {
                 "enum": [
-                  "requires",
-                  "ensures"
-                ]
+                  "needs",
+                  "promises",
+                  "trust"
+                ],
+                "description": "A 'trust' is neither proved nor checked: it is never evaluated (decision 0019, 5.6)."
               },
               "condition": {
                 "type": "string",
@@ -360,6 +363,13 @@
               "line": {
                 "type": "integer",
                 "minimum": 1
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The name of the clause, if it has one."
               }
             }
           }
@@ -490,7 +500,7 @@
                     "type": "null"
                   }
                 ],
-                "description": "The 'decreases' clause. Null for every 'for' loop and in a program with errors (E2021)."
+                "description": "The 'shrinks' clause. Null for every 'for' loop and in a program with errors (E2021)."
               }
             }
           }
@@ -548,7 +558,8 @@
       "required": [
         "condition",
         "message",
-        "line"
+        "line",
+        "name"
       ],
       "properties": {
         "condition": {
@@ -565,6 +576,13 @@
         "line": {
           "type": "integer",
           "minimum": 1
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The name of the clause, if it has one."
         }
       }
     },

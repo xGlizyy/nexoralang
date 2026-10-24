@@ -79,7 +79,7 @@ comment. For example:
 ````markdown
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     print("Hello")
 }
 ```

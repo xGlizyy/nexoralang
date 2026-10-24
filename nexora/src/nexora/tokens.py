@@ -20,8 +20,10 @@ class TokenType(Enum):
     AND = "and"
     OR = "or"
     NOT = "not"
-    REQUIRES = "requires"
-    ENSURES = "ensures"
+    NEEDS = "needs"
+    GIVES = "gives"
+    PROMISES = "promises"
+    TRUST = "trust"
     TYPE = "type"
     WHERE = "where"
     EXAMPLE = "example"
@@ -29,13 +31,16 @@ class TokenType(Enum):
     WHILE = "while"
     FOR = "for"
     IN = "in"
-    INVARIANT = "invariant"
-    DECREASES = "decreases"
+    KEEPS = "keeps"
+    SHRINKS = "shrinks"
     USES = "uses"
     IMPORT = "import"
     PUB = "pub"
     # A word reserved for a future version: recognised so it can be rejected clearly.
     RESERVED = "reserved word"
+    # A clause word of 0.11 (`requires`, `ensures`, `invariant`, `decreases`), reserved for one
+    # minor version so that a program written before 0.12 gets E1107 (decision 0019, section 9).
+    OLD_CLAUSE = "word of 0.11"
 
     IDENT = "name"
     INT = "integer"
@@ -79,8 +84,10 @@ KEYWORDS: dict[str, TokenType] = {
     "and": TokenType.AND,
     "or": TokenType.OR,
     "not": TokenType.NOT,
-    "requires": TokenType.REQUIRES,
-    "ensures": TokenType.ENSURES,
+    "needs": TokenType.NEEDS,
+    "gives": TokenType.GIVES,
+    "promises": TokenType.PROMISES,
+    "trust": TokenType.TRUST,
     "type": TokenType.TYPE,
     "where": TokenType.WHERE,
     "example": TokenType.EXAMPLE,
@@ -88,8 +95,8 @@ KEYWORDS: dict[str, TokenType] = {
     "while": TokenType.WHILE,
     "for": TokenType.FOR,
     "in": TokenType.IN,
-    "invariant": TokenType.INVARIANT,
-    "decreases": TokenType.DECREASES,
+    "keeps": TokenType.KEEPS,
+    "shrinks": TokenType.SHRINKS,
     "uses": TokenType.USES,
     "import": TokenType.IMPORT,
     "pub": TokenType.PUB,
@@ -97,15 +104,22 @@ KEYWORDS: dict[str, TokenType] = {
 
 # Keywords that can only start a statement or a declaration, never appear inside parentheses.
 STATEMENT_KEYWORDS: frozenset[str] = frozenset({
-    "fn", "let", "var", "return", "if", "else", "while", "for", "requires", "ensures", "example",
-    "invariant", "decreases", "type", "where", "uses",
+    "fn", "let", "var", "return", "if", "else", "while", "for", "needs", "gives", "promises", "trust",
+    "example", "keeps", "shrinks", "type", "where", "uses", "requires", "ensures", "invariant", "decreases",
 })
+
+# The clause words of 0.11 and the words that replace them (decision 0019). They are not names
+# in 0.12.0; a later minor version frees them.
+OLD_CLAUSE_WORDS: dict[str, str] = {
+    "requires": "needs", "ensures": "promises", "invariant": "keeps", "decreases": "shrinks",
+}
 
 # Words the language design sets aside for features that are not implemented yet.
 # Reserving them now means adding those features later cannot break existing programs.
+# `ai` and `tool` were reserved until 0.11 and are ordinary names from 0.12 (decision 0019, 9).
 RESERVED_WORDS: frozenset[str] = frozenset({
-    "ai", "assert", "break", "const", "continue", "enum",
-    "match", "test", "tool", "try",
+    "assert", "break", "const", "continue", "enum",
+    "match", "test", "try",
 })
 
 

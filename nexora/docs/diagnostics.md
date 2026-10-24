@@ -7,7 +7,7 @@ a code that does not change and a category that says what kind of problem it is.
 
 <!-- nex:check-fails -->
 ```nex
-fn main() -> Void {
+fn main() {
     let total = 10
     let total = 20
 }
@@ -99,7 +99,9 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E1102` | Unclosed block | The end of the file was reached with an unclosed `{` | Add the `}`. The note says where the block was opened |
 | `E1103` | Reserved word | A word reserved for the future is used (`break`, `match`…) | That construct does not exist yet; choose another name or rewrite the code. For `break` and `continue` the suggestion explains how to express it with the condition of the loop, an `if` or `return` |
 | `E1105` | Expression too deeply nested | More than 64 levels of nesting, or an expression of more than 256 levels | Split the code into variables or functions |
-| `E1106` | Misplaced contract clause | `requires`, `ensures` or `example` outside the beginning of the body of a function, or `invariant` or `decreases` outside the beginning of the body of a loop | Move the clause to the first lines of the function or of the loop |
+| `E1106` | Misplaced contract clause | `needs`, `promises`, `trust` or `example` inside the body of a function, or `keeps` or `shrinks` inside the body of a loop | Move the clause to the header: between the signature (or the head of the loop) and its `{` |
+| `E1107` | Syntax before 0.12 | `requires`, `ensures`, `invariant` or `decreases`, the clause words of 0.11 ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)) | Write `needs`, `promises`, `keeps` or `shrinks` in the header; `nex migrate` rewrites a program of 0.11 |
+| `E1108` | Arrow before the return type | `-> Type` after the parameters of a function ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)) | Write `gives Type`; a function that gives nothing has no `gives` |
 
 ### Semantic
 
@@ -120,13 +122,14 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E2019` | Too many refinement checks | Checking the constants against their refined types exceeds the work limit of the analysis (100,000 condition nodes). It only happens with many constants of long chains of refined types | Use fewer constants of those types or shorter conditions |
 | `E2020` | Example without its function | An example contains no call to its own function: its expression does not name it anywhere. A call that only happens inside another function does not count | Write the call with its inputs: `example f(2) == 4` |
 | `E2021` | Missing loop measure | A `while` does not declare its measure (`decreases`), or declares more than one. Without a measure, nothing says why the loop ends | Add `decreases` with an `Int` that goes down on every iteration and does not go below 0, for example `decreases n - i` |
-| `E2022` | Unsupported loop clause | A `for` declares `decreases`, but it goes through a finite list and has no measure | Remove the `decreases`; if you need invariants, write them with `invariant` |
+| `E2022` | Unsupported loop clause | A `for` declares `shrinks`, but it goes through a finite list and has no measure | Remove the `shrinks`; if you need invariants, write them with `keeps` |
 | `E2026` | Missing capability declaration | A file is read or written without declaring it with `uses` ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Declare it at the beginning of the file: `uses read "data/inputs.txt"` |
 | `E2025` | Cannot reassign a field | A field of a record, which is immutable, is assigned to ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) | Build another record with the value you want |
 | `E2027` | Unknown module | The name of a module that the program does not import is used ([decision 0018](decisions/0018-modulos-e-importaciones.md)) | Declare it at the beginning of the file: `import "app/models.nex"` |
 | `E2028` | Private name | A name of another module is used that this module does not declare with `pub` ([decision 0018](decisions/0018-modulos-e-importaciones.md)) | Write `pub` in front of the function or the type in the file that declares it |
 | `E2029` | Circular import | Modules import each other, so that none can be analyzed before the one it needs ([decision 0018](decisions/0018-modulos-e-importaciones.md)) | Break the cycle: move what both share to a third module that both import |
 | `E2030` | Module name clash | Two different files are imported as the same module, because they have the same name ([decision 0018](decisions/0018-modulos-e-importaciones.md)) | Rename one of the two files: the module takes its name from its file |
+| `E2031` | Duplicate clause name | A clause name used twice in a function and its loops, or equal to a parameter or to `result` ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)) | Give each clause its own name |
 
 ### Type
 
@@ -193,15 +196,15 @@ oldest:
 
 <!-- nex:fails exit=3 -->
 ```nex
-fn share(total: Int, people: Int) -> Int {
+fn share(total: Int, people: Int) gives Int {
     return total / people
 }
 
-fn report(people: Int) -> Void {
+fn report(people: Int) {
     print(share(100, people))
 }
 
-fn main() -> Void {
+fn main() {
     report(4)
     report(0)
 }
@@ -233,7 +236,7 @@ interpret the text above. For the first example of this page:
 
 <!-- nex:check-json -->
 ```nex
-fn main() -> Void {
+fn main() {
     let total = 10
     let total = 20
 }

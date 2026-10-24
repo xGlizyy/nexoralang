@@ -93,14 +93,14 @@ def test_an_empty_list_takes_its_element_type_from_the_annotation() -> None:
 
 
 def test_an_empty_list_takes_its_element_type_from_a_function_parameter() -> None:
-    text = with_main("fn take(xs: List[Int]) -> Void {\n    print(xs)\n}", "take([])")
+    text = with_main("fn take(xs: List[Int]) {\n    print(xs)\n}", "take([])")
     analysis = analyze(Source("test.nex", text))
 
     assert analysis.diagnostics == ()
 
 
 def test_an_empty_list_takes_its_element_type_from_the_return_type() -> None:
-    text = with_main("fn empty() -> List[Int] {\n    return []\n}", "print(empty())")
+    text = with_main("fn empty() gives List[Int] {\n    return []\n}", "print(empty())")
 
     assert run_text(text) == "[]\n"
 
@@ -177,7 +177,7 @@ def test_lists_are_invariant_across_element_types() -> None:
 
 def test_a_list_cannot_be_used_where_a_different_list_type_is_expected() -> None:
     text = with_main(
-        "fn take(xs: List[Int]) -> Void {\n    print(xs)\n}",
+        "fn take(xs: List[Int]) {\n    print(xs)\n}",
         "let texts: List[Text] = [\"a\"]\ntake(texts)",
     )
 
@@ -245,7 +245,7 @@ def test_values_format_lists_recursively() -> None:
 
 
 def test_main_cannot_return_a_list() -> None:
-    diagnostics = diagnostics_of("fn main() -> List[Int] {\n    return []\n}\n")
+    diagnostics = diagnostics_of("fn main() gives List[Int] {\n    return []\n}\n")
 
     assert [diagnostic.code for diagnostic in diagnostics] == ["E2004"]
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://nexora.invalid/schemas/nexora-inspect.schema.json",
-  "title": "nexora.inspect/2: the syntax tree of a program",
+  "title": "nexora.inspect/3: the syntax tree of a program",
   "type": "object",
   "required": [
     "schema",
@@ -14,7 +14,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "nexora.inspect/2"
+      "const": "nexora.inspect/3"
     },
     "nexora_version": {
       "type": "string",
@@ -1687,6 +1687,7 @@
         "kind",
         "span",
         "clause",
+        "name",
         "condition",
         "message"
       ],
@@ -1699,6 +1700,16 @@
         },
         "clause": {
           "type": "string"
+        },
+        "name": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "condition": {
           "oneOf": [
@@ -1927,6 +1938,7 @@
         "kind",
         "span",
         "clause",
+        "name",
         "condition",
         "message"
       ],
@@ -1939,6 +1951,16 @@
         },
         "clause": {
           "type": "string"
+        },
+        "name": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "condition": {
           "oneOf": [
@@ -2068,9 +2090,8 @@
         "name_span",
         "params",
         "return_type",
-        "contracts",
+        "header",
         "body",
-        "examples",
         "public"
       ],
       "properties": {
@@ -2093,22 +2114,30 @@
           }
         },
         "return_type": {
-          "$ref": "#/$defs/TypeRef"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/TypeRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
-        "contracts": {
+        "header": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/Contract"
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Contract"
+              },
+              {
+                "$ref": "#/$defs/Example"
+              }
+            ]
           }
         },
         "body": {
           "$ref": "#/$defs/Block"
-        },
-        "examples": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/Example"
-          }
         },
         "public": {
           "type": "boolean"

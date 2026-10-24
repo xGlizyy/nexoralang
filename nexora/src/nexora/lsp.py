@@ -435,13 +435,16 @@ def _type_text(reference: ast.TypeRef | None) -> str:
 
 
 def _return_type_of(function: ast.Function) -> str:
-    return _type_text(function.return_type)
+    """The type a function gives: Void when it has no 'gives' (decision 0019)."""
+    return "Void" if function.return_type is None else _type_text(function.return_type)
 
 
 def _signature_of(function: ast.Function, facts: CheckedProgram) -> str:
     """The signature of a function, as it is written in the language."""
     parameters = ", ".join(f"{parameter.name}: {_type_text(parameter.type)}" for parameter in function.params)
-    return f"fn {function.name}({parameters}) -> {_return_type_of(function)}"
+    if function.return_type is None:
+        return f"fn {function.name}({parameters})"
+    return f"fn {function.name}({parameters}) gives {_return_type_of(function)}"
 
 
 def _call_name_at(document: Document, line: int, column: int) -> str | None:

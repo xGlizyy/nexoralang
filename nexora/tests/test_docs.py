@@ -26,6 +26,11 @@ A `nex` block that contains `fn main` and has no marker is an error: a complete 
 the documentation must be checked. Programs are saved as `program.nex`, which is the file
 name the documented diagnostics show.
 
+The decisions in docs/decisions/ are records: their programs are written in the syntax of the
+version that decided them. Up to 0.11 that syntax is no longer accepted (decision 0019), so a
+checked block of a decision is checked with the frozen front end of 0.11, `nexora.legacy011`: it
+must still pass, or still fail, the analysis of 0.11, and its documented output is not compared.
+
 After an intended change in the output, rewrite the expected blocks and review the result:
 
     NEXORA_UPDATE_DOCS=1 python -m pytest tests/test_docs.py
@@ -40,8 +45,11 @@ import pytest
 
 from nexora import __version__, cli
 from nexora.diagnostics import CATEGORIES, CODES
+from nexora.legacy011 import diagnostics as diagnostics011
+from nexora.legacy011 import pipeline as pipeline011
 
 ROOT = Path(__file__).resolve().parents[1]
+DECISIONS = ROOT / "docs" / "decisions"
 DOCUMENTS = sorted(
     path for path in ROOT.rglob("*.md")
     if not any(part.startswith(".") or part.endswith(".egg-info") for part in path.relative_to(ROOT).parts)
@@ -121,7 +129,7 @@ def execute(command: list[str], source: str, tmp_path, monkeypatch, capsys) -> t
 
 
 def in_main(body: str) -> str:
-    return "fn main() -> Void {\n" + "\n".join(f"    {line}" for line in body.split("\n")) + "\n}"
+    return "fn main() {\n" + "\n".join(f"    {line}" for line in body.split("\n")) + "\n}"
 
 
 def assert_expected(block: Block, actual: str) -> None:
@@ -162,6 +170,12 @@ def test_documented_example(block, tmp_path, monkeypatch, capsys):
     run = lambda *command: execute(list(command), source, tmp_path, monkeypatch, capsys)  # noqa: E731
     source = block.text
 
+    if DECISIONS in block.document.parents:
+        # A record in the syntax of 0.11: checked with the frozen front end of 0.11.
+        assert block.marker in ("run", "fails", "valid", "check-fails"), f"{block.label}: nex:{block.marker}"
+        analysis = pipeline011.analyze(diagnostics011.Source("program.nex", source + "\n"))
+        assert analysis.ok is (block.marker != "check-fails"), f"{block.label}: {analysis.diagnostics}"
+        return
     if block.marker == "run":
         code, out, err = run("run")
         assert (code, err) == (0, ""), f"{block.label}: {err}"

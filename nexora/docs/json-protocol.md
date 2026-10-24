@@ -106,11 +106,11 @@ missing, is missing. The details are in [the `nex inspect` schema](inspect-schem
 
 <!-- nex:check-json -->
 ```nex
-fn double(n: Int) -> Int {
+fn double(n: Int) gives Int {
     return n * 2
 }
 
-fn main() -> Void {
+fn main() {
     print(double("21"))
 }
 ```
@@ -132,7 +132,7 @@ fn main() -> Void {
       "label": "Expected Int, found Text",
       "hint": null,
       "notes": [
-        "This is the argument for 'n' in: fn double(n: Int) -> Int"
+        "This is the argument for 'n' in: fn double(n: Int) gives Int"
       ],
       "file": "program.nex",
       "line": 6,

@@ -19,7 +19,7 @@ from helpers import run_failure_with_host, run_with_host
 READ_PROGRAM = """
 uses read "datos/entradas.txt"
 
-fn main() -> Void {
+fn main() {
     print(read_file("datos/entradas.txt"))
 }
 """
@@ -27,7 +27,7 @@ fn main() -> Void {
 WRITE_PROGRAM = """
 uses write "datos/salida.txt"
 
-fn main() -> Void {
+fn main() {
     write_file("datos/salida.txt", "escrito")
     print("hecho")
 }
@@ -76,7 +76,7 @@ def test_declaring_is_not_granting(scope):
 
 def test_granting_is_not_declaring(scope):
     program = """
-fn main() -> Void {
+fn main() {
     print(read_file("datos/entradas.txt"))
 }
 """
@@ -107,7 +107,7 @@ def test_a_file_can_be_written_without_being_read(scope):
     program = """
 uses write "datos/salida.txt"
 
-fn main() -> Void {
+fn main() {
     write_file("datos/salida.txt", "escrito")
     print("hecho")
 }
@@ -121,7 +121,7 @@ def test_a_path_outside_the_granted_scope_is_denied(scope):
     program = """
 uses read "secreto.txt"
 
-fn main() -> Void {
+fn main() {
     print(read_file("secreto.txt"))
 }
 """
@@ -136,7 +136,7 @@ def test_a_path_that_starts_the_same_is_not_inside(scope):
     program = """
 uses read "datos2/entradas.txt"
 
-fn main() -> Void {
+fn main() {
     print(read_file("datos2/entradas.txt"))
 }
 """
@@ -148,7 +148,7 @@ def test_a_dot_dot_that_leaves_the_scope_is_denied(scope):
     program = """
 uses read "datos/../secreto.txt"
 
-fn main() -> Void {
+fn main() {
     print(read_file("datos/../secreto.txt"))
 }
 """
@@ -160,7 +160,7 @@ def test_a_dot_dot_inside_the_scope_is_allowed(scope):
     program = """
 uses read "datos/entradas.txt"
 
-fn main() -> Void {
+fn main() {
     print(read_file("datos/./entradas.txt"))
 }
 """
@@ -174,7 +174,7 @@ def test_an_absolute_path_is_allowed_when_the_scope_resolves_to_it(scope):
     program = f"""
 uses read "{path.as_posix()}"
 
-fn main() -> Void {{
+fn main() {{
     print(read_file("{path.as_posix()}"))
 }}
 """
@@ -187,7 +187,7 @@ def test_an_absolute_path_outside_the_scope_is_denied(scope):
     program = f"""
 uses read "{outside.as_posix()}"
 
-fn main() -> Void {{
+fn main() {{
     print(read_file("{outside.as_posix()}"))
 }}
 """
@@ -200,7 +200,7 @@ def test_an_absolute_path_is_allowed_when_it_is_granted(scope):
     program = f"""
 uses read "{path.as_posix()}"
 
-fn main() -> Void {{
+fn main() {{
     print(read_file("{path.as_posix()}"))
 }}
 """
@@ -216,7 +216,7 @@ def test_a_symbolic_link_that_leaves_the_scope_is_denied(scope):
     program = """
 uses read "datos/enlace.txt"
 
-fn main() -> Void {
+fn main() {
     print(read_file("datos/enlace.txt"))
 }
 """
@@ -233,7 +233,7 @@ def test_a_symbolic_link_inside_the_scope_is_allowed(scope):
     program = """
 uses read "datos/copia.txt"
 
-fn main() -> Void {
+fn main() {
     print(read_file("datos/copia.txt"))
 }
 """
@@ -255,7 +255,7 @@ def test_a_directory_junction_that_leaves_the_scope_is_denied(scope):
     program = """
 uses read "datos/enlace/secreto.txt"
 
-fn main() -> Void {
+fn main() {
     print(read_file("datos/enlace/secreto.txt"))
 }
 """
@@ -269,7 +269,7 @@ def test_a_file_that_does_not_exist_is_a_file_error(scope):
     program = """
 uses read "datos/ausente.txt"
 
-fn main() -> Void {
+fn main() {
     print(read_file("datos/ausente.txt"))
 }
 """
@@ -282,7 +282,7 @@ def test_a_file_that_is_not_text_is_a_file_error(scope):
     program = """
 uses read "datos/binario.bin"
 
-fn main() -> Void {
+fn main() {
     print(read_file("datos/binario.bin"))
 }
 """
@@ -294,7 +294,7 @@ def test_a_directory_cannot_be_read_as_a_file(scope):
     program = """
 uses read "datos"
 
-fn main() -> Void {
+fn main() {
     print(read_file("datos"))
 }
 """

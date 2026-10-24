@@ -426,7 +426,7 @@ def test_public_type_surface_is_unchanged():
         json.dumps(document)
 
     builtins = {entry["name"]: entry for entry in documents["symbols"]["builtins"]}
-    assert builtins["print"]["signature"] == "fn print(value: Int | Float | Bool | Text) -> Void"
+    assert builtins["print"]["signature"] == "fn print(value: Int | Float | Bool | Text)"
 
     types = {entry["name"]: entry for entry in documents["context"]["types"]}
     assert (types["Percent"]["root"], types["Accepted"]["root"]) == ("Int", "Bool")

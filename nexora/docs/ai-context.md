@@ -22,18 +22,19 @@ For this program:
 
 <!-- nex:context -->
 ```nex
-fn unit_price(total_cents: Int, units: Int) -> Int {
-    requires units > 0
-    ensures result >= 0
+fn unit_price(total_cents: Int, units: Int) gives Int
+    needs units > 0
+    promises result >= 0
+{
     return total_cents / units
 }
 
-fn report(total_cents: Int, units: Int) -> Void {
+fn report(total_cents: Int, units: Int) {
     let price = unit_price(total_cents, units)
     print("Price: " + to_text(price))
 }
 
-fn main() -> Void {
+fn main() {
     report(1200, 3)
 }
 ```
@@ -41,28 +42,28 @@ fn main() -> Void {
 `nex context program.nex` writes:
 
 ```text
-program.nex | NEXORA 0.11.0 | 14 lines
+program.nex | NEXORA 0.11.0 | 15 lines
 Static analysis: no errors.
 The program was not run to produce this summary.
 Entry point: main
 
 Functions (3):
-  fn unit_price(total_cents: Int, units: Int) -> Int    [line 1]
-      requires units > 0
-      ensures result >= 0
+  fn unit_price(total_cents: Int, units: Int) gives Int    [line 1]
+      needs units > 0
+      promises result >= 0
       called by: report
-  fn report(total_cents: Int, units: Int) -> Void    [line 7]
+  fn report(total_cents: Int, units: Int)    [line 8]
       variables: price: Int
       calls: unit_price
       built-ins: print, to_text
       called by: main
-  fn main() -> Void    [line 12]
+  fn main()    [line 13]
       calls: report
 
 Features used: arithmetic, comparisons, contracts, conversions, text_concatenation, user_functions
 
 Notes:
-  - Contracts ('requires', 'ensures') are checked while the program runs, on the calls that execute. This analysis verified their types, not that they hold.
+  - Contracts ('needs', 'promises') are checked while the program runs, on the calls that execute; a 'trust' is never checked. This analysis verified their types, not that they hold.
   - Int / Int produces an Int: the fractional part is dropped. Division by zero is a runtime error (E3001) that static analysis does not detect.
 ```
 
@@ -117,18 +118,18 @@ Schema `nexora.context/1`, described in
 
 <!-- nex:context-json -->
 ```nex
-fn double(n: Int) -> Int {
+fn double(n: Int) gives Int {
     return n * 2
 }
 
-fn main() -> Void {
+fn main() {
     print(double(21))
 }
 ```
 
 ```json
 {
-  "schema": "nexora.context/1",
+  "schema": "nexora.context/2",
   "nexora_version": "0.11.0",
   "file": "program.nex",
   "ok": true,
@@ -145,7 +146,7 @@ fn main() -> Void {
   "functions": [
     {
       "name": "double",
-      "signature": "fn double(n: Int) -> Int",
+      "signature": "fn double(n: Int) gives Int",
       "params": [
         {
           "name": "n",
@@ -173,7 +174,7 @@ fn main() -> Void {
     },
     {
       "name": "main",
-      "signature": "fn main() -> Void",
+      "signature": "fn main()",
       "params": [],
       "return_type": "Void",
       "span": {
@@ -229,7 +230,7 @@ For example, a program that uses features that do not yet exist. The two erroneo
 
 <!-- nex:context -->
 ```nex
-fn main() -> Void {
+fn main() {
     let items = 3
     break
     let first = match
@@ -244,7 +245,7 @@ Partial summary: only the code that could be parsed is described.
 Entry point: main
 
 Functions (1):
-  fn main() -> Void    [line 1]
+  fn main()    [line 1]
       variables: items: Int
 
 Features used: none
@@ -287,7 +288,7 @@ On the first program on this page, `nex symbols program.nex --format json` retur
 
 <!-- nex:symbols-json -->
 ```nex
-fn main() -> Void {
+fn main() {
     let total = 2 + 3
     print(total)
 }
@@ -295,7 +296,7 @@ fn main() -> Void {
 
 ```json
 {
-  "schema": "nexora.symbols/1",
+  "schema": "nexora.symbols/2",
   "nexora_version": "0.11.0",
   "file": "program.nex",
   "ok": true,
@@ -321,7 +322,7 @@ fn main() -> Void {
       "references": [],
       "mutable": false,
       "assignments": [],
-      "signature": "fn main() -> Void",
+      "signature": "fn main()",
       "params": [],
       "return_type": "Void",
       "file": "program.nex"
@@ -339,7 +340,7 @@ fn main() -> Void {
       },
       "scope": {
         "line": 1,
-        "column": 19,
+        "column": 11,
         "end_line": 4,
         "end_column": 2
       },
@@ -359,7 +360,7 @@ fn main() -> Void {
   "builtins": [
     {
       "name": "Err",
-      "signature": "fn Err(error: E) -> Result[T, E]",
+      "signature": "fn Err(error: E) gives Result[T, E]",
       "params": [
         {
           "name": "error",
@@ -371,7 +372,7 @@ fn main() -> Void {
     },
     {
       "name": "Float.can_parse",
-      "signature": "fn Float.can_parse(text: Text) -> Bool",
+      "signature": "fn Float.can_parse(text: Text) gives Bool",
       "params": [
         {
           "name": "text",
@@ -383,7 +384,7 @@ fn main() -> Void {
     },
     {
       "name": "Float.parse",
-      "signature": "fn Float.parse(text: Text) -> Float",
+      "signature": "fn Float.parse(text: Text) gives Float",
       "params": [
         {
           "name": "text",
@@ -393,7 +394,7 @@ fn main() -> Void {
       "return_type": "Float",
       "contracts": [
         {
-          "clause": "requires",
+          "clause": "needs",
           "condition": "Float.can_parse(text)",
           "message": "Only a decimal number that fits in a Float can be read as a Float",
           "checked_at_run_time": true
@@ -402,7 +403,7 @@ fn main() -> Void {
     },
     {
       "name": "Int.can_parse",
-      "signature": "fn Int.can_parse(text: Text) -> Bool",
+      "signature": "fn Int.can_parse(text: Text) gives Bool",
       "params": [
         {
           "name": "text",
@@ -414,7 +415,7 @@ fn main() -> Void {
     },
     {
       "name": "Int.parse",
-      "signature": "fn Int.parse(text: Text) -> Int",
+      "signature": "fn Int.parse(text: Text) gives Int",
       "params": [
         {
           "name": "text",
@@ -424,7 +425,7 @@ fn main() -> Void {
       "return_type": "Int",
       "contracts": [
         {
-          "clause": "requires",
+          "clause": "needs",
           "condition": "Int.can_parse(text)",
           "message": "Only a whole number within the range of Int can be read as an Int",
           "checked_at_run_time": true
@@ -433,7 +434,7 @@ fn main() -> Void {
     },
     {
       "name": "List.append",
-      "signature": "fn List.append(xs: List[T], x: T) -> List[T]",
+      "signature": "fn List.append(xs: List[T], x: T) gives List[T]",
       "params": [
         {
           "name": "xs",
@@ -449,7 +450,7 @@ fn main() -> Void {
     },
     {
       "name": "List.concat",
-      "signature": "fn List.concat(xs: List[T], ys: List[T]) -> List[T]",
+      "signature": "fn List.concat(xs: List[T], ys: List[T]) gives List[T]",
       "params": [
         {
           "name": "xs",
@@ -465,7 +466,7 @@ fn main() -> Void {
     },
     {
       "name": "List.contains",
-      "signature": "fn List.contains(xs: List[T], x: T) -> Bool",
+      "signature": "fn List.contains(xs: List[T], x: T) gives Bool",
       "params": [
         {
           "name": "xs",
@@ -481,7 +482,7 @@ fn main() -> Void {
     },
     {
       "name": "List.get",
-      "signature": "fn List.get(xs: List[T], i: Int) -> T",
+      "signature": "fn List.get(xs: List[T], i: Int) gives T",
       "params": [
         {
           "name": "xs",
@@ -495,7 +496,7 @@ fn main() -> Void {
       "return_type": "T",
       "contracts": [
         {
-          "clause": "requires",
+          "clause": "needs",
           "condition": "0 <= i and i < List.length(xs)",
           "message": "An index must be inside the list",
           "checked_at_run_time": true
@@ -504,7 +505,7 @@ fn main() -> Void {
     },
     {
       "name": "List.length",
-      "signature": "fn List.length(xs: List[T]) -> Int",
+      "signature": "fn List.length(xs: List[T]) gives Int",
       "params": [
         {
           "name": "xs",
@@ -516,7 +517,7 @@ fn main() -> Void {
     },
     {
       "name": "Ok",
-      "signature": "fn Ok(value: T) -> Result[T, E]",
+      "signature": "fn Ok(value: T) gives Result[T, E]",
       "params": [
         {
           "name": "value",
@@ -528,7 +529,7 @@ fn main() -> Void {
     },
     {
       "name": "Option.is_none",
-      "signature": "fn Option.is_none(value: Option[T]) -> Bool",
+      "signature": "fn Option.is_none(value: Option[T]) gives Bool",
       "params": [
         {
           "name": "value",
@@ -540,7 +541,7 @@ fn main() -> Void {
     },
     {
       "name": "Option.is_some",
-      "signature": "fn Option.is_some(value: Option[T]) -> Bool",
+      "signature": "fn Option.is_some(value: Option[T]) gives Bool",
       "params": [
         {
           "name": "value",
@@ -551,8 +552,8 @@ fn main() -> Void {
       "contracts": []
     },
     {
-      "name": "Option.unwrap",
-      "signature": "fn Option.unwrap(value: Option[T]) -> T",
+      "name": "Option.value",
+      "signature": "fn Option.value(value: Option[T]) gives T",
       "params": [
         {
           "name": "value",
@@ -563,8 +564,8 @@ fn main() -> Void {
       "contracts": []
     },
     {
-      "name": "Option.unwrap_or",
-      "signature": "fn Option.unwrap_or(value: Option[T], fallback: T) -> T",
+      "name": "Option.value_or",
+      "signature": "fn Option.value_or(value: Option[T], fallback: T) gives T",
       "params": [
         {
           "name": "value",
@@ -580,7 +581,7 @@ fn main() -> Void {
     },
     {
       "name": "Result.error",
-      "signature": "fn Result.error(value: Result[T, E]) -> E",
+      "signature": "fn Result.error(value: Result[T, E]) gives E",
       "params": [
         {
           "name": "value",
@@ -592,7 +593,7 @@ fn main() -> Void {
     },
     {
       "name": "Result.is_err",
-      "signature": "fn Result.is_err(value: Result[T, E]) -> Bool",
+      "signature": "fn Result.is_err(value: Result[T, E]) gives Bool",
       "params": [
         {
           "name": "value",
@@ -604,7 +605,7 @@ fn main() -> Void {
     },
     {
       "name": "Result.is_ok",
-      "signature": "fn Result.is_ok(value: Result[T, E]) -> Bool",
+      "signature": "fn Result.is_ok(value: Result[T, E]) gives Bool",
       "params": [
         {
           "name": "value",
@@ -615,8 +616,8 @@ fn main() -> Void {
       "contracts": []
     },
     {
-      "name": "Result.unwrap",
-      "signature": "fn Result.unwrap(value: Result[T, E]) -> T",
+      "name": "Result.value",
+      "signature": "fn Result.value(value: Result[T, E]) gives T",
       "params": [
         {
           "name": "value",
@@ -627,8 +628,8 @@ fn main() -> Void {
       "contracts": []
     },
     {
-      "name": "Result.unwrap_or",
-      "signature": "fn Result.unwrap_or(value: Result[T, E], fallback: T) -> T",
+      "name": "Result.value_or",
+      "signature": "fn Result.value_or(value: Result[T, E], fallback: T) gives T",
       "params": [
         {
           "name": "value",
@@ -644,7 +645,7 @@ fn main() -> Void {
     },
     {
       "name": "Some",
-      "signature": "fn Some(value: T) -> Option[T]",
+      "signature": "fn Some(value: T) gives Option[T]",
       "params": [
         {
           "name": "value",
@@ -656,7 +657,7 @@ fn main() -> Void {
     },
     {
       "name": "Text.contains",
-      "signature": "fn Text.contains(text: Text, part: Text) -> Bool",
+      "signature": "fn Text.contains(text: Text, part: Text) gives Bool",
       "params": [
         {
           "name": "text",
@@ -672,7 +673,7 @@ fn main() -> Void {
     },
     {
       "name": "Text.ends_with",
-      "signature": "fn Text.ends_with(text: Text, part: Text) -> Bool",
+      "signature": "fn Text.ends_with(text: Text, part: Text) gives Bool",
       "params": [
         {
           "name": "text",
@@ -688,7 +689,7 @@ fn main() -> Void {
     },
     {
       "name": "Text.length",
-      "signature": "fn Text.length(text: Text) -> Int",
+      "signature": "fn Text.length(text: Text) gives Int",
       "params": [
         {
           "name": "text",
@@ -698,7 +699,7 @@ fn main() -> Void {
       "return_type": "Int",
       "contracts": [
         {
-          "clause": "ensures",
+          "clause": "promises",
           "condition": "result >= 0",
           "message": "A text never has a negative number of characters",
           "checked_at_run_time": false
@@ -707,7 +708,7 @@ fn main() -> Void {
     },
     {
       "name": "Text.slice",
-      "signature": "fn Text.slice(text: Text, start: Int, end: Int) -> Text",
+      "signature": "fn Text.slice(text: Text, start: Int, end: Int) gives Text",
       "params": [
         {
           "name": "text",
@@ -725,25 +726,25 @@ fn main() -> Void {
       "return_type": "Text",
       "contracts": [
         {
-          "clause": "requires",
+          "clause": "needs",
           "condition": "start >= 0",
           "message": "A slice cannot start before the first character",
           "checked_at_run_time": true
         },
         {
-          "clause": "requires",
+          "clause": "needs",
           "condition": "start <= end",
           "message": "A slice cannot end before it starts",
           "checked_at_run_time": true
         },
         {
-          "clause": "requires",
+          "clause": "needs",
           "condition": "end <= Text.length(text)",
           "message": "A slice cannot end after the last character",
           "checked_at_run_time": true
         },
         {
-          "clause": "ensures",
+          "clause": "promises",
           "condition": "Text.length(result) == end - start",
           "message": "The slice has exactly end - start characters",
           "checked_at_run_time": false
@@ -752,7 +753,7 @@ fn main() -> Void {
     },
     {
       "name": "Text.starts_with",
-      "signature": "fn Text.starts_with(text: Text, part: Text) -> Bool",
+      "signature": "fn Text.starts_with(text: Text, part: Text) gives Bool",
       "params": [
         {
           "name": "text",
@@ -768,21 +769,21 @@ fn main() -> Void {
     },
     {
       "name": "args",
-      "signature": "fn args() -> List[Text]",
+      "signature": "fn args() gives List[Text]",
       "params": [],
       "return_type": "List[Text]",
       "contracts": []
     },
     {
       "name": "input",
-      "signature": "fn input() -> Text",
+      "signature": "fn input() gives Text",
       "params": [],
       "return_type": "Text",
       "contracts": []
     },
     {
       "name": "print",
-      "signature": "fn print(value: Int | Float | Bool | Text) -> Void",
+      "signature": "fn print(value: Int | Float | Bool | Text)",
       "params": [
         {
           "name": "value",
@@ -794,7 +795,7 @@ fn main() -> Void {
     },
     {
       "name": "read_file",
-      "signature": "fn read_file(path: Text) -> Text",
+      "signature": "fn read_file(path: Text) gives Text",
       "params": [
         {
           "name": "path",
@@ -806,7 +807,7 @@ fn main() -> Void {
     },
     {
       "name": "to_float",
-      "signature": "fn to_float(value: Int) -> Float",
+      "signature": "fn to_float(value: Int) gives Float",
       "params": [
         {
           "name": "value",
@@ -818,7 +819,7 @@ fn main() -> Void {
     },
     {
       "name": "to_int",
-      "signature": "fn to_int(value: Float) -> Int",
+      "signature": "fn to_int(value: Float) gives Int",
       "params": [
         {
           "name": "value",
@@ -830,7 +831,7 @@ fn main() -> Void {
     },
     {
       "name": "to_text",
-      "signature": "fn to_text(value: Int | Float | Bool | Text) -> Text",
+      "signature": "fn to_text(value: Int | Float | Bool | Text) gives Text",
       "params": [
         {
           "name": "value",
@@ -842,7 +843,7 @@ fn main() -> Void {
     },
     {
       "name": "write_file",
-      "signature": "fn write_file(path: Text, text: Text) -> Void",
+      "signature": "fn write_file(path: Text, text: Text)",
       "params": [
         {
           "name": "path",

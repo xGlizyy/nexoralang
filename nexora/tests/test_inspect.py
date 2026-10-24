@@ -1,4 +1,4 @@
-"""The structured view of a program used by `nex inspect` (schema nexora.inspect/2)."""
+"""The structured view of a program used by `nex inspect` (schema nexora.inspect/3)."""
 
 import json
 from pathlib import Path
@@ -10,9 +10,10 @@ from nexora.pipeline import analyze
 SCHEMA_DOC = Path(__file__).resolve().parents[1] / "docs" / "inspect-schema.md"
 
 PROGRAM = (
-    "fn scale(value: Float, factor: Float) -> Float {\n"
-    "    requires factor > 0.0\n"
-    "    ensures result >= 0.0 or value < 0.0\n"
+    "fn scale(value: Float, factor: Float) gives Float\n"
+    "    needs factor > 0.0\n"
+    "    promises result >= 0.0 or value < 0.0\n"
+    "{\n"
     "    let scaled: Float = value * factor\n"
     "    if scaled > 100.0 {\n"
     "        return 100.0\n"
@@ -21,13 +22,13 @@ PROGRAM = (
     "    }\n"
     "}\n"
     "\n"
-    "fn main() -> Void {\n"
-    '    let label = "x" + to_text(not true)\n'
+    "fn main() {\n"
+    "    let label = \"x\" + to_text(not true)\n"
     "    print(-scale(2.0, 1.5))\n"
     "}\n"
 )
 
-# Every node kind and its fields, in order. This is the contract of schema version 2:
+# Every node kind and its fields, in order. This is the contract of schema version 3:
 # removing or renaming anything here requires a new schema version.
 EXPECTED_FIELDS = {
     "Program": ["kind", "span", "types", "functions", "records", "uses", "imports"],
@@ -36,12 +37,11 @@ EXPECTED_FIELDS = {
     "RecordDecl": ["kind", "span", "name", "name_span", "fields", "public"],
     "FieldDecl": ["kind", "span", "name", "name_span", "type"],
     "UsesDecl": ["kind", "span", "capability", "path", "path_span"],
-    "Function": ["kind", "span", "name", "name_span", "params", "return_type", "contracts", "body",
-                 "examples", "public"],
+    "Function": ["kind", "span", "name", "name_span", "params", "return_type", "header", "body", "public"],
     "Example": ["kind", "span", "condition", "message"],
     "Param": ["kind", "span", "name", "name_span", "type"],
     "TypeRef": ["kind", "span", "name", "arguments", "qualifier"],
-    "Contract": ["kind", "span", "clause", "condition", "message"],
+    "Contract": ["kind", "span", "clause", "name", "condition", "message"],
     "Block": ["kind", "span", "statements"],
     "Let": ["kind", "span", "name", "name_span", "declared_type", "value"],
     "Assign": ["kind", "span", "name", "name_span", "value"],
@@ -86,9 +86,9 @@ def test_function_signature_and_contracts():
     assert scale["name"] == "scale"
     assert [(p["name"], p["type"]["name"]) for p in scale["params"]] == [("value", "Float"), ("factor", "Float")]
     assert scale["return_type"]["name"] == "Float"
-    assert [c["clause"] for c in scale["contracts"]] == ["requires", "ensures"]
-    assert scale["contracts"][0]["condition"]["type"] == "Bool"
-    assert scale["contracts"][0]["span"] == {"line": 2, "column": 5, "end_line": 2, "end_column": 26}
+    assert [c["clause"] for c in scale["header"]] == ["needs", "promises"]
+    assert scale["header"][0]["condition"]["type"] == "Bool"
+    assert scale["header"][0]["span"] == {"line": 2, "column": 5, "end_line": 2, "end_column": 23}
 
 
 def test_statements_and_expressions_carry_kinds_types_and_positions():
@@ -97,12 +97,12 @@ def test_statements_and_expressions_carry_kinds_types_and_positions():
     assert (let["kind"], let["name"], let["declared_type"]["name"]) == ("Let", "scaled", "Float")
     assert let["value"] == {
         "kind": "Binary",
-        "span": {"line": 4, "column": 25, "end_line": 4, "end_column": 39},
+        "span": {"line": 5, "column": 25, "end_line": 5, "end_column": 39},
         "operator": "*",
-        "operator_span": {"line": 4, "column": 31, "end_line": 4, "end_column": 32},
-        "left": {"kind": "Name", "span": {"line": 4, "column": 25, "end_line": 4, "end_column": 30},
+        "operator_span": {"line": 5, "column": 31, "end_line": 5, "end_column": 32},
+        "left": {"kind": "Name", "span": {"line": 5, "column": 25, "end_line": 5, "end_column": 30},
                  "name": "value", "type": "Float"},
-        "right": {"kind": "Name", "span": {"line": 4, "column": 33, "end_line": 4, "end_column": 39},
+        "right": {"kind": "Name", "span": {"line": 5, "column": 33, "end_line": 5, "end_column": 39},
                   "name": "factor", "type": "Float"},
         "type": "Float",
     }
@@ -123,7 +123,7 @@ def test_every_node_has_exactly_the_documented_fields():
     refined = 'type Small = Int where value < 10, "Small numbers only"\n'
     records = (
         "type Point = { x: Int, y: Int }\n"
-        "fn origin() -> Point {\n"
+        "fn origin() gives Point {\n"
         "    let p = Point(x: 0, y: 0)\n"
         "    return Point(x: p.x, y: p.y)\n"
         "}\n"
@@ -131,19 +131,23 @@ def test_every_node_has_exactly_the_documented_fields():
     uses = 'uses read "datos/entradas.txt"\n'
     imports = 'import "app/models.nex"\n'
     extra = (
-        'fn extra(n: Small) -> Int {\n    example extra(1) == 2, "One more"\n'
-        "    let xs: List[Int] = [1, 2]\n    return (n) + 1\n}\n"
+        'fn extra(n: Small) gives Int\n'
+        '    example extra(1) == 2, "One more"\n'
+        '{\n'
+        '    let xs: List[Int] = [1, 2]\n'
+        '    return (n) + 1\n'
+        '}\n'
     )
     for node in walk(inspect(imports + refined + records + uses + PROGRAM + "\n" + extra)):
         seen.setdefault(node["kind"], list(node))
     assert_fields(seen)
     assert set(seen) == set(EXPECTED_FIELDS) - {"Assign", "FieldAssign"}
 
-    assign = inspect("fn main() -> Void {\n    let x = 1\n    x = 2\n}\n")["functions"][0]["body"]["statements"][1]
+    assign = inspect("fn main() {\n    let x = 1\n    x = 2\n}\n")["functions"][0]["body"]["statements"][1]
     assert list(assign) == EXPECTED_FIELDS["Assign"]
 
     field_assign = inspect(
-        "type Point = { x: Int }\nfn main() -> Void {\n    let p = Point(x: 1)\n    p.x = 2\n}\n"
+        "type Point = { x: Int }\nfn main() {\n    let p = Point(x: 1)\n    p.x = 2\n}\n"
     )["functions"][0]["body"]["statements"][1]
     assert list(field_assign) == EXPECTED_FIELDS["FieldAssign"]
 
@@ -164,7 +168,7 @@ def test_every_expression_of_a_valid_program_has_a_type():
 
 
 def test_an_expression_that_could_not_be_typed_has_a_null_type():
-    statements = inspect('fn main() -> Void {\n    let x = 1 + "a"\n    let y = missing\n}\n')["functions"][0]["body"]["statements"]
+    statements = inspect('fn main() {\n    let x = 1 + "a"\n    let y = missing\n}\n')["functions"][0]["body"]["statements"]
     assert statements[0]["value"]["type"] is None
     assert statements[0]["value"]["left"]["type"] == "Int"
     assert statements[1]["value"]["type"] is None
@@ -185,7 +189,7 @@ def test_output_is_deterministic():
 
 def test_the_schema_document_describes_every_node_kind_and_field():
     text = SCHEMA_DOC.read_text(encoding="utf-8")
-    assert "nexora.inspect/2" in text
+    assert "nexora.inspect/3" in text
     for kind, names in EXPECTED_FIELDS.items():
         assert f"`{kind}`" in text, kind
         for name in names:
@@ -193,8 +197,13 @@ def test_the_schema_document_describes_every_node_kind_and_field():
 
 
 def test_refined_types_appear_in_the_tree_with_their_names():
-    text = ('type Percent = Int where value >= 0 and value <= 100, "From 0 to 100"\n\n'
-            "fn main() -> Void {\n    let n = 40\n    let p = Percent(n)\n    print(p + 1)\n}\n")
+    text = ('type Percent = Int where value >= 0 and value <= 100, "From 0 to 100"\n'
+            '\n'
+            'fn main() {\n'
+            '    let n = 40\n'
+            '    let p = Percent(n)\n'
+            '    print(p + 1)\n'
+            '}\n')
     program = inspect(text)
     (declaration,) = program["types"]
     assert (declaration["name"], declaration["base"]["name"], declaration["message"]) == ("Percent", "Int", "From 0 to 100")

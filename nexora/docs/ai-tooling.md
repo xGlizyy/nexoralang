@@ -61,11 +61,11 @@ analyzer and no duplicated rules: what decides whether a program is valid is alw
 
 <!-- nex:check-json -->
 ```nex
-fn double(n: Int) -> Int {
+fn double(n: Int) gives Int {
     return n * 2
 }
 
-fn main() -> Void {
+fn main() {
     let price = 2.5
     print(double(price))
 }
@@ -86,7 +86,7 @@ fn main() -> Void {
       "label": "Expected Int, found Float",
       "hint": "Convert the Float explicitly with to_int(...), which drops the fractional part.",
       "notes": [
-        "This is the argument for 'n' in: fn double(n: Int) -> Int"
+        "This is the argument for 'n' in: fn double(n: Int) gives Int"
       ],
       "file": "program.nex",
       "line": 7,
@@ -113,14 +113,14 @@ representation. For the smallest possible program:
 
 <!-- nex:inspect -->
 ```nex
-fn main() -> Void {
+fn main() {
     print(1 + 2)
 }
 ```
 
 ```json
 {
-  "schema": "nexora.inspect/2",
+  "schema": "nexora.inspect/3",
   "nexora_version": "0.11.0",
   "file": "program.nex",
   "ok": true,
@@ -152,24 +152,13 @@ fn main() -> Void {
           "end_column": 8
         },
         "params": [],
-        "return_type": {
-          "kind": "TypeRef",
-          "span": {
-            "line": 1,
-            "column": 14,
-            "end_line": 1,
-            "end_column": 18
-          },
-          "name": "Void",
-          "arguments": [],
-          "qualifier": null
-        },
-        "contracts": [],
+        "return_type": null,
+        "header": [],
         "body": {
           "kind": "Block",
           "span": {
             "line": 1,
-            "column": 19,
+            "column": 11,
             "end_line": 3,
             "end_column": 2
           },
@@ -244,7 +233,6 @@ fn main() -> Void {
             }
           ]
         },
-        "examples": [],
         "public": false
       }
     ],

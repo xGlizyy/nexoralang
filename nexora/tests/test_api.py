@@ -16,7 +16,7 @@ from helpers import in_main, with_main
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
 
-HELLO = 'fn main() -> Void {\n    print("Hello from NEXORA")\n}\n'
+HELLO = 'fn main() {\n    print("Hello from NEXORA")\n}\n'
 RESULT_FIELDS = ["schema", "action", "status", "output", "diagnostics", "message"]
 
 
@@ -36,10 +36,10 @@ def test_check_valid_program():
 
 
 @pytest.mark.parametrize("source, category, code", [
-    ("fn main() -> Void {\n    let x = @\n}", "lexical", "E1001"),
-    ("fn main() -> Void {\n    let = 1\n}", "syntax", "E1101"),
-    ("fn main() -> Void {\n    print(missing)\n}", "semantic", "E2005"),
-    ('fn main() -> Void {\n    let n: Int = "a"\n}', "type", "E2011"),
+    ("fn main() {\n    let x = @\n}", "lexical", "E1001"),
+    ("fn main() {\n    let = 1\n}", "syntax", "E1101"),
+    ("fn main() {\n    print(missing)\n}", "semantic", "E2005"),
+    ('fn main() {\n    let n: Int = "a"\n}', "type", "E2011"),
 ])
 def test_check_reports_static_errors_with_positions(source, category, code):
     result = api.check_source(source, "demo.nex")
@@ -52,7 +52,7 @@ def test_check_never_runs_the_program(monkeypatch):
     def forbidden(*arguments, **options):
         raise AssertionError("check must not start the interpreter")
     monkeypatch.setattr(api, "run", forbidden)
-    source = 'fn main() -> Void {\n    print("SIDE EFFECT")\n    print(1 / 0)\n}\n'
+    source = 'fn main() {\n    print("SIDE EFFECT")\n    print(1 / 0)\n}\n'
     assert api.check_source(source)["status"] == "success"
 
 
@@ -68,7 +68,7 @@ def test_run_does_not_start_a_program_with_static_errors(monkeypatch):
     def forbidden(*arguments, **options):
         raise AssertionError("a program with static errors must not be started")
     monkeypatch.setattr(api, "run", forbidden)
-    result = api.run_source('fn main() -> Void {\n    print("must not appear")\n    print(missing)\n}\n')
+    result = api.run_source('fn main() {\n    print("must not appear")\n    print(missing)\n}\n')
     assert_result(result, "run", "invalid")
     assert result["output"] == "" and result["diagnostics"][0]["code"] == "E2005"
 
@@ -81,7 +81,7 @@ def test_run_runtime_error_keeps_the_output_so_far():
 
 
 def test_run_contract_violation_is_its_own_status():
-    functions = "fn half(n: Int) -> Int {\n    requires n > 0\n    return n / 2\n}"
+    functions = "fn half(n: Int) gives Int\n    needs n > 0\n{\n    return n / 2\n}"
     result = api.run_source(with_main(functions, "print(half(8))\nprint(half(0))"))
     assert_result(result, "run", "contract_violation")
     assert result["output"] == "4\n"
@@ -91,13 +91,13 @@ def test_run_contract_violation_is_its_own_status():
 def test_filename_is_only_a_label():
     # Whatever the name, nothing is opened: it only appears in the diagnostics.
     for name in ("playground.nex", "../../etc/passwd", "C:\\Windows\\win.ini", ""):
-        result = api.check_source("fn main() -> Void {\n    print(x)\n}", name)
+        result = api.check_source("fn main() {\n    print(x)\n}", name)
         assert result["diagnostics"][0]["file"] == name
 
 
 # Limits
 
-LOOP = "fn spam(n: Int) -> Void {\n    if n == 0 {\n        return\n    }\n    print(\"0123456789\")\n    spam(n - 1)\n}"
+LOOP = "fn spam(n: Int) {\n    if n == 0 {\n        return\n    }\n    print(\"0123456789\")\n    spam(n - 1)\n}"
 
 
 def test_output_limit_stops_the_program():
@@ -126,7 +126,7 @@ def test_without_limits_output_is_unbounded():
     assert result["status"] == "success" and result["output"].count("\n") == 900
 
 
-DOUBLE = 'fn grow(text: Text, times: Int) -> Text {\n    if times == 0 {\n        return text\n    }\n    return grow(text + text, times - 1)\n}'
+DOUBLE = 'fn grow(text: Text, times: Int) gives Text {\n    if times == 0 {\n        return text\n    }\n    return grow(text + text, times - 1)\n}'
 
 
 def test_text_limit_is_a_runtime_error_with_its_own_code():

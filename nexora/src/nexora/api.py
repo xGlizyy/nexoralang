@@ -36,7 +36,7 @@ from .checker import BUILTINS, KNOWN_TYPES, own_calls
 from .diagnostics import CONTRACT, MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Source
 from .interpreter import MAX_CALL_DEPTH, ExampleRun, run, run_example
 from .pipeline import Analysis, analyze
-from .tokens import KEYWORDS, RESERVED_WORDS
+from .tokens import KEYWORDS, OLD_CLAUSE_WORDS, RESERVED_WORDS
 from .types import LIST, OPTION, RESULT
 from .values import show_value
 from .version import __version__
@@ -327,7 +327,8 @@ def language_info() -> dict:
     return {
         "version": __version__,
         "keywords": sorted(KEYWORDS),
-        "reserved_words": sorted(RESERVED_WORDS),
+        # The clause words of 0.11 cannot be names in 0.12 either (decision 0019, 9).
+        "reserved_words": sorted(RESERVED_WORDS | OLD_CLAUSE_WORDS.keys()),
         "types": [*KNOWN_TYPES, LIST.name, OPTION.name, RESULT.name],
         "builtins": sorted(BUILTINS),
         "limits": {

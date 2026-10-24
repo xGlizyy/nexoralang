@@ -4,12 +4,13 @@
 
 type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
 
-fn as_percent(part: Int, whole: Int) -> Percent {
-    requires whole > 0, "A percentage of nothing is not defined"
+fn as_percent(part: Int, whole: Int) gives Percent
+    needs whole > 0, "A percentage of nothing is not defined"
+{
     return Percent(part * 100 / whole)
 }
 
-fn main() -> Void {
+fn main() {
     print(as_percent(30, 120))
     print(as_percent(150, 120))
     print("This line is never reached")

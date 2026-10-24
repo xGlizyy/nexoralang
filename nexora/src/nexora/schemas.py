@@ -160,12 +160,12 @@ _BUILTIN_CONTRACT = {
     "type": "object",
     "required": ["clause", "condition", "message", "checked_at_run_time"],
     "properties": {
-        "clause": {"enum": ["requires", "ensures"]},
+        "clause": {"enum": ["needs", "promises"]},
         "condition": {"type": "string", "description": "The condition, written in NEXORA."},
         "message": {"type": "string", "description": "Why the rule exists."},
         "checked_at_run_time": {
             "type": "boolean",
-            "description": "True for 'requires', checked on every call. False for 'ensures', which the "
+            "description": "True for 'needs', checked on every call. False for 'promises', which the "
                            "implementation keeps and the tests check, but the program does not.",
         },
     },
@@ -191,12 +191,15 @@ _CONTEXT_FUNCTION = {
         "return_type": {"type": "string"},
         "span": {"$ref": "#/$defs/span"},
         "contracts": {"type": "array", "items": {
-            "type": "object", "required": ["clause", "condition", "message", "line"],
-            "properties": {"clause": {"enum": ["requires", "ensures"]},
+            "type": "object", "required": ["clause", "condition", "message", "line", "name"],
+            "properties": {"clause": {"enum": ["needs", "promises", "trust"],
+                                      "description": "A 'trust' is neither proved nor checked: it is never "
+                                                     "evaluated (decision 0019, 5.6)."},
                            "condition": {"type": "string", "description": "The condition, as written in the source."},
                            "message": {**_NULLABLE_STRING, "description": "The explanation written after the "
                                                                           "condition, if any."},
-                           "line": {"type": "integer", "minimum": 1}}}},
+                           "line": {"type": "integer", "minimum": 1},
+                           "name": {**_NULLABLE_STRING, "description": "The name of the clause, if it has one."}}}},
         "variables": {"type": "array", "items": {
             "type": "object", "required": ["name", "type", "line", "mutable"],
             "properties": {"name": {"type": "string"}, "type": _NULLABLE_STRING,
@@ -229,7 +232,7 @@ _CONTEXT_FUNCTION = {
                                                        "or 'name in iterable' for a 'for'."},
                           "invariants": {"type": "array", "items": {"$ref": "#/$defs/loop_clause"}},
                           "measure": {"oneOf": [{"$ref": "#/$defs/loop_clause"}, {"type": "null"}],
-                                      "description": "The 'decreases' clause. Null for every 'for' loop and "
+                                      "description": "The 'shrinks' clause. Null for every 'for' loop and "
                                                      "in a program with errors (E2021)."}}}},
         "file": {"type": "string", "description": "The file that declares the function: the module it belongs "
                                                    "to, or the file the command was given. A module is shown "
@@ -238,10 +241,11 @@ _CONTEXT_FUNCTION = {
 }
 
 _LOOP_CLAUSE = {
-    "type": "object", "required": ["condition", "message", "line"],
+    "type": "object", "required": ["condition", "message", "line", "name"],
     "properties": {"condition": {"type": "string", "description": "The expression, as written."},
                    "message": {**_NULLABLE_STRING, "description": "The explanation written after it, if any."},
-                   "line": {"type": "integer", "minimum": 1}},
+                   "line": {"type": "integer", "minimum": 1},
+                   "name": {**_NULLABLE_STRING, "description": "The name of the clause, if it has one."}},
 }
 
 
@@ -361,16 +365,16 @@ def all_schemas() -> dict[str, dict]:
         _header("nexora.diagnostics/1"), _HEADER_REQUIRED, base,
     )
     inspect = _document(
-        "nexora-inspect", "nexora.inspect/2: the syntax tree of a program",
-        {**_header("nexora.inspect/2"),
+        "nexora-inspect", "nexora.inspect/3: the syntax tree of a program",
+        {**_header("nexora.inspect/3"),
          "complete": _COMPLETE,
          "program": {**nullable({"$ref": "#/$defs/Program"}),
                      "description": "Partial when 'complete' is false. Null when the source has lexical errors."}},
         [*_HEADER_REQUIRED, "complete", "program"], {**base, **node_definitions()},
     )
     symbols = _document(
-        "nexora-symbols", "nexora.symbols/1: the names a program declares and where they are used",
-        {**_header("nexora.symbols/1"),
+        "nexora-symbols", "nexora.symbols/2: the names a program declares and where they are used",
+        {**_header("nexora.symbols/2"),
          "complete": _COMPLETE,
          "filter": {"type": "object", "required": ["name", "function"],
                     "properties": {"name": _NULLABLE_STRING, "function": _NULLABLE_STRING}},
@@ -381,8 +385,8 @@ def all_schemas() -> dict[str, dict]:
         {**base, "param": _PARAM, "symbol": _SYMBOL, "builtin": _BUILTIN},
     )
     context = _document(
-        "nexora-context", "nexora.context/1: a technical summary of a program",
-        {**_header("nexora.context/1"),
+        "nexora-context", "nexora.context/2: a technical summary of a program",
+        {**_header("nexora.context/2"),
          "executed": {"const": False, "description": "The program is never run to produce this document."},
          "lines": {"type": "integer", "minimum": 0},
          "analysed": {"type": "boolean",

@@ -11,7 +11,7 @@ from nexora import __version__, cli
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
 
-HELLO = 'fn main() -> Void {\n    let message = "Hello from NEXORA"\n    print(message)\n}\n'
+HELLO = 'fn main() {\n    let message = "Hello from NEXORA"\n    print(message)\n}\n'
 
 
 @pytest.fixture
@@ -94,7 +94,7 @@ def test_run_directory_instead_of_file(tmp_path, capsys):
 
 def test_run_file_that_is_not_utf8(tmp_path, capsys):
     path = tmp_path / "latin1.nex"
-    path.write_bytes('fn main() -> Void {\n    print("a\xf1o")\n}\n'.encode("latin-1"))
+    path.write_bytes('fn main() {\n    print("año")\n}\n'.encode("latin-1"))
     assert cli.main(["run", str(path)]) == 4
     assert "E0002" in capsys.readouterr().err
 
@@ -107,7 +107,7 @@ def test_run_accepts_a_utf8_byte_order_mark_and_windows_line_endings(tmp_path, c
 
 
 def test_run_invalid_program_does_not_execute_anything(program, capsys):
-    path = program('fn main() -> Void {\n    print("must not appear")\n    let = 1\n}\n')
+    path = program('fn main() {\n    print("must not appear")\n    let = 1\n}\n')
     assert cli.main(["run", path]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -117,7 +117,7 @@ def test_run_invalid_program_does_not_execute_anything(program, capsys):
 
 
 def test_run_semantic_error_does_not_execute_anything(program, capsys):
-    path = program('fn main() -> Void {\n    print("must not appear")\n    print(missing)\n}\n')
+    path = program('fn main() {\n    print("must not appear")\n    print(missing)\n}\n')
     assert cli.main(["run", path]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -125,7 +125,7 @@ def test_run_semantic_error_does_not_execute_anything(program, capsys):
 
 
 def test_run_runtime_error(program, capsys):
-    path = program('fn main() -> Void {\n    print("before")\n    print(1 / 0)\n    print("after")\n}\n')
+    path = program('fn main() {\n    print("before")\n    print(1 / 0)\n    print("after")\n}\n')
     assert cli.main(["run", path]) == 3
     captured = capsys.readouterr()
     assert captured.out == "before\n"
@@ -146,7 +146,7 @@ def test_check_valid_program(program, capsys):
 
 def test_check_does_not_run_the_program(program, capsys):
     # A valid program whose only observable behaviour is printing, plus a failure at run time.
-    path = program('fn main() -> Void {\n    print("SIDE EFFECT")\n    print(1 / 0)\n}\n')
+    path = program('fn main() {\n    print("SIDE EFFECT")\n    print(1 / 0)\n}\n')
     assert cli.main(["check", path]) == 0
     captured = capsys.readouterr()
     assert "SIDE EFFECT" not in captured.out + captured.err
@@ -164,7 +164,7 @@ def test_check_never_calls_the_interpreter(program, monkeypatch):
 
 
 def test_check_invalid_program(program, capsys):
-    path = program('fn main() -> Void {\n    let x = 1 + "a"\n    print(y)\n}\n')
+    path = program('fn main() {\n    let x = 1 + "a"\n    print(y)\n}\n')
     assert cli.main(["check", path]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -190,7 +190,7 @@ def test_check_json_for_a_valid_program(program, capsys):
 
 
 def test_check_json_for_an_invalid_program(program, capsys):
-    path = program("fn main() -> Void {\n    print(missing)\n}\n")
+    path = program("fn main() {\n    print(missing)\n}\n")
     assert cli.main(["check", path, "--format", "json"]) == 1
     captured = capsys.readouterr()
     document = json.loads(captured.out)
@@ -222,8 +222,17 @@ def test_check_json_for_a_missing_file(capsys):
 # run: contracts and JSON errors
 
 DIVIDE = (
-    "fn divide(a: Float, b: Float) -> Float {\n    requires b != 0.0\n    return a / b\n}\n\n"
-    'fn main() -> Void {\n    print("before")\n    print(divide(1.0, 0.0))\n    print("after")\n}\n'
+    "fn divide(a: Float, b: Float) gives Float\n"
+    "    needs b != 0.0\n"
+    "{\n"
+    "    return a / b\n"
+    "}\n"
+    "\n"
+    "fn main() {\n"
+    "    print(\"before\")\n"
+    "    print(divide(1.0, 0.0))\n"
+    "    print(\"after\")\n"
+    "}\n"
 )
 
 
@@ -250,11 +259,11 @@ def test_run_json_reports_a_runtime_failure_on_standard_error(program, capsys):
     assert document["schema"] == "nexora.diagnostics/1"
     assert document["ok"] is False
     (diagnostic,) = document["diagnostics"]
-    assert (diagnostic["category"], diagnostic["code"], diagnostic["line"]) == ("contract", "E4001", 8)
+    assert (diagnostic["category"], diagnostic["code"], diagnostic["line"]) == ("contract", "E4001", 9)
 
 
 def test_run_json_reports_static_errors_without_running(program, capsys):
-    path = program('fn main() -> Void {\n    print("must not appear")\n    let x: Int = "a"\n}\n')
+    path = program('fn main() {\n    print("must not appear")\n    let x: Int = "a"\n}\n')
     assert cli.main(["run", path, "--format", "json"]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -276,7 +285,7 @@ def test_inspect_prints_the_program_as_json(program, capsys):
     document = json.loads(captured.out)
     assert captured.err == ""
     assert list(document) == ["schema", "nexora_version", "file", "ok", "diagnostics", "complete", "program"]
-    assert (document["schema"], document["file"], document["ok"]) == ("nexora.inspect/2", path, True)
+    assert (document["schema"], document["file"], document["ok"]) == ("nexora.inspect/3", path, True)
     assert document["complete"] is True
     assert document["program"]["kind"] == "Program"
     assert document["program"]["functions"][0]["name"] == "main"
@@ -294,7 +303,7 @@ def test_inspect_does_not_run_the_program(program, capsys, monkeypatch):
     def forbidden(*arguments):
         raise AssertionError("inspect must not execute the program")
     monkeypatch.setattr(cli, "run", forbidden)
-    path = program('fn main() -> Void {\n    print("SIDE EFFECT")\n    print(1 / 0)\n}\n')
+    path = program('fn main() {\n    print("SIDE EFFECT")\n    print(1 / 0)\n}\n')
     assert cli.main(["inspect", path]) == 0
     captured = capsys.readouterr()
     # The text only appears as data: the literal inside the tree. Nothing was printed by the program.
@@ -304,7 +313,7 @@ def test_inspect_does_not_run_the_program(program, capsys, monkeypatch):
 
 
 def test_inspect_with_type_errors_still_shows_the_tree(program, capsys):
-    path = program('fn main() -> Void {\n    let x: Int = "a"\n}\n')
+    path = program('fn main() {\n    let x: Int = "a"\n}\n')
     assert cli.main(["inspect", path]) == 1
     document = json.loads(capsys.readouterr().out)
     assert document["ok"] is False
@@ -313,7 +322,7 @@ def test_inspect_with_type_errors_still_shows_the_tree(program, capsys):
 
 
 def test_inspect_with_syntax_errors_has_a_partial_tree(program, capsys):
-    assert cli.main(["inspect", program("fn main() -> Void {\n    let = 1\n    print(2)\n}\n")]) == 1
+    assert cli.main(["inspect", program("fn main() {\n    let = 1\n    print(2)\n}\n")]) == 1
     document = json.loads(capsys.readouterr().out)
     assert (document["ok"], document["complete"]) == (False, False)
     assert [d["category"] for d in document["diagnostics"]] == ["syntax"]
@@ -323,7 +332,7 @@ def test_inspect_with_syntax_errors_has_a_partial_tree(program, capsys):
 
 
 def test_inspect_with_lexical_errors_has_no_tree(program, capsys):
-    assert cli.main(["inspect", program('fn main() -> Void {\n    print("open)\n}\n')]) == 1
+    assert cli.main(["inspect", program('fn main() {\n    print("open)\n}\n')]) == 1
     document = json.loads(capsys.readouterr().out)
     assert (document["complete"], document["program"]) == (False, None)
     assert document["diagnostics"][0]["category"] == "lexical"
@@ -331,7 +340,7 @@ def test_inspect_with_lexical_errors_has_no_tree(program, capsys):
 
 def test_a_program_with_syntax_errors_is_never_run(program, capsys):
     # The partial tree is for tools only: what parsed must not be executed.
-    assert cli.main(["run", program('fn main() -> Void {\n    print("before")\n    let = 1\n}\n')]) == 1
+    assert cli.main(["run", program('fn main() {\n    print("before")\n    let = 1\n}\n')]) == 1
     assert capsys.readouterr().out == ""
 
 
@@ -347,7 +356,7 @@ def test_process_inspect_is_valid_json_for_every_example():
         name = path.relative_to(EXAMPLES).as_posix()
         result = nex("inspect", f"examples/{name}")
         document = json.loads(result.stdout)
-        assert document["schema"] == "nexora.inspect/2", name
+        assert document["schema"] == "nexora.inspect/3", name
         assert result.stderr == "", name
         # Inspecting never runs the program, so even the examples that fail at run time are 'ok'.
         assert result.returncode == (0 if document["ok"] else 1), name
@@ -432,7 +441,7 @@ def test_empty_file(program, capsys):
 
 # Arguments are paths, never code
 
-@pytest.mark.parametrize("argument", ['print("injected")', "fn main() -> Void {}", "__import__('os')", "; echo injected"])
+@pytest.mark.parametrize("argument", ['print("injected")', "fn main() {}", "__import__('os')", "; echo injected"])
 def test_an_argument_is_never_treated_as_source_code(argument, capsys):
     assert cli.main(["run", argument]) == 4
     captured = capsys.readouterr()
@@ -485,9 +494,9 @@ def assert_diagnostics_document(document: dict, path: str) -> None:
 @pytest.mark.parametrize("text", [
     HELLO,
     "",                                                       # no main: a diagnostic without a position
-    "fn main() -> Void {\n    let x = @\n}\n",                # lexical
-    "fn main() -> Void {\n    let = 1\n}\n",                  # syntax
-    'fn main() -> Void {\n    let x: Int = "a"\n    print(y)\n}\n',   # type and semantic
+    "fn main() {\n    let x = @\n}\n",                # lexical
+    "fn main() {\n    let = 1\n}\n",                  # syntax
+    'fn main() {\n    let x: Int = "a"\n    print(y)\n}\n',   # type and semantic
     "\x00\x01\x02 not a program at all {{{{ )))) \"",
 ])
 def test_check_json_always_follows_the_schema(text, program, capsys):
@@ -503,7 +512,7 @@ def test_check_json_always_follows_the_schema(text, program, capsys):
 
 
 def test_diagnostic_codes_and_positions_are_stable_across_runs(program, capsys):
-    path = program('fn main() -> Void {\n    let x: Int = "a"\n    print(y)\n    let = 2\n}\n')
+    path = program('fn main() {\n    let x: Int = "a"\n    print(y)\n    let = 2\n}\n')
     outputs = []
     for _ in range(3):
         cli.main(["check", path, "--format", "json"])
@@ -512,7 +521,7 @@ def test_diagnostic_codes_and_positions_are_stable_across_runs(program, capsys):
 
 
 def test_json_positions_agree_with_the_text_report(program, capsys):
-    path = program('fn main() -> Void {\n    let age: Int = "twenty"\n    print(missing)\n}\n')
+    path = program('fn main() {\n    let age: Int = "twenty"\n    print(missing)\n}\n')
     cli.main(["check", path, "--format", "json"])
     document = json.loads(capsys.readouterr().out)
     cli.main(["check", path])
@@ -578,7 +587,7 @@ def test_process_from_another_working_directory(tmp_path):
     # A relative path is resolved against the directory the command is run from,
     # and reported exactly as it was given.
     (tmp_path / "sub").mkdir()
-    (tmp_path / "sub" / "here.nex").write_text('fn main() -> Void {\n    print("from sub")\n    print(nope)\n}\n', encoding="utf-8")
+    (tmp_path / "sub" / "here.nex").write_text('fn main() {\n    print("from sub")\n    print(nope)\n}\n', encoding="utf-8")
     command = [sys.executable, "-m", "nexora"]
 
     relative = subprocess.run([*command, "check", "sub/here.nex"], capture_output=True, encoding="utf-8", cwd=tmp_path)
@@ -598,7 +607,7 @@ def test_process_from_another_working_directory(tmp_path):
 
 def test_process_output_is_utf8_whatever_the_console_encoding(tmp_path):
     path = tmp_path / "unicode.nex"
-    path.write_text('fn main() -> Void {\n    print("año ✓ 日本")\n}\n', encoding="utf-8")
+    path.write_text('fn main() {\n    print("año ✓ 日本")\n}\n', encoding="utf-8")
     environment = {**os.environ, "PYTHONIOENCODING": "ascii"}
     result = subprocess.run([sys.executable, "-m", "nexora", "run", str(path)], capture_output=True, env=environment)
     assert result.returncode == 0
@@ -609,7 +618,7 @@ def test_process_reader_that_stops_early(tmp_path):
     # `nex run big.nex | head -1`: the reader closes the pipe while the program is still printing.
     path = tmp_path / "big.nex"
     body = "\n".join(f'    print("line {index}")' for index in range(20000))
-    path.write_text(f"fn main() -> Void {{\n{body}\n}}\n", encoding="utf-8")
+    path.write_text(f"fn main() {{\n{body}\n}}\n", encoding="utf-8")
     process = subprocess.Popen(
         [sys.executable, "-m", "nexora", "run", str(path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )

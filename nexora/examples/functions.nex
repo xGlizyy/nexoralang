@@ -1,18 +1,18 @@
 // Functions with typed parameters and return values, 'if' / 'else', and recursion.
 
-fn add(a: Int, b: Int) -> Int {
+fn add(a: Int, b: Int) gives Int {
     return a + b
 }
 
 // Every path of a function that returns a value ends in 'return'.
-fn max(a: Int, b: Int) -> Int {
+fn max(a: Int, b: Int) gives Int {
     if a > b {
         return a
     }
     return b
 }
 
-fn describe(n: Int) -> Text {
+fn describe(n: Int) gives Text {
     if n < 0 {
         return "negative"
     } else if n == 0 {
@@ -23,14 +23,14 @@ fn describe(n: Int) -> Text {
 }
 
 // A function can call itself. The 'if' is what makes the recursion stop.
-fn factorial(n: Int) -> Int {
+fn factorial(n: Int) gives Int {
     if n <= 1 {
         return 1
     }
     return n * factorial(n - 1)
 }
 
-fn is_even(n: Int) -> Bool {
+fn is_even(n: Int) gives Bool {
     if n == 0 {
         return true
     }
@@ -38,7 +38,7 @@ fn is_even(n: Int) -> Bool {
 }
 
 // Functions can be declared in any order: is_even calls is_odd, declared after it.
-fn is_odd(n: Int) -> Bool {
+fn is_odd(n: Int) gives Bool {
     if n == 0 {
         return false
     }
@@ -46,7 +46,7 @@ fn is_odd(n: Int) -> Bool {
 }
 
 // A Void function returns nothing. A bare 'return' leaves it early.
-fn greet(name: Text, formal: Bool) -> Void {
+fn greet(name: Text, formal: Bool) {
     if formal {
         print("Good morning, " + name + ".")
         return
@@ -54,7 +54,7 @@ fn greet(name: Text, formal: Bool) -> Void {
     print("Hi, " + name + "!")
 }
 
-fn main() -> Void {
+fn main() {
     let result: Int = add(2, 3)
     print(result)
     print(max(7, 12))

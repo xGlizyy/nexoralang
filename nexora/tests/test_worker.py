@@ -9,7 +9,7 @@ import pytest
 
 from nexora import __version__
 
-HELLO = 'fn main() -> Void {\n    print("Hello from NEXORA")\n}\n'
+HELLO = 'fn main() {\n    print("Hello from NEXORA")\n}\n'
 POSIX_ONLY = pytest.mark.skipif(os.name == "nt", reason="the operating-system limits use POSIX `resource` and `signal`")
 # The limit of memory is the address space of the process (RLIMIT_AS). The kernel of Linux enforces
 # it; the one of macOS accepts it and does not apply it, so there the program keeps growing until
@@ -38,23 +38,23 @@ def test_run():
 
 
 def test_check_does_not_print_the_program_output():
-    code, response, _ = worker({"action": "check", "code": 'fn main() -> Void {\n    print("RAN")\n    print(1 / 0)\n}'})
+    code, response, _ = worker({"action": "check", "code": 'fn main() {\n    print("RAN")\n    print(1 / 0)\n}'})
     assert (code, response["action"], response["status"], response["output"]) == (0, "check", "success", "")
 
 
 def test_diagnostics_use_the_virtual_file_name():
-    _, response, _ = worker({"action": "run", "code": "fn main() -> Void {\n    print(x)\n}", "filename": "demo.nex"})
+    _, response, _ = worker({"action": "run", "code": "fn main() {\n    print(x)\n}", "filename": "demo.nex"})
     assert response["status"] == "invalid"
     assert (response["diagnostics"][0]["file"], response["diagnostics"][0]["line"]) == ("demo.nex", 2)
 
 
 def test_limits_from_the_request_are_applied():
-    program = 'fn main() -> Void {\n    print("0123456789")\n    print("0123456789")\n}'
+    program = 'fn main() {\n    print("0123456789")\n    print("0123456789")\n}'
     _, response, _ = worker({"action": "run", "code": program, "limits": {"output_bytes": 15}})
     assert response["status"] == "output_limit"
     assert response["output"] == "0123456789\n0123"
 
-    grow = 'fn main() -> Void {\n    let a = "abcdefgh"\n    let b = a + a + a\n    print(b)\n}'
+    grow = 'fn main() {\n    let a = "abcdefgh"\n    let b = a + a + a\n    print(b)\n}'
     _, response, _ = worker({"action": "run", "code": grow, "limits": {"text_chars": 10}})
     assert (response["status"], response["diagnostics"][0]["code"]) == ("runtime_error", "E3006")
 
@@ -66,7 +66,7 @@ def test_info():
 
 
 def test_non_ascii_text_survives_the_round_trip():
-    _, response, _ = worker({"action": "run", "code": 'fn main() -> Void {\n    print("año ✓ 日本")\n}'})
+    _, response, _ = worker({"action": "run", "code": 'fn main() {\n    print("año ✓ 日本")\n}'})
     assert response["output"] == "año ✓ 日本\n"
 
 
@@ -108,8 +108,8 @@ def test_isolated_mode_ignores_python_environment_variables(tmp_path):
 # Limits enforced by the operating system. They cannot run on Windows, and the limit of memory
 # cannot run on macOS either (see MEMORY_LIMIT_ONLY).
 
-DOUBLE = 'fn grow(text: Text, times: Int) -> Text {\n    if times == 0 {\n        return text\n    }\n    return grow(text + text, times - 1)\n}\nfn main() -> Void {\n    let big = grow("ab", 40)\n    print("unreachable")\n}'
-SLOW = "fn fib(n: Int) -> Int {\n    if n < 2 {\n        return n\n    }\n    return fib(n - 1) + fib(n - 2)\n}\nfn main() -> Void {\n    print(fib(45))\n}"
+DOUBLE = 'fn grow(text: Text, times: Int) gives Text {\n    if times == 0 {\n        return text\n    }\n    return grow(text + text, times - 1)\n}\nfn main() {\n    let big = grow("ab", 40)\n    print("unreachable")\n}'
+SLOW = "fn fib(n: Int) gives Int {\n    if n < 2 {\n        return n\n    }\n    return fib(n - 1) + fib(n - 2)\n}\nfn main() {\n    print(fib(45))\n}"
 
 
 @MEMORY_LIMIT_ONLY

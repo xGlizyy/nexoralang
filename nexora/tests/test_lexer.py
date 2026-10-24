@@ -143,11 +143,11 @@ def test_a_missing_parenthesis_does_not_swallow_the_following_lines():
 
 
 def test_lines_and_columns():
-    tokens, _ = lex('fn main() -> Void {\n    let name = "NEXORA"\n}')
+    tokens, _ = lex('fn main() {\n    let name = "NEXORA"\n}')
     positions = {token.lexeme: (token.span.line, token.span.column, token.span.end_column) for token in tokens}
     assert positions["fn"] == (1, 1, 3)
     assert positions["main"] == (1, 4, 8)
-    assert positions["->"] == (1, 11, 13)
+    assert positions["{"] == (1, 11, 12)
     assert positions["let"] == (2, 5, 8)
     assert positions["name"] == (2, 9, 13)
     assert positions['"NEXORA"'] == (2, 16, 24)

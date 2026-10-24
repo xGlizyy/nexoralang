@@ -10,12 +10,13 @@ tool `nex`, the specification, the examples and the tests.
 ```nex
 type Grade = Float where value >= 0.0 and value <= 100.0, "A grade goes from 0 to 100"
 
-fn average(total: Int, count: Int) -> Grade {
-    requires count > 0, "An average needs at least one mark"
+fn average(total: Int, count: Int) gives Grade
+    needs count > 0, "An average needs at least one mark"
+{
     return Grade(to_float(total) / to_float(count))
 }
 
-fn main() -> Void {
+fn main() {
     let mean = average(270, 4)
     if mean >= 50.0 {
         print("Passed with " + to_text(mean))
@@ -115,11 +116,11 @@ Save this in a file `program.nex`:
 
 <!-- nex:run -->
 ```nex
-fn square(n: Int) -> Int {
+fn square(n: Int) gives Int {
     return n * n
 }
 
-fn main() -> Void {
+fn main() {
     let side = 12
     print("Side: " + to_text(side))
     print("Area: " + to_text(square(side)))
@@ -141,11 +142,11 @@ If the program has an error, NEXORA explains it **before running anything**:
 
 <!-- nex:check-fails -->
 ```nex
-fn square(n: Int) -> Int {
+fn square(n: Int) gives Int {
     return n * n
 }
 
-fn main() -> Void {
+fn main() {
     print(square(2.5))
 }
 ```
@@ -156,7 +157,7 @@ type error[E2011]: Type mismatch
   |
 6 |     print(square(2.5))
   |                  ^^^ Expected Int, found Float
-  = note: This is the argument for 'n' in: fn square(n: Int) -> Int
+  = note: This is the argument for 'n' in: fn square(n: Int) gives Int
   = hint: Convert the Float explicitly with to_int(...), which drops the fractional part.
 
 error: program.nex: check failed with 1 error

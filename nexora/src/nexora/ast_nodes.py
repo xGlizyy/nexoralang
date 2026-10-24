@@ -49,7 +49,7 @@ class ListLiteral(Node):
 
 @dataclass(frozen=True)
 class Name(Node):
-    """A reference to a variable or a parameter (or to `result` inside `ensures`, or to `value`
+    """A reference to a variable or a parameter (or to `result` inside `promises`, or to `value`
     inside the condition of a refined type)."""
     name: str
 
@@ -273,10 +273,13 @@ class Block(Node):
 
 @dataclass(frozen=True)
 class LoopClause(Node):
-    """An `invariant` or `decreases` clause at the start of the body of a `while` (decision 0010)."""
-    # "invariant" or "decreases". Not called 'kind': that is the name of the node type in the JSON form.
+    """A `keeps` or `shrinks` clause in the header of a loop, between its head and its body
+    (decisions 0010 and 0019)."""
+    # "keeps" or "shrinks". Not called 'kind': that is the name of the node type in the JSON form.
     clause: str
-    # A Bool for 'invariant'; the Int measure for 'decreases'.
+    # The name written before ':', or None. It is not a variable: no expression can use it.
+    name: str | None
+    # A Bool for 'keeps'; the Int measure for 'shrinks'.
     condition: Expr
     # The explanation written after the condition, or None.
     message: str | None
@@ -284,8 +287,8 @@ class LoopClause(Node):
 
 @dataclass(frozen=True)
 class While(Node):
-    """`while condition { clauses statements }`. Every loop declares one `decreases` measure, checked
-    on every turn, and any number of invariants (decision 0010)."""
+    """`while condition clauses { statements }`. Every loop declares one `shrinks` measure, checked
+    on every turn, and any number of `keeps` (decisions 0010 and 0019)."""
     condition: Expr
     clauses: tuple[LoopClause, ...]
     body: Block
@@ -293,9 +296,9 @@ class While(Node):
 
 @dataclass(frozen=True)
 class For(Node):
-    """`for name in iterable { clauses statements }`. Iterates over a `List[T]`; the iterator is a
-    new immutable name in every turn, and the loop body may declare invariants but not `decreases`
-    (decision 0012)."""
+    """`for name in iterable clauses { statements }`. Iterates over a `List[T]`; the iterator is a
+    new immutable name in every turn, and the loop may declare `keeps` but not `shrinks`
+    (decisions 0012 and 0019)."""
     name: str
     name_span: Span
     iterable: Expr
@@ -317,18 +320,21 @@ class Param(Node):
 
 @dataclass(frozen=True)
 class Contract(Node):
-    """A `requires` or `ensures` clause at the start of a function body."""
-    # "requires" or "ensures". Not called 'kind': that is the name of the node type in the JSON form.
+    """A `needs`, `promises` or `trust` clause in the header of a function (decision 0019)."""
+    # "needs", "promises" or "trust". Not called 'kind': that is the name of the node type in the
+    # JSON form.
     clause: str
+    # The name written before ':', or None. It is not a variable: no expression can use it.
+    name: str | None
     condition: Expr
-    # The explanation written after the condition, or None.
+    # The explanation written after the condition, or None. A 'trust' always has one.
     message: str | None
 
 
 @dataclass(frozen=True)
 class Example(Node):
-    """An `example` clause at the start of a function body: a Bool expression that calls the
-    function with concrete inputs. Only `nex test` evaluates it; the analysis never does."""
+    """An `example` clause in the header of a function: a Bool expression that calls the function
+    with concrete inputs. Only `nex test` evaluates it; the analysis never does."""
     condition: Expr
     # The explanation written after the condition, or None.
     message: str | None
@@ -339,15 +345,25 @@ class Function(Node):
     name: str
     name_span: Span
     params: tuple[Param, ...]
-    return_type: TypeRef
-    contracts: tuple[Contract, ...]
+    # The type after 'gives', or None for a function that gives nothing (decision 0019).
+    return_type: TypeRef | None
+    # The clauses between the signature and the body, in the order they are written: the order
+    # is part of the program (decision 0019, 8.4.1).
+    header: tuple[Contract | Example, ...]
     body: Block
-    # Last, after body: in the `nex inspect` JSON a new field is only ever added at the end, so the
-    # order of the existing fields stays the same (docs/inspect-schema.md).
-    examples: tuple[Example, ...] = ()
     # True when the function is marked with `pub` and can be called from another
-    # module (decision 0018, 3). Last, for the same reason.
+    # module (decision 0018, 3).
     public: bool = False
+
+    @property
+    def contracts(self) -> tuple[Contract, ...]:
+        """The `needs`, `promises` and `trust` of the header, in order."""
+        return tuple(item for item in self.header if isinstance(item, Contract))
+
+    @property
+    def examples(self) -> tuple[Example, ...]:
+        """The `example` clauses of the header, in order."""
+        return tuple(item for item in self.header if isinstance(item, Example))
 
 
 @dataclass(frozen=True)

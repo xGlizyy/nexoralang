@@ -10,21 +10,21 @@ pub type Point = { x: Int, y: Int }
 pub type Percent = Int where value >= 0 and value <= 100
 
 // The area of a rectangle.
-pub fn area(p: Point) -> Int {
+pub fn area(p: Point) gives Int {
     return p.x * p.y
 }
 
 // The perimeter, built from the same record.
-pub fn perimeter(p: Point) -> Int {
+pub fn perimeter(p: Point) gives Int {
     return 2 * (p.x + p.y)
 }
 
 // Private: this file uses it, and no other file can. Inside the module it is called by
 // its own name, without the module in front.
-fn scale(p: Point, factor: Int) -> Point {
+fn scale(p: Point, factor: Int) gives Point {
     return Point(x: p.x * factor, y: p.y * factor)
 }
 
-pub fn double(p: Point) -> Point {
+pub fn double(p: Point) gives Point {
     return scale(p, 2)
 }

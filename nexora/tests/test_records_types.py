@@ -173,7 +173,7 @@ def test_the_name_of_a_record_cannot_be_used_for_a_variable():
 
 
 def test_the_name_of_a_record_cannot_be_used_for_a_function():
-    (error,) = diagnostics_of(POINT + "fn Point() -> Int {\n    return 0\n}\n" + in_main(""))
+    (error,) = diagnostics_of(POINT + "fn Point() gives Int {\n    return 0\n}\n" + in_main(""))
     assert error.code == "E2006"
     assert "the name of a type" in error.label
 

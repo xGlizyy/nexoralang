@@ -107,16 +107,16 @@ def test_get_outside_the_list_breaks_its_requires(index: str) -> None:
 
     assert output == ""
     assert (error.code, error.category) == ("E4001", "contract")
-    assert error.label == "This call breaks a 'requires' condition of 'List.get'"
+    assert error.label == "This call breaks a 'needs' condition of 'List.get'"
     assert error.notes[0] == (
-        "The condition of the built-in function is false: requires 0 <= i and i < List.length(xs)"
+        "The condition of the built-in function is false: needs 0 <= i and i < List.length(xs)"
     )
     assert error.notes[1] == "Reason: An index must be inside the list"
     assert error.notes[2] == f"It was called with: xs = [1, 2], i = {index}"
 
 
 def test_get_in_a_function_reports_the_call_that_broke_the_contract() -> None:
-    functions = "fn at(xs: List[Int], i: Int) -> Int {\n    return List.get(xs, i)\n}"
+    functions = "fn at(xs: List[Int], i: Int) gives Int {\n    return List.get(xs, i)\n}"
     output, error = run_failure(with_main(functions, "print(at([1, 2], 5))"))
 
     assert output == ""
@@ -247,7 +247,7 @@ def test_an_unknown_function_of_list_is_suggested_as_list_function() -> None:
 
 def test_a_list_cannot_be_used_where_another_element_type_is_expected() -> None:
     text = with_main(
-        "fn take(xs: List[Text]) -> Void {\n    print(xs)\n}",
+        "fn take(xs: List[Text]) {\n    print(xs)\n}",
         "let xs = [1, 2]\ntake(List.append(xs, 3))",
     )
 
