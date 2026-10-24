@@ -1174,7 +1174,8 @@ class Checker:
                 "E2012",
                 f"{what} cannot have the type Void",
                 reference.span,
-                hint="Void means 'no value'. It can only be the return type of a function.",
+                # Since 0.12 Void is never written, not even after 'gives' (decision 0019, 4.1).
+                hint="Void means 'no value', and it is never written: a function that gives nothing has no 'gives'.",
             )
             return None
         return self._known_type(reference, declared_records=declared_records)
