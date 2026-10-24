@@ -25,12 +25,12 @@ They pass `nex check` and `nex run` ends with code `0`.
 | [`arithmetic.nex`](arithmetic.nex) | Precedence, integer and decimal division, limits of `Int` |
 | [`types.nex`](types.nex) | Inference, annotations, comparisons, logic and conversions |
 | [`functions.nex`](functions.nex) | Functions, `if` / `else`, recursion |
-| [`contracts.nex`](contracts.nex) | `requires` and `ensures` contracts that hold, with their explanation |
+| [`contracts.nex`](contracts.nex) | `needs`, `promises` and `trust` clauses in the header of a function, with their names and explanations |
 | [`checked_examples.nex`](checked_examples.nex) | Functions with their own examples (`example`), which `nex test` evaluates |
 | [`refined_types.nex`](refined_types.nex) | Refined types with `where`: constants checked without running and explicit check with `Percent(x)` |
-| [`loops.nex`](loops.nex) | `var` variables and `while` loops with their measure (`decreases`) and their invariants (`invariant`), checked on every iteration |
+| [`loops.nex`](loops.nex) | `var` variables and `while` loops with their measure (`shrinks`) and their invariants (`keeps`), checked on every iteration |
 | [`texts.nex`](texts.nex) | Texts: `Text.length`, `Text.slice` and searching inside a text, the order between texts and reading numbers with `Int.parse` and `Float.parse`, each with its requirements |
-| [`lists.nex`](lists.nex) | Immutable lists `List[T]`: length, access by index with its requirement, new lists with `List.append` and `List.concat`, `List.contains`, and a `for` that goes through the list with its `invariant` |
+| [`lists.nex`](lists.nex) | Immutable lists `List[T]`: length, access by index with its requirement, new lists with `List.append` and `List.concat`, `List.contains`, and a `for` that goes through the list with its `keeps` |
 | [`records.nex`](records.nex) | Immutable nominal records: declaration, construction with named fields in any order, reading fields and access chains, equality by value, a record inside another one and a list of records |
 | [`option_result.nex`](option_result.nex) | `Option[T]` and `Result[T, E]`: `Some`, `None`, `Ok` and `Err`, the functions that recognize the variant, reading the value with and without a default, and equality between variants |
 | [`console.nex`](console.nex) | A console program: the arguments it was run with and the standard input, with `args()` and `input()` |
@@ -57,7 +57,7 @@ They pass `nex check`, because the failure depends on values that are only known
 | File | What happens | `nex run` ends with |
 |------|--------------|---------------------|
 | [`failing/runtime_error.nex`](failing/runtime_error.nex) | Division by zero | `3` |
-| [`failing/contract_violation.nex`](failing/contract_violation.nex) | A `requires` condition is false | `5` |
+| [`failing/contract_violation.nex`](failing/contract_violation.nex) | A `needs` condition is false | `5` |
 | [`failing/refinement_violation.nex`](failing/refinement_violation.nex) | A computed value does not meet the condition of a refined type | `5` |
 | [`failing/loop_measure.nex`](failing/loop_measure.nex) | A loop that would not end: its measure stops decreasing | `5` |
-| [`failing/parse_number.nex`](failing/parse_number.nex) | Reads a number from a text that is not one: it breaks the `requires` of `Int.parse`, with a suggestion | `5` |
+| [`failing/parse_number.nex`](failing/parse_number.nex) | Reads a number from a text that is not one: it breaks the `needs` of `Int.parse`, with a suggestion | `5` |

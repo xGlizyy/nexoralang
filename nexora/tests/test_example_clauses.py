@@ -13,9 +13,20 @@ from nexora.pipeline import analyze
 
 
 def double(*clauses: str, body: str = "return n * 2") -> str:
-    """A function `double(n: Int) -> Int` with the given clauses, and nothing else (no main)."""
-    lines = "\n".join(f"    {line}" for line in (*clauses, body))
-    return f"fn double(n: Int) -> Int {{\n{lines}\n}}\n"
+    """A function `double(n: Int) gives Int` with the given clauses, and nothing else (no main)."""
+    return _with_header("double(n: Int) gives Int", [*clauses, *body.split("\n")]) + "\n"
+
+def _with_header(signature: str, lines: list[str]) -> str:
+    """A function in the syntax of 0.12: the clauses at the start of `lines` go in its header."""
+    clauses = []
+    while lines and lines[0].split(" ", 1)[0] in ("needs", "promises", "trust", "example"):
+        clauses.append(lines.pop(0))
+    body = "\n".join(f"    {line}" for line in lines)
+    if not clauses:
+        return f"fn {signature} {{\n{body}\n}}"
+    header = "\n".join(f"    {line}" for line in clauses)
+    return f"fn {signature}\n{header}\n{{\n{body}\n}}"
+
 
 
 def test_codes(text: str) -> list[str]:
@@ -36,11 +47,11 @@ def test_example_is_a_keyword_and_no_longer_reserved():
 
 def test_examples_are_parsed_into_their_own_nodes_in_any_order_with_the_contracts():
     program, errors = parse_text(double(
-        "requires n >= 0", 'example double(2) == 4, "Two doubled"', "ensures result >= n", "example double(0) == 0",
+        "needs n >= 0", 'example double(2) == 4, "Two doubled"', "promises result >= n", "example double(0) == 0",
     ))
     assert errors == []
     function = program.functions[0]
-    assert [contract.clause for contract in function.contracts] == ["requires", "ensures"]
+    assert [contract.clause for contract in function.contracts] == ["needs", "promises"]
     assert [(example.message, example.span.line) for example in function.examples] == [("Two doubled", 3), (None, 5)]
     assert type(function.examples[0].condition).__name__ == "Binary"
 
@@ -53,7 +64,7 @@ def test_a_function_without_examples_has_an_empty_tuple():
 def test_an_example_after_a_statement_is_misplaced():
     (error,) = diagnostics_of(double("let x = 1", "example double(1) == 2", body="return x"))
     assert (error.code, error.label) == (
-        "E1106", "'example' must come at the start of a function body, before any other statement",
+        "E1106", "'example' goes between the signature and the body",
     )
 
 
@@ -88,7 +99,7 @@ def test_the_expression_must_be_bool():
 
 
 def test_a_void_function_cannot_have_a_valid_example():
-    text = 'fn say(n: Int) -> Void {\n    example say(1)\n    print(n)\n}\n'
+    text = 'fn say(n: Int)\n    example say(1)\n{\n    print(n)\n}\n'
     assert test_codes(text) == ["E2011"]
 
 
@@ -107,8 +118,12 @@ def test_an_example_does_not_see_result():
 
 def test_an_example_can_use_other_functions_builtins_and_refined_checks():
     text = (
-        'type Small = Int where value < 100\n\n'
-        "fn half(n: Int) -> Int {\n    return n / 2\n}\n\n"
+        'type Small = Int where value < 100\n'
+        '\n'
+        'fn half(n: Int) gives Int {\n'
+        '    return n / 2\n'
+        '}\n'
+        '\n'
         + double("example half(double(5)) == 5", "example to_float(double(1)) > 1.5",
                  "example double(Small(3)) == 6")
     )
@@ -116,8 +131,13 @@ def test_an_example_can_use_other_functions_builtins_and_refined_checks():
 
 
 def test_constants_in_examples_are_checked_against_refined_types():
-    text = 'type Percent = Int where value >= 0 and value <= 100\n\n' \
-           "fn twice(p: Percent) -> Int {\n    example twice(150) == 300\n    return p * 2\n}\n"
+    text = 'type Percent = Int where value >= 0 and value <= 100\n' \
+           '\n' \
+           'fn twice(p: Percent) gives Int\n' \
+           '    example twice(150) == 300\n' \
+           '{\n' \
+           '    return p * 2\n' \
+           '}\n'
     assert test_codes(text) == ["E2017"]
 
 
@@ -133,7 +153,7 @@ def test_constants_in_examples_are_checked_against_refined_types():
     ("example not (double(2) != 4)", 1),
 ])
 def test_calls_anywhere_in_the_expression_count(clause, count):
-    text = "fn half(n: Int) -> Int {\n    return n / 2\n}\n\n" + double(clause)
+    text = "fn half(n: Int) gives Int {\n    return n / 2\n}\n\n" + double(clause)
     assert test_codes(text) == []
     program, _ = parse_text(text)
     assert len(own_calls(program.functions[1].examples[0], "double")) == count
@@ -156,7 +176,7 @@ def test_no_own_call_is_e2020_on_the_whole_expression():
 
 
 def test_a_call_made_only_inside_another_function_does_not_count():
-    text = "fn quad(n: Int) -> Int {\n    return double(double(n))\n}\n\n" + double("example quad(1) == 4")
+    text = "fn quad(n: Int) gives Int {\n    return double(double(n))\n}\n\n" + double("example quad(1) == 4")
     assert test_codes(text) == ["E2020"]
 
 
@@ -178,14 +198,14 @@ def test_an_own_call_with_wrong_arguments_is_its_own_error_not_e2020(clause, cod
 def test_the_analysis_never_evaluates_an_example():
     # Evaluating any of these would fail or print; the analysis accepts them silently.
     text = (
-        "fn boom(n: Int) -> Int {\n    print(\"evaluated!\")\n    return n / 0\n}\n\n"
+        "fn boom(n: Int) gives Int {\n    print(\"evaluated!\")\n    return n / 0\n}\n\n"
         + double("example double(boom(1)) == 0", "example double(2) == 5")
     )
     assert test_codes(text) == []
 
 
 def test_calls_in_examples_are_not_edges_of_the_call_graph():
-    text = "fn g(n: Int) -> Int {\n    return n + 1\n}\n\n" + double("example double(g(1)) == 4 and double(2) == 4")
+    text = "fn g(n: Int) gives Int {\n    return n + 1\n}\n\n" + double("example double(g(1)) == 4 and double(2) == 4")
     analysis = analyze(Source("t.nex", text), require_main=False)
     assert analysis.ok
     assert ("double", "double") not in analysis.facts.calls
@@ -193,43 +213,43 @@ def test_calls_in_examples_are_not_edges_of_the_call_graph():
 
 
 def test_calls_in_examples_are_references():
-    text = "fn g(n: Int) -> Int {\n    return n + 1\n}\n\n" + double("example double(g(1)) == 4")
+    text = "fn g(n: Int) gives Int {\n    return n + 1\n}\n\n" + double("example double(g(1)) == 4")
     symbols = {symbol.name: symbol for symbol in analyze(Source("t.nex", text), require_main=False).facts.symbols}
     assert [(span.line, span.column) for span in symbols["g"].references] == [(6, 20)]
     assert [(span.line, span.column) for span in symbols["double"].references] == [(6, 13)]
 
 
 def test_main_is_still_checked_when_present():
-    text = double("example double(2) == 4") + "\nfn main() -> Int {\n    return 1\n}\n"
+    text = double("example double(2) == 4") + "\nfn main() gives Int {\n    return 1\n}\n"
     assert test_codes(text) == ["E2004"]
 
 
 # The analysis tools (decision 0008, section 8)
 
 TWO_EXAMPLES = (
-    "fn g(n: Int) -> Int {\n    return n + 1\n}\n\n"
+    "fn g(n: Int) gives Int {\n    return n + 1\n}\n\n"
     + double('example double(2) == 4, "Two doubled"', "example double(g(1)) == 4")
-    + "\nfn main() -> Void {\n    print(double(1))\n}\n"
+    + "\nfn main() {\n    print(double(1))\n}\n"
 )
 
 
-def test_inspect_adds_example_nodes_at_the_end_of_function():
+def test_inspect_puts_the_examples_in_the_header_of_the_function():
     from nexora import tooling
 
     document = tooling.inspect_source(TWO_EXAMPLES)
-    assert document["schema"] == "nexora.inspect/2" and document["ok"]
+    assert document["schema"] == "nexora.inspect/3" and document["ok"]
     function = document["program"]["functions"][1]
-    assert list(function)[-2:] == ["examples", "public"]
-    first, second = function["examples"]
+    assert list(function)[-3:] == ["header", "body", "public"]
+    first, second = function["header"]
     assert list(first) == ["kind", "span", "condition", "message"]
     assert (first["kind"], first["message"], second["message"]) == ("Example", "Two doubled", None)
     assert first["condition"]["type"] == "Bool"
     assert first["condition"]["left"]["callee"] == "double" and first["condition"]["left"]["type"] == "Int"
 
 
-def test_inspect_still_validates_against_the_schema_of_0_3_1():
-    # Case 38: a consumer written for 0.3.1 reads the new documents, because the schema only gains
-    # a field at the end of Function and a node kind, and schemas never forbid extra fields.
+def test_a_consumer_of_0_3_1_notices_that_the_tree_changed_in_0_12():
+    # Case 38 held up to 0.11: the schema only gained fields. `nexora.inspect/3` removes
+    # `contracts` and `examples` from Function (decision 0019, 8.8), so an old consumer is told.
     import json
     from pathlib import Path
 
@@ -240,10 +260,11 @@ def test_inspect_still_validates_against_the_schema_of_0_3_1():
     old = json.loads((Path(__file__).parent / "golden" / "schemas" / "nexora-inspect-0.3.1.schema.json")
                      .read_text(encoding="utf-8"))
     document = tooling.inspect_source(TWO_EXAMPLES)
-    jsonschema.validate(document, old)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(document, old)
     old_order = old["$defs"]["Function"]["required"]
     function = document["program"]["functions"][1]
-    assert [name for name in function if name in old_order] == old_order
+    assert "contracts" in old_order and "contracts" not in function
 
 
 def test_context_lists_examples_last_and_keeps_the_call_graph():
@@ -275,7 +296,7 @@ def test_context_text_shows_the_examples():
 def test_a_program_without_examples_has_an_empty_list_and_no_feature():
     from nexora import tooling
 
-    document = tooling.get_context(double() + "\nfn main() -> Void {\n    print(double(1))\n}\n")
+    document = tooling.get_context(double() + "\nfn main() {\n    print(double(1))\n}\n")
     assert all(function["examples"] == [] for function in document["functions"])
     assert "examples" not in document["features"]
 
@@ -292,8 +313,8 @@ def test_no_analysis_tool_evaluates_examples():
     # Case 33: evaluating this example would print and divide by zero.
     from nexora import tooling
 
-    text = "fn boom(n: Int) -> Int {\n    print(\"evaluated!\")\n    return n / 0\n}\n\n" \
-           + double("example double(boom(1)) == 0") + "\nfn main() -> Void {\n    print(1)\n}\n"
+    text = "fn boom(n: Int) gives Int {\n    print(\"evaluated!\")\n    return n / 0\n}\n\n" \
+           + double("example double(boom(1)) == 0") + "\nfn main() {\n    print(1)\n}\n"
     for document in (tooling.check_source(text), tooling.inspect_source(text), tooling.get_context(text),
                      tooling.get_symbols(text)):
         assert document["ok"], document["schema"]

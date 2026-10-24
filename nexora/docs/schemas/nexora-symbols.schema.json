@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://nexora.invalid/schemas/nexora-symbols.schema.json",
-  "title": "nexora.symbols/1: the names a program declares and where they are used",
+  "title": "nexora.symbols/2: the names a program declares and where they are used",
   "type": "object",
   "required": [
     "schema",
@@ -16,7 +16,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "nexora.symbols/1"
+      "const": "nexora.symbols/2"
     },
     "nexora_version": {
       "type": "string",
@@ -351,8 +351,8 @@
             "properties": {
               "clause": {
                 "enum": [
-                  "requires",
-                  "ensures"
+                  "needs",
+                  "promises"
                 ]
               },
               "condition": {
@@ -365,7 +365,7 @@
               },
               "checked_at_run_time": {
                 "type": "boolean",
-                "description": "True for 'requires', checked on every call. False for 'ensures', which the implementation keeps and the tests check, but the program does not."
+                "description": "True for 'needs', checked on every call. False for 'promises', which the implementation keeps and the tests check, but the program does not."
               }
             }
           }

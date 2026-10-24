@@ -13,7 +13,7 @@ POINT = "type Point = { x: Int, y: Int }\n"
 
 
 def test_the_tree_has_the_record_declaration():
-    document = tooling.inspect_source(POINT + "fn main() -> Void {\n}\n")
+    document = tooling.inspect_source(POINT + "fn main() {\n}\n")
     (record,) = document["program"]["records"]
     assert record["kind"] == "RecordDecl"
     assert record["name"] == "Point"
@@ -22,7 +22,7 @@ def test_the_tree_has_the_record_declaration():
 
 def test_the_tree_has_the_construction_and_the_access():
     document = tooling.inspect_source(
-        POINT + "fn main() -> Void {\n    let p = Point(x: 1, y: 2)\n    print(p.x)\n}\n"
+        POINT + "fn main() {\n    let p = Point(x: 1, y: 2)\n    print(p.x)\n}\n"
     )
     statements = document["program"]["functions"][0]["body"]["statements"]
     construction = statements[0]["value"]
@@ -38,12 +38,12 @@ def test_the_tree_has_the_construction_and_the_access():
 
 
 def test_the_tree_of_a_program_without_records_has_an_empty_list():
-    document = tooling.inspect_source("fn main() -> Void {\n}\n")
+    document = tooling.inspect_source("fn main() {\n}\n")
     assert document["program"]["records"] == []
 
 
 def test_the_context_lists_the_records():
-    document = tooling.get_context(POINT + "fn main() -> Void {\n    let p = Point(x: 1, y: 2)\n}\n")
+    document = tooling.get_context(POINT + "fn main() {\n    let p = Point(x: 1, y: 2)\n}\n")
     (record,) = document["records"]
     assert record["name"] == "Point"
     assert record["valid"] is True
@@ -53,12 +53,12 @@ def test_the_context_lists_the_records():
 
 
 def test_the_context_of_a_program_without_records_has_an_empty_list():
-    document = tooling.get_context("fn main() -> Void {\n}\n")
+    document = tooling.get_context("fn main() {\n}\n")
     assert document["records"] == []
 
 
 def test_the_context_says_that_a_record_that_cannot_be_used_is_not_valid():
-    document = tooling.get_context("type A = { a: A }\nfn main() -> Void {\n}\n")
+    document = tooling.get_context("type A = { a: A }\nfn main() {\n}\n")
     (record,) = document["records"]
     assert record["valid"] is False
     assert record["reason"] is not None
@@ -66,30 +66,30 @@ def test_the_context_says_that_a_record_that_cannot_be_used_is_not_valid():
 
 def test_the_types_of_the_context_are_only_the_refined_ones():
     document = tooling.get_context(
-        "type Small = Int where value < 10\n" + POINT + "fn main() -> Void {\n}\n"
+        "type Small = Int where value < 10\n" + POINT + "fn main() {\n}\n"
     )
     assert [kind["name"] for kind in document["types"]] == ["Small"]
     assert [record["name"] for record in document["records"]] == ["Point"]
 
 
 def test_the_features_of_the_context_say_that_the_program_uses_records():
-    document = tooling.get_context(POINT + "fn main() -> Void {\n}\n")
+    document = tooling.get_context(POINT + "fn main() {\n}\n")
     assert "records" in document["features"]
 
 
 def test_the_features_of_a_program_without_records_do_not_say_it():
-    document = tooling.get_context("fn main() -> Void {\n}\n")
+    document = tooling.get_context("fn main() {\n}\n")
     assert "records" not in document["features"]
 
 
 def test_the_text_of_the_context_shows_the_records():
-    text = tooling.render_context(tooling.get_context(POINT + "fn main() -> Void {\n}\n"))
+    text = tooling.render_context(tooling.get_context(POINT + "fn main() {\n}\n"))
     assert "Records (1):" in text
     assert "type Point = { x: Int, y: Int }" in text
 
 
 def test_the_documents_of_a_program_with_records_hold_up():
-    text = POINT + "fn main() -> Void {\n    let p = Point(x: 1, y: 2)\n    print(p.x)\n}\n"
+    text = POINT + "fn main() {\n    let p = Point(x: 1, y: 2)\n    print(p.x)\n}\n"
     analysis = analyze(Source("test.nex", text))
     assert analysis.ok
     for document in (tooling.check_source(text), tooling.inspect_source(text),

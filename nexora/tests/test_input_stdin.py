@@ -12,7 +12,7 @@ from nexora.host import LocalHost
 from helpers import run_failure_with_host, run_with_host
 
 PROGRAM = """
-fn main() -> Void {
+fn main() {
     let first = input()
     let second = input()
     print(first)
@@ -35,7 +35,7 @@ def host_with(*lines: str) -> LocalHost:
 
 def test_one_line():
     program = """
-fn main() -> Void {
+fn main() {
     print(input())
 }
 """
@@ -48,7 +48,7 @@ def test_several_lines_are_read_in_order():
 
 def test_an_empty_line_is_an_empty_text():
     program = """
-fn main() -> Void {
+fn main() {
     let line = input()
     print(line == "")
 }
@@ -58,7 +58,7 @@ fn main() -> Void {
 
 def test_a_line_keeps_its_spaces():
     program = """
-fn main() -> Void {
+fn main() {
     print(input())
 }
 """
@@ -67,7 +67,7 @@ fn main() -> Void {
 
 def test_a_line_may_have_unicode():
     program = """
-fn main() -> Void {
+fn main() {
     print(input())
 }
 """
@@ -83,7 +83,7 @@ def test_the_end_of_the_input_stops_the_program():
 
 def test_the_end_of_the_input_is_reported_even_with_nothing_read():
     program = """
-fn main() -> Void {
+fn main() {
     print(input())
 }
 """
@@ -93,7 +93,7 @@ fn main() -> Void {
 
 def test_a_program_that_never_reads_does_not_need_the_input():
     program = """
-fn main() -> Void {
+fn main() {
     print("sin entrada")
 }
 """
@@ -103,7 +103,7 @@ fn main() -> Void {
 def test_without_a_host_there_is_no_input():
     # A program that runs with no host at all: the input is empty (decision 0015, 6).
     program = """
-fn main() -> Void {
+fn main() {
     print(input())
 }
 """
@@ -114,7 +114,7 @@ fn main() -> Void {
 @pytest.mark.parametrize("line", ["", " ", "a", "ñ", "🎉"])
 def test_every_line_is_read_whole(line):
     program = """
-fn main() -> Void {
+fn main() {
     print(input())
 }
 """

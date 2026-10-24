@@ -20,15 +20,18 @@ from nexora.pipeline import analyze
 
 # grow(n) calls itself n times, printing on the way. The examples of grow(3) run out of memory
 # three calls deep, so the error has a chain of calls; grow(1) does not.
-GROW = ('fn grow(n: Int) -> Int {\n'
+GROW = ('fn grow(n: Int) gives Int\n'
         '    example grow(3) == 3\n'
         '    example grow(1) == 1\n'
+        '{\n'
         '    print("grow " + to_text(n))\n'
-        '    if n == 0 {\n        return 0\n    }\n'
+        '    if n == 0 {\n'
+        '        return 0\n'
+        '    }\n'
         '    return grow(n - 1) + 1\n'
         '}\n')
 # The same function, run by main: grow(3) runs out of memory after printing two lines.
-PROGRAM = GROW + 'fn main() -> Void {\n    print("before")\n    print(grow(3))\n}\n'
+PROGRAM = GROW + 'fn main() {\n    print("before")\n    print(grow(3))\n}\n'
 LABEL = "The program needed more memory than is available."
 HINT = "Reduce the size of values created by the program, especially values that grow with each function call."
 MESSAGE = "The program needed more memory than this environment allows and was stopped."
@@ -121,7 +124,7 @@ def test_memory_error_in_a_call_of_the_program_is_e3007(monkeypatch):           
     diagnostic = raised.value.diagnostic
     assert (diagnostic.code, diagnostic.message, diagnostic.category) == ("E3007", "Out of memory", "runtime")
     assert (diagnostic.label, diagnostic.hint, diagnostic.span) == (LABEL, HINT, None)
-    assert diagnostic.notes == ("In 'grow', called at line 12, column 11.",)
+    assert diagnostic.notes == ("In 'grow', called at line 13, column 11.",)
 
 
 def test_memory_error_in_the_write_of_print_is_e3007():                                 # [2]

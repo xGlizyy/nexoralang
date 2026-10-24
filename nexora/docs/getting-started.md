@@ -13,7 +13,7 @@ Create a text file called `program.nex` with this content:
 
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     print("Hello from NEXORA")
 }
 ```
@@ -59,7 +59,7 @@ run. `nex check` is useful while you write, because it produces no effect.
 
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     let name = "Ada"
     let year = 1843
     print(name)
@@ -97,7 +97,7 @@ then the language checks that the value is of that type:
 
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     let title = "Analytical Engine"      // Text, deduced
     let pages: Int = 25                  // Int, written
     let price: Float = 19.99
@@ -123,7 +123,7 @@ say so with a conversion function:
 
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     let units = 3
     let price = 2.5
     let total = to_float(units) * price          // Int -> Float
@@ -146,15 +146,15 @@ type, and the function declares the type of what it returns:
 
 <!-- nex:run -->
 ```nex
-fn add(a: Int, b: Int) -> Int {
+fn add(a: Int, b: Int) gives Int {
     return a + b
 }
 
-fn greet(name: Text) -> Void {
+fn greet(name: Text) {
     print("Hello, " + name + "!")
 }
 
-fn main() -> Void {
+fn main() {
     let result: Int = add(2, 3)
     print(result)
     greet("Ada")
@@ -177,7 +177,7 @@ otherwise:
 
 <!-- nex:run -->
 ```nex
-fn describe(temperature: Int) -> Text {
+fn describe(temperature: Int) gives Text {
     if temperature < 0 {
         return "freezing"
     } else if temperature < 20 {
@@ -187,7 +187,7 @@ fn describe(temperature: Int) -> Text {
     }
 }
 
-fn main() -> Void {
+fn main() {
     print(describe(-5))
     print(describe(12))
     print(describe(30))
@@ -211,10 +211,11 @@ iteration and never goes below 0.
 
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     var count = 3
-    while count > 0 {
-        decreases count, "One step closer to zero on every turn"
+    while count > 0
+        shrinks count, "One step closer to zero on every turn"
+    {
         print(count)
         count = count - 1
     }
@@ -241,7 +242,7 @@ When something is not correct, NEXORA explains it with a diagnostic. This progra
 
 <!-- nex:check-fails -->
 ```nex
-fn main() -> Void {
+fn main() {
     let age: Int = "twenty"
     print(age)
 }
@@ -279,7 +280,7 @@ An error with a suggestion: the name is misspelled and a similar one exists.
 
 <!-- nex:check-fails -->
 ```nex
-fn main() -> Void {
+fn main() {
     let total = 10
     print(totl)
 }
@@ -301,7 +302,7 @@ This program passes `nex check`, but it fails when it runs:
 
 <!-- nex:fails exit=3 -->
 ```nex
-fn main() -> Void {
+fn main() {
     let items = 12
     let people = 3 - 3
     print("Sharing...")
@@ -330,18 +331,18 @@ With what you have seen so far:
 ```nex
 // Computes the average mark of three exams and decides whether they are passed.
 
-fn average(a: Int, b: Int, c: Int) -> Float {
+fn average(a: Int, b: Int, c: Int) gives Float {
     return to_float(a + b + c) / 3.0
 }
 
-fn verdict(mean: Float) -> Text {
+fn verdict(mean: Float) gives Text {
     if mean >= 50.0 {
         return "passed"
     }
     return "failed"
 }
 
-fn main() -> Void {
+fn main() {
     let mean = average(62, 48, 71)
     print("Mean: " + to_text(mean))
     print("Result: " + verdict(mean))

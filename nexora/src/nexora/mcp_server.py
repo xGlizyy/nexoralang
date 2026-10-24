@@ -99,7 +99,7 @@ def build_server():
     def nexora_inspect(source: str, filename: str = tooling.DEFAULT_FILENAME) -> dict[str, Any]:
         """Get the syntax tree of NEXORA source code, with the type of every expression. Does not run it.
 
-        Returns a nexora.inspect/2 document. If the code has syntax errors the tree is
+        Returns a nexora.inspect/3 document. If the code has syntax errors the tree is
         partial and "complete" is false; "program" is null if it has lexical errors. The tree
         can be large; prefer nexora_get_context for an overview.
         """
@@ -110,7 +110,7 @@ def build_server():
     def nexora_get_context(source: str, filename: str = tooling.DEFAULT_FILENAME) -> dict[str, Any]:
         """Get a compact technical summary of NEXORA source code, to understand it before changing it.
 
-        Returns a nexora.context/1 document: functions with their signatures, contracts,
+        Returns a nexora.context/2 document: functions with their signatures, contracts,
         variables and types, which function calls which, the language features in use and the
         current diagnostics. Computed by static analysis: the program is not run, and nothing
         is inferred beyond what the analysis establishes.
@@ -123,7 +123,7 @@ def build_server():
                            function: str | None = None) -> dict[str, Any]:
         """List the functions, parameters and variables NEXORA source code declares, and where each is used.
 
-        Returns a nexora.symbols/1 document. "name" keeps only the symbols with that name;
+        Returns a nexora.symbols/2 document. "name" keeps only the symbols with that name;
         "function" keeps one function and what is declared inside it. Does not run the code.
         """
         _source(source, filename)

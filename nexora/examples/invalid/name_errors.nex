@@ -2,13 +2,13 @@
 // The syntax is correct; the problems are found by the static analysis, without running.
 // `nex check examples/invalid/name_errors.nex` reports them all and exits with code 1.
 
-fn area(width: Int, height: Int) -> Int {
+fn area(width: Int, height: Int) gives Int {
     if width > 0 {
         return width * height
     }
 }
 
-fn main() -> Void {
+fn main() {
     let name = "NEXORA"
     let name = "again"
     print(totl)

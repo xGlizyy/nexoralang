@@ -2,9 +2,9 @@
 
 Three things live here, and only here:
 
-- their contracts, written in NEXORA and parsed with the real parser: the `requires` that say when
-  a function has an answer, and the `ensures` that describe its result;
-- their implementations, which the interpreter calls once every `requires` holds;
+- their contracts, written in NEXORA and parsed with the real parser: the `needs` that say when
+  a function has an answer, and the `promises` that describe its result;
+- their implementations, which the interpreter calls once every `needs` holds;
 - the grammar of a number written in a text (decision 0011, section 6).
 
 Their signatures are in checker.py, next to the other built-in functions.
@@ -31,18 +31,18 @@ _INT_DIGITS = len(str(INT_MAX))
 
 @dataclass(frozen=True)
 class Contract:
-    """A `requires` or `ensures` of a built-in function."""
+    """A `needs` or `promises` of a built-in function."""
 
-    clause: str                 # "requires" or "ensures"
+    clause: str                 # "needs" or "promises"
     source: str                 # the condition, as written here
     condition: ast.Expr         # the same condition, parsed
     message: str
 
     @property
     def checked_at_run_time(self) -> bool:
-        """Only `requires` is checked when the program runs; `ensures` is kept by the implementation
+        """Only `needs` is checked when the program runs; `promises` is kept by the implementation
         and checked by the tests (decision 0011, 7.1)."""
-        return self.clause == "requires"
+        return self.clause == "needs"
 
 
 def _contract(clause: str, source: str, message: str) -> Contract:
@@ -55,32 +55,32 @@ def _contract(clause: str, source: str, message: str) -> Contract:
 # Decision 0011, section 4. A function without an entry has no contract.
 CONTRACTS: dict[str, tuple[Contract, ...]] = {
     "Text.length": (
-        _contract("ensures", "result >= 0", "A text never has a negative number of characters"),
+        _contract("promises", "result >= 0", "A text never has a negative number of characters"),
     ),
     "Text.slice": (
-        _contract("requires", "start >= 0", "A slice cannot start before the first character"),
-        _contract("requires", "start <= end", "A slice cannot end before it starts"),
-        _contract("requires", "end <= Text.length(text)", "A slice cannot end after the last character"),
-        _contract("ensures", "Text.length(result) == end - start", "The slice has exactly end - start characters"),
+        _contract("needs", "start >= 0", "A slice cannot start before the first character"),
+        _contract("needs", "start <= end", "A slice cannot end before it starts"),
+        _contract("needs", "end <= Text.length(text)", "A slice cannot end after the last character"),
+        _contract("promises", "Text.length(result) == end - start", "The slice has exactly end - start characters"),
     ),
     "Int.parse": (
-        _contract("requires", "Int.can_parse(text)",
+        _contract("needs", "Int.can_parse(text)",
                   "Only a whole number within the range of Int can be read as an Int"),
     ),
     "Float.parse": (
-        _contract("requires", "Float.can_parse(text)",
+        _contract("needs", "Float.can_parse(text)",
                   "Only a decimal number that fits in a Float can be read as a Float"),
     ),
     "List.get": (
-        _contract("requires", "0 <= i and i < List.length(xs)",
+        _contract("needs", "0 <= i and i < List.length(xs)",
                   "An index must be inside the list"),
     ),
 }
 
 
 def requirements(name: str) -> tuple[Contract, ...]:
-    """The `requires` of a built-in function, in the order they are checked."""
-    return tuple(contract for contract in CONTRACTS.get(name, ()) if contract.clause == "requires")
+    """The `needs` of a built-in function, in the order they are checked."""
+    return tuple(contract for contract in CONTRACTS.get(name, ()) if contract.clause == "needs")
 
 
 # Numbers written in a text (decision 0011, section 6)
@@ -104,10 +104,10 @@ def _int_value(text: str) -> int | None:
 
 
 def parse_int(text: str) -> int:
-    """Only called once `can_parse_int(text)` holds (its `requires`)."""
+    """Only called once `can_parse_int(text)` holds (its `needs`)."""
     value = _int_value(text) if _INTEGER.fullmatch(text) else None
     if value is None:
-        raise ValueError("Int.parse was called without checking its requires")
+        raise ValueError("Int.parse was called without checking its needs")
     return value
 
 
@@ -118,9 +118,9 @@ def can_parse_float(text: str) -> bool:
 
 
 def parse_float(text: str) -> float:
-    """Only called once `can_parse_float(text)` holds (its `requires`)."""
+    """Only called once `can_parse_float(text)` holds (its `needs`)."""
     if not can_parse_float(text):
-        raise ValueError("Float.parse was called without checking its requires")
+        raise ValueError("Float.parse was called without checking its needs")
     return float(text)
 
 
@@ -140,7 +140,7 @@ def parse_hint(name: str, text: str) -> str | None:
     return None
 
 
-# The implementations. Each receives the values of the arguments, in order, once every `requires`
+# The implementations. Each receives the values of the arguments, in order, once every `needs`
 # holds, and returns the value of the call.
 IMPLEMENTATIONS = {
     "Text.length": lambda text: len(text),
@@ -153,7 +153,7 @@ IMPLEMENTATIONS = {
     "Float.can_parse": can_parse_float,
     "Float.parse": parse_float,
     # Lists are immutable tuples: append and concat build a new value and never change
-    # the one they receive. List.get is only reached after its 'requires' holds.
+    # the one they receive. List.get is only reached after its 'needs' holds.
     "List.length": lambda xs: len(xs),
     "List.get": lambda xs, i: xs[i],
     "List.append": lambda xs, x: xs + (x,),
@@ -163,10 +163,10 @@ IMPLEMENTATIONS = {
     # value, so None is never Some(x) and Ok(x) is never Err(x).
     "Option.is_some": lambda value: value.kind == SOME,
     "Option.is_none": lambda value: value.kind == NONE,
-    "Option.unwrap_or": lambda value, fallback: value.payload if value.kind == SOME else fallback,
+    "Option.value_or": lambda value, fallback: value.payload if value.kind == SOME else fallback,
     "Result.is_ok": lambda value: value.kind == OK,
     "Result.is_err": lambda value: value.kind == ERR,
-    "Result.unwrap_or": lambda value, fallback: value.payload if value.kind == OK else fallback,
+    "Result.value_or": lambda value, fallback: value.payload if value.kind == OK else fallback,
 }
 
 

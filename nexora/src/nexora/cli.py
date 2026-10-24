@@ -36,7 +36,7 @@ exit codes:
   3   the program failed while running
   4   the file could not be read
   5   the program broke a rule it declares while running: a contract
-      ('requires', 'ensures') or the condition of a refined type
+      ('needs', 'promises') or the condition of a refined type
   6   nex test: an example did not pass, or there was no example to run
   70  internal error in NEXORA (a bug, please report it)
   130 interrupted with Ctrl+C

@@ -178,5 +178,6 @@ def test_valid_examples_cover_every_feature_of_the_language():
         (EXAMPLES / name).read_text(encoding="utf-8") for name, (run_code, _) in EXPECTED.items() if run_code == 0
     )
     code_only = "\n".join(line.split("//")[0] for line in valid.splitlines())
-    for word in [*KEYWORDS, *BUILTINS, "result", "Int", "Float", "Bool", "Text", "Void"]:
+    # `Void` is not among them: since 0.12 a valid program never writes it (decision 0019, 4.1).
+    for word in [*KEYWORDS, *BUILTINS, "result", "Int", "Float", "Bool", "Text"]:
         assert word in code_only.replace("(", " ").replace(")", " ").replace(":", " ").split(), word

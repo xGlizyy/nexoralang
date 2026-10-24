@@ -23,7 +23,7 @@ PROGRAM = """
 uses read "datos/entradas.txt"
 uses write "datos/salida.txt"
 
-fn main() -> Void {
+fn main() {
     print(read_file("datos/entradas.txt"))
 }
 """

@@ -1,7 +1,7 @@
 semantic error[E2014]: Missing return
  --> examples/invalid/name_errors.nex:5:4
   |
-5 | fn area(width: Int, height: Int) -> Int {
+5 | fn area(width: Int, height: Int) gives Int {
   |    ^^^^ 'area' must return a value of type Int, but its body can end without a 'return'
   = hint: Make sure every path through the function ends with 'return'. An 'if' without 'else' can be skipped, and a loop may not run at all.
 
@@ -53,7 +53,7 @@ semantic error[E2021]: Missing loop measure
    |
 19 |     while true {
    |     ^^^^^ This loop does not say why it ends
-   = hint: Add 'decreases <expression>' with an Int that gets smaller on every turn and never goes below 0, for example 'decreases n - i'.
+   = hint: Add 'shrinks <expression>' to the header of the loop, with an Int that gets smaller on every turn and never goes below 0, for example 'shrinks n - i'.
 
 semantic error[E2015]: Unreachable code
   --> examples/invalid/name_errors.nex:23:5

@@ -24,8 +24,8 @@ TOOLS = {
     "nexora_check", "nexora_get_diagnostics", "nexora_inspect", "nexora_get_context",
     "nexora_get_symbols", "nexora_get_language_spec", "nexora_get_capabilities",
 }
-HELLO = 'fn main() -> Void {\n    print("Hello from NEXORA")\n}\n'
-EFFECTS = with_main("fn forever(n: Int) -> Int {\n    return forever(n + 1)\n}",
+HELLO = 'fn main() {\n    print("Hello from NEXORA")\n}\n'
+EFFECTS = with_main("fn forever(n: Int) gives Int {\n    return forever(n + 1)\n}",
                     'print("RAN")\nprint(1 / 0)\nprint(forever(0))')
 
 
@@ -97,7 +97,7 @@ def test_there_is_no_tool_that_runs_code():
     ("nexora_get_symbols", tooling.get_symbols),
 ])
 def test_tools_return_the_documents_of_the_tooling_api(tool, function):
-    source = with_main("fn double(n: Int) -> Int {\n    requires n >= 0\n    return n * 2\n}", "print(double(21))")
+    source = with_main("fn double(n: Int) gives Int\n    needs n >= 0\n{\n    return n * 2\n}", "print(double(21))")
     result = call(tool, {"source": source, "filename": "demo.nex"})
     assert result.is_error is False
     expected = json.loads(json.dumps(function(source, "demo.nex")))
@@ -119,12 +119,12 @@ def test_check_reports_the_errors_of_incorrect_code():
 def test_get_diagnostics():
     clean = call("nexora_get_diagnostics", {"source": HELLO}).structured_content
     assert clean == {"ok": True, "count": 0, "diagnostics": []}
-    broken = call("nexora_get_diagnostics", {"source": "fn main() -> Void {\n    let = 1\n}"}).structured_content
+    broken = call("nexora_get_diagnostics", {"source": "fn main() {\n    let = 1\n}"}).structured_content
     assert (broken["ok"], broken["count"], broken["diagnostics"][0]["code"]) == (False, 1, "E1101")
 
 
 def test_symbols_filters():
-    source = with_main("fn add(a: Int, b: Int) -> Int {\n    return a + b\n}", "print(add(1, 2))")
+    source = with_main("fn add(a: Int, b: Int) gives Int {\n    return a + b\n}", "print(add(1, 2))")
     document = call("nexora_get_symbols", {"source": source, "function": "add"}).structured_content
     assert [s["name"] for s in document["symbols"]] == ["add", "a", "b"]
     document = call("nexora_get_symbols", {"source": source, "name": "b"}).structured_content
@@ -236,9 +236,9 @@ def test_the_language_core_does_not_need_the_sdk():
     # Importing the SDK is confined to mcp_server.py: the rest of NEXORA runs without it.
     script = (
         "import sys\n"
-        "sys.modules['mcp'] = None\n"            # makes any `import mcp` fail
+        "sys.modules['mcp'] = None\n"
         "from nexora import cli, tooling\n"
-        "print(tooling.check_source('fn main() -> Void {}')['ok'])\n"
+        "print(tooling.check_source('fn main() {}')['ok'])\n"
     )
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, encoding="utf-8")
     assert (result.returncode, result.stdout.strip()) == (0, "True"), result.stderr

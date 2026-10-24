@@ -1,5 +1,5 @@
 // The first NEXORA program.
-fn main() -> Void {
+fn main() {
     let message = "Hello from NEXORA"
     print(message)
 }

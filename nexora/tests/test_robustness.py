@@ -67,7 +67,7 @@ def test_regression_error_count_is_capped_in_every_stage():
     lexical = in_main("\n".join("let x = @" for _ in range(500)))
     syntax = in_main("\n".join("let = 1" for _ in range(500)))
     semantic = in_main("\n".join("print(missing)" for _ in range(500)))
-    duplicates = "\n".join("fn same() -> Void {}" for _ in range(500)) + "\nfn main() -> Void {}\n"
+    duplicates = "\n".join("fn same() {}" for _ in range(500)) + "\nfn main() {}\n"
     for text in (lexical, syntax, semantic, duplicates):
         assert len(check_codes(text)) == MAX_DIAGNOSTICS
 
@@ -89,7 +89,7 @@ def test_regression_stack_exhaustion_is_not_described_as_a_thousand_calls():
     # Recursion through a deeply nested expression runs out of Python stack well before the limit
     # of nested calls. The message used to claim that "more than 1000 calls" had been nested.
     nested = "(" * 50 + "deep(n - 1)" + ")" * 50
-    function = f"fn deep(n: Int) -> Int {{\n    if n == 0 {{\n        return 0\n    }}\n    return {nested} + 1\n}}"
+    function = f"fn deep(n: Int) gives Int {{\n    if n == 0 {{\n        return 0\n    }}\n    return {nested} + 1\n}}"
     _, error = run_failure(with_main(function, f"print(deep({MAX_CALL_DEPTH - 100}))"))
     assert error.code == "E3004"
     assert "ran out of stack space after" in error.label
@@ -100,9 +100,9 @@ def test_regression_stack_exhaustion_is_not_described_as_a_thousand_calls():
 
 def test_regression_contract_field_does_not_overwrite_the_node_kind():
     # In the JSON form, the clause name of a contract used to replace the node's own "kind".
-    analysis = analyze(Source("t.nex", "fn main() -> Void {\n    requires true\n}\n"))
-    contract = ast.to_dict(analysis.program, analysis.types)["functions"][0]["contracts"][0]
-    assert (contract["kind"], contract["clause"]) == ("Contract", "requires")
+    analysis = analyze(Source("t.nex", "fn main()\n    needs true\n{\n}\n"))
+    contract = ast.to_dict(analysis.program, analysis.types)["functions"][0]["header"][0]
+    assert (contract["kind"], contract["clause"]) == ("Contract", "needs")
 
 
 # Size and depth
@@ -113,7 +113,7 @@ def test_large_program():
 
 
 def test_many_functions_and_many_variables():
-    functions = "\n".join(f"fn f{index}(a: Int) -> Int {{\n    return a + {index}\n}}" for index in range(2000))
+    functions = "\n".join(f"fn f{index}(a: Int) gives Int {{\n    return a + {index}\n}}" for index in range(2000))
     assert run_text(with_main(functions, "print(f1999(1))")) == "2000\n"
     body = "\n".join(f"let v{index} = {index}" for index in range(5000)) + "\nprint(v4999)"
     assert run_text(in_main(body)) == "4999\n"
@@ -121,7 +121,7 @@ def test_many_functions_and_many_variables():
 
 def test_very_long_line_and_very_long_text():
     assert run_text(in_main('print("' + "a" * 500_000 + '")')) == "a" * 500_000 + "\n"
-    assert check_codes('fn main() -> Void {\n    print("' + "a" * 500_000) == ["E1002"]
+    assert check_codes('fn main() {\n    print("' + "a" * 500_000) == ["E1002"]
 
 
 @pytest.mark.parametrize("text", [
@@ -147,14 +147,14 @@ def test_very_wide_expressions_are_rejected_not_crashed():
 
 
 def test_call_with_thousands_of_arguments():
-    function = "fn one(a: Int) -> Int {\n    return a\n}"
+    function = "fn one(a: Int) gives Int {\n    return a\n}"
     assert check_codes(with_main(function, "print(one(" + ", ".join(["1"] * 5000) + "))")) == ["E2009"]
 
 
 def test_unbounded_and_mutual_recursion_end_with_a_diagnostic():
-    mutual = "fn a(n: Int) -> Int {\n    return b(n)\n}\nfn b(n: Int) -> Int {\n    return a(n)\n}"
+    mutual = "fn a(n: Int) gives Int {\n    return b(n)\n}\nfn b(n: Int) gives Int {\n    return a(n)\n}"
     assert run_failure(with_main(mutual, "print(a(1))"))[1].code == "E3004"
-    in_contract = "fn f(n: Int) -> Int {\n    requires f(n) > 0\n    return n\n}"
+    in_contract = "fn f(n: Int) gives Int\n    needs f(n) > 0\n{\n    return n\n}"
     assert run_failure(with_main(in_contract, "print(f(1))"))[1].code == "E3004"
 
 
@@ -162,13 +162,13 @@ def test_unbounded_and_mutual_recursion_end_with_a_diagnostic():
 
 @pytest.mark.parametrize("text", [
     "", " ", "\n", "\t\r\n", "\x00", "﻿", "}", "{", "(", ")", '"', "\\", "fn", "fn main", "fn main(",
-    "fn main()", "fn main() ->", "fn main() -> Void", "fn main() -> Void {", "//", "// only a comment",
-    "fn fn fn", "let let let", "= = =", "-> -> ->", "requires", "ensures result", "else", "return",
-    'fn main() -> Void { print("', "fn main() -> Void {\n    let x = 1 +\n", "fn main() -> Void { if }",
-    "fn main() -> Void { if true { } else }", "fn main() -> Void { return return }",
-    "fn f(a: Int, a: Int, a: Int) -> Int { return a }", "fn main(a: Void) -> Void {}",
-    "fn result() -> Int {\n    ensures result == result\n    return 1\n}\nfn main() -> Void {}",
-    "\U0001F600", "fn main() -> Void { print(\"\U0001F600\") }", "fn main() -> Void {\r    print(1)\r}\r",
+    "fn main()", "fn main() gives ", "fn main()", "fn main() {", "//", "// only a comment",
+    "fn fn fn", "let let let", "= = =", "-> -> ->", "needs", "promises result", "else", "return",
+    'fn main() { print("', "fn main() {\n    let x = 1 +\n", "fn main() { if }",
+    "fn main() { if true { } else }", "fn main() { return return }",
+    "fn f(a: Int, a: Int, a: Int) gives Int { return a }", "fn main(a: Void) {}",
+    "fn result() gives Int\n    promises result == result\n{\n    return 1\n}\nfn main() {}",
+    "\U0001F600", "fn main() { print(\"😀\") }", "fn main() {\r    print(1)\r}\r",
 ], ids=lambda text: f"{len(text)}-chars")
 def test_odd_inputs_never_crash(text):
     survives(text)
@@ -192,7 +192,7 @@ def test_every_single_deletion_in_a_valid_program_is_handled(path):
 PIECES = [
     "fn", "main", "f", "g", "(", ")", "->", "Void", "Int", "Float", "Bool", "Text", "{", "}", "let", "x", "y", "n",
     "print", "to_text", "to_int", "to_float", "=", "+", "-", "*", "/", "==", "!=", "<", "<=", ">", ">=", "and",
-    "or", "not", "return", "if", "else", "requires", "ensures", "result", "1", "0", "2.5", "0.0", '"s"', "true",
+    "or", "not", "return", "if", "else", "needs", "promises", "result", "1", "0", "2.5", "0.0", '"s"', "true",
     "false", "\n", "\n", "\n", " ", ",", ":", "//c", "var", "while", '"open', "@", ";", "!", "9223372036854775807",
 ]
 

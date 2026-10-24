@@ -2,7 +2,7 @@
 // else is checked. `nex check examples/invalid/syntax_error.nex` reports each broken
 // statement (the parser recovers and keeps going) and exits with code 1.
 
-fn main() -> Void {
+fn main() {
     let = "missing name"
     let total 10
     print("missing parenthesis"
@@ -11,6 +11,6 @@ fn main() -> Void {
     print("this line is fine")
 }
 
-fn broken(a, b: Int) -> Int {
+fn broken(a, b: Int) gives Int {
     return a + b
 }

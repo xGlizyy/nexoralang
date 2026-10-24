@@ -1,6 +1,6 @@
 semantic error[E2001]: Missing main function
  --> examples/modules/models.nex
   = This program has no 'main' function, so there is nothing to run
-  = hint: Add the entry point: fn main() -> Void { ... }
+  = hint: Add the entry point: fn main() { ... }
 
 error: examples/modules/models.nex: not run because of 1 error

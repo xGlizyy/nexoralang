@@ -11,7 +11,7 @@ def result(expression: str) -> str:
 # Output
 
 def test_hello():
-    program = 'fn main() -> Void {\n    let message = "Hello from NEXORA"\n    print(message)\n}\n'
+    program = 'fn main() {\n    let message = "Hello from NEXORA"\n    print(message)\n}\n'
     assert run_text(program) == "Hello from NEXORA\n"
 
 
@@ -36,7 +36,7 @@ def test_statements_run_in_order():
 
 
 def test_empty_main_prints_nothing():
-    assert run_text("fn main() -> Void {}") == ""
+    assert run_text("fn main() {}") == ""
 
 
 # Variables and scopes

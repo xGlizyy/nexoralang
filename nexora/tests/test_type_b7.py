@@ -1,4 +1,4 @@
-"""D01/B7: the `decreases` measure decision uses the type model, keeping observable semantics.
+"""D01/B7: the `shrinks` measure decision uses the type model, keeping observable semantics.
 
 Before B7 `Checker._while` compared the rooted measure type with the string `Int`. Now the rooted
 type is resolved with `_current_type_model` and decided with `equal` against `type_model.INT`. A
@@ -7,7 +7,7 @@ an Int and keeps the same diagnostic. The legacy decision is kept here as an ind
 (`legacy_while`) that never uses the model to decide whether the measure is valid.
 
 Only the measure decision changes: the expression is still evaluated once, and the message, hint,
-span, notes, the `invariant` branch, the `E2021` checks and the loop body are untouched.
+span, notes, the `keeps` branch, the `E2021` checks and the loop body are untouched.
 """
 
 from __future__ import annotations
@@ -53,16 +53,16 @@ def legacy_while(self: Checker, statement: ast.While, scope: _Scope) -> None:
     `_current_type_model` nor the model's `equal` to decide whether the measure is valid.
     """
     self._condition(statement.condition, scope, "'while'")
-    measures = [clause for clause in statement.clauses if clause.clause == "decreases"]
+    measures = [clause for clause in statement.clauses if clause.clause == "shrinks"]
     for clause in statement.clauses:
-        if clause.clause == "invariant":
-            self._condition(clause.condition, scope, "'invariant'")
+        if clause.clause == "keeps":
+            self._condition(clause.condition, scope, "'keeps'")
             continue
         found = self._expression(clause.condition, scope)
         if found is not None and self._root(found) != INT:
             self._report(
                 "E2011",
-                f"The measure of 'decreases' must be Int, found {found}",
+                f"The measure of 'shrinks' must be Int, found {found}",
                 clause.condition.span,
                 hint=HINT,
             )
@@ -72,8 +72,8 @@ def legacy_while(self: Checker, statement: ast.While, scope: _Scope) -> None:
             "E2021",
             "This loop does not say why it ends",
             Span(keyword.line, keyword.column, keyword.line, keyword.column + len("while")),
-            hint="Add 'decreases <expression>' with an Int that gets smaller on every turn and never goes "
-                 "below 0, for example 'decreases n - i'.",
+            hint="Add 'shrinks <expression>' to the header of the loop, with an Int that gets smaller on "
+                 "every turn and never goes below 0, for example 'shrinks n - i'.",
         )
     for extra in measures[1:]:
         first = measures[0].span
@@ -82,7 +82,7 @@ def legacy_while(self: Checker, statement: ast.While, scope: _Scope) -> None:
             "A loop has exactly one measure",
             extra.span,
             hint="Combine them into one Int that gets smaller on every turn.",
-            notes=(f"The first 'decreases' is at line {first.line}, column {first.column}.",),
+            notes=(f"The first 'shrinks' is at line {first.line}, column {first.column}.",),
         )
     self._block(statement.body, _Scope(scope))
 
@@ -110,8 +110,8 @@ def check_pair(monkeypatch, text: str, *, require_main: bool = True):
 
 
 def parse_loop(measure: str = "m", condition: str = "true") -> ast.While:
-    """A parsed `while` whose only clause is `decreases {measure}` and whose body is empty."""
-    program, _ = parse_text(in_main(f"while {condition} {{\n    decreases {measure}\n}}"))
+    """A parsed `while` whose only clause is `shrinks {measure}` and whose body is empty."""
+    program, _ = parse_text(in_main(f"while {condition}\n    shrinks {measure}\n{{\n}}"))
     (loop,) = program.functions[0].body.statements
     assert isinstance(loop, ast.While)
     return loop
@@ -210,7 +210,7 @@ def test_a_rejected_measure_keeps_the_complete_diagnostic():
         assert new_diagnostics == old_diagnostics
         (error,) = new_diagnostics
         assert error.code == "E2011"
-        assert error.label == f"The measure of 'decreases' must be Int, found {found}"
+        assert error.label == f"The measure of 'shrinks' must be Int, found {found}"
         assert error.hint == HINT
         assert error.span == loop.clauses[0].condition.span
         assert error.notes == ()
@@ -220,7 +220,7 @@ def test_the_message_of_a_rejected_refinement_uses_its_name_not_its_root():
     new_diagnostics, old_diagnostics = measure_case("Accepted", ACCEPTED)
     assert new_diagnostics == old_diagnostics
     (error,) = new_diagnostics
-    assert error.label == "The measure of 'decreases' must be Int, found Accepted"
+    assert error.label == "The measure of 'shrinks' must be Int, found Accepted"
     assert "Bool" not in error.label
 
 
@@ -231,19 +231,22 @@ def test_refined_measures_in_real_loops(monkeypatch):
     text = with_main(
         f"{PERCENT}\n{SMALL}\n{ACCEPTED}",
         "var i = 0\n"
-        "while i < 3 {\n"
-        "    decreases Percent(3 - i)\n"
+        "while i < 3\n"
+        "    shrinks Percent(3 - i)\n"
+        "{\n"
         "    i = i + 1\n"
         "}\n"
         "var j = 0\n"
-        "while j < 3 {\n"
-        "    decreases Small(3 - j)\n"
+        "while j < 3\n"
+        "    shrinks Small(3 - j)\n"
+        "{\n"
         "    j = j + 1\n"
         "}\n"
         "var ok: Accepted = true\n"
         "var k = 0\n"
-        "while k < 3 {\n"
-        "    decreases ok\n"
+        "while k < 3\n"
+        "    shrinks ok\n"
+        "{\n"
         "    k = k + 1\n"
         "}\n"
         "print(i + j + k)\n",
@@ -251,7 +254,7 @@ def test_refined_measures_in_real_loops(monkeypatch):
     new_checked, diagnostics, old_checked, _ = check_pair(monkeypatch, text)
     assert [diagnostic.code for diagnostic in diagnostics] == ["E2011"]
     (error,) = diagnostics
-    assert error.label == "The measure of 'decreases' must be Int, found Accepted"
+    assert error.label == "The measure of 'shrinks' must be Int, found Accepted"
     new_symbols = {symbol.name: symbol.type for symbol in new_checked.symbols}
     old_symbols = {symbol.name: symbol.type for symbol in old_checked.symbols}
     assert new_symbols["ok"] == old_symbols["ok"] == "Accepted"
@@ -261,18 +264,18 @@ def test_refined_measures_in_real_loops(monkeypatch):
 
 
 def test_an_unresolved_measure_adds_no_second_diagnostic(monkeypatch):
-    text = in_main("var i = 0\nwhile i < 3 {\n    decreases missing\n    i = i + 1\n}")
+    text = in_main("var i = 0\nwhile i < 3\n    shrinks missing\n{\n    i = i + 1\n}")
     _, diagnostics, _, _ = check_pair(monkeypatch, text)
     assert [diagnostic.code for diagnostic in diagnostics] == ["E2005"]
     assert all("measure" not in diagnostic.label for diagnostic in diagnostics)
 
 
 def test_a_void_measure_is_rejected(monkeypatch):
-    text = in_main("var i = 0\nwhile i < 3 {\n    decreases print(1)\n    i = i + 1\n}")
+    text = in_main("var i = 0\nwhile i < 3\n    shrinks print(1)\n{\n    i = i + 1\n}")
     _, diagnostics, _, _ = check_pair(monkeypatch, text)
     (error,) = diagnostics
     assert error.code == "E2011"
-    assert error.label == "The measure of 'decreases' must be Int, found Void"
+    assert error.label == "The measure of 'shrinks' must be Int, found Void"
     assert error.hint == HINT
 
 
@@ -280,10 +283,11 @@ def test_clause_diagnostics_keep_their_order_and_notes(monkeypatch):
     text = in_main(
         "var i = 0\n"
         "var b = true\n"
-        "while i {\n"
-        "    invariant 1\n"
-        "    decreases b\n"
-        "    decreases 1.5\n"
+        "while i\n"
+        "    keeps 1\n"
+        "    shrinks b\n"
+        "    shrinks 1.5\n"
+        "{\n"
         "    i = i + 1\n"
         "}"
     )
@@ -292,12 +296,12 @@ def test_clause_diagnostics_keep_their_order_and_notes(monkeypatch):
     assert diagnostics == old_diagnostics
     labels = [diagnostic.label for diagnostic in diagnostics]
     assert labels[0] == "The condition of 'while' must be Bool, found Int"
-    assert labels[1] == "The condition of 'invariant' must be Bool, found Int"
-    assert labels[2] == "The measure of 'decreases' must be Int, found Bool"
-    assert labels[3] == "The measure of 'decreases' must be Int, found Float"
+    assert labels[1] == "The condition of 'keeps' must be Bool, found Int"
+    assert labels[2] == "The measure of 'shrinks' must be Int, found Bool"
+    assert labels[3] == "The measure of 'shrinks' must be Int, found Float"
     assert labels[4] == "A loop has exactly one measure"
-    assert diagnostics[4].notes == ("The first 'decreases' is at line 6, column 9.",)
-    assert (diagnostics[3].span.line, diagnostics[3].span.column) == (7, 19)
+    assert diagnostics[4].notes == ("The first 'shrinks' is at line 6, column 9.",)
+    assert (diagnostics[3].span.line, diagnostics[3].span.column) == (7, 17)
     assert (diagnostics[4].span.line, diagnostics[4].span.column) == (7, 9)
 
 
@@ -306,7 +310,7 @@ def test_a_loop_without_a_measure_is_unchanged(monkeypatch):
     _, diagnostics, _, _ = check_pair(monkeypatch, text)
     (error,) = diagnostics
     assert (error.code, error.label) == ("E2021", "This loop does not say why it ends")
-    assert "decreases n - i" in error.hint
+    assert "shrinks n - i" in error.hint
 
 
 # E. Real valid measures
@@ -316,23 +320,27 @@ def test_valid_arithmetic_and_refined_measures_are_differentially_equivalent(mon
     text = with_main(
         f"{PERCENT}\n{SMALL}",
         "var i = 0\n"
-        "while i < 10 {\n"
-        "    decreases 10 - i\n"
+        "while i < 10\n"
+        "    shrinks 10 - i\n"
+        "{\n"
         "    i = i + 1\n"
         "}\n"
         "var j = 0\n"
-        "while j < 10 {\n"
-        "    decreases 10 - 2 * j\n"
+        "while j < 10\n"
+        "    shrinks 10 - 2 * j\n"
+        "{\n"
         "    j = j + 1\n"
         "}\n"
         "var k = 0\n"
-        "while k < 10 {\n"
-        "    decreases Percent(10 - k)\n"
+        "while k < 10\n"
+        "    shrinks Percent(10 - k)\n"
+        "{\n"
         "    k = k + 1\n"
         "}\n"
         "var l = 0\n"
-        "while l < 10 {\n"
-        "    decreases Small(10 - l)\n"
+        "while l < 10\n"
+        "    shrinks Small(10 - l)\n"
+        "{\n"
         "    l = l + 1\n"
         "}\n"
         "print(i + j + k + l)\n",
@@ -344,12 +352,13 @@ def test_valid_arithmetic_and_refined_measures_are_differentially_equivalent(mon
 def test_a_text_length_measure_is_valid(monkeypatch):
     text = in_main(
         'var t = "abc"\n'
-        "var i = 0\n"
-        "while i < Text.length(t) {\n"
-        "    decreases Text.length(t) - i\n"
-        "    i = i + 1\n"
-        "}\n"
-        "print(i)\n"
+        'var i = 0\n'
+        'while i < Text.length(t)\n'
+        '    shrinks Text.length(t) - i\n'
+        '{\n'
+        '    i = i + 1\n'
+        '}\n'
+        'print(i)\n'
     )
     _, diagnostics, _, _ = check_pair(monkeypatch, text)
     assert diagnostics == []
@@ -409,7 +418,7 @@ def test_a_historical_refinement_is_not_accepted_again():
     assert new_diagnostics == old_diagnostics
     (error,) = new_diagnostics
     assert error.code == "E2011"
-    assert error.label == "The measure of 'decreases' must be Int, found Parent"
+    assert error.label == "The measure of 'shrinks' must be Int, found Parent"
 
 
 def test_no_measure_operation_was_added_to_the_model_or_adapter():
@@ -427,7 +436,7 @@ def test_the_legacy_reference_reproduces_the_pre_b7_behaviour():
     legacy_while(rejected, parse_loop(), scope_with(FLOAT))
     (error,) = rejected._diagnostics
     assert error.code == "E2011"
-    assert error.label == "The measure of 'decreases' must be Int, found Float"
+    assert error.label == "The measure of 'shrinks' must be Int, found Float"
 
 
 # G. Differential over the examples
@@ -473,8 +482,9 @@ def test_public_type_surface_is_unchanged():
     text = with_main(
         f"{PERCENT}\n{SMALL}\n{ACCEPTED}",
         "var i = 0\n"
-        "while i < 3 {\n"
-        "    decreases Percent(3 - i)\n"
+        "while i < 3\n"
+        "    shrinks Percent(3 - i)\n"
+        "{\n"
         "    i = i + 1\n"
         "}\n"
         "print(i)\n",
@@ -500,7 +510,7 @@ def test_public_type_surface_is_unchanged():
         json.dumps(document)
 
     builtins = {entry["name"]: entry for entry in documents["symbols"]["builtins"]}
-    assert builtins["print"]["signature"] == "fn print(value: Int | Float | Bool | Text) -> Void"
+    assert builtins["print"]["signature"] == "fn print(value: Int | Float | Bool | Text)"
 
     types = {entry["name"]: entry for entry in documents["context"]["types"]}
     assert (types["Percent"]["root"], types["Small"]["root"], types["Accepted"]["root"]) == (

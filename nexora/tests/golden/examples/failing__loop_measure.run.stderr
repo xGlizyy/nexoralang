@@ -1,12 +1,12 @@
 contract error[E4006]: Loop measure did not decrease
-  --> examples/failing/loop_measure.nex:11:19
+  --> examples/failing/loop_measure.nex:12:17
    |
-11 |         decreases limit - i, "Each turn moves i one step closer to limit"
-   |                   ^^^^^^^^^ The measure was 9 and is still 9
-   = note: The measure at line 11: decreases limit - i
+12 |         shrinks limit - i, "Each turn moves i one step closer to limit"
+   |                 ^^^^^^^^^ The measure was 9 and is still 9
+   = note: The measure at line 12: shrinks limit - i
    = note: Reason: Each turn moves i one step closer to limit
-   = note: Before turn 3 of the loop at line 10.
+   = note: Before turn 3 of the loop at line 11.
    = note: The values: limit = 10, i = 1, even = 1
-   = note: In 'count_even', called at line 21, column 11.
+   = note: In 'count_even', called at line 23, column 11.
 
 error: examples/failing/loop_measure.nex: the program stopped because a contract was broken

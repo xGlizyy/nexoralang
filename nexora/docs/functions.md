@@ -6,7 +6,7 @@ explains it with examples; all of them are checked by the tests of the project.
 ## Declaring a function
 
 ```nex
-fn add(a: Int, b: Int) -> Int {
+fn add(a: Int, b: Int) gives Int {
     return a + b
 }
 ```
@@ -28,11 +28,11 @@ execution starts.
 
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     print(square(7))
 }
 
-fn square(n: Int) -> Int {
+fn square(n: Int) gives Int {
     return n * n
 }
 ```
@@ -49,11 +49,11 @@ the type of its parameter.
 
 <!-- nex:check-fails -->
 ```nex
-fn add(a: Int, b: Int) -> Int {
+fn add(a: Int, b: Int) gives Int {
     return a + b
 }
 
-fn main() -> Void {
+fn main() {
     print(add(1))
     print(add(1, "2"))
     print(ad(1, 2))
@@ -66,14 +66,14 @@ type error[E2009]: Wrong number of arguments
   |
 6 |     print(add(1))
   |           ^^^^^^ 'add' takes 2 arguments, but 1 was given
-  = note: Its signature is: fn add(a: Int, b: Int) -> Int
+  = note: Its signature is: fn add(a: Int, b: Int) gives Int
 
 type error[E2011]: Type mismatch
  --> program.nex:7:18
   |
 7 |     print(add(1, "2"))
   |                  ^^^ Expected Int, found Text
-  = note: This is the argument for 'b' in: fn add(a: Int, b: Int) -> Int
+  = note: This is the argument for 'b' in: fn add(a: Int, b: Int) gives Int
 
 semantic error[E2008]: Unknown function
  --> program.nex:8:11
@@ -97,11 +97,11 @@ In a function that returns a value, `return` is followed by an expression of the
 
 <!-- nex:check-fails -->
 ```nex
-fn label(count: Int) -> Text {
+fn label(count: Int) gives Text {
     return count
 }
 
-fn main() -> Void {
+fn main() {
     print(label(3))
 }
 ```
@@ -123,11 +123,11 @@ result is an error (`E2010`):
 
 <!-- nex:check-fails -->
 ```nex
-fn add(a: Int, b: Int) -> Int {
+fn add(a: Int, b: Int) gives Int {
     return a + b
 }
 
-fn main() -> Void {
+fn main() {
     add(1, 2)
 }
 ```
@@ -150,7 +150,7 @@ A `Void` function returns no value. It ends when it reaches the end of the body,
 
 <!-- nex:run -->
 ```nex
-fn report(score: Int) -> Void {
+fn report(score: Int) {
     if score < 0 {
         print("invalid score")
         return
@@ -158,7 +158,7 @@ fn report(score: Int) -> Void {
     print("score: " + to_text(score))
 }
 
-fn main() -> Void {
+fn main() {
     report(-1)
     report(80)
 }
@@ -179,7 +179,7 @@ the same line as the previous `}`.
 
 <!-- nex:run -->
 ```nex
-fn sign(n: Int) -> Int {
+fn sign(n: Int) gives Int {
     if n < 0 {
         return -1
     } else if n == 0 {
@@ -189,7 +189,7 @@ fn sign(n: Int) -> Int {
     }
 }
 
-fn main() -> Void {
+fn main() {
     print(sign(-8))
     print(sign(0))
     print(sign(5))
@@ -212,7 +212,7 @@ path. If any of them can reach the end of the body, the program is rejected befo
 
 <!-- nex:check-fails -->
 ```nex
-fn sign(n: Int) -> Int {
+fn sign(n: Int) gives Int {
     if n < 0 {
         return -1
     } else if n > 0 {
@@ -220,7 +220,7 @@ fn sign(n: Int) -> Int {
     }
 }
 
-fn main() -> Void {
+fn main() {
     print(sign(0))
 }
 ```
@@ -229,7 +229,7 @@ fn main() -> Void {
 semantic error[E2014]: Missing return
  --> program.nex:1:4
   |
-1 | fn sign(n: Int) -> Int {
+1 | fn sign(n: Int) gives Int {
   |    ^^^^ 'sign' must return a value of type Int, but its body can end without a 'return'
   = hint: Make sure every path through the function ends with 'return'. An 'if' without 'else' can be skipped, and a loop may not run at all.
 
@@ -258,14 +258,14 @@ iterations are not calls and do not have the limit of 1000.
 
 <!-- nex:run -->
 ```nex
-fn factorial(n: Int) -> Int {
+fn factorial(n: Int) gives Int {
     if n <= 1 {
         return 1
     }
     return n * factorial(n - 1)
 }
 
-fn countdown(n: Int) -> Void {
+fn countdown(n: Int) {
     if n == 0 {
         print("liftoff")
         return
@@ -274,7 +274,7 @@ fn countdown(n: Int) -> Void {
     countdown(n - 1)
 }
 
-fn main() -> Void {
+fn main() {
     print(factorial(10))
     countdown(3)
 }
@@ -293,11 +293,11 @@ recursion that does not reach its base case stops with a runtime error:
 
 <!-- nex:fails exit=3 -->
 ```nex
-fn forever(n: Int) -> Int {
+fn forever(n: Int) gives Int {
     return forever(n + 1)
 }
 
-fn main() -> Void {
+fn main() {
     print(forever(0))
 }
 ```
@@ -331,12 +331,12 @@ declared twice. Consequently:
 
 <!-- nex:check-fails -->
 ```nex
-fn area(width: Int, width: Int) -> Int {
+fn area(width: Int, width: Int) gives Int {
     let area = width * width
     return area
 }
 
-fn main() -> Void {
+fn main() {
     print(area(2, 3))
 }
 ```
@@ -345,7 +345,7 @@ fn main() -> Void {
 semantic error[E2006]: Name already declared
  --> program.nex:1:21
   |
-1 | fn area(width: Int, width: Int) -> Int {
+1 | fn area(width: Int, width: Int) gives Int {
   |                     ^^^^^ 'width' is already declared and still visible here
   = note: It was first declared at line 1, column 9.
   = hint: Choose a different name: a visible name cannot be declared again.

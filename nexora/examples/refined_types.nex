@@ -10,16 +10,17 @@ type Cents = Int where value >= 0, "An amount of money cannot be negative"
 type SmallCents = Cents where value < 100000, "Small amounts stay under 1000.00"
 type Label = Text where value != "", "A label cannot be empty"
 
-fn apply_discount(price: Cents, percent: Percent) -> Cents {
-    ensures result <= price, "A discount never raises the price"
+fn apply_discount(price: Cents, percent: Percent) gives Cents
+    promises result <= price, "A discount never raises the price"
+{
     return Cents(price * (100 - percent) / 100)
 }
 
-fn describe(name: Label, price: Cents) -> Text {
+fn describe(name: Label, price: Cents) gives Text {
     return name + ": " + to_text(price) + " cents"
 }
 
-fn main() -> Void {
+fn main() {
     let discount: Percent = 25
     let coffee: SmallCents = 350
 

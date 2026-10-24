@@ -151,8 +151,8 @@
             "properties": {
               "clause": {
                 "enum": [
-                  "requires",
-                  "ensures"
+                  "needs",
+                  "promises"
                 ]
               },
               "condition": {
@@ -165,7 +165,7 @@
               },
               "checked_at_run_time": {
                 "type": "boolean",
-                "description": "True for 'requires', checked on every call. False for 'ensures', which the implementation keeps and the tests check, but the program does not."
+                "description": "True for 'needs', checked on every call. False for 'promises', which the implementation keeps and the tests check, but the program does not."
               }
             }
           }

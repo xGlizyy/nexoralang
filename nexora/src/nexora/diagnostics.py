@@ -63,8 +63,8 @@ SYNTAX = "syntax"        # the tokens do not follow the grammar
 SEMANTIC = "semantic"    # names, scopes and program structure, checked without running
 TYPE = "type"            # types, checked without running
 RUNTIME = "runtime"      # depends on the values computed while the program runs
-CONTRACT = "contract"    # a rule the program declares was broken while running: a 'requires' or
-                         # 'ensures' condition, or the condition of a refined type
+CONTRACT = "contract"    # a rule the program declares was broken while running: a 'needs' or
+                         # 'promises' condition, or the condition of a refined type
 TEST = "test"            # an 'example' evaluated by `nex test` turned out false
 
 # Every diagnostic code: its title and its category. A code never changes meaning; a code that
@@ -86,6 +86,8 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E1103": ("Reserved word", SYNTAX),
     "E1105": ("Expression too deeply nested", SYNTAX),
     "E1106": ("Misplaced contract clause", SYNTAX),
+    "E1107": ("Syntax before 0.12", SYNTAX),
+    "E1108": ("Arrow before the return type", SYNTAX),
 
     "E2001": ("Missing main function", SEMANTIC),
     "E2002": ("Duplicate function", SEMANTIC),
@@ -116,6 +118,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E2028": ("Private name", SEMANTIC),
     "E2029": ("Circular import", SEMANTIC),
     "E2030": ("Module name clash", SEMANTIC),
+    "E2031": ("Duplicate clause name", SEMANTIC),
 
     "E3001": ("Division by zero", RUNTIME),
     "E3002": ("Integer overflow", RUNTIME),

@@ -175,8 +175,8 @@ def test_the_built_in_functions_are_exactly_the_documented_ones():
         "List.length", "List.get", "List.append", "List.concat", "List.contains",
         # The constructors of Option and Result, and their inspection (decision 0016).
         "Some", "Ok", "Err",
-        "Option.is_some", "Option.is_none", "Option.unwrap_or", "Option.unwrap",
-        "Result.is_ok", "Result.is_err", "Result.unwrap_or", "Result.unwrap", "Result.error",
+        "Option.is_some", "Option.is_none", "Option.value_or", "Option.value",
+        "Result.is_ok", "Result.is_err", "Result.value_or", "Result.value", "Result.error",
         # The input and the files (decision 0015). The arguments and the standard input
         # need no declaration; the files do.
         "args", "input", "read_file", "write_file",
@@ -212,7 +212,7 @@ def test_text_is_data_and_is_never_interpreted(capsys, tmp_path):
     # Text that looks like code, format strings or escape sequences is printed as it is.
     path = tmp_path / "data.nex"
     path.write_text(
-        'fn main() -> Void {\n'
+        'fn main() {\n'
         '    print("__import__(\'os\').system(\'echo hacked\')")\n'
         '    print("%s %d \\{0} $(whoami) `id`")\n'
         '    print(to_text(1) + "; rm -rf /")\n'
@@ -234,7 +234,7 @@ def test_a_program_cannot_reach_the_variables_of_the_interpreter():
 
 def test_running_a_program_creates_no_files(tmp_path, monkeypatch, capsys):
     path = tmp_path / "program.nex"
-    path.write_text('fn main() -> Void {\n    print("x")\n}\n', encoding="utf-8")
+    path.write_text('fn main() {\n    print("x")\n}\n', encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     for command in ("run", "check", "inspect"):
         assert cli.main([command, "program.nex"]) == 0
@@ -245,10 +245,20 @@ def test_running_a_program_creates_no_files(tmp_path, monkeypatch, capsys):
 # check and inspect never execute
 
 SIDE_EFFECTS = (
-    "fn loud(n: Int) -> Int {\n"
-    '    requires n > 0\n    print("RAN")\n    return n / 0\n}\n'
-    "fn forever(n: Int) -> Int {\n    return forever(n + 1)\n}\n"
-    'fn main() -> Void {\n    print("RAN")\n    print(loud(1))\n    print(forever(0))\n}\n'
+    "fn loud(n: Int) gives Int\n"
+    "    needs n > 0\n"
+    "{\n"
+    "    print(\"RAN\")\n"
+    "    return n / 0\n"
+    "}\n"
+    "fn forever(n: Int) gives Int {\n"
+    "    return forever(n + 1)\n"
+    "}\n"
+    "fn main() {\n"
+    "    print(\"RAN\")\n"
+    "    print(loud(1))\n"
+    "    print(forever(0))\n"
+    "}\n"
 )
 
 

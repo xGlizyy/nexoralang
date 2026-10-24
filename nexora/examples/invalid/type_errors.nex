@@ -2,15 +2,15 @@
 // `nex check examples/invalid/type_errors.nex` reports them all without running anything,
 // and exits with code 1.
 
-fn half(value: Float) -> Float {
+fn half(value: Float) gives Float {
     return value / 2.0
 }
 
-fn label(count: Int) -> Text {
+fn label(count: Int) gives Text {
     return count
 }
 
-fn main() -> Void {
+fn main() {
     let age: Int = "twenty"
     let total = 10 + 2.5
     let ok = true + 1

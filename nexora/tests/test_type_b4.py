@@ -1,6 +1,6 @@
 """D01/B4: `Checker._condition` decides with the type model, keeping the observable semantics.
 
-The condition of an `if`, a `while`, an `invariant`, a contract, an `example` or a `where`
+The condition of an `if`, a `while`, an `keeps`, a contract, an `example` or a `where`
 must be `Bool`. Before B4 the checker compared `_root(found)` with the string `"Bool"`. Now a
 representable `found` is decided with `assignable(Bool, found)`; only a name outside the model
 keeps the old root comparison, and a representable type missing from the model raises instead
@@ -259,35 +259,35 @@ def test_if_condition_with_a_refined_bool_passes(monkeypatch):
 
 
 def test_while_condition_is_checked(monkeypatch):
-    text = in_main("var i = 0\nwhile i {\n    decreases 3 - i\n}")
+    text = in_main("var i = 0\nwhile i\n    shrinks 3 - i\n{\n}")
     _, diagnostics, _, _ = check_pair(monkeypatch, text)
     assert [diagnostic.code for diagnostic in diagnostics] == ["E2011"]
     assert diagnostics[0].label == "The condition of 'while' must be Bool, found Int"
 
 
 def test_while_invariant_is_checked(monkeypatch):
-    text = in_main("var i = 0\nwhile i < 3 {\n    invariant 1\n    decreases 3 - i\n}")
+    text = in_main("var i = 0\nwhile i < 3\n    keeps 1\n    shrinks 3 - i\n{\n}")
     _, diagnostics, _, _ = check_pair(monkeypatch, text)
     assert [diagnostic.code for diagnostic in diagnostics] == ["E2011"]
-    assert diagnostics[0].label == "The condition of 'invariant' must be Bool, found Int"
+    assert diagnostics[0].label == "The condition of 'keeps' must be Bool, found Int"
 
 
 def test_requires_condition_is_checked(monkeypatch):
-    text = with_main("fn f(n: Int) -> Int {\n    requires n\n    return n\n}", "print(f(1))")
+    text = with_main("fn f(n: Int) gives Int\n    needs n\n{\n    return n\n}", "print(f(1))")
     _, diagnostics, _, _ = check_pair(monkeypatch, text)
     assert [diagnostic.code for diagnostic in diagnostics] == ["E2011"]
-    assert diagnostics[0].label == "The condition of 'requires' must be Bool, found Int"
+    assert diagnostics[0].label == "The condition of 'needs' must be Bool, found Int"
 
 
 def test_ensures_condition_is_checked(monkeypatch):
-    text = with_main("fn f(n: Int) -> Int {\n    ensures result\n    return n\n}", "print(f(1))")
+    text = with_main("fn f(n: Int) gives Int\n    promises result\n{\n    return n\n}", "print(f(1))")
     _, diagnostics, _, _ = check_pair(monkeypatch, text)
     assert [diagnostic.code for diagnostic in diagnostics] == ["E2011"]
-    assert diagnostics[0].label == "The condition of 'ensures' must be Bool, found Int"
+    assert diagnostics[0].label == "The condition of 'promises' must be Bool, found Int"
 
 
 def test_example_condition_is_checked(monkeypatch):
-    text = "fn double(n: Int) -> Int {\n    example double(2) + 1\n    return n * 2\n}\n"
+    text = "fn double(n: Int) gives Int\n    example double(2) + 1\n{\n    return n * 2\n}\n"
     _, diagnostics, _, _ = check_pair(monkeypatch, text, require_main=False)
     assert [diagnostic.code for diagnostic in diagnostics] == ["E2011"]
     assert diagnostics[0].label == "The condition of 'example' must be Bool, found Int"
@@ -381,7 +381,7 @@ def test_public_type_surface_is_unchanged():
         json.dumps(document)
 
     builtins = {entry["name"]: entry for entry in documents["symbols"]["builtins"]}
-    assert builtins["print"]["signature"] == "fn print(value: Int | Float | Bool | Text) -> Void"
+    assert builtins["print"]["signature"] == "fn print(value: Int | Float | Bool | Text)"
 
     types = {entry["name"]: entry for entry in documents["context"]["types"]}
     assert (types["Percent"]["base"], types["Percent"]["root"]) == ("Int", "Int")

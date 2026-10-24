@@ -59,7 +59,7 @@ If it is not, the error points at the value:
 
 <!-- nex:check-fails -->
 ```nex
-fn main() -> Void {
+fn main() {
     let price: Float = 5
 }
 ```
@@ -126,7 +126,7 @@ left-hand side of an equality: `[] == a` is `E2011`. All the elements have to be
 
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     let xs = [1, 2, 3]
     print(xs)
     print(List.length(xs))
@@ -175,7 +175,7 @@ Parentheses group.
 
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     print(2 + 3 * 4)                    // 14: '*' before '+'
     print((2 + 3) * 4)                  // 20
     print(7 / 2)                        // 3: Int / Int is Int
@@ -231,7 +231,7 @@ A condition has to be a `Bool`; a number is not valid:
 
 <!-- nex:check-fails -->
 ```nex
-fn main() -> Void {
+fn main() {
     let count = 3
     if count {
         print("some")
@@ -270,7 +270,7 @@ The only conversions are calls to these three functions:
 
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     print(to_float(7) / 2.0)
     print(to_int(3.9))
     print(to_int(-3.9))
@@ -327,7 +327,7 @@ guarantee anything that depends on the concrete **value**. These situations are 
 
 <!-- nex:fails exit=3 -->
 ```nex
-fn main() -> Void {
+fn main() {
     let largest = 9223372036854775807
     print(largest)
     print(largest + 1)
@@ -355,12 +355,13 @@ A refined type is a value type with a rule that all its values meet:
 type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
 type Cents = Int where value >= 0, "An amount of money cannot be negative"
 
-fn apply_discount(price: Cents, percent: Percent) -> Cents {
-    ensures result <= price, "A discount never raises the price"
+fn apply_discount(price: Cents, percent: Percent) gives Cents
+    promises result <= price, "A discount never raises the price"
+{
     return Cents(price * (100 - percent) / 100)
 }
 
-fn main() -> Void {
+fn main() {
     print(apply_discount(2000, 15))
 }
 ```
@@ -388,7 +389,7 @@ There are only two ways, and both are written in the code:
 ```nex
 type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
 
-fn main() -> Void {
+fn main() {
     let discount: Percent = 150
     print(discount)
 }
@@ -418,7 +419,7 @@ the base:
 ```nex
 type Percent = Int where value >= 0 and value <= 100
 
-fn main() -> Void {
+fn main() {
     let half = 100 / 2
     let discount: Percent = half
     print(discount)
@@ -484,10 +485,11 @@ compared and printed.
 
 <!-- nex:run -->
 ```nex
-fn find(names: List[Text], wanted: Text) -> Option[Int] {
+fn find(names: List[Text], wanted: Text) gives Option[Int] {
     var index = 0
-    while index < List.length(names) {
-    decreases List.length(names) - index, "Each turn looks at one more name"
+    while index < List.length(names)
+    shrinks List.length(names) - index, "Each turn looks at one more name"
+    {
         if List.get(names, index) == wanted {
             return Some(index)
         }
@@ -496,10 +498,10 @@ fn find(names: List[Text], wanted: Text) -> Option[Int] {
     return None
 }
 
-fn main() -> Void {
+fn main() {
     let names = ["ada", "grace"]
-    print(Option.unwrap_or(find(names, "grace"), -1))
-    print(Option.unwrap_or(find(names, "nobody"), -1))
+    print(Option.value_or(find(names, "grace"), -1))
+    print(Option.value_or(find(names, "nobody"), -1))
 }
 ```
 
@@ -526,7 +528,7 @@ To recognize the variant and to read the value:
 ```nex
 let found: Option[Int] = Some(42)
 if Option.is_some(found) {
-    print(Option.unwrap_or(found, 0))
+    print(Option.value_or(found, 0))
 }
 ```
 
@@ -537,15 +539,15 @@ reads the value without a default: if there is none, the program stops with `E30
 
 <!-- nex:run -->
 ```nex
-fn parse(text: Text) -> Result[Int, Text] {
+fn parse(text: Text) gives Result[Int, Text] {
     if Int.can_parse(text) {
         return Ok(Int.parse(text))
     }
     return Err("not a whole number")
 }
 
-fn main() -> Void {
-    print(Result.unwrap_or(parse("42"), -1))
+fn main() {
+    print(Result.value_or(parse("42"), -1))
     print(Result.error(parse("forty two")))
 }
 ```

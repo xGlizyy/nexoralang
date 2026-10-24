@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 
 from .diagnostics import MAX_DIAGNOSTICS, Diagnostic, Source, Span
-from .tokens import KEYWORDS, RESERVED_WORDS, STATEMENT_KEYWORDS, Token, TokenType
+from .tokens import KEYWORDS, OLD_CLAUSE_WORDS, RESERVED_WORDS, STATEMENT_KEYWORDS, Token, TokenType
 from .values import INT_MAX
 
 # A set, not a string: `"" in "0123"` is true in Python, and "" is what _peek returns at the end.
@@ -181,6 +181,8 @@ class Lexer:
             self._end_unclosed_line()
         if word in KEYWORDS:
             self._add(KEYWORDS[word], word, span)
+        elif word in OLD_CLAUSE_WORDS:
+            self._add(TokenType.OLD_CLAUSE, word, span)
         elif word in RESERVED_WORDS:
             self._add(TokenType.RESERVED, word, span)
         else:

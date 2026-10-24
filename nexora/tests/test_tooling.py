@@ -20,14 +20,15 @@ EXAMPLES = sorted((ROOT / "examples").rglob("*.nex"))
 SCHEMA_DIR = ROOT / "docs" / "schemas"
 SCHEMAS = schemas.all_schemas()
 
-PROGRAM = '''fn area(width: Int, height: Int) -> Int {
-    requires width > 0 and height > 0
-    ensures result > 0
+PROGRAM = '''fn area(width: Int, height: Int) gives Int
+    needs width > 0 and height > 0
+    promises result > 0
+{
     let size = width * height
     return size
 }
 
-fn describe(n: Int) -> Text {
+fn describe(n: Int) gives Text {
     if n > 100 {
         let label = "large"
         return label
@@ -37,7 +38,7 @@ fn describe(n: Int) -> Text {
     }
 }
 
-fn countdown(n: Int) -> Void {
+fn countdown(n: Int) {
     if n == 0 {
         return
     }
@@ -45,14 +46,14 @@ fn countdown(n: Int) -> Void {
     countdown(n - 1)
 }
 
-fn main() -> Void {
+fn main() {
     let total: Int = area(3, 4)
     print(describe(total))
     countdown(2)
 }
 '''
 
-BROKEN = "fn main() -> Void {\n    let = 1\n}\n"
+BROKEN = "fn main() {\n    let = 1\n}\n"
 NOT_NEXORA = "\x00\x01 this is {{{ not a program \""
 
 
@@ -117,7 +118,7 @@ def test_every_document_for_every_example_matches_its_schema(path):
     validate(tooling.get_context(source, path.name), "nexora-context.schema.json")
 
 
-@pytest.mark.parametrize("source", ["", BROKEN, NOT_NEXORA, "fn main() -> Void {", in_main("print(x)")],
+@pytest.mark.parametrize("source", ["", BROKEN, NOT_NEXORA, "fn main() {", in_main("print(x)")],
                          ids=["empty", "syntax-error", "not-nexora", "truncated", "semantic-error"])
 def test_incorrect_input_still_produces_valid_documents(source):
     validate(tooling.check_source(source), "nexora-diagnostics.schema.json")
@@ -169,7 +170,7 @@ def test_inspect_source():
 
 # Code with syntax errors: a partial tree, clearly marked
 
-HALF_WRITTEN = '''fn double(n: Int) -> Int {
+HALF_WRITTEN = '''fn double(n: Int) gives Int {
     return n * 2
 }
 
@@ -177,7 +178,7 @@ fn broken(a: Int -> Int {
     return a
 }
 
-fn main() -> Void {
+fn main() {
     let total = double(21)
     let = 5
     let label = "Total: " + to_text(total)
@@ -233,7 +234,7 @@ def test_context_of_a_program_with_syntax_errors():
     document = tooling.get_context(HALF_WRITTEN)
     validate(document, "nexora-context.schema.json")
     assert (document["ok"], document["analysed"], document["complete"]) == (False, True, False)
-    assert [function["signature"] for function in document["functions"]] == ["fn double(n: Int) -> Int", "fn main() -> Void"]
+    assert [function["signature"] for function in document["functions"]] == ["fn double(n: Int) gives Int", "fn main()"]
     assert function_of(document, "main")["calls"] == ["double"]
     assert any("this summary is partial" in note for note in document["notes"])
     assert "Partial summary" in tooling.render_context(document)
@@ -276,7 +277,7 @@ def test_symbols_lists_functions_parameters_and_variables():
         ("function", "area"), ("function", "describe"), ("function", "countdown"), ("function", "main"),
     ]
     area = symbol(document, "area")
-    assert area["signature"] == "fn area(width: Int, height: Int) -> Int"
+    assert area["signature"] == "fn area(width: Int, height: Int) gives Int"
     assert (area["type"], area["return_type"], area["function"], area["scope"]) == ("Int", "Int", None, None)
     assert area["params"] == [{"name": "width", "type": "Int"}, {"name": "height", "type": "Int"}]
     assert at(area["declaration"]) == (1, 4)
@@ -297,9 +298,9 @@ def test_references_are_the_ones_the_checker_resolved():
             text = lines[reference["line"] - 1][reference["column"] - 1:reference["end_column"] - 1]
             assert text == entry["name"], (entry["name"], reference)
     # width is used in the contract and in the body; the call to area is found in main.
-    assert [at(r) for r in symbol(document, "width")["references"]] == [(2, 14), (4, 16)]
-    assert [at(r) for r in symbol(document, "area")["references"]] == [(27, 22)]
-    assert [at(r) for r in symbol(document, "countdown")["references"]] == [(23, 5), (29, 5)]
+    assert [at(r) for r in symbol(document, "width")["references"]] == [(2, 11), (5, 16)]
+    assert [at(r) for r in symbol(document, "area")["references"]] == [(28, 22)]
+    assert [at(r) for r in symbol(document, "countdown")["references"]] == [(24, 5), (30, 5)]
     assert symbol(document, "main")["references"] == []
 
 
@@ -307,8 +308,8 @@ def test_two_variables_with_the_same_name_in_sibling_blocks_are_two_symbols():
     document = tooling.get_symbols(PROGRAM, name="label")
     assert [(s["function"], at(s["declaration"]), s["scope"]["line"], [at(r) for r in s["references"]])
             for s in document["symbols"]] == [
-        ("describe", (10, 13), 9, [(11, 16)]),
-        ("describe", (13, 13), 12, [(14, 16)]),
+        ("describe", (11, 13), 10, [(12, 16)]),
+        ("describe", (14, 13), 13, [(15, 16)]),
     ]
     assert document["filter"] == {"name": "label", "function": None}
 
@@ -333,7 +334,7 @@ def test_symbols_of_a_program_with_errors():
     assert semantic["ok"] is False
     assert [(s["name"], s["type"]) for s in semantic["symbols"]] == [("main", "Void"), ("a", "Int"), ("c", "Int")]
     # A type that is written wrong is reported as unknown, not invented.
-    unknown = tooling.get_symbols("fn f(a: Number) -> Void {}\nfn main() -> Void {}")
+    unknown = tooling.get_symbols("fn f(a: Number) {}\nfn main() {}")
     assert symbol(unknown, "a")["type"] is None
     assert (semantic["complete"], unknown["complete"]) == (True, True)
 
@@ -346,18 +347,18 @@ def function_of(document: dict, name: str) -> dict:
 
 def test_context_describes_the_program():
     document = tooling.get_context(PROGRAM, "shapes.nex")
-    assert (document["schema"], document["file"], document["ok"], document["executed"]) == ("nexora.context/1", "shapes.nex", True, False)
-    assert (document["analysed"], document["entry_point"], document["lines"]) == (True, "main", 30)
+    assert (document["schema"], document["file"], document["ok"], document["executed"]) == ("nexora.context/2", "shapes.nex", True, False)
+    assert (document["analysed"], document["entry_point"], document["lines"]) == (True, "main", 31)
     assert [function["signature"] for function in document["functions"]] == [
-        "fn area(width: Int, height: Int) -> Int", "fn describe(n: Int) -> Text",
-        "fn countdown(n: Int) -> Void", "fn main() -> Void",
+        "fn area(width: Int, height: Int) gives Int", "fn describe(n: Int) gives Text",
+        "fn countdown(n: Int)", "fn main()",
     ]
     area = function_of(document, "area")
     assert area["contracts"] == [
-        {"clause": "requires", "condition": "width > 0 and height > 0", "message": None, "line": 2},
-        {"clause": "ensures", "condition": "result > 0", "message": None, "line": 3},
+        {"clause": "needs", "condition": "width > 0 and height > 0", "message": None, "line": 2, "name": None},
+        {"clause": "promises", "condition": "result > 0", "message": None, "line": 3, "name": None},
     ]
-    assert area["variables"] == [{"name": "size", "type": "Int", "line": 4, "mutable": False}]
+    assert area["variables"] == [{"name": "size", "type": "Int", "line": 5, "mutable": False}]
     assert (area["calls"], area["called_by"], area["recursive"]) == ([], ["main"], False)
 
     main = function_of(document, "main")
@@ -379,7 +380,7 @@ def test_context_features_come_from_the_tree():
 
 
 def test_mutual_recursion_is_found_through_the_call_graph():
-    functions = "fn a(n: Int) -> Int {\n    return b(n)\n}\nfn b(n: Int) -> Int {\n    return a(n)\n}\nfn c() -> Int {\n    return 1\n}"
+    functions = "fn a(n: Int) gives Int {\n    return b(n)\n}\nfn b(n: Int) gives Int {\n    return a(n)\n}\nfn c() gives Int {\n    return 1\n}"
     document = tooling.get_context(with_main(functions, "print(a(1) + c())"))
     assert [(f["name"], f["recursive"]) for f in document["functions"]] == [("a", True), ("b", True), ("c", False), ("main", False)]
 
@@ -394,7 +395,7 @@ def test_context_notes_are_tied_to_what_the_program_contains():
 
 
 def test_context_reports_unsupported_constructs_instead_of_guessing():
-    document = tooling.get_context("fn main() -> Void {\n    break\n    let x = match\n}\n")
+    document = tooling.get_context("fn main() {\n    break\n    let x = match\n}\n")
     assert (document["ok"], document["analysed"], document["complete"]) == (False, True, False)
     assert document["reserved_words_used"] == ["break", "match"]
     assert any("reserved for features that are not implemented: break, match" in note for note in document["notes"])
@@ -408,7 +409,7 @@ def test_context_reports_unsupported_constructs_instead_of_guessing():
 
 
 def test_context_with_semantic_errors_keeps_what_is_known():
-    document = tooling.get_context(with_main("fn f(a: Number) -> Int {\n    return missing\n}", "print(f(1))"))
+    document = tooling.get_context(with_main("fn f(a: Number) gives Int {\n    return missing\n}", "print(f(1))"))
     assert (document["ok"], document["analysed"]) == (False, True)
     assert {d["code"] for d in document["diagnostics"]} == {"E2012", "E2005"}
     assert function_of(document, "f")["params"] == [{"name": "a", "type": "Number"}]
@@ -424,13 +425,13 @@ def test_context_is_deterministic_and_much_smaller_than_the_tree():
 def test_context_text_form():
     text = tooling.render_context(tooling.get_context(PROGRAM, "shapes.nex"))
     assert text.splitlines()[:4] == [
-        f"shapes.nex | NEXORA {__version__} | 30 lines",
+        f"shapes.nex | NEXORA {__version__} | 31 lines",
         "Static analysis: no errors.",
         "The program was not run to produce this summary.",
         "Entry point: main",
     ]
-    assert "  fn area(width: Int, height: Int) -> Int    [line 1]" in text
-    assert "      requires width > 0 and height > 0" in text
+    assert "  fn area(width: Int, height: Int) gives Int    [line 1]" in text
+    assert "      needs width > 0 and height > 0" in text
     assert "      variables: size: Int" in text
     assert "      recursive" in text
     broken = tooling.render_context(tooling.get_context(in_main("print(x)")))
@@ -442,7 +443,7 @@ def test_context_text_form():
 @pytest.mark.parametrize("tool", [tooling.check_source, tooling.inspect_source, tooling.get_symbols, tooling.get_context])
 def test_analysis_never_runs_the_program(tool, monkeypatch):
     no_interpreter(monkeypatch)
-    effects = with_main("fn forever(n: Int) -> Int {\n    return forever(n + 1)\n}",
+    effects = with_main("fn forever(n: Int) gives Int {\n    return forever(n + 1)\n}",
                         'print("RAN")\nprint(1 / 0)\nprint(forever(0))')
     document = tool(effects)
     assert document["ok"] is True
@@ -550,8 +551,8 @@ def test_cli_context_and_symbols_text():
 
     symbols = nex("symbols", "examples/contracts.nex", "--name", "whole")
     assert symbols.stdout.splitlines() == [
-        "parameter  whole: Int    in percentage    [declared at 23:26]",
-        "    used at: 24:14, 25:36, 27:25",
+        "parameter  whole: Int    in percentage    [declared at 29:26]",
+        "    used at: 30:27, 31:46, 32:18, 35:25",
     ]
     filtered = json.loads(nex("symbols", "examples/contracts.nex", "--function", "divide", "--format", "json").stdout)
     assert [s["name"] for s in filtered["symbols"]] == ["divide", "a", "b"]

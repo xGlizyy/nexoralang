@@ -3,12 +3,14 @@
 // where the measure did not decrease, and says which values it had. `nex check` accepts it: whether
 // a measure decreases depends on values. `nex run` exits with code 5.
 
-fn count_even(limit: Int) -> Int {
-    requires limit >= 0, "There is nothing to count below zero"
+fn count_even(limit: Int) gives Int
+    needs limit >= 0, "There is nothing to count below zero"
+{
     var i = 0
     var even = 0
-    while i < limit {
-        decreases limit - i, "Each turn moves i one step closer to limit"
+    while i < limit
+        shrinks limit - i, "Each turn moves i one step closer to limit"
+    {
         if i / 2 * 2 == i {
             even = even + 1
             i = i + 1
@@ -17,6 +19,6 @@ fn count_even(limit: Int) -> Int {
     return even
 }
 
-fn main() -> Void {
+fn main() {
     print(count_even(10))
 }

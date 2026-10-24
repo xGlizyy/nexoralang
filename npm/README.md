@@ -28,7 +28,7 @@ npx nexora-lang --version
 ## Use
 
 ```nex
-fn main() -> Void {
+fn main() {
     print("Hello from NEXORA")
 }
 ```

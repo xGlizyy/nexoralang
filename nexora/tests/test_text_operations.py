@@ -91,7 +91,7 @@ def test_slice(expression, expected):  # [2]
 def test_slice_outside_its_limits_is_e4001(arguments, condition):  # [2], [6]
     error = failure_of(f"Text.slice({arguments})")
     assert error.code == "E4001"
-    assert error.notes[0] == f"The condition of the built-in function is false: requires {condition}"
+    assert error.notes[0] == f"The condition of the built-in function is false: needs {condition}"
     assert error.hint is None
 
 
@@ -231,12 +231,12 @@ def test_round_trips():  # [5]
 # Requirements [6-10]
 
 def test_the_e4001_of_a_built_in_function():  # [6]
-    text = with_main("fn shorten(word: Text) -> Text {\n    return Text.slice(word, 2, 9)\n}", 'print(shorten("abc"))')
+    text = with_main("fn shorten(word: Text) gives Text {\n    return Text.slice(word, 2, 9)\n}", 'print(shorten("abc"))')
     _, error = run_failure(text)
     assert (error.code, error.category, error.label) == (
-        "E4001", "contract", "This call breaks a 'requires' condition of 'Text.slice'")
+        "E4001", "contract", "This call breaks a 'needs' condition of 'Text.slice'")
     assert error.notes == (
-        "The condition of the built-in function is false: requires end <= Text.length(text)",
+        "The condition of the built-in function is false: needs end <= Text.length(text)",
         "Reason: A slice cannot end after the last character",
         'It was called with: text = "abc", start = 2, end = 9',
         "In 'shorten', called at line 6, column 11.",
@@ -287,7 +287,7 @@ def test_the_built_in_contracts_are_valid_nexora_that_cannot_fail(name):  # [9]
     some_value = {"Int": "0", "Float": "0.0", "Text": '""', "Bool": "true"}[return_type]
     for contract in prelude.CONTRACTS[name]:
         # The clause, checked by the real checker in a function with the same parameters and result.
-        program = (f"fn probe({params}) -> {return_type} {{\n    {contract.clause} {contract.source}\n"
+        program = (f"fn probe({params}) gives {return_type}\n    {contract.clause} {contract.source}\n{{\n"
                    f"    return {some_value}\n}}\n") + in_main("")
         assert check_codes(program) == [], (name, contract.source)
         assert unparse(contract.condition) == contract.source
@@ -327,7 +327,7 @@ def test_each_interface(capsys, tmp_path):  # [10]
     assert document["diagnostics"][0]["hint"].startswith("Check the text first with Int.can_parse")
     result = api.run_source(program)
     assert (result["status"], result["output"]) == ("contract_violation", "before\n")
-    examples = 'fn f(t: Text) -> Int {\n    example f("x") == 1\n    example f("2") == 2\n    return Int.parse(t)\n}\n'
+    examples = 'fn f(t: Text) gives Int\n    example f("x") == 1\n    example f("2") == 2\n{\n    return Int.parse(t)\n}\n'
     report = api.test_source(examples)
     assert [example["status"] for example in report["examples"]] == ["error", "passed"]
     assert report["examples"][0]["diagnostic"]["code"] == "E4001"
@@ -342,7 +342,7 @@ def test_a_refinement_that_breaks_a_built_in_requirement():  # [10]
 
 
 def test_a_built_in_requirement_inside_a_contract_of_the_program():  # [10]
-    text = with_main('fn f(t: Text) -> Int {\n    requires Int.parse(t) > 0\n    return 1\n}', 'print(f("x"))')
+    text = with_main('fn f(t: Text) gives Int\n    needs Int.parse(t) > 0\n{\n    return 1\n}', 'print(f("x"))')
     assert run_failure(text)[1].code == "E4001"
 
 
@@ -351,18 +351,20 @@ def test_a_built_in_requirement_inside_a_contract_of_the_program():  # [10]
 def test_qualified_calls_in_every_position():  # [11]
     text = (
         'type Code = Text where Text.length(value) == 3, "Three characters"\n'
-        "fn f(t: Text) -> Int {\n"
-        "    requires Text.length(t) > 0\n"
-        "    ensures result == Text.length(t)\n"
+        'fn f(t: Text) gives Int\n'
+        '    needs Text.length(t) > 0\n'
+        '    promises result == Text.length(t)\n'
         '    example f(Text.slice("abcd", 0, 2)) == 2\n'
-        "    var i = 0\n"
-        "    while i < Text.length(t) {\n"
-        "        invariant i <= Text.length(t)\n"
-        "        decreases Text.length(t) - i\n"
-        "        i = i + 1\n"
-        "    }\n"
-        "    return Text.length(Text.slice(t, 0, i))\n"
-        "}\n"
+        '{\n'
+        '    var i = 0\n'
+        '    while i < Text.length(t)\n'
+        '        keeps i <= Text.length(t)\n'
+        '        shrinks Text.length(t) - i\n'
+        '    {\n'
+        '        i = i + 1\n'
+        '    }\n'
+        '    return Text.length(Text.slice(t, 0, i))\n'
+        '}\n'
     ) + in_main('let c: Code = "NEX"\nprint(f(c) + Int.parse(to_text(Text.length(c))))')
     assert run_text(text) == "6\n"
     assert api.test_source(text)["status"] == "passed"
@@ -417,12 +419,12 @@ def test_syntax_errors_with_the_dot(body, label):  # [14]
 
 
 def test_the_end_of_a_line_before_the_dot_ends_the_statement():  # [14]
-    errors = diagnostics_of("fn main() -> Void {\n    let n = Text\n    .length(\"x\")\n}\n")
+    errors = diagnostics_of("fn main() {\n    let n = Text\n    .length(\"x\")\n}\n")
     assert [e.label for e in errors if e.code == "E1101"] == ["Expected a value or an expression, found '.'"]
 
 
 def test_a_program_cannot_declare_a_function_of_a_type():  # [14]
-    (error,) = diagnostics_of("fn Text.length(t: Text) -> Int {\n    return 0\n}\n" + in_main(""))
+    (error,) = diagnostics_of("fn Text.length(t: Text) gives Int {\n    return 0\n}\n" + in_main(""))
     assert error.code == "E1101" and error.hint.startswith("Only the language defines functions of a type")
 
 
@@ -442,7 +444,7 @@ def test_a_value_before_the_dot(declaration, hint):  # [15]
 
 def test_common_names_stay_free():  # [16]
     text = with_main(
-        "fn size(length: Int, slice: Text, contains: Bool) -> Int {\n    return length + Text.length(slice)\n}",
+        "fn size(length: Int, slice: Text, contains: Bool) gives Int {\n    return length + Text.length(slice)\n}",
         'let length = Text.length("abcd")\nvar contains = Text.contains("ab", "b")\nprint(size(length, "xy", contains))',
     )
     assert run_text(text) == "6\n"
@@ -450,7 +452,7 @@ def test_common_names_stay_free():  # [16]
 
 def test_variables_named_like_the_types_stay_valid():  # [17]
     text = with_main(
-        "fn twice(Text: Int) -> Int {\n    return Text * 2\n}",
+        "fn twice(Text: Int) gives Int {\n    return Text * 2\n}",
         'let Text = 1\nlet Int = "abc"\nprint(Text.length(Int) + twice(Text))',
     )
     assert run_text(text) == "5\n"
@@ -499,12 +501,13 @@ def test_inspect_has_a_qualifier_in_every_call():  # [20]
     assert (length["qualifier"], length["type"]) == ("Text", "Int")
     assert (length["callee_span"]["column"], length["callee_span"]["end_column"]) == (11, 22)
     jsonschema.validate(document, SCHEMAS["nexora-inspect.schema.json"])
-    jsonschema.validate(document, _schema_of_0_5_1())
-    jsonschema.validate(tooling.inspect_source(in_main("print(1)")), _schema_of_0_5_1())
+    # `nexora.inspect/3` (decision 0019, 8.8) is not a document of the schema of 0.5.1 any more.
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(document, _schema_of_0_5_1())
 
 
 def test_a_consumer_of_0_5_1_never_takes_a_qualified_call_for_a_name_of_the_program():  # [20]
-    text = with_main("fn size(length: Int) -> Int {\n    return length\n}", 'let name = "abc"\nprint(size(Text.length(name)))')
+    text = with_main("fn size(length: Int) gives Int {\n    return length\n}", 'let name = "abc"\nprint(size(Text.length(name)))')
     document = tooling.inspect_source(text)
     names = {node.get("name") for node in _nodes(document) if node.get("kind") in ("Param", "Let", "Var", "Function")}
     old_builtins = {"print", "to_text", "to_float", "to_int"}
@@ -519,24 +522,24 @@ def test_symbols_describe_the_functions_of_the_types():  # [21]
     builtins = {entry["name"]: entry for entry in document["builtins"]}
     assert set(builtins) == set(BUILTINS)
     slice_ = builtins["Text.slice"]
-    assert slice_["signature"] == "fn Text.slice(text: Text, start: Int, end: Int) -> Text"
+    assert slice_["signature"] == "fn Text.slice(text: Text, start: Int, end: Int) gives Text"
     assert [(c["clause"], c["condition"], c["checked_at_run_time"]) for c in slice_["contracts"]] == [
-        ("requires", "start >= 0", True), ("requires", "start <= end", True),
-        ("requires", "end <= Text.length(text)", True), ("ensures", "Text.length(result) == end - start", False),
+        ("needs", "start >= 0", True), ("needs", "start <= end", True),
+        ("needs", "end <= Text.length(text)", True), ("promises", "Text.length(result) == end - start", False),
     ]
     assert builtins["print"]["contracts"] == [] and builtins["Text.contains"]["contracts"] == []
     assert {name.split(".")[0] for name in BUILTINS if "." in name} == set(TYPE_FUNCTIONS)
 
 
 def test_context_names_the_functions_of_the_types_and_their_requirements():  # [21]
-    text = with_main('fn first(t: Text) -> Text {\n    return Text.slice(t, 0, 1)\n}', 'print(first("ab") < "b")')
+    text = with_main('fn first(t: Text) gives Text {\n    return Text.slice(t, 0, 1)\n}', 'print(first("ab") < "b")')
     document = tooling.get_context(text)
     jsonschema.validate(document, SCHEMAS["nexora-context.schema.json"])
     first = next(f for f in document["functions"] if f["name"] == "first")
     assert first["builtins_called"] == ["Text.slice"] and first["calls"] == []
     assert "text_operations" in document["features"]
     rendered = tooling.render_context(document)
-    assert "      built-ins: Text.slice\n          Text.slice requires start >= 0\n" in rendered
+    assert "      built-ins: Text.slice\n          Text.slice needs start >= 0\n" in rendered
     assert "              reason: A slice cannot end after the last character" in rendered
     assert "text_operations" not in tooling.get_context(in_main("print(1 < 2)"))["features"]
     ordering = tooling.get_context('type Name = Text where value != ""\n' + in_main('let a: Name = "x"\nprint(a < "y")'))
@@ -554,7 +557,7 @@ def test_the_checker_knows_every_implementation():
     # Every function of a type is implemented: the pure ones in the prelude, and the three that
     # can fail in the interpreter, which needs the position of the argument to say where the
     # variant was wrong.
-    failing = {"Option.unwrap", "Result.unwrap", "Result.error"}
+    failing = {"Option.value", "Result.value", "Result.error"}
     of_a_type = {name for name in BUILTINS if "." in name}
     assert of_a_type - failing == set(prelude.IMPLEMENTATIONS)
     assert failing <= of_a_type
@@ -563,15 +566,15 @@ def test_the_checker_knows_every_implementation():
 
 
 def test_the_defensive_paths_of_the_prelude():
-    # The interpreter only calls these once their requires hold; called without, they refuse.
+    # The interpreter only calls these once their 'needs' hold; called without, they refuse.
     with pytest.raises(ValueError):
         prelude.parse_int("12a")
     with pytest.raises(ValueError):
         prelude.parse_float("1")
     # A built-in condition that is not valid NEXORA is a defect, found when the module loads.
     with pytest.raises(ValueError):
-        prelude._contract("requires", "start >=", "broken")
+        prelude._contract("needs", "start >=", "broken")
     with pytest.raises(ValueError):
-        prelude._contract("requires", "start ` 0", "broken")
+        prelude._contract("needs", "start ` 0", "broken")
     with pytest.raises(ValueError):
-        prelude._contract("requires", "start >= 0 0", "broken")
+        prelude._contract("needs", "start >= 0 0", "broken")

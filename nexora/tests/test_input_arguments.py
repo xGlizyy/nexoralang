@@ -13,7 +13,7 @@ from nexora.host import LocalHost
 from helpers import run_with_host
 
 PROGRAM = """
-fn main() -> Void {
+fn main() {
     let names = args()
     print(names)
     print(names == [])
@@ -52,7 +52,7 @@ def test_an_argument_may_have_unicode():
 
 def test_the_arguments_can_be_read_more_than_once():
     program = """
-fn main() -> Void {
+fn main() {
     print(args())
     print(args())
 }
@@ -62,10 +62,11 @@ fn main() -> Void {
 
 def test_the_arguments_can_be_walked():
     program = """
-fn main() -> Void {
+fn main() {
     var total = 0
-    for name in args() {
-        invariant total >= 0, "The total never goes down"
+    for name in args()
+        keeps total >= 0, "The total never goes down"
+    {
         total = total + Text.length(name)
     }
     print(total)
@@ -81,10 +82,11 @@ fn main() -> Void {
 ])
 def test_every_argument_is_a_text(arguments):
     program = """
-fn main() -> Void {
+fn main() {
     var total = 0
-    for name in args() {
-        invariant total >= 0, "The total never goes down"
+    for name in args()
+        keeps total >= 0, "The total never goes down"
+    {
         total = total + Text.length(name)
     }
     print(total)

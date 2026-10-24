@@ -12,7 +12,7 @@
 uses read "datos/entradas.txt"
 uses write "salida/copiadas.txt"
 
-fn main() -> Void {
+fn main() {
     let entradas = read_file("datos/entradas.txt")
     print(entradas)
     write_file("salida/copiadas.txt", entradas)

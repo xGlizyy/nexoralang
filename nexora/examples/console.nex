@@ -7,14 +7,15 @@
 //   nex run examples/console.nex -- Ada
 //   echo "Grace" | nex run examples/console.nex
 
-fn greet(name: Text) -> Text {
+fn greet(name: Text) gives Text {
     return "Hola, " + name
 }
 
-fn main() -> Void {
+fn main() {
     var greeted = 0
-    for name in args() {
-        invariant greeted >= 0, "The count of greetings never goes down"
+    for name in args()
+        keeps greeted >= 0, "The count of greetings never goes down"
+    {
         greeted = greeted + 1
         print(greet(name))
     }

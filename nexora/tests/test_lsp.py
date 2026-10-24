@@ -8,11 +8,11 @@ import json
 
 from nexora import lsp
 
-PROGRAM = """fn add(a: Int, b: Int) -> Int {
+PROGRAM = """fn add(a: Int, b: Int) gives Int {
     return a + b
 }
 
-fn main() -> Void {
+fn main() {
     let total = add(1, 2)
     print(total)
 }
@@ -32,7 +32,7 @@ def _position(line: int, character: int) -> dict:
 
 
 def test_the_diagnostics_are_the_ones_of_the_command_line():
-    server = _server("fn main() -> Void {\n    let x: Int = \"text\"\n}\n")
+    server = _server("fn main() {\n    let x: Int = \"text\"\n}\n")
     diagnostics = server.diagnostics_of(server.documents["file:///p.nex"])
     assert [d["code"] for d in diagnostics] == ["E2011"]
     assert diagnostics[0]["range"]["start"]["line"] == 1
@@ -72,7 +72,7 @@ def test_the_hover_of_a_function_says_its_signature():
         "position": _position(5, 16),
     })
     assert answer is not None
-    assert "fn add(a: Int, b: Int) -> Int" in answer["contents"]["value"]
+    assert "fn add(a: Int, b: Int) gives Int" in answer["contents"]["value"]
 
 
 def test_the_definition_of_a_name_is_where_it_was_declared():
@@ -123,19 +123,19 @@ def test_the_signature_help_says_the_parameters_of_the_function_being_called():
         "position": _position(5, 16),
     })
     assert answer is not None
-    assert answer["signatures"][0]["label"] == "fn add(a: Int, b: Int) -> Int"
+    assert answer["signatures"][0]["label"] == "fn add(a: Int, b: Int) gives Int"
     assert [p["label"] for p in answer["signatures"][0]["parameters"]] == ["a", "b"]
 
 
 def test_the_formatting_of_a_document_gives_the_canonical_shape():
-    server = _server("fn main() -> Void {\nlet x   = 1\n}\n")
+    server = _server("fn main() {\nlet x   = 1\n}\n")
     edits = server.formatting({"textDocument": {"uri": "file:///p.nex"}, "options": {}})
     assert len(edits) == 1
-    assert edits[0]["newText"] == "fn main() -> Void {\n    let x = 1\n}\n"
+    assert edits[0]["newText"] == "fn main() {\n    let x = 1\n}\n"
 
 
 def test_the_formatting_of_a_range_leaves_the_rest_alone():
-    server = _server("fn main() -> Void {\nlet x   = 1\nprint(x)\n}\n")
+    server = _server("fn main() {\nlet x   = 1\nprint(x)\n}\n")
     edits = server.range_formatting({
         "textDocument": {"uri": "file:///p.nex"},
         "options": {},
@@ -148,7 +148,7 @@ def test_the_formatting_of_a_range_leaves_the_rest_alone():
 def test_formatting_a_range_does_not_take_the_lines_of_another_place():
     # The range is cut from the formatted text by line number, so the formatted text has
     # to keep every line: the comment and the blank line before the range included.
-    server = _server("fn main() -> Void {\n// c\n\nlet x   = 1\nprint(x)\n}\n")
+    server = _server("fn main() {\n// c\n\nlet x   = 1\nprint(x)\n}\n")
     edits = server.range_formatting({
         "textDocument": {"uri": "file:///p.nex"},
         "options": {},
@@ -158,9 +158,9 @@ def test_formatting_a_range_does_not_take_the_lines_of_another_place():
 
 
 def test_formatting_a_document_keeps_its_comments():
-    server = _server("// a program\nfn main() -> Void { // main\nlet x   = 1 // one\n}\n")
+    server = _server("// a program\nfn main() { // main\nlet x   = 1 // one\n}\n")
     edits = server.formatting({"textDocument": {"uri": "file:///p.nex"}, "options": {}})
-    assert edits[0]["newText"] == "// a program\nfn main() -> Void { // main\n    let x = 1 // one\n}\n"
+    assert edits[0]["newText"] == "// a program\nfn main() { // main\n    let x = 1 // one\n}\n"
 
 
 def test_the_server_speaks_the_protocol():
@@ -191,7 +191,7 @@ def test_the_server_answers_over_the_protocol_in_a_process():
     import subprocess
     import sys
 
-    program = "fn main() -> Void {\n    let x: Int = \"text\"\n}\n"
+    program = "fn main() {\n    let x: Int = \"text\"\n}\n"
 
     def frame(message: dict) -> bytes:
         body = json.dumps(message).encode("utf-8")

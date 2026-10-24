@@ -44,26 +44,26 @@ def errors_of(text: str):
 # Valid programs
 
 def test_main_function():
-    program = parse_ok('fn main() -> Void {\n    print("Hello from NEXORA")\n}\n')
+    program = parse_ok('fn main() {\n    print("Hello from NEXORA")\n}\n')
     assert len(program.functions) == 1
     function = program.functions[0]
     assert function.name == "main"
-    assert function.return_type.name == "Void"
+    assert function.return_type is None          # no 'gives': it gives nothing
     assert len(function.body.statements) == 1
 
 
 def test_empty_program_and_empty_body():
     assert parse_ok("").functions == ()
-    assert parse_ok("fn main() -> Void {}").functions[0].body.statements == ()
+    assert parse_ok("fn main() {}").functions[0].body.statements == ()
 
 
 def test_function_on_one_line_and_with_brace_on_the_next():
-    assert len(parse_ok("fn main() -> Void { print(1) }").functions[0].body.statements) == 1
-    assert len(parse_ok("fn main() -> Void\n{\n    print(1)\n}").functions[0].body.statements) == 1
+    assert len(parse_ok("fn main() { print(1) }").functions[0].body.statements) == 1
+    assert len(parse_ok("fn main() {\n    print(1)\n}").functions[0].body.statements) == 1
 
 
 def test_several_functions_are_parsed():
-    program = parse_ok("fn main() -> Void {}\n\nfn other() -> Void {}\n")
+    program = parse_ok("fn main() {}\n\nfn other() {}\n")
     assert [function.name for function in program.functions] == ["main", "other"]
 
 
@@ -176,7 +176,7 @@ def test_ast_converts_to_json():
     ("let x = match", "E1103", 2, 13),         # reserved word in an expression
     ("let x: = 1", "E1101", 2, 12),            # annotation without a type
     ("let x: Int", "E1101", 2, 15),            # annotation without a value
-    ("fn inner() -> Void {}", "E1101", 2, 5),  # nested function
+    ("fn inner() {}", "E1101", 2, 5),  # nested function
     ("let x = 1 < 2 < 3", "E1101", 2, 19),     # chained comparison
     ("let x = 1 ==", "E1101", 2, 17),          # comparison without a right side
     ("let x = not", "E1101", 2, 16),           # 'not' without an operand
@@ -185,8 +185,8 @@ def test_ast_converts_to_json():
     ("if true\nprint(1)", "E1101", 2, 12),     # 'if' without a block
     ("else {\n}", "E1101", 2, 5),              # 'else' without an 'if'
     ("if true {\n}\nelse {\n}", "E1101", 4, 5),   # 'else' on its own line
-    ("let x = 1\nensures x > 0", "E1106", 3, 5),  # contract clause after a statement
-    ("{\n    requires true\n}", "E1106", 3, 9),   # contract clause inside a nested block
+    ("let x = 1\npromises x > 0", "E1106", 3, 5),  # contract clause after a statement
+    ("{\n    needs true\n}", "E1106", 3, 9),   # contract clause inside a nested block
 ])
 def test_statement_errors(body, code, line, column):
     errors = errors_of(in_main(body))
@@ -195,22 +195,22 @@ def test_statement_errors(body, code, line, column):
 
 
 @pytest.mark.parametrize("text, code, line, column", [
-    ("fn main() -> Void {\n    print(1)\n", "E1102", 3, 1),   # unclosed block
-    ("fn main() -> Void {", "E1102", 1, 20),
-    ("fn () -> Void {}", "E1101", 1, 4),                       # missing function name
-    ("fn main -> Void {}", "E1101", 1, 9),                     # missing '('
-    ("fn main( -> Void {}", "E1101", 1, 10),                   # missing ')'
-    ("fn main() Void {}", "E1101", 1, 11),                     # missing '->'
-    ("fn main() -> {}", "E1101", 1, 14),                       # missing return type
-    ("fn main() -> Void", "E1101", 1, 18),                     # missing body
-    ("fn main(name) -> Void {}", "E1101", 1, 13),              # parameter without a type
-    ("fn main(name:) -> Void {}", "E1101", 1, 14),             # parameter with ':' but no type
-    ("fn main(a: Int,) -> Void {}", "E1101", 1, 16),           # trailing comma
-    ("fn main(a: Int b: Int) -> Void {}", "E1101", 1, 16),     # missing comma
-    ("fn main(1) -> Void {}", "E1101", 1, 9),                  # not a parameter name
-    ("fn main() -> Void {\n    requires\n}", "E1101", 2, 13),  # contract without a condition
+    ("fn main() {\n    print(1)\n", "E1102", 3, 1),   # unclosed block
+    ("fn main() {", "E1102", 1, 12),
+    ("fn () {}", "E1101", 1, 4),                       # missing function name
+    ("fn main {}", "E1101", 1, 9),                     # missing '('
+    ("fn main( {}", "E1101", 1, 10),                   # missing ')'
+    ("fn main() Int {}", "E1101", 1, 11),              # missing 'gives'
+    ("fn main() gives {}", "E1101", 1, 17),            # missing type after 'gives'
+    ("fn main()", "E1101", 1, 10),                     # missing body
+    ("fn main(name) {}", "E1101", 1, 13),              # parameter without a type
+    ("fn main(name:) {}", "E1101", 1, 14),             # parameter with ':' but no type
+    ("fn main(a: Int,) {}", "E1101", 1, 16),           # trailing comma
+    ("fn main(a: Int b: Int) {}", "E1101", 1, 16),     # missing comma
+    ("fn main(1) {}", "E1101", 1, 9),                  # not a parameter name
+    ("fn main()\n    needs\n{\n}", "E1101", 2, 10),  # contract without a condition
     ("let x = 1", "E1101", 1, 1),                              # code outside a function
-    ("fn main() -> Void {}\n}", "E1101", 2, 1),                # stray closing brace
+    ("fn main() {}\n}", "E1101", 2, 1),                # stray closing brace
 ])
 def test_declaration_errors(text, code, line, column):
     errors = errors_of(text)
@@ -227,8 +227,8 @@ def test_messages_say_what_was_expected():
 
 
 def test_unclosed_block_points_back_to_its_opening_brace():
-    (error,) = errors_of("fn main() -> Void {\n    print(1)\n")
-    assert error.notes == ("The block opened at line 1, column 19 is never closed.",)
+    (error,) = errors_of("fn main() {\n    print(1)\n")
+    assert error.notes == ("The block opened at line 1, column 11 is never closed.",)
 
 
 def test_parser_recovers_and_reports_several_errors():
@@ -242,7 +242,7 @@ def test_recovery_continues_after_a_missing_parenthesis():
 
 
 def test_recovery_continues_with_the_next_function():
-    program, errors = parse_text("fn broken( -> Void {\n    print(1)\n}\n\nfn main() -> Void {}\n\nfn () -> Void {}\n")
+    program, errors = parse_text("fn broken( {\n    print(1)\n}\n\nfn main() {}\n\nfn () {}\n")
     assert [(error.code, error.span.line) for error in errors] == [("E1101", 1), ("E1101", 7)]
     assert [function.name for function in program.functions] == ["main"]
 

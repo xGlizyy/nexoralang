@@ -44,8 +44,8 @@ _BINARY = frozenset({
 _SPACE_AFTER = frozenset({
     TokenType.FN, TokenType.LET, TokenType.VAR, TokenType.RETURN, TokenType.IF, TokenType.ELSE,
     TokenType.WHILE, TokenType.FOR, TokenType.IN, TokenType.AND, TokenType.OR, TokenType.NOT,
-    TokenType.REQUIRES, TokenType.ENSURES, TokenType.EXAMPLE, TokenType.INVARIANT, TokenType.DECREASES,
-    TokenType.USES, TokenType.TYPE, TokenType.WHERE,
+    TokenType.NEEDS, TokenType.GIVES, TokenType.PROMISES, TokenType.TRUST, TokenType.EXAMPLE, TokenType.KEEPS,
+    TokenType.SHRINKS, TokenType.USES, TokenType.TYPE, TokenType.WHERE,
 })
 # The tokens that end a statement and are followed by nothing.
 _STATEMENT_END = frozenset({TokenType.RBRACE, TokenType.RBRACKET, TokenType.RPAREN})
@@ -54,6 +54,9 @@ _LINE = re.compile(r"([^\r\n]*)(\r\n|\n|\r|$)")
 # The tokens that open and close a group whose lines go one step further in.
 _OPEN_GROUP = frozenset({TokenType.LPAREN, TokenType.LBRACKET})
 _CLOSE_GROUP = frozenset({TokenType.RPAREN, TokenType.RBRACKET})
+# The tokens that start the head of a function or of a loop. When that line does not end with
+# `{`, the lines of its header follow, one step further in, up to the `{` alone (decision 0019).
+_HEADS = frozenset({TokenType.FN, TokenType.PUB, TokenType.WHILE, TokenType.FOR})
 
 
 @dataclass(frozen=True)
@@ -110,15 +113,19 @@ def _render(source: str, tokens: list[Token]) -> str | None:
     out: list[str] = []
     depth = 0   # Blocks open: `{`.
     group = 0   # Parentheses and brackets open: `(` and `[`.
+    header = 0  # 1 between the head of a function or a loop and the `{` of its body.
     for number, (text, ending) in enumerate(_physical_lines(source), start=1):
         line = by_line.get(number, [])
-        own = depth
+        if header and line and line[0].type is TokenType.LBRACE:
+            # The `{` alone after the header goes back to the line of the head.
+            header = 0
+        own = depth + header
         if line and line[0].type is TokenType.RBRACE:
             # A line that closes a block is written one step back.
             own = max(0, depth - 1)
         elif group > 0 and not (line and line[0].type in _CLOSE_GROUP):
             # A line that continues an open group goes one step further in.
-            own = depth + 1
+            own = depth + header + 1
         if line:
             # Everything after the last token is whitespace or a comment: a comment
             # runs to the end of the line, so none can be between two tokens.
@@ -141,6 +148,8 @@ def _render(source: str, tokens: list[Token]) -> str | None:
                 group += 1
             elif token.type in _CLOSE_GROUP:
                 group = max(0, group - 1)
+        if line and line[0].type in _HEADS and line[-1].type is not TokenType.LBRACE and group == 0:
+            header = 1
 
     result = "".join(out)
     if result and not result.endswith(("\n", "\r")):
@@ -188,6 +197,10 @@ def _needs_space(tokens: list[Token], index: int, parts: list[str]) -> bool:
     """Whether a space goes between the token written last and this one."""
     previous = tokens[index - 1]
     current = tokens[index]
+    if current.type is TokenType.LPAREN and (previous.type in _SPACE_AFTER or previous.type is TokenType.COLON):
+        # A parenthesis after a keyword or after the name of a clause opens an expression, not
+        # the arguments of a call: `needs ok: (x > 0 and`.
+        return True
     if previous.type in _NO_SPACE_AFTER or current.type in _NO_SPACE_BEFORE:
         return False
     if current.type is TokenType.LBRACKET and previous.type is TokenType.IDENT:

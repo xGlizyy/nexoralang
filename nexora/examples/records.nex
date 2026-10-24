@@ -9,13 +9,13 @@
 type Point = { x: Int, y: Int }
 type Segment = { from: Point, to: Point }
 
-fn distance_squared(a: Point, b: Point) -> Int {
+fn distance_squared(a: Point, b: Point) gives Int {
     let dx = b.x - a.x
     let dy = b.y - a.y
     return dx * dx + dy * dy
 }
 
-fn main() -> Void {
+fn main() {
     let origin = Point(x: 0, y: 0)
     let corner = Point(x: 3, y: 4)
 
@@ -42,11 +42,12 @@ fn main() -> Void {
     print(centre(corners))
 }
 
-fn centre(points: List[Point]) -> Point {
+fn centre(points: List[Point]) gives Point {
     var sum_x = 0
     var sum_y = 0
-    for point in points {
-        invariant sum_x >= 0, "A sum never goes down"
+    for point in points
+        keeps sum_x >= 0, "A sum never goes down"
+    {
         sum_x = sum_x + point.x
         sum_y = sum_y + point.y
     }

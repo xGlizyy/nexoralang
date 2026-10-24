@@ -19,7 +19,7 @@ def program(declarations: str, body: str) -> str:
 # Syntax
 
 def test_a_type_declaration_is_parsed_at_the_top_level():
-    parsed, errors = parse_text(PERCENT + "\n\nfn main() -> Void {\n}\n")
+    parsed, errors = parse_text(PERCENT + "\n\nfn main() {\n}\n")
     assert errors == []
     (declaration,) = parsed.types
     assert (declaration.name, declaration.base.name) == ("Percent", "Int")
@@ -29,7 +29,7 @@ def test_a_type_declaration_is_parsed_at_the_top_level():
 
 
 def test_types_and_functions_can_be_declared_in_any_order():
-    text = "fn main() -> Void {\n    print(half(40))\n}\n\nfn half(p: Percent) -> Int {\n    return p / 2\n}\n\n" + PERCENT
+    text = "fn main() {\n    print(half(40))\n}\n\nfn half(p: Percent) gives Int {\n    return p / 2\n}\n\n" + PERCENT
     assert run_text(text) == "20\n"
 
 
@@ -43,24 +43,24 @@ def test_types_and_functions_can_be_declared_in_any_order():
                                             "found the end of line"),
 ])
 def test_malformed_type_declarations(declaration, label):
-    (error,) = diagnostics_of(declaration + "\n\nfn main() -> Void {\n}\n")
+    (error,) = diagnostics_of(declaration + "\n\nfn main() {\n}\n")
     assert (error.code, error.label) == ("E1101", label)
 
 
 def test_a_type_cannot_be_declared_inside_a_function():
-    (error,) = diagnostics_of("fn main() -> Void {\n    type Small = Int where value < 10\n}\n")
+    (error,) = diagnostics_of("fn main() {\n    type Small = Int where value < 10\n}\n")
     assert (error.code, error.label) == ("E1101", "A type cannot be declared inside a function")
 
 
 def test_where_outside_a_type_declaration_is_a_syntax_error():
-    (error,) = diagnostics_of("fn main() -> Void {\n    where\n}\n")
+    (error,) = diagnostics_of("fn main() {\n    where\n}\n")
     assert error.code == "E1101"
     assert error.label == "'where' can only follow the base type in a type declaration"
 
 
 def test_type_and_where_are_keywords_now():
-    assert check_codes("fn main() -> Void {\n    let type = 1\n}\n") == ["E1101"]
-    assert check_codes("fn main() -> Void {\n    let where = 1\n}\n") == ["E1101"]
+    assert check_codes("fn main() {\n    let type = 1\n}\n") == ["E1101"]
+    assert check_codes("fn main() {\n    let where = 1\n}\n") == ["E1101"]
 
 
 # Declarations
@@ -72,12 +72,12 @@ def test_type_and_where_are_keywords_now():
     ("type Nothing = Void where value > 0", "E2012", "The type 'Nothing' cannot have the type Void"),
 ])
 def test_invalid_type_declarations(declaration, code, label):
-    (error,) = diagnostics_of(declaration + "\n\nfn main() -> Void {\n}\n")
+    (error,) = diagnostics_of(declaration + "\n\nfn main() {\n}\n")
     assert (error.code, error.label) == (code, label)
 
 
 def test_a_type_declared_twice():
-    errors = diagnostics_of(PERCENT + "\n" + PERCENT + "\n\nfn main() -> Void {\n}\n")
+    errors = diagnostics_of(PERCENT + "\n" + PERCENT + "\n\nfn main() {\n}\n")
     assert [(error.code, error.label) for error in errors] == [
         ("E2016", "The type 'Percent' is declared more than once"),
     ]
@@ -85,13 +85,13 @@ def test_a_type_declared_twice():
 
 
 def test_a_chain_of_types_that_never_reaches_a_built_in_type():
-    text = "type A = B where value > 0\ntype B = A where value > 0\n\nfn main() -> Void {\n}\n"
+    text = "type A = B where value > 0\ntype B = A where value > 0\n\nfn main() {\n}\n"
     assert check_codes(text) == ["E2016", "E2016"]
 
 
 def test_type_names_cannot_be_reused_for_values_or_functions():
     assert check_codes(program(PERCENT, "let Percent = 3")) == ["E2006"]
-    assert check_codes(program(PERCENT + "\nfn Percent() -> Int {\n    return 1\n}", "")) == ["E2006"]
+    assert check_codes(program(PERCENT + "\nfn Percent() gives Int {\n    return 1\n}", "")) == ["E2006"]
     (error,) = diagnostics_of(program(PERCENT, "print(Percent)"))
     assert (error.code, error.label) == ("E2011", "'Percent' is a type, not a value")
 
@@ -115,7 +115,7 @@ def test_value_has_the_base_type():
 
 
 def test_the_condition_cannot_call_functions_of_the_program():
-    functions = "type Positive = Int where check(value)\nfn check(n: Int) -> Bool {\n    return n > 0\n}"
+    functions = "type Positive = Int where check(value)\nfn check(n: Int) gives Bool {\n    return n > 0\n}"
     (error,) = diagnostics_of(program(functions, ""))
     assert (error.code, error.category) == ("E2018", "semantic")
     assert error.label == "The condition of 'Positive' cannot call the function 'check'"
@@ -155,7 +155,7 @@ def test_a_constant_that_breaks_the_condition(statement, written):
 
 
 def test_constants_are_checked_as_arguments_and_return_values():
-    functions = PERCENT + "\nfn half(p: Percent) -> Percent {\n    return 120\n}"
+    functions = PERCENT + "\nfn half(p: Percent) gives Percent {\n    return 120\n}"
     errors = diagnostics_of(program(functions, "print(half(150))"))
     assert [(error.code, error.span.line) for error in errors] == [("E2017", 3), ("E2017", 7)]
 
@@ -212,7 +212,7 @@ def test_an_explicit_check_takes_one_value_of_the_base_type(call, code):
 
 
 def test_the_violation_lists_the_calls_that_led_to_it():
-    functions = PERCENT + "\nfn as_percent(n: Int) -> Percent {\n    return Percent(n)\n}"
+    functions = PERCENT + "\nfn as_percent(n: Int) gives Percent {\n    return Percent(n)\n}"
     _, error = run_failure(program(functions, "print(as_percent(500))"))
     assert error.code == "E4003"
     assert error.notes[-1] == "In 'as_percent', called at line 7, column 11."
@@ -221,7 +221,7 @@ def test_the_violation_lists_the_calls_that_led_to_it():
 # Using refined values
 
 def test_a_refined_value_is_accepted_where_its_base_type_is_expected():
-    functions = PERCENT + "\nfn double(n: Int) -> Int {\n    return n * 2\n}"
+    functions = PERCENT + "\nfn double(n: Int) gives Int {\n    return n * 2\n}"
     assert run_text(program(functions, "let p: Percent = 40\nprint(double(p))\nprint(to_float(p))")) == "80\n40.0\n"
 
 
@@ -233,7 +233,7 @@ def test_operations_on_refined_values_give_the_base_type():
 
 
 def test_a_base_value_is_not_accepted_where_a_refined_type_is_expected():
-    functions = PERCENT + "\nfn show(p: Percent) -> Void {\n    print(p)\n}"
+    functions = PERCENT + "\nfn show(p: Percent) {\n    print(p)\n}"
     assert check_codes(program(functions, "let n = 3\nshow(n)")) == ["E2011"]
     assert run_text(program(functions, "let n = 3\nshow(Percent(n))")) == "3\n"
 
@@ -251,12 +251,12 @@ def test_a_refined_bool_is_a_condition():
 
 
 def test_result_has_the_refined_return_type():
-    functions = PERCENT + '\nfn full() -> Percent {\n    ensures result == 100, "Full is everything"\n    return 100\n}'
+    functions = PERCENT + '\nfn full() gives Percent\n    promises result == 100, "Full is everything"\n{\n    return 100\n}'
     assert run_text(program(functions, "print(full())")) == "100\n"
 
 
 def test_main_cannot_return_a_refined_type():
-    assert check_codes(PERCENT + "\nfn main() -> Percent {\n    return 1\n}\n") == ["E2004"]
+    assert check_codes(PERCENT + "\nfn main() gives Percent {\n    return 1\n}\n") == ["E2004"]
 
 
 # Chains of refined types
@@ -284,7 +284,7 @@ def test_the_parent_condition_is_checked_first():
 
 
 def test_a_refinement_is_accepted_where_its_parent_is_expected():
-    functions = CHAIN + "\nfn show(p: Percent) -> Void {\n    print(p)\n}"
+    functions = CHAIN + "\nfn show(p: Percent) {\n    print(p)\n}"
     assert run_text(program(functions, "let p: Pass = 90\nshow(p)")) == "90\n"
     assert check_codes(program(functions.replace("show(p: Percent)", "show(p: Pass)"),
                                "let p: Percent = 90\nshow(p)")) == ["E2011"]
@@ -329,7 +329,7 @@ def test_no_unchecked_path_into_a_refined_type(statement):
 
 
 def test_a_function_cannot_return_its_base_type_as_the_refined_type():
-    text = PERCENT + "\nfn f(n: Int) -> Percent {\n    return n\n}\n\nfn main() -> Void {\n}\n"
+    text = PERCENT + "\nfn f(n: Int) gives Percent {\n    return n\n}\n\nfn main() {\n}\n"
     assert check_codes(text) == ["E2011"]
 
 
@@ -355,7 +355,7 @@ def test_a_runtime_error_inside_a_condition_says_where_the_check_was_asked():
 
 
 def test_an_invalid_condition_is_reported_once_and_not_at_every_use():
-    functions = "type Bad = Int where value + 1\nfn f(x: Bad) -> Int {\n    return x + 1\n}"
+    functions = "type Bad = Int where value + 1\nfn f(x: Bad) gives Int {\n    return x + 1\n}"
     errors = diagnostics_of(program(functions, "print(f(3))\nlet y: Bad = 4"))
     assert [(error.code, error.span.line) for error in errors] == [("E2011", 1)]
 
@@ -363,8 +363,14 @@ def test_an_invalid_condition_is_reported_once_and_not_at_every_use():
 def test_an_explanation_is_one_line():
     (error,) = diagnostics_of(program('type Even = Int where value / 2 * 2 == value, "One\\ntwo"', ""))
     assert (error.code, error.label) == ("E1101", "An explanation is a single line: it cannot contain '\\n'")
-    (error,) = diagnostics_of('fn f(n: Int) -> Int {\n    requires n > 0, "a\\nb"\n    return n\n}\n\n'
-                              "fn main() -> Void {\n}\n")
+    (error,) = diagnostics_of('fn f(n: Int) gives Int\n'
+                              '    needs n > 0, "a\\nb"\n'
+                              '{\n'
+                              '    return n\n'
+                              '}\n'
+                              '\n'
+                              'fn main() {\n'
+                              '}\n')
     assert error.code == "E1101"
 
 
@@ -374,7 +380,7 @@ def chain_program(types: int, terms: int, uses: int) -> str:
         for i in range(types)
     )
     body = "\n".join(f"    let v{i}: T{types - 1} = {i}" for i in range(uses))
-    return chain + "fn main() -> Void {\n" + body + "\n}\n"
+    return chain + "fn main() {\n" + body + "\n}\n"
 
 
 def test_the_cost_of_checking_constants_is_bounded(monkeypatch):

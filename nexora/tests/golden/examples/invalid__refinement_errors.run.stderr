@@ -10,7 +10,7 @@ semantic error[E2018]: Invalid refinement condition
   |
 7 | type Positive = Int where is_positive(value)
   |                           ^^^^^^^^^^^ The condition of 'Positive' cannot call the function 'is_positive'
-  = hint: A refinement only describes the value itself: it can use operators, literals and the built-in conversions. Write the rule there, or check it with 'requires'.
+  = hint: A refinement only describes the value itself: it can use operators, literals and the built-in conversions. Write the rule there, or check it with 'needs'.
 
 type error[E2011]: Type mismatch
   --> examples/invalid/refinement_errors.nex:14:12

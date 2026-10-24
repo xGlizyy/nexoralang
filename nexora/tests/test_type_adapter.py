@@ -629,7 +629,7 @@ def test_expect_type_does_not_hide_a_missing_refined_model(monkeypatch):
 
 def test_expect_type_is_not_called_for_unresolved_or_void_values(monkeypatch):
     text = with_main(
-        "fn f() -> Int {\n    return print(1)\n}",
+        "fn f() gives Int {\n    return print(1)\n}",
         'let x: Missing = 1\nlet y = print(1)\nlet z: Int = print(1)',
     )
 
@@ -763,7 +763,7 @@ def test_public_documents_keep_strings_and_existing_values():
     print_builtin = next(entry for entry in documents["symbols"]["builtins"] if entry["name"] == "print")
     assert print_builtin["params"] == [{"name": "value", "type": "Int | Float | Bool | Text"}]
     assert print_builtin["return_type"] == "Void"
-    assert print_builtin["signature"] == "fn print(value: Int | Float | Bool | Text) -> Void"
+    assert print_builtin["signature"] == "fn print(value: Int | Float | Bool | Text)"
 
     types = {entry["name"]: entry for entry in documents["context"]["types"]}
     assert (types["Percent"]["base"], types["Percent"]["root"]) == ("Int", "Int")

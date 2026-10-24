@@ -360,12 +360,13 @@ diagnostic says which of the two is false.
 type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
 type Pass = Percent where value >= 50, "Passing starts at half"
 
-fn grade(points: Int, total: Int) -> Percent {
-    requires total > 0, "There is nothing to grade"
+fn grade(points: Int, total: Int) gives Percent
+    needs total > 0, "There is nothing to grade"
+{
     return Percent(points * 100 / total)
 }
 
-fn main() -> Void {
+fn main() {
     let minimum: Pass = 50
     let score = grade(42, 60)
     print(score)
@@ -384,7 +385,7 @@ A constant that does not meet the condition is rejected without running anything
 ```nex
 type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
 
-fn main() -> Void {
+fn main() {
     let discount: Percent = 120
     print(discount)
 }
@@ -409,7 +410,7 @@ And a computed value that does not meet it stops the program at the point where 
 ```nex
 type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
 
-fn main() -> Void {
+fn main() {
     let points = 130
     print(Percent(points))
 }
@@ -499,7 +500,7 @@ format, and a text that contains `,` or `]` may look ambiguous.
 
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     let numbers = [1, 2, 3]
     let empty: List[Int] = []
     let nested = [[1], [2, 3]]
@@ -533,7 +534,7 @@ is built by giving each field its value by name.
 type Point = { x: Int, y: Int }
 type Line = { from: Point, to: Point }
 
-fn main() -> Void {
+fn main() {
     let origin = Point(x: 0, y: 0)
     let end = Point(x: 3, y: 4)
     let segment = Line(from: origin, to: end)
@@ -721,7 +722,7 @@ p = Percent(p + 10)    // correct: checked when running (E4003 if it is not met)
 
 <!-- nex:valid -->
 ```nex
-fn main() -> Void {
+fn main() {
     let total = 10
     if total > 5 {
         let double = total * 2   // reads 'total' from the outer block
@@ -804,7 +805,7 @@ call whose result is not used (`add(1, 2)`).
 ### 7.1 Declaration
 
 ```nex
-fn add(a: Int, b: Int) -> Int {
+fn add(a: Int, b: Int) gives Int {
     return a + b
 }
 ```
@@ -823,7 +824,7 @@ fn add(a: Int, b: Int) -> Int {
 
 <!-- nex:valid -->
 ```nex
-fn main() -> Void {
+fn main() {
     print("Hello from NEXORA")
 }
 ```
@@ -860,7 +861,7 @@ The analysis does not evaluate conditions: `if true { return 1 }` without `else`
 a function whose only `return` is inside a loop needs another one after the loop.
 
 ```nex
-fn sign(n: Int) -> Int {          // correct: the three branches return
+fn sign(n: Int) gives Int {          // correct: the three branches return
     if n < 0 {
         return -1
     } else if n == 0 {
@@ -870,7 +871,7 @@ fn sign(n: Int) -> Int {          // correct: the three branches return
     }
 }
 
-fn broken(n: Int) -> Int {        // E2014: if n <= 0 the end is reached without 'return'
+fn broken(n: Int) gives Int {        // E2014: if n <= 0 the end is reached without 'return'
     if n > 0 {
         return 1
     }
@@ -1063,7 +1064,7 @@ Some built-in functions belong to a type and are called with its name in front
 
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     let name = "Ada Lovelace"
     let length = Text.length(name)
     print(length)
@@ -1088,7 +1089,7 @@ A requirement that is not met stops the program with its explanation and the val
 
 <!-- nex:fails exit=5 -->
 ```nex
-fn main() -> Void {
+fn main() {
     print(Int.parse("12a"))
 }
 ```
@@ -1098,8 +1099,8 @@ contract error[E4001]: Precondition violated
  --> program.nex:2:11
   |
 2 |     print(Int.parse("12a"))
-  |           ^^^^^^^^^^^^^^^^ This call breaks a 'requires' condition of 'Int.parse'
-  = note: The condition of the built-in function is false: requires Int.can_parse(text)
+  |           ^^^^^^^^^^^^^^^^ This call breaks a 'needs' condition of 'Int.parse'
+  = note: The condition of the built-in function is false: needs Int.can_parse(text)
   = note: Reason: Only a whole number within the range of Int can be read as an Int
   = note: It was called with: text = "12a"
   = hint: Check the text first with Int.can_parse(...), and call Int.parse only when it is true.
@@ -1141,7 +1142,7 @@ function like that cannot be declared.
 
 <!-- nex:run -->
 ```nex
-fn main() -> Void {
+fn main() {
     let xs = [10, 20, 30]
     print(List.length(xs))
     print(List.get(xs, 1))
@@ -1258,13 +1259,15 @@ A contract expresses a condition that a function **expects** from its caller or 
 any other expression; no AI model is involved.
 
 ```nex
-fn divide(a: Float, b: Float) -> Float {
-    requires b != 0.0
+fn divide(a: Float, b: Float) gives Float
+    needs b != 0.0
+{
     return a / b
 }
 
-fn absolute(value: Int) -> Int {
-    ensures result >= 0
+fn absolute(value: Int) gives Int
+    promises result >= 0
+{
     if value < 0 {
         return -value
     }
@@ -1293,14 +1296,15 @@ fn absolute(value: Int) -> Int {
 
 <!-- nex:fails exit=5 -->
 ```nex
-fn withdraw(balance: Int, amount: Int) -> Int {
-    requires amount > 0, "A withdrawal moves some money"
-    requires amount <= balance, "An account cannot go below zero"
-    ensures result == balance - amount
+fn withdraw(balance: Int, amount: Int) gives Int
+    needs amount > 0, "A withdrawal moves some money"
+    needs amount <= balance, "An account cannot go below zero"
+    promises result == balance - amount
+{
     return balance - amount
 }
 
-fn main() -> Void {
+fn main() {
     print(withdraw(100, 30))
     print(withdraw(100, 300))
 }
@@ -1309,11 +1313,11 @@ fn main() -> Void {
 ```text
 70
 contract error[E4001]: Precondition violated
-  --> program.nex:10:11
+  --> program.nex:11:11
    |
-10 |     print(withdraw(100, 300))
-   |           ^^^^^^^^^^^^^^^^^^ This call breaks a 'requires' condition of 'withdraw'
-   = note: The condition at line 3 is false: requires amount <= balance
+11 |     print(withdraw(100, 300))
+   |           ^^^^^^^^^^^^^^^^^^ This call breaks a 'needs' condition of 'withdraw'
+   = note: The condition at line 3 is false: needs amount <= balance
    = note: Reason: An account cannot go below zero
    = note: It was called with: balance = 100, amount = 300
 
@@ -1338,23 +1342,24 @@ If the condition is false, the program stops with a contract diagnostic:
 
 <!-- nex:fails exit=5 -->
 ```nex
-fn divide(a: Float, b: Float) -> Float {
-    requires b != 0.0
+fn divide(a: Float, b: Float) gives Float
+    needs b != 0.0
+{
     return a / b
 }
 
-fn main() -> Void {
+fn main() {
     print(divide(1.0, 0.0))
 }
 ```
 
 ```text
 contract error[E4001]: Precondition violated
- --> program.nex:7:11
+ --> program.nex:8:11
   |
-7 |     print(divide(1.0, 0.0))
-  |           ^^^^^^^^^^^^^^^^ This call breaks a 'requires' condition of 'divide'
-  = note: The condition at line 2 is false: requires b != 0.0
+8 |     print(divide(1.0, 0.0))
+  |           ^^^^^^^^^^^^^^^^ This call breaks a 'needs' condition of 'divide'
+  = note: The condition at line 2 is false: needs b != 0.0
   = note: It was called with: a = 1.0, b = 0.0
 
 error: program.nex: the program stopped because a contract was broken
@@ -1415,21 +1420,23 @@ of its body the requirements that make it correct, and the interpreter checks th
 
 <!-- nex:run -->
 ```nex
-fn sum_to(n: Int) -> Int {
-    requires n >= 0, "Only natural numbers"
-    ensures result == n * (n + 1) / 2
+fn sum_to(n: Int) gives Int
+    needs n >= 0, "Only natural numbers"
+    promises result == n * (n + 1) / 2
+{
     var total = 0
     var i = 0
-    while i < n {
-        invariant total == i * (i + 1) / 2, "total is the sum of the numbers already added"
-        decreases n - i, "Each turn moves i one step closer to n"
+    while i < n
+        keeps total == i * (i + 1) / 2, "total is the sum of the numbers already added"
+        shrinks n - i, "Each turn moves i one step closer to n"
+    {
         i = i + 1
         total = total + i
     }
     return total
 }
 
-fn main() -> Void {
+fn main() {
     print(sum_to(10000))
 }
 ```
@@ -1470,11 +1477,12 @@ always gives the same result. The diagnostic says in which iteration it happened
 
 <!-- nex:fails exit=5 -->
 ```nex
-fn count_even(limit: Int) -> Int {
+fn count_even(limit: Int) gives Int {
     var i = 0
     var even = 0
-    while i < limit {
-        decreases limit - i, "Each turn moves i one step closer to limit"
+    while i < limit
+        shrinks limit - i, "Each turn moves i one step closer to limit"
+    {
         if i / 2 * 2 == i {
             even = even + 1
             i = i + 1
@@ -1483,22 +1491,22 @@ fn count_even(limit: Int) -> Int {
     return even
 }
 
-fn main() -> Void {
+fn main() {
     print(count_even(10))
 }
 ```
 
 ```text
 contract error[E4006]: Loop measure did not decrease
- --> program.nex:5:19
+ --> program.nex:5:17
   |
-5 |         decreases limit - i, "Each turn moves i one step closer to limit"
-  |                   ^^^^^^^^^ The measure was 9 and is still 9
-  = note: The measure at line 5: decreases limit - i
+5 |         shrinks limit - i, "Each turn moves i one step closer to limit"
+  |                 ^^^^^^^^^ The measure was 9 and is still 9
+  = note: The measure at line 5: shrinks limit - i
   = note: Reason: Each turn moves i one step closer to limit
   = note: Before turn 3 of the loop at line 4.
   = note: The values: limit = 10, i = 1, even = 1
-  = note: In 'count_even', called at line 15, column 11.
+  = note: In 'count_even', called at line 16, column 11.
 
 error: program.nex: the program stopped because a contract was broken
 ```
@@ -1519,16 +1527,17 @@ proposal for the rest:
 
 <!-- nex:run -->
 ```nex
-fn total(xs: List[Int]) -> Int {
+fn total(xs: List[Int]) gives Int {
     var sum = 0
-    for x in xs {
-        invariant sum >= 0, "The total is never negative"
+    for x in xs
+        keeps sum >= 0, "The total is never negative"
+    {
         sum = sum + x
     }
     return sum
 }
 
-fn main() -> Void {
+fn main() {
     print(total([1, 2, 3, 4]))
 }
 ```
@@ -1648,7 +1657,7 @@ column counts characters (not bytes) and a tab counts as one column.
 
 <!-- nex:check-fails -->
 ```nex
-fn main() -> Void {
+fn main() {
     let age: Int = "twenty"
 }
 ```
@@ -1711,7 +1720,9 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E1102` | Unclosed block | `syntax` | A `}` is missing when the end of the file is reached |
 | `E1103` | Reserved word | `syntax` | A word reserved for a future version is used |
 | `E1105` | Expression too deeply nested | `syntax` | The nesting limits of section 3 are exceeded |
-| `E1106` | Misplaced contract clause | `syntax` | `requires`, `ensures` or `example` outside the beginning of the body of a function, or `invariant` or `decreases` outside the beginning of the body of a loop |
+| `E1106` | Misplaced contract clause | `syntax` | `needs`, `promises`, `trust` or `example` inside the body of a function, or `keeps` or `shrinks` inside the body of a loop |
+| `E1107` | Syntax before 0.12 | `syntax` | `requires`, `ensures`, `invariant` or `decreases`, the clause words of 0.11 (decision 0019) |
+| `E1108` | Arrow before the return type | `syntax` | `-> Type` after the parameters of a function (decision 0019) |
 | `E2001` | Missing main function | `semantic` | The program does not declare `main` |
 | `E2002` | Duplicate function | `semantic` | Two functions with the same name, or with that of a built-in one |
 | `E2004` | Invalid return type | `type` | `main` declares a return type other than `Void` |
@@ -1732,7 +1743,7 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E2019` | Too many refinement checks | `semantic` | Checking the constants against their refined types exceeds the work limit of the analysis (section 4.4) |
 | `E2020` | Example without its function | `semantic` | An example contains no call to its function (section 9.4) |
 | `E2021` | Missing loop measure | `semantic` | A `while` without `decreases`, or with more than one (section 9.5) |
-| `E2022` | Unsupported loop clause | `semantic` | A `decreases` in a `for`, which does not accept it (section 9.6) |
+| `E2022` | Unsupported loop clause | `semantic` | A `shrinks` in a `for`, which does not accept it (section 9.6) |
 | `E2023` | Invalid record construction | `type` | A construction of a record that is missing a field, has an extra one or is given the same one twice (section 4.6) |
 | `E2024` | Invalid field access | `type` | A field is read from a value that is not a record, or from a record that does not have that field (section 4.6) |
 | `E2025` | Cannot reassign a field | `semantic` | A field of a record, which is immutable, is assigned to (section 4.6) |
@@ -1741,6 +1752,7 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E2028` | Private name | `semantic` | A name of another module is used that this module does not declare with `pub` (section 7.6) |
 | `E2029` | Circular import | `semantic` | Modules import each other, so that none can be analyzed before the one it needs (section 7.6) |
 | `E2030` | Module name clash | `semantic` | Two different files are imported as the same module, because they have the same name (section 7.6) |
+| `E2031` | Duplicate clause name | `semantic` | A clause name used twice in a function and its loops, or equal to a parameter or to `result` (decision 0019) |
 | `E3001` | Division by zero | `runtime` | Division by zero |
 | `E3002` | Integer overflow | `runtime` | An `Int` result out of the 64-bit range |
 | `E3003` | Float result out of range | `runtime` | A `Float` result that is too large |
@@ -1778,7 +1790,7 @@ For the program of section 11.1:
 
 <!-- nex:check-json -->
 ```nex
-fn main() -> Void {
+fn main() {
     let age: Int = "twenty"
 }
 ```
@@ -1859,11 +1871,11 @@ are run by the automated tests; the output shown is the real one.
 
 <!-- nex:run -->
 ```nex
-fn add(a: Int, b: Int) -> Int {
+fn add(a: Int, b: Int) gives Int {
     return a + b
 }
 
-fn main() -> Void {
+fn main() {
     let result: Int = add(2, 3)
     print(result)
 }
@@ -1875,16 +1887,17 @@ fn main() -> Void {
 
 <!-- nex:run -->
 ```nex
-fn factorial(n: Int) -> Int {
-    requires n >= 0
-    ensures result >= 1
+fn factorial(n: Int) gives Int
+    needs n >= 0
+    promises result >= 1
+{
     if n <= 1 {
         return 1
     }
     return n * factorial(n - 1)
 }
 
-fn main() -> Void {
+fn main() {
     let n = 10
     print("factorial: " + to_text(factorial(n)))
     print(to_float(n) / 4.0)

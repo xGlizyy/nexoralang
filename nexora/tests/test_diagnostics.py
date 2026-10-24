@@ -15,7 +15,7 @@ def rendered(text: str, name: str = "hello.nex") -> list[str]:
 
 
 def test_render_shows_severity_code_file_position_line_and_caret():
-    (output,) = rendered('fn main() -> Void {\n    print("hi")\n    let = "Hello"\n}\n')
+    (output,) = rendered('fn main() {\n    print("hi")\n    let = "Hello"\n}\n')
     assert output == "\n".join([
         "syntax error[E1101]: Unexpected token",
         " --> hello.nex:3:9",
@@ -26,14 +26,14 @@ def test_render_shows_severity_code_file_position_line_and_caret():
 
 
 def test_caret_underlines_the_whole_span():
-    (output,) = rendered("fn main() -> Void {\n    print(total)\n}\n")
+    (output,) = rendered("fn main() {\n    print(total)\n}\n")
     lines = output.splitlines()
     assert lines[3] == "2 |     print(total)"
     assert lines[4].startswith("  |           ^^^^^ ")
 
 
 def test_notes_and_hints_follow_the_code():
-    (output,) = rendered("fn main() -> Void {\n    let x = 1\n    let x = 2\n}\n")
+    (output,) = rendered("fn main() {\n    let x = 1\n    let x = 2\n}\n")
     assert output.splitlines()[5:] == [
         "  = note: It was first declared at line 2, column 9.",
         "  = hint: Choose a different name: a visible name cannot be declared again.",
@@ -41,7 +41,7 @@ def test_notes_and_hints_follow_the_code():
 
 
 def test_gutter_grows_with_the_line_number():
-    text = "fn main() -> Void {\n" + "    print(1)\n" * 9 + "    print(x)\n}\n"
+    text = "fn main() {\n" + "    print(1)\n" * 9 + "    print(x)\n}\n"
     (output,) = rendered(text)
     assert output.splitlines()[1:5] == [
         "  --> hello.nex:11:11",
@@ -52,7 +52,7 @@ def test_gutter_grows_with_the_line_number():
 
 
 def test_caret_lines_up_under_tabs():
-    (output,) = rendered("fn main() -> Void {\n\tprint(x)\n}\n")
+    (output,) = rendered("fn main() {\n\tprint(x)\n}\n")
     lines = output.splitlines()
     assert lines[3] == "2 | \tprint(x)"
     assert lines[4].startswith("  | \t      ^ ")
@@ -68,14 +68,14 @@ def test_diagnostic_without_a_position():
 
 
 def test_error_at_the_end_of_the_file():
-    (output,) = rendered("fn main() -> Void {\n    print(1)")
+    (output,) = rendered("fn main() {\n    print(1)")
     lines = output.splitlines()
     assert lines[1] == " --> hello.nex:2:13"
     assert lines[4].startswith("  |             ^ Expected '}'")
 
 
 def test_reported_position_matches_the_source_text():
-    source = Source("t.nex", 'fn main() -> Void {\n    let a = 1\n\n    let b = a + "x"\n}\n')
+    source = Source("t.nex", 'fn main() {\n    let a = 1\n\n    let b = a + "x"\n}\n')
     (diagnostic,) = analyze(source).diagnostics
     span = diagnostic.span
     assert source.line_text(span.line)[span.column - 1:span.end_column - 1] == "+"
@@ -107,10 +107,10 @@ def test_every_code_is_documented_in_the_spec_with_the_same_title_and_category()
 
 
 @pytest.mark.parametrize("text, header", [
-    ("fn main() -> Void {\n    let x = @\n}", "lexical error[E1001]: Unexpected character"),
-    ("fn main() -> Void {\n    let = 1\n}", "syntax error[E1101]: Unexpected token"),
-    ("fn main() -> Void {\n    print(x)\n}", "semantic error[E2005]: Unknown variable"),
-    ('fn main() -> Void {\n    let x: Int = "a"\n}', "type error[E2011]: Type mismatch"),
+    ("fn main() {\n    let x = @\n}", "lexical error[E1001]: Unexpected character"),
+    ("fn main() {\n    let = 1\n}", "syntax error[E1101]: Unexpected token"),
+    ("fn main() {\n    print(x)\n}", "semantic error[E2005]: Unknown variable"),
+    ('fn main() {\n    let x: Int = "a"\n}', "type error[E2011]: Type mismatch"),
 ])
 def test_the_header_names_the_kind_of_problem(text, header):
     (output,) = rendered(text)

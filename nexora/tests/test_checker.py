@@ -26,24 +26,24 @@ def test_missing_main():
 
 
 def test_a_program_with_other_functions_still_needs_main():
-    assert check_codes("fn main() -> Void {}\nfn helper() -> Void {}\n") == []
-    assert check_codes("fn helper() -> Void {}\n") == ["E2001"]
+    assert check_codes("fn main() {}\nfn helper() {}\n") == []
+    assert check_codes("fn helper() {}\n") == ["E2001"]
 
 
 def test_duplicate_main():
-    (error,) = diagnostics("fn main() -> Void {}\nfn main() -> Void {}\n")
+    (error,) = diagnostics("fn main() {}\nfn main() {}\n")
     assert error.code == "E2002"
     assert error.span.line == 2
     assert error.notes == ("It was first declared at line 1, column 4.",)
 
 
 def test_main_must_return_void():
-    assert check_codes("fn main() -> Int {\n    return 1\n}") == ["E2004"]
-    assert check_codes("fn main() -> Nothing {}") == ["E2012"]
+    assert check_codes("fn main() gives Int {\n    return 1\n}") == ["E2004"]
+    assert check_codes("fn main() gives Nothing {}") == ["E2012"]
 
 
 def test_main_takes_no_parameters():
-    (error,) = diagnostics("fn main(count: Int) -> Void {}")
+    (error,) = diagnostics("fn main(count: Int) {}")
     assert error.code == "E2013"
     assert (error.span.column, error.span.end_column) == (9, 19)
 
@@ -183,7 +183,7 @@ def test_all_independent_errors_are_reported():
 # Stages
 
 def test_lexical_errors_stop_before_parsing():
-    assert check_codes("fn main() -> Void {\n    let x = @\n}") == ["E1001"]
+    assert check_codes("fn main() {\n    let x = @\n}") == ["E1001"]
 
 
 def test_syntax_errors_stop_before_the_semantic_checks():

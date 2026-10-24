@@ -1,7 +1,7 @@
 """I5: `for x in xs { ... }` over an immutable `List[T]` (decision 0012).
 
 The iterator is declared by the loop, is immutable and has the element type; the body opens a new
-scope on every turn; the loop accepts `invariant` but not `decreases`; a `return` leaves the
+scope on every turn; the loop accepts `keeps` but not `shrinks`; a `return` leaves the
 function. Invariants are checked before every turn and once after the last one, exactly as in a
 `while`.
 """
@@ -19,10 +19,11 @@ from helpers import check_codes, diagnostics_of, in_main, parse_text, run_failur
 SCHEMAS = schemas.all_schemas()
 
 COUNT = """
-fn count(xs: List[Int]) -> Int {
+fn count(xs: List[Int]) gives Int {
     var total = 0
-    for x in xs {
-        invariant total >= 0, "The total is never negative"
+    for x in xs
+        keeps total >= 0, "The total is never negative"
+    {
         total = total + x
     }
     return total
@@ -32,9 +33,10 @@ fn count(xs: List[Int]) -> Int {
 
 def test_a_for_is_parsed_with_its_iterator_iterable_clauses_and_body():
     program, diagnostics = parse_text(
-        "fn main() -> Void {\n"
-        "    for value in numbers {\n"
-        "        invariant value >= 0\n"
+        "fn main() {\n"
+        "    for value in numbers\n"
+        "        keeps value >= 0\n"
+        "    {\n"
         "        print(value)\n"
         "    }\n"
         "}\n"
@@ -45,7 +47,7 @@ def test_a_for_is_parsed_with_its_iterator_iterable_clauses_and_body():
     assert isinstance(loop, ast.For)
     assert (loop.name, loop.name_span.line, loop.name_span.column) == ("value", 2, 9)
     assert isinstance(loop.iterable, ast.Name) and loop.iterable.name == "numbers"
-    assert [(clause.clause, clause.message) for clause in loop.clauses] == [("invariant", None)]
+    assert [(clause.clause, clause.message) for clause in loop.clauses] == [("keeps", None)]
     assert len(loop.body.statements) == 1
     assert (loop.span.line, loop.span.column) == (2, 5)
 
@@ -61,8 +63,8 @@ def test_a_for_over_an_empty_list_runs_no_turn():
 
 def test_the_iterable_is_evaluated_once():
     text = with_main(
-        "fn make() -> List[Int] {\n"
-        '    print("once")\n'
+        "fn make() gives List[Int] {\n"
+        "    print(\"once\")\n"
         "    return [1, 2, 3]\n"
         "}\n",
         "for x in make() {\n    print(x)\n}",
@@ -83,7 +85,7 @@ def test_a_non_list_iterable_reports_once_and_does_not_cascade():
 
 def test_the_iterator_has_the_element_type():
     text = with_main(
-        "fn lengths(xs: List[Text]) -> Void {\n"
+        "fn lengths(xs: List[Text]) {\n"
         "    for x in xs {\n"
         "        print(Text.length(x))\n"
         "    }\n"
@@ -119,7 +121,7 @@ def test_the_iterator_is_immutable_with_its_own_message():
 
 def test_a_return_inside_the_body_leaves_the_function():
     text = with_main(
-        "fn first(xs: List[Int]) -> Int {\n"
+        "fn first(xs: List[Int]) gives Int {\n"
         "    for x in xs {\n"
         "        return x\n"
         "    }\n"
@@ -154,10 +156,11 @@ def test_the_body_updates_a_variable_of_the_outer_scope():
 
 def test_an_invariant_is_checked_before_the_first_turn_even_for_an_empty_list():
     text = with_main(
-        "fn f(xs: List[Int]) -> Void {\n"
+        "fn f(xs: List[Int]) {\n"
         "    var i = 1\n"
-        "    for x in xs {\n"
-        '        invariant i == 0, "i starts at zero"\n'
+        "    for x in xs\n"
+        "        keeps i == 0, \"i starts at zero\"\n"
+        "    {\n"
         "    }\n"
         "}\n",
         "f([])",
@@ -171,8 +174,9 @@ def test_an_invariant_is_checked_before_the_first_turn_even_for_an_empty_list():
 def test_an_invariant_is_checked_once_after_the_last_turn():
     text = in_main(
         "var i = 0\n"
-        "for x in [1, 2] {\n"
-        "    invariant i < 2\n"
+        "for x in [1, 2]\n"
+        "    keeps i < 2\n"
+        "{\n"
         "    i = i + 1\n"
         "}"
     )
@@ -182,22 +186,22 @@ def test_an_invariant_is_checked_once_after_the_last_turn():
 
 
 def test_invariants_do_not_see_the_iterator():
-    codes = check_codes(in_main("for x in [1] {\n    invariant x > 0\n}"))
+    codes = check_codes(in_main("for x in [1]\n    keeps x > 0\n{\n}"))
     assert codes == ["E2005"]
 
 
 def test_an_invariant_must_be_bool():
-    (error,) = diagnostics_of(in_main("var n = 1\nfor x in [1] {\n    invariant n\n}"))
+    (error,) = diagnostics_of(in_main("var n = 1\nfor x in [1]\n    keeps n\n{\n}"))
     assert (error.code, error.label) == (
         "E2011",
-        "The condition of 'invariant' must be Bool, found Int",
+        "The condition of 'keeps' must be Bool, found Int",
     )
 
 
 def test_decreases_is_rejected_with_e2022():
-    (error,) = diagnostics_of(in_main("for x in [1] {\n    decreases 1\n}"))
-    assert (error.code, error.label) == ("E2022", "'decreases' has no meaning in a 'for' loop")
-    assert "remove the 'decreases' clause" in error.hint
+    (error,) = diagnostics_of(in_main("for x in [1]\n    shrinks 1\n{\n}"))
+    assert (error.code, error.label) == ("E2022", "'shrinks' has no meaning in a 'for' loop")
+    assert "remove the 'shrinks' clause" in error.hint
 
 
 @pytest.mark.parametrize("word", ["break", "continue"])
@@ -231,7 +235,7 @@ def test_the_context_lists_a_for_loop():
         "kind": "for",
         "condition": "x in xs",
         "invariants": [{"condition": "total >= 0",
-                        "message": "The total is never negative", "line": 4}],
+                        "message": "The total is never negative", "line": 4, "name": None}],
         "measure": None,
     }]
 
@@ -239,7 +243,7 @@ def test_the_context_lists_a_for_loop():
 def test_the_context_text_shows_a_for_loop():
     text = tooling.render_context(tooling.get_context(with_main(COUNT, "print(count([1, 2, 3]))")))
     assert "loop at line 3: for x in xs" in text
-    assert "invariant total >= 0" in text
+    assert "keeps total >= 0" in text
 
 
 def test_the_symbols_document_marks_the_iterator_immutable():

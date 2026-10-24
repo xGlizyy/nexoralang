@@ -38,15 +38,23 @@ _COMPARISON_OPERATORS = ("==", "!=", "<", "<=", ">", ">=")
 
 _NAME_KEYWORDS = (
     TokenType.FN, TokenType.LET, TokenType.RETURN, TokenType.IF, TokenType.ELSE, TokenType.TRUE,
-    TokenType.FALSE, TokenType.AND, TokenType.OR, TokenType.NOT, TokenType.REQUIRES, TokenType.ENSURES,
-    TokenType.TYPE, TokenType.WHERE, TokenType.EXAMPLE, TokenType.VAR, TokenType.WHILE, TokenType.FOR,
-    TokenType.IN, TokenType.INVARIANT, TokenType.DECREASES, TokenType.USES,
+    TokenType.FALSE, TokenType.AND, TokenType.OR, TokenType.NOT, TokenType.NEEDS, TokenType.GIVES,
+    TokenType.PROMISES, TokenType.TRUST, TokenType.TYPE, TokenType.WHERE, TokenType.EXAMPLE, TokenType.VAR,
+    TokenType.WHILE, TokenType.FOR, TokenType.IN, TokenType.KEEPS, TokenType.SHRINKS, TokenType.USES,
 )
 _DECLARATION_KEYWORDS = (TokenType.FN, TokenType.TYPE)
-# The clauses that open a function body: the contracts and the examples.
-_CONTRACT_KEYWORDS = (TokenType.REQUIRES, TokenType.ENSURES, TokenType.EXAMPLE)
-# The clauses that open the body of a loop.
-_LOOP_KEYWORDS = (TokenType.INVARIANT, TokenType.DECREASES)
+# The clauses of the header of a function, between its signature and its body (decision 0019).
+_CONTRACT_KEYWORDS = (TokenType.NEEDS, TokenType.PROMISES, TokenType.TRUST, TokenType.EXAMPLE)
+# The clauses of the header of a loop.
+_LOOP_KEYWORDS = (TokenType.KEEPS, TokenType.SHRINKS)
+# Where each clause word of 0.11 went (decision 0019, 8.7: E1107).
+_OLD_CLAUSE_PLACES = {
+    "requires": "'needs' in the header of the function",
+    "ensures": "'promises' in the header of the function",
+    "invariant": "'keeps' in the header of the loop",
+    "decreases": "'shrinks' in the header of the loop",
+}
+_MIGRATE_HINT = "'nex migrate' rewrites a program written for 0.11 in the syntax of 0.12."
 # Hints for the reserved words a program is most likely to reach for.
 _RESERVED_HINTS = {
     "break": "There is no 'break': a loop ends when its condition is false or its list is exhausted, or with 'return'.",
@@ -113,7 +121,7 @@ class Parser:
                                 "E1101",
                                 f"Expected 'fn' or 'type' after 'pub', found {self._peek().describe()}",
                                 self._peek(),
-                                hint="Only a function or a type can be public: pub fn add(a: Int) -> Int { }",
+                                hint="Only a function or a type can be public: pub fn add(a: Int) gives Int { }",
                             )
                     if self._check(TokenType.IMPORT):
                         if types or records or uses or functions:
@@ -213,7 +221,18 @@ class Parser:
             )
         if token.type in _NAME_KEYWORDS:
             raise self._error("E1101", f"Expected {expected}, but '{token.lexeme}' is a keyword")
+        if token.type is TokenType.OLD_CLAUSE:
+            raise self._old_clause(token)
         return self._expect(TokenType.IDENT, expected, hint=hint)
+
+    def _old_clause(self, token: Token) -> ParseError:
+        """E1107: a clause word of 0.11 (decision 0019, 8.7)."""
+        return self._error(
+            "E1107",
+            f"'{token.lexeme}' is the syntax before 0.12: write {_OLD_CLAUSE_PLACES[token.lexeme]}",
+            token,
+            hint=_MIGRATE_HINT,
+        )
 
     def _type(self, expected: str, *, hint: str | None = None) -> ast.TypeRef:
         """`Name`, or `List[Type]`, `Option[Type]` or `Result[Type, Type]` with nested arguments (I2).
@@ -325,7 +344,7 @@ class Parser:
             "E1101",
             f"Expected a function declaration, found {token.describe()}",
             hint="At the top level there are only functions, types and capabilities. "
-                 "All other code goes inside a function: fn main() -> Void { ... }",
+                 "All other code goes inside a function: fn main() { ... }",
         )
 
     # Declarations
@@ -513,24 +532,132 @@ class Parser:
                 params.append(self._param())
         self._expect(TokenType.RPAREN, "')' to close the parameter list", notes=(self._opened_at(opening),))
 
-        self._expect(
-            TokenType.ARROW,
-            "'->' and a return type",
-            hint="The return type is always written. Use 'Void' for a function that returns nothing.",
-        )
-        return_type = self._type("a return type after '->'", hint="Use 'Void' for a function that returns nothing.")
-        self._skip_newlines()
+        return_type: ast.TypeRef | None = None
+        if self._match(TokenType.GIVES):
+            return_type = self._type("a type after 'gives'", hint="A function that gives nothing has no 'gives'.")
+        elif self._check(TokenType.ARROW):
+            return_type = self._old_arrow()
 
+        header = self._header(f"the body of '{name.lexeme}'", "the signature", _CONTRACT_KEYWORDS,
+                              self._contract_clause, self._nesting)
         brace = self._expect(TokenType.LBRACE, f"'{{' to start the body of '{name.lexeme}'")
         self._enter(brace)
         level = self._nesting
         self._skip_newlines()
-        contracts, examples = self._clauses(level)
         body = self._block_rest(brace, level)
         return ast.Function(
-            keyword.span.to(body.span), name.lexeme, name.span, tuple(params), return_type, tuple(contracts), body,
-            tuple(examples), public,
+            keyword.span.to(body.span), name.lexeme, name.span, tuple(params), return_type, tuple(header), body,
+            public,
         )
+
+    def _old_arrow(self) -> ast.TypeRef | None:
+        """E1108: `-> Type` after the parameters (decision 0019, 8.7). The type is read anyway, so
+        the rest of the function can still be checked."""
+        arrow = self._advance()
+        return_type = self._type("a type after '->'")
+        written = _type_source(return_type)
+        if written == VOID:
+            label = "Remove '-> Void': a function that gives nothing has no 'gives'"
+        else:
+            label = f"Write 'gives {written}' instead of '-> {written}'"
+        self._record(self._error("E1108", label, span=arrow.span.to(return_type.span), hint=_MIGRATE_HINT))
+        return None if written == VOID else return_type
+
+    def _header(self, body: str, head: str, keywords, clause, level: int) -> list:
+        """The clauses between the head of a function or a loop and its `{` (decision 0019, 4.1).
+
+        Without clauses, the `{` goes on the line of the head. With clauses, the head ends its line,
+        every clause takes its own lines and the `{` goes alone after the last one. Blank lines and
+        comments may come in between: they are not tokens."""
+        if not self._check(TokenType.NEWLINE):
+            return []
+        self._skip_newlines()
+        if self._check(TokenType.LBRACE):
+            self._record(self._error(
+                "E1101",
+                f"Without header clauses, '{{' goes on the line of {head}",
+                hint=f"Write the '{{' that starts {body} at the end of the line of {head}.",
+            ))
+            return []
+        items: list = []
+        while self._peek().type in (*keywords, TokenType.OLD_CLAUSE):
+            try:
+                keyword = self._advance()
+                self._depths.clear()
+                if keyword.type is TokenType.OLD_CLAUSE:
+                    raise self._old_clause(keyword)
+                items.append(clause(keyword))
+                if self._check(TokenType.LBRACE):
+                    self._record(self._error(
+                        "E1101",
+                        f"The '{{' that starts {body} goes alone on the line after the last clause",
+                        hint="End the clause with its line, and write the '{' on the next one.",
+                    ))
+                    return items
+                self._end_of_statement()
+            except ParseError as error:
+                self._record(error)
+                self._nesting = level
+                self._synchronize_statement()
+        return items
+
+    def _clause_name(self, keyword: Token) -> str | None:
+        """The optional `name:` of a clause. It is not a variable: no expression can use it."""
+        if self._peek(1).type is not TokenType.COLON:
+            return None
+        if self._peek().type in _NAME_KEYWORDS or self._peek().type is TokenType.RESERVED:
+            raise self._error("E1101", f"A clause cannot be named '{self._peek().lexeme}': it is a keyword")
+        if not self._check(TokenType.IDENT):
+            return None
+        name = self._advance()
+        if name.lexeme != name.lexeme.lower():
+            raise self._error(
+                "E1101",
+                f"The name of a clause is written in lowercase, not '{name.lexeme}'",
+                name,
+                hint=f"Write: {keyword.lexeme} {name.lexeme.lower()}: ...",
+            )
+        self._advance()
+        return name.lexeme
+
+    def _condition_after(self, keyword: Token, what: str = "a condition") -> ast.Expr:
+        if self._peek().type in _STATEMENT_END:
+            raise self._error("E1101", f"Expected {what} after '{keyword.lexeme}', found {self._peek().describe()}")
+        return self._expression()
+
+    def _contract_clause(self, keyword: Token) -> ast.Contract | ast.Example:
+        """`needs`, `promises` or `trust`, with an optional name, a condition and an explanation
+        (required for `trust`); or an `example`, which has no name."""
+        if keyword.type is TokenType.EXAMPLE:
+            if self._check(TokenType.IDENT) and self._peek(1).type is TokenType.COLON:
+                raise self._error(
+                    "E1101",
+                    "An example has no name",
+                    self._peek(),
+                    hint="Write the call and what it gives: example f(1) == 2",
+                )
+            condition = self._condition_after(keyword)
+            message, end = self._explanation(keyword.lexeme, condition.span)
+            return ast.Example(keyword.span.to(end), condition, message)
+        name = self._clause_name(keyword)
+        condition = self._condition_after(keyword)
+        if keyword.type is TokenType.TRUST and not self._check(TokenType.COMMA):
+            raise self._error(
+                "E1101",
+                "A 'trust' says why its condition can be trusted",
+                span=keyword.span.to(condition.span),
+                hint='Add the reason after a comma: trust plausible: x < 150, "Why it holds"',
+            )
+        message, end = self._explanation(keyword.lexeme, condition.span)
+        return ast.Contract(keyword.span.to(end), keyword.lexeme, name, condition, message)
+
+    def _loop_clause(self, keyword: Token) -> ast.LoopClause:
+        """`keeps` or `shrinks`, with an optional name, a condition or a measure and an explanation."""
+        name = self._clause_name(keyword)
+        what = "a condition" if keyword.type is TokenType.KEEPS else "an Int measure"
+        condition = self._condition_after(keyword, what)
+        message, end = self._explanation(keyword.lexeme, condition.span)
+        return ast.LoopClause(keyword.span.to(end), keyword.lexeme, name, condition, message)
 
     def _param(self) -> ast.Param:
         name = self._expect_name("a parameter name")
@@ -541,33 +668,6 @@ class Parser:
         )
         param_type = self._type(f"a type for the parameter '{name.lexeme}'")
         return ast.Param(name.span.to(param_type.span), name.lexeme, name.span, param_type)
-
-    def _clauses(self, level: int) -> tuple[list[ast.Contract], list[ast.Example]]:
-        """The `requires`, `ensures` and `example` clauses that open a function body, in any order.
-        All three share one form: a condition and an optional explanation."""
-        contracts: list[ast.Contract] = []
-        examples: list[ast.Example] = []
-        while self._peek().type in _CONTRACT_KEYWORDS:
-            try:
-                keyword = self._advance()
-                self._depths.clear()
-                if self._peek().type in _STATEMENT_END:
-                    raise self._error(
-                        "E1101",
-                        f"Expected a condition after '{keyword.lexeme}', found {self._peek().describe()}",
-                    )
-                condition = self._expression()
-                message, end = self._explanation(keyword.lexeme, condition.span)
-                self._end_of_statement()
-                if keyword.type is TokenType.EXAMPLE:
-                    examples.append(ast.Example(keyword.span.to(end), condition, message))
-                else:
-                    contracts.append(ast.Contract(keyword.span.to(end), keyword.lexeme, condition, message))
-            except ParseError as error:
-                self._record(error)
-                self._nesting = level
-                self._synchronize_statement()
-        return contracts, examples
 
     def _block(self, what: str = "a block") -> ast.Block:
         opening = self._expect(TokenType.LBRACE, f"'{{' to start {what}")
@@ -641,15 +741,17 @@ class Parser:
         if token.type in _CONTRACT_KEYWORDS:
             raise self._error(
                 "E1106",
-                f"'{token.lexeme}' must come at the start of a function body, before any other statement",
-                hint="Move this clause to the first lines of the function.",
+                f"'{token.lexeme}' goes between the signature and the body",
+                hint="Move this clause to the header of the function: after its signature, before its '{'.",
             )
         if token.type in _LOOP_KEYWORDS:
             raise self._error(
                 "E1106",
-                f"'{token.lexeme}' must come at the start of the body of a loop, before any other statement",
-                hint="Move this clause to the first lines of the loop body.",
+                f"'{token.lexeme}' goes between the head of the loop and its body",
+                hint="Move this clause to the header of the loop: after its condition, before its '{'.",
             )
+        if token.type is TokenType.OLD_CLAUSE:
+            raise self._old_clause(token)
         if token.type is TokenType.ELSE:
             raise self._error(
                 "E1101",
@@ -756,25 +858,25 @@ class Parser:
         return ast.If(keyword.span.to(end), condition, then_block, else_branch)
 
     def _while(self) -> ast.While:
-        """`while condition { clauses statements }`. The clauses come first in the body, like the
-        contracts of a function; the checker requires exactly one `decreases` (decision 0010)."""
+        """`while condition`, its header clauses and its body. The checker asks for exactly one
+        `shrinks` (decisions 0010 and 0019)."""
         keyword = self._advance()
         self._enter(keyword)
         if self._check(TokenType.LBRACE):
             raise self._error("E1101", "Expected a condition after 'while', found '{'")
         condition = self._expression()
+        clauses = self._loop_header("'while'")
         opening = self._expect(TokenType.LBRACE, "'{' to start the body of 'while'")
         self._enter(opening)
         level = self._nesting
         self._skip_newlines()
-        clauses = self._loop_clauses(level)
         body = self._block_rest(opening, level)
         self._nesting -= 1
         return ast.While(keyword.span.to(body.span), condition, tuple(clauses), body)
 
     def _for(self) -> ast.For:
-        """`for name in iterable { clauses statements }`. The iterator is declared by the loop and
-        cannot be assigned; the loop body takes the same clauses as a `while` (decision 0012)."""
+        """`for name in iterable`, its header clauses and its body. The iterator is declared by the
+        loop and cannot be assigned; the loop takes the same clauses as a `while` (decision 0012)."""
         keyword = self._advance()
         self._enter(keyword)
         name = self._expect_name("a name for the iterator after 'for'")
@@ -790,37 +892,17 @@ class Parser:
                 hint="Write the list the loop walks over, for example 'for x in xs'.",
             )
         iterable = self._expression()
+        clauses = self._loop_header("'for'")
         opening = self._expect(TokenType.LBRACE, "'{' to start the body of 'for'")
         self._enter(opening)
         level = self._nesting
         self._skip_newlines()
-        clauses = self._loop_clauses(level)
         body = self._block_rest(opening, level)
         self._nesting -= 1
         return ast.For(keyword.span.to(body.span), name.lexeme, name.span, iterable, tuple(clauses), body)
 
-    def _loop_clauses(self, level: int) -> list[ast.LoopClause]:
-        """The `invariant` and `decreases` clauses that open the body of a loop, in any order."""
-        clauses: list[ast.LoopClause] = []
-        while self._peek().type in _LOOP_KEYWORDS:
-            try:
-                keyword = self._advance()
-                self._depths.clear()
-                if self._peek().type in _STATEMENT_END:
-                    what = "a condition" if keyword.type is TokenType.INVARIANT else "an Int measure"
-                    raise self._error(
-                        "E1101",
-                        f"Expected {what} after '{keyword.lexeme}', found {self._peek().describe()}",
-                    )
-                condition = self._expression()
-                message, end = self._explanation(keyword.lexeme, condition.span)
-                self._end_of_statement()
-                clauses.append(ast.LoopClause(keyword.span.to(end), keyword.lexeme, condition, message))
-            except ParseError as error:
-                self._record(error)
-                self._nesting = level
-                self._synchronize_statement()
-        return clauses
+    def _loop_header(self, loop: str) -> list[ast.LoopClause]:
+        return self._header(f"the body of {loop}", "the loop", _LOOP_KEYWORDS, self._loop_clause, self._nesting)
 
     # Expressions
 
@@ -1109,3 +1191,11 @@ def parse_expression(tokens: list[Token]) -> ast.Expr:
     if not parser._check(TokenType.EOF):
         raise ValueError(f"unexpected {parser._peek().describe()} after the expression")
     return expression
+
+
+def _type_source(reference: ast.TypeRef) -> str:
+    """A type reference as it is written."""
+    name = f"{reference.qualifier}.{reference.name}" if reference.qualifier else reference.name
+    if not reference.arguments:
+        return name
+    return f"{name}[{', '.join(_type_source(argument) for argument in reference.arguments)}]"

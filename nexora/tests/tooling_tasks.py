@@ -10,22 +10,23 @@ writes better NEXORA than one that does not is a separate question, and it has n
 evaluated. docs/ai-tooling.md describes how such an evaluation would have to be run.
 """
 
-INVENTORY = '''fn unit_price(total_cents: Int, units: Int) -> Int {
-    requires units > 0
-    ensures result >= 0
+INVENTORY = '''fn unit_price(total_cents: Int, units: Int) gives Int
+    needs units > 0
+    promises result >= 0
+{
     return total_cents / units
 }
 
-fn label(cents: Int) -> Text {
+fn label(cents: Int) gives Text {
     return to_text(cents) + " cents"
 }
 
-fn report(total_cents: Int, units: Int) -> Void {
+fn report(total_cents: Int, units: Int) {
     let price = unit_price(total_cents, units)
     print(label(price))
 }
 
-fn main() -> Void {
+fn main() {
     report(1200, 3)
     report(500, 0)
 }
@@ -41,10 +42,10 @@ TASKS = [
         "tool": "get_context",
         "answer": lambda d: [f["signature"] for f in d["functions"]],
         "expected": [
-            "fn unit_price(total_cents: Int, units: Int) -> Int",
-            "fn label(cents: Int) -> Text",
-            "fn report(total_cents: Int, units: Int) -> Void",
-            "fn main() -> Void",
+            "fn unit_price(total_cents: Int, units: Int) gives Int",
+            "fn label(cents: Int) gives Text",
+            "fn report(total_cents: Int, units: Int)",
+            "fn main()",
         ],
     },
     {
@@ -63,7 +64,7 @@ TASKS = [
         "tool": "get_context",
         "answer": lambda d: next((f["called_by"], [(c["clause"], c["condition"]) for c in f["contracts"]])
                                  for f in d["functions"] if f["name"] == "unit_price"),
-        "expected": (["report"], [("requires", "units > 0"), ("ensures", "result >= 0")]),
+        "expected": (["report"], [("needs", "units > 0"), ("promises", "result >= 0")]),
     },
     {
         "id": "every-use-of-a-parameter",
@@ -72,7 +73,7 @@ TASKS = [
         "tool": "get_symbols",
         "arguments": {"function": "unit_price", "name": "units"},
         "answer": lambda d: [(r["line"], r["column"]) for s in d["symbols"] for r in s["references"]],
-        "expected": [(2, 14), (4, 26)],
+        "expected": [(2, 11), (5, 26)],
     },
     {
         "id": "detect-a-wrong-argument",
@@ -81,7 +82,7 @@ TASKS = [
         "tool": "check_source",
         "answer": lambda d: [(x["code"], x["category"], x["line"], x["column"], x["label"], x["hint"])
                              for x in d["diagnostics"]],
-        "expected": [("E2011", "type", 13, 17, "Expected Int, found Float",
+        "expected": [("E2011", "type", 14, 17, "Expected Int, found Float",
                       "Convert the Float explicitly with to_int(...), which drops the fractional part.")],
     },
     {
@@ -109,8 +110,8 @@ TASKS = [
         "tool": "run_source",
         "answer": lambda r: (r["status"], r["output"], r["diagnostics"][0]["code"], r["diagnostics"][0]["line"],
                              r["diagnostics"][0]["notes"][:2]),
-        "expected": ("contract_violation", "400 cents\n", "E4001", 12,
-                     ["The condition at line 2 is false: requires units > 0",
+        "expected": ("contract_violation", "400 cents\n", "E4001", 13,
+                     ["The condition at line 2 is false: needs units > 0",
                       "It was called with: total_cents = 500, units = 0"]),
     },
     {

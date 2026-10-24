@@ -20,8 +20,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def double(*clauses: str, body: str = "return n * 2", contracts: tuple[str, ...] = ()) -> str:
-    lines = "\n".join(f"    {line}" for line in (*contracts, *clauses, body))
-    return f"fn double(n: Int) -> Int {{\n{lines}\n}}\n"
+    return _with_header("double(n: Int) gives Int", [*contracts, *clauses, *body.split("\n")]) + "\n"
+
+def _with_header(signature: str, lines: list[str]) -> str:
+    """A function in the syntax of 0.12: the clauses at the start of `lines` go in its header."""
+    clauses = []
+    while lines and lines[0].split(" ", 1)[0] in ("needs", "promises", "trust", "example"):
+        clauses.append(lines.pop(0))
+    body = "\n".join(f"    {line}" for line in lines)
+    if not clauses:
+        return f"fn {signature} {{\n{body}\n}}"
+    header = "\n".join(f"    {line}" for line in clauses)
+    return f"fn {signature}\n{header}\n{{\n{body}\n}}"
+
 
 
 def runs(text: str, function: str = "double"):
@@ -55,42 +66,67 @@ def test_own_calls_are_recorded_in_the_order_they_are_invoked():                
 
 
 def test_a_broken_requires_stops_the_call_that_was_invoked():                           # [12]
-    (run,) = runs(double("example double(-1) == -2", contracts=('requires n >= 0, "Only natural numbers"',)))
+    (run,) = runs(double("example double(-1) == -2", contracts=('needs n >= 0, "Only natural numbers"',)))
     assert run.value is None and run.error.code == "E4001"
     assert calls(run) == [("double", "stopped", None)]
 
 
 def test_a_broken_ensures():                                                            # [13]
-    (run,) = runs(double("example double(0) == 0", contracts=("ensures result > n",)))
+    (run,) = runs(double("example double(0) == 0", contracts=("promises result > n",)))
     assert run.error.code == "E4002" and calls(run) == [("double", "stopped", None)]
 
 
 def test_a_broken_requires_deeper_in_the_calls():                                       # [14]
-    text = ("fn h(n: Int) -> Int {\n    requires n > 0\n    return n\n}\n\n"
-            "fn g(n: Int) -> Int {\n    return h(n - 1)\n}\n\n"
-            "fn f(n: Int) -> Int {\n    example f(1) == 0\n    return g(n)\n}\n")
+    text = ("fn h(n: Int) gives Int\n"
+            "    needs n > 0\n"
+            "{\n"
+            "    return n\n"
+            "}\n"
+            "\n"
+            "fn g(n: Int) gives Int {\n"
+            "    return h(n - 1)\n"
+            "}\n"
+            "\n"
+            "fn f(n: Int) gives Int\n"
+            "    example f(1) == 0\n"
+            "{\n"
+            "    return g(n)\n"
+            "}\n")
     (run,) = runs(text, "f")
     assert run.error.code == "E4001"
-    assert (run.error.span.line, run.error.span.column) == (7, 12)        # the call to h, inside g
-    assert run.error.notes[-2:] == ("In 'g', called at line 12, column 12.", "In 'f', called at line 11, column 13.")
+    assert (run.error.span.line, run.error.span.column) == (8, 12)        # the call to h, inside g
+    assert run.error.notes[-2:] == ("In 'g', called at line 14, column 12.", "In 'f', called at line 12, column 13.")
 
 
 def test_a_runtime_error_in_another_function():                                         # [15]
-    text = "fn broken(n: Int) -> Int {\n    return n / 0\n}\n\n" + double("example double(broken(1)) == 0")
+    text = "fn broken(n: Int) gives Int {\n    return n / 0\n}\n\n" + double("example double(broken(1)) == 0")
     (run,) = runs(text)
     assert run.error.code == "E3001" and run.invoked == []
 
 
 def test_a_broken_refined_type():                                                       # [16]
-    text = ("type Percent = Int where value >= 0 and value <= 100\n\n"
-            "fn f(p: Percent) -> Int {\n    example f(Percent(150 - 1)) == 1\n    return p\n}\n")
+    text = ("type Percent = Int where value >= 0 and value <= 100\n"
+            "\n"
+            "fn f(p: Percent) gives Int\n"
+            "    example f(Percent(150 - 1)) == 1\n"
+            "{\n"
+            "    return p\n"
+            "}\n")
     (run,) = runs(text, "f")
     assert run.error.code == "E4003"
 
 
 def test_each_example_starts_with_a_clean_interpreter():                                # [19]
-    text = "fn loop(n: Int) -> Int {\n    example loop(1) == 1\n    example loop(0) == 0\n" \
-           "    print(\"in loop\")\n    if n == 0 {\n        return 0\n    }\n    return loop(n)\n}\n"
+    text = "fn loop(n: Int) gives Int\n" \
+           "    example loop(1) == 1\n" \
+           "    example loop(0) == 0\n" \
+           "{\n" \
+           "    print(\"in loop\")\n" \
+           "    if n == 0 {\n" \
+           "        return 0\n" \
+           "    }\n" \
+           "    return loop(n)\n" \
+           "}\n"
     endless, finite = runs(text, "loop")
     assert endless.error.code == "E3004" and endless.output.count("in loop\n") == 1000
     assert (finite.value, finite.error, finite.output) == (True, None, "in loop\n")
@@ -112,19 +148,19 @@ def test_or_skips_its_right_side_when_the_left_is_true():
 
 
 def test_a_call_after_an_error_is_never_invoked():                                      # [35]
-    (run,) = runs(double("example double(double(-1)) == 4", contracts=("requires n >= 0",)))
+    (run,) = runs(double("example double(double(-1)) == 4", contracts=("needs n >= 0",)))
     assert run.error.code == "E4001"
     assert [(r.node.span.column, r.status) for r in run.invoked] == [(20, "stopped")]
     assert run.short_circuited == set()
 
 
 def test_the_outer_call_stops_after_the_inner_one_returned():                           # [12] [35]
-    (run,) = runs(double("example double(double(1)) == 4", contracts=("requires n >= 4",),
+    (run,) = runs(double("example double(double(1)) == 4", contracts=("needs n >= 4",),
                          body="return n * 4"))
-    # double(1) breaks the requires: the inner call is the one stopped, the outer never starts.
+    # double(1) breaks the 'needs': the inner call is the one stopped, the outer never starts.
     assert [(r.node.span.column, r.status) for r in run.invoked] == [(20, "stopped")]
-    (run,) = runs(double("example double(double(4)) == 64", contracts=("requires n < 10",), body="return n * 4"))
-    # double(4) returns 16, and then the outer call breaks the requires: returned first, stopped last.
+    (run,) = runs(double("example double(double(4)) == 64", contracts=("needs n < 10",), body="return n * 4"))
+    # double(4) returns 16, and then the outer call breaks the 'needs': returned first, stopped last.
     assert [(r.node.span.column, r.status, r.value) for r in run.invoked] == [(20, "returned", 16), (13, "stopped", None)]
     assert run.error.code == "E4001" and (run.error.span.line, run.error.span.column) == (3, 13)
 
@@ -140,7 +176,7 @@ def test_short_circuit_marks_every_own_call_in_the_skipped_operand():           
 
 def test_a_skipped_call_stays_short_circuit_when_a_later_call_fails():                  # [20] [35]
     document = api.test_source(double("example (double(1) == 2 or double(2) == 0) and double(-1) == 0",
-                                      contracts=("requires n >= 0",)))
+                                      contracts=("needs n >= 0",)))
     (example,) = document["examples"]
     assert example["status"] == "error" and example["diagnostic"]["code"] == "E4001"
     assert [(v["call"], v["status"]) for v in example["values"]] == [("double(1)", "returned"), ("double(-1)", "stopped")]
@@ -166,13 +202,18 @@ def test_an_expression_over_several_lines_is_reported_as_written():
 
 def test_the_same_program_gives_the_same_document():
     text = double("example double(2) == 5", "example double(-1) == 0", "example double(1) == 3 and double(2) == 4",
-                  contracts=("requires n >= 0",), body='print("n")\n    return n * 2')
+                  contracts=("needs n >= 0",), body='print("n")\n    return n * 2')
     assert api.test_source(text) == api.test_source(text)
 
 
 def test_output_is_collected_per_example():                                             # [21]
-    text = 'fn shout(n: Int) -> Int {\n    example shout(1) == 1\n    example shout(2) == 2\n' \
-           '    print("n is " + to_text(n))\n    return n\n}\n'
+    text = 'fn shout(n: Int) gives Int\n' \
+           '    example shout(1) == 1\n' \
+           '    example shout(2) == 2\n' \
+           '{\n' \
+           '    print("n is " + to_text(n))\n' \
+           '    return n\n' \
+           '}\n'
     first, second = runs(text, "shout")
     assert (first.output, second.output) == ("n is 1\n", "n is 2\n")
 
@@ -204,7 +245,7 @@ def test_a_defect_of_nexora_is_not_turned_into_a_result(monkeypatch):           
 
 
 def test_running_main_is_unchanged():
-    text = double() + "\nfn main() -> Void {\n    print(double(21))\n}\n"
+    text = double() + "\nfn main() {\n    print(double(21))\n}\n"
     analysis = analyze(Source("t.nex", text))
     output = []
     interpreter.run(analysis.checked, output.append)
@@ -213,7 +254,9 @@ def test_running_main_is_unchanged():
 
 # The API: nexora.api.test_source
 
-from nexora import api, cli, schemas, tooling  # noqa: E402
+from nexora import api, cli, migrate, schemas, tooling  # noqa: E402
+from nexora.legacy011.diagnostics import Source as Source011  # noqa: E402
+from nexora.legacy011.pipeline import analyze as analyze011  # noqa: E402
 
 TEST_SCHEMA = schemas.all_schemas()["nexora-test.schema.json"]
 DECISION = ROOT / "docs" / "decisions" / "0008-ejemplos-y-nex-test.md"
@@ -246,7 +289,7 @@ def test_api_failed_example_has_e4004_with_values_and_reason():                 
 
 
 def test_api_error_keeps_the_original_code_and_adds_the_note_last():                    # [12]
-    document = validate(api.test_source(double("example double(-1) == -2", contracts=("requires n >= 0",))))
+    document = validate(api.test_source(double("example double(-1) == -2", contracts=("needs n >= 0",))))
     (example,) = document["examples"]
     assert (example["status"], example["diagnostic"]["code"], example["diagnostic"]["category"]) == (
         "error", "E4001", "contract")
@@ -256,7 +299,7 @@ def test_api_error_keeps_the_original_code_and_adds_the_note_last():            
 
 def test_api_mixed_results_are_all_evaluated_in_order():                                # [18]
     text = double("example double(2) == 5", "example double(2) == 4", "example double(-1) == -2",
-                  contracts=("requires n >= 0",))
+                  contracts=("needs n >= 0",))
     document = validate(api.test_source(text))
     assert [e["status"] for e in document["examples"]] == ["failed", "passed", "error"]
     assert [e["index"] for e in document["examples"]] == [1, 2, 3]
@@ -269,23 +312,23 @@ def test_api_not_evaluated_calls():                                             
     assert [v["call"] for v in short["values"]] == ["double(1)"]
     assert [(n["call"], n["reason"]) for n in short["not_evaluated"]] == [("double(2)", "short_circuit")]
     stopped = validate(api.test_source(double("example double(double(-1)) == 4",
-                                              contracts=("requires n >= 0",))))["examples"][0]
+                                              contracts=("needs n >= 0",))))["examples"][0]
     assert [(v["call"], v["status"]) for v in stopped["values"]] == [("double(-1)", "stopped")]
     assert [(n["call"], n["reason"]) for n in stopped["not_evaluated"]] == [("double(double(-1))", "stopped_before")]
 
 
 def test_api_output_is_kept_per_example():                                              # [21]
-    text = 'fn shout(n: Int) -> Int {\n    example shout(1) == 1\n    print("hi")\n    return n\n}\n'
+    text = 'fn shout(n: Int) gives Int\n    example shout(1) == 1\n{\n    print("hi")\n    return n\n}\n'
     assert validate(api.test_source(text))["examples"][0]["output"] == "hi\n"
 
 
 def test_api_filter():                                                                  # [22]
-    text = (double("example double(2) == 4", contracts=("requires n >= 0",))
-            + "\nfn triple(n: Int) -> Int {\n    example triple(-1) == -2\n    return double(n) + n\n}\n")
+    text = (double("example double(2) == 4", contracts=("needs n >= 0",))
+            + "\nfn triple(n: Int) gives Int\n    example triple(-1) == -2\n{\n    return double(n) + n\n}\n")
     document = validate(api.test_source(text, function="triple"))
     assert document["filter"] == {"function": "triple"}
     (example,) = document["examples"]
-    # Only the examples of triple, but the requires of double, which triple calls, is still checked.
+    # Only the examples of triple, but the 'needs' of double, which triple calls, is still checked.
     assert (example["function"], example["status"], example["diagnostic"]["code"]) == ("triple", "error", "E4001")
 
 
@@ -299,7 +342,7 @@ def test_api_unknown_function_raises_tooling_error():                           
 def test_api_no_examples_and_not_run():                                                 # [24] [25] [26]
     empty = validate(api.test_source(double()))
     assert (empty["status"], empty["summary"]["total"], empty["examples"]) == ("no_examples", 0, [])
-    helper = validate(api.test_source(double("example double(2) == 4") + "\nfn helper(n: Int) -> Int {\n    return n\n}\n",
+    helper = validate(api.test_source(double("example double(2) == 4") + "\nfn helper(n: Int) gives Int {\n    return n\n}\n",
                                       function="helper"))
     assert (helper["status"], helper["examples"]) == ("no_examples", [])
     broken = validate(api.test_source(double("example 2 + 2 == 4"), function="nope"))
@@ -308,7 +351,7 @@ def test_api_no_examples_and_not_run():                                         
 
 
 def test_api_does_not_require_main_and_never_runs_it():                                 # [28] [29]
-    with_main = double("example double(2) == 4") + '\nfn main() -> Void {\n    print("main ran")\n}\n'
+    with_main = double("example double(2) == 4") + '\nfn main() {\n    print("main ran")\n}\n'
     document = validate(api.test_source(with_main))
     assert document["status"] == "passed" and document["examples"][0]["output"] == ""
 
@@ -320,20 +363,29 @@ def test_the_documents_of_the_decision_are_the_real_output():                   
     section = text[text.index("#### 6.4"):text.index("### 7. Python API")]
     blocks = re.findall(r"```(text|json)\n(.*?)```", section, re.S)
     programs = [body for kind, body in blocks if kind == "text"]
-    documents = [json.loads(body) for kind, body in blocks if kind == "json"]
+    # The messages of 0.12 name the clauses with the words of 0.12 (decision 0019).
+    documents = [json.loads(body.replace("requires", "needs").replace("ensures", "promises"))
+                 for kind, body in blocks if kind == "json"]
     assert len(programs) == 5 and len(documents) == 7
 
     def source_of(listing: str) -> str:
-        return "\n".join(re.sub(r"^\d+ {1,2}", "", line) for line in listing.rstrip("\n").split("\n")) + "\n"
+        """The program of the listing, in the syntax of 0.12. The decision is a record written in
+        the syntax of 0.11; `nex migrate` only adds the '{' after the header, so every line the
+        documents point at keeps its number."""
+        text = "\n".join(re.sub(r"^\d+ {1,2}", "", line) for line in listing.rstrip("\n").split("\n")) + "\n"
+        analysis = analyze011(Source011("double.nex", text), require_main=False)
+        plan = migrate.plan(text, analysis.tokens, analysis.program)
+        assert plan.refusals == ()
+        return migrate.apply(text, plan.edits)
 
     for program, expected in zip(programs, documents[:5], strict=True):
         actual = validate(api.test_source(source_of(program), "double.nex"))
         assert {**actual, "nexora_version": None} == {**expected, "nexora_version": None}
 
-    # The two fragments: one example result each, inside double.nex with the requires of line 2.
+    # The two fragments: one example result each, inside double.nex with the 'needs' of line 2.
     for fragment in documents[5:]:
-        listing = ('fn double(n: Int) -> Int {\n    requires n >= 0, "Only natural numbers"\n'
-                   f"    example {fragment['expression']}\n    return n * 2\n}}\n")
+        listing = ('fn double(n: Int) gives Int\n    needs n >= 0, "Only natural numbers"\n'
+                   f"    example {fragment['expression']}\n{{\n    return n * 2\n}}\n")
         (actual,) = api.test_source(listing, "double.nex")["examples"]
         assert actual == fragment
 
@@ -362,7 +414,7 @@ def test_cli_passing(files):                                                    
 
 def test_cli_failing_text_report(files):                                                # [2] [12] [18] [21]
     text = double('example double(2) == 5, "Two doubled"', "example double(2) == 4", "example double(-1) == -2",
-                  contracts=("requires n >= 0",), body='print("n is " + to_text(n))\n    return n * 2')
+                  contracts=("needs n >= 0",), body='print("n is " + to_text(n))\n    return n * 2')
     result = nex("test", files("bad.nex", text), cwd=files.dir)
     assert result.returncode == 6
     assert result.stdout == "bad.nex: 3 examples in 1 function\n  double   1 passed, 1 failed, 1 error\n"
@@ -413,7 +465,7 @@ def test_cli_unknown_function_is_a_usage_error_without_document(files):         
 
 
 def test_cli_filter_and_no_examples(files):                                             # [22] [24] [25]
-    text = double("example double(2) == 4") + "\nfn helper(n: Int) -> Int {\n    return n\n}\n"
+    text = double("example double(2) == 4") + "\nfn helper(n: Int) gives Int {\n    return n\n}\n"
     name = files("lib.nex", text)
     only = nex("test", name, "--function", "double", cwd=files.dir)
     assert only.returncode == 0 and only.stdout.startswith("lib.nex: 1 example of 'double'\n")
@@ -428,14 +480,14 @@ def test_cli_without_main_and_with_main(files):                                 
     library = files("lib.nex", double("example double(2) == 4"))
     assert nex("test", library, cwd=files.dir).returncode == 0
     assert "E2001" in nex("check", library, cwd=files.dir).stderr
-    program = files("prog.nex", double("example double(2) == 4") + '\nfn main() -> Void {\n    print("main ran")\n}\n')
+    program = files("prog.nex", double("example double(2) == 4") + '\nfn main() {\n    print("main ran")\n}\n')
     result = nex("test", program, cwd=files.dir)
     assert result.returncode == 0 and "main ran" not in result.stdout + result.stderr
 
 
 def test_cli_analysis_commands_do_not_evaluate_examples(files):                        # [33]
-    text = ("fn boom(n: Int) -> Int {\n    print(\"evaluated!\")\n    return n / 0\n}\n\n"
-            + double("example double(boom(1)) == 0") + '\nfn main() -> Void {\n    print("main")\n}\n')
+    text = ("fn boom(n: Int) gives Int {\n    print(\"evaluated!\")\n    return n / 0\n}\n\n"
+            + double("example double(boom(1)) == 0") + '\nfn main() {\n    print("main")\n}\n')
     name = files("quiet.nex", text)
     for command in (("check",), ("inspect",), ("context",), ("symbols",)):
         result = nex(*command, name, cwd=files.dir)

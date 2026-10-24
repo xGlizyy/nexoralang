@@ -51,20 +51,20 @@ def test_two_values_of_different_records_are_not_compared():
 
 def test_a_record_can_go_through_a_function_and_come_back():
     text = with_main(
-        POINT + "fn move(p: Point) -> Point {\n    return Point(x: p.x + 1, y: p.y)\n}\n",
+        POINT + "fn move(p: Point) gives Point {\n    return Point(x: p.x + 1, y: p.y)\n}\n",
         "let p = move(Point(x: 1, y: 2))\nprint(p)\n",
     )
     assert run_text(text) == "Point(x: 2, y: 2)\n"
 
 
 def test_a_record_can_be_the_result_of_a_function():
-    text = with_main(POINT + "fn origin() -> Point {\n    return Point(x: 0, y: 0)\n}\n", "print(origin())")
+    text = with_main(POINT + "fn origin() gives Point {\n    return Point(x: 0, y: 0)\n}\n", "print(origin())")
     assert run_text(text) == "Point(x: 0, y: 0)\n"
 
 
 def test_a_record_can_be_read_inside_an_ensures():
     text = with_main(
-        POINT + "fn check(p: Point) -> Int {\n    ensures result == p.x\n    return p.x\n}\n",
+        POINT + "fn check(p: Point) gives Int\n    promises result == p.x\n{\n    return p.x\n}\n",
         "print(check(Point(x: 7, y: 0)))\n",
     )
     assert run_text(text) == "7\n"
@@ -72,7 +72,7 @@ def test_a_record_can_be_read_inside_an_ensures():
 
 def test_a_record_can_be_the_value_of_an_example():
     text = with_main(
-        POINT + "fn origin() -> Point {\n    example origin() == Point(x: 0, y: 0)\n    return Point(x: 0, y: 0)\n}\n",
+        POINT + "fn origin() gives Point\n    example origin() == Point(x: 0, y: 0)\n{\n    return Point(x: 0, y: 0)\n}\n",
         "print(1)\n",
     )
     assert run_text(text) == "1\n"
@@ -80,8 +80,15 @@ def test_a_record_can_be_the_value_of_an_example():
 
 def test_a_record_can_be_written_in_a_loop():
     text = with_main(
-        POINT + "fn last(points: List[Point]) -> Point {\n    var result = Point(x: 0, y: 0)\n"
-        "    for point in points {\n        invariant result.x >= 0\n        result = point\n    }\n    return result\n}\n",
+        POINT + "fn last(points: List[Point]) gives Point {\n"
+        "    var result = Point(x: 0, y: 0)\n"
+        "    for point in points\n"
+        "        keeps result.x >= 0\n"
+        "    {\n"
+        "        result = point\n"
+        "    }\n"
+        "    return result\n"
+        "}\n",
         "print(last([Point(x: 1, y: 1), Point(x: 2, y: 2)]))\n",
     )
     assert run_text(text) == "Point(x: 2, y: 2)\n"

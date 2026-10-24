@@ -6,7 +6,7 @@ effect a program can have is writing text through `print`.
 The interpreter only accepts a `CheckedProgram`: names and types were verified by the
 checker and are not verified again here. What is checked here is exactly what cannot be
 known before running: division by zero, overflow, conversions out of range, the depth of
-the call stack, whether the `requires` and `ensures` conditions hold, whether a value
+the call stack, whether the `needs` and `promises` conditions hold, whether a value
 checked with `Percent(x)` satisfies the condition of its refined type, and whether every
 loop keeps its invariants and makes its measure smaller on every turn.
 """
@@ -248,10 +248,10 @@ class Interpreter:
             parameters.declare(param.name, argument)
 
         for contract in function.contracts:
-            if contract.clause == "requires" and not self._evaluate(contract.condition, parameters):
+            if contract.clause == "needs" and not self._evaluate(contract.condition, parameters):
                 raise self._fail(
                     "E4001",
-                    f"This call breaks a 'requires' condition of '{function.name}'",
+                    f"This call breaks {self._clause_label(contract)} of '{function.name}'",
                     site,
                     notes=(
                         f"The condition at line {contract.span.line} is false: {self._source_of(contract)}",
@@ -266,7 +266,8 @@ class Interpreter:
         result = outcome.value if outcome is not None else None
 
         for contract in function.contracts:
-            if contract.clause != "ensures":
+            if contract.clause != "promises":
+                # A 'trust' is never evaluated (decision 0019, 5.6).
                 continue
             environment = parameters
             if result is not None:
@@ -280,7 +281,7 @@ class Interpreter:
                 notes.extend(self._values_note(function, arguments))
                 raise self._fail(
                     "E4002",
-                    f"'{function.name}' breaks its own 'ensures' condition",
+                    f"'{function.name}' breaks its own {self._clause_label(contract)}",
                     contract.span,
                     notes=tuple(notes),
                 )
@@ -301,8 +302,17 @@ class Interpreter:
         return (f"Reason: {contract.message}",) if contract.message is not None else ()
 
     @staticmethod
-    def _source_of(contract: ast.Contract) -> str:
-        return f"{contract.clause} {unparse(contract.condition)}"
+    def _source_of(contract: ast.Contract | ast.LoopClause) -> str:
+        """A clause as it is written, with its name: `needs whole_positive: whole > 0`."""
+        name = f"{contract.name}: " if contract.name is not None else ""
+        return f"{contract.clause} {name}{unparse(contract.condition)}"
+
+    @staticmethod
+    def _clause_label(contract: ast.Contract) -> str:
+        """How a diagnostic names a clause: by its name when it has one (decision 0019)."""
+        if contract.name is not None:
+            return f"{contract.clause} '{contract.name}'"
+        return f"a '{contract.clause}' condition" if contract.clause == "needs" else f"'{contract.clause}' condition"
 
     # Refined types
 
@@ -381,8 +391,8 @@ class Interpreter:
         """Runs a loop without recursion. Before every evaluation of the condition the invariants must
         hold; before every turn the measure must be 0 or more and smaller than on the turn before. So a
         loop always ends, or stops with a diagnostic that names the turn and the values."""
-        invariants = [clause for clause in loop.clauses if clause.clause == "invariant"]
-        measure = next(clause for clause in loop.clauses if clause.clause == "decreases")
+        invariants = [clause for clause in loop.clauses if clause.clause == "keeps"]
+        measure = next(clause for clause in loop.clauses if clause.clause == "shrinks")
         line = loop.span.line
         previous: int | None = None
         turn = 0
@@ -396,8 +406,7 @@ class Interpreter:
                         "This condition is false",
                         invariant.condition.span,
                         notes=(
-                            f"The condition at line {invariant.span.line} is false: "
-                            f"invariant {unparse(invariant.condition)}",
+                            f"The condition at line {invariant.span.line} is false: {self._source_of(invariant)}",
                             *self._reason_note(invariant),
                             when,
                             *self._loop_values(environment),
@@ -421,7 +430,7 @@ class Interpreter:
                     label,
                     measure.condition.span,
                     notes=(
-                        f"The measure at line {measure.span.line}: decreases {unparse(measure.condition)}",
+                        f"The measure at line {measure.span.line}: {self._source_of(measure)}",
                         *self._reason_note(measure),
                         before,
                         *self._loop_values(environment),
@@ -439,7 +448,7 @@ class Interpreter:
         checked before each turn and once after the last one, exactly as in a `while`; the list is
         finite, so a `for` has no measure (decision 0012)."""
         items = self._evaluate(loop.iterable, environment)
-        invariants = [clause for clause in loop.clauses if clause.clause == "invariant"]
+        invariants = [clause for clause in loop.clauses if clause.clause == "keeps"]
         line = loop.span.line
         turn = 0
         while True:
@@ -452,8 +461,7 @@ class Interpreter:
                         "This condition is false",
                         invariant.condition.span,
                         notes=(
-                            f"The condition at line {invariant.span.line} is false: "
-                            f"invariant {unparse(invariant.condition)}",
+                            f"The condition at line {invariant.span.line} is false: {self._source_of(invariant)}",
                             *self._reason_note(invariant),
                             when,
                             *self._loop_values(environment),
@@ -639,7 +647,7 @@ class Interpreter:
         if target in self._refined:
             return self._refine(node, arguments[0])
 
-        # The functions of a type (decision 0011): their requires first, then the operation.
+        # The functions of a type (decision 0011): their 'needs' first, then the operation.
         implementation = IMPLEMENTATIONS.get(node.callee)
         if implementation is not None:
             self._check_requirements(node, arguments)
@@ -653,7 +661,7 @@ class Interpreter:
         if node.callee == "Err":
             return error(arguments[0])
         # The extractions that read the payload. They fail with a diagnostic, never with a crash.
-        if node.callee in ("Option.unwrap", "Result.unwrap", "Result.error"):
+        if node.callee in ("Option.value", "Result.value", "Result.error"):
             return self._extract(node, arguments[0])
 
         # Built-in functions.
@@ -690,31 +698,31 @@ class Interpreter:
     def _extract(self, node: ast.Call, value: Value) -> Value:
         """The payload of an Option or a Result, when there is one.
 
-        `Option.unwrap` and `Result.unwrap` read the value of a Some or of an Ok;
+        `Option.value` and `Result.value` read the value of a Some or of an Ok;
         `Result.error` reads the error of an Err. When the variant does not carry that
         payload, the program stops with a diagnostic: the failure is explicit, never a crash.
         """
         if not isinstance(value, VariantValue):
             raise TypeError(f"call to '{node.callee}' reached the interpreter")
         span = node.arguments[0].span
-        if node.callee == "Option.unwrap":
+        if node.callee == "Option.value":
             if value.kind == NONE:
                 raise self._fail(
                     "E3011",
                     "This Option has no value",
                     span,
                     hint="Check it with Option.is_none(...) before reading it, or use "
-                         "Option.unwrap_or(...) to give a value for the case of no value.",
+                         "Option.value_or(...) to give a value for the case of no value.",
                 )
             return value.payload
-        if node.callee == "Result.unwrap":
+        if node.callee == "Result.value":
             if value.kind == ERR:
                 raise self._fail(
                     "E3012",
                     f"This Result is an error: {show_value(value.payload)}",
                     span,
                     hint="Check it with Result.is_err(...) before reading it, or use "
-                         "Result.unwrap_or(...) to give a value for the case of error.",
+                         "Result.value_or(...) to give a value for the case of error.",
                 )
             return value.payload
         if value.kind == OK:
@@ -787,7 +795,7 @@ class Interpreter:
             ) from None
 
     def _check_requirements(self, node: ast.Call, arguments: list[Value]) -> None:
-        """Checks the `requires` of a function of a type, in the order they are written, and stops
+        """Checks the `needs` of a function of a type, in the order they are written, and stops
         at the first that is false with the same E4001 as a function of the program (decision 0011,
         7.1 and 7.2). Its conditions cannot fail: they only compare Ints and call functions that
         have an answer for any text."""
@@ -804,11 +812,11 @@ class Interpreter:
             values = ", ".join(f"{name} = {show_value(value)}" for name, value in zip(params, arguments, strict=True))
             raise self._fail(
                 "E4001",
-                f"This call breaks a 'requires' condition of '{node.callee}'",
+                f"This call breaks a 'needs' condition of '{node.callee}'",
                 node.span,
                 hint=parse_hint(node.callee, arguments[0]),
                 notes=(
-                    f"The condition of the built-in function is false: requires {unparse(contract.condition)}",
+                    f"The condition of the built-in function is false: needs {unparse(contract.condition)}",
                     f"Reason: {contract.message}",
                     f"It was called with: {values}",
                 ),
