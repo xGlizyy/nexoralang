@@ -370,7 +370,9 @@ _EVIDENCE = {
                    "name": _NULLABLE_STRING,
                    "kind": {"enum": ["needs", "promises", "trust", "keeps", "shrinks"]},
                    "stable": {"type": "boolean",
-                              "description": "True for a named clause: (module, function, name) identifies it."}}},
+                              "description": "True for a named clause: within one version of the program, "
+                                             "(module, function, name) names exactly one clause. It says "
+                                             "nothing about other versions."}}},
         "condition": {"type": "string"},
         "message": _NULLABLE_STRING,
         "enforcement": {"enum": ["checked", "trusted"],

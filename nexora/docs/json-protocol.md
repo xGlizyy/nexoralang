@@ -205,7 +205,7 @@ Each entry:
 |-------|---------|
 | `id.module` | The path of the file, relative to the directory of the program and with `/`; `""` for the program itself |
 | `id.function` | The function that declares the clause, without its module |
-| `id.name`, `id.stable` | The name of the clause, or `null`. `stable` is `true` exactly when there is a name: `(module, function, name)` then identifies the clause across edits. A clause without a name has no identity of its own |
+| `id.name`, `id.stable` | The name of the clause, or `null`. `stable` is `true` exactly when there is a name: within one version of the program, `(module, function, name)` then names exactly one clause. It does not say that the clause is the same in another version, or anything about its evidence ([decision 0019, addendum 1](decisions/0019-identidad-propia-del-lenguaje.md#addendum-1--details-of-nexoraevidence1-left-open-by-section-5-provisional)). A clause without a name has no identity of its own |
 | `id.kind` | `needs`, `promises`, `trust`, `keeps` or `shrinks` |
 | `condition`, `message` | The condition as written, and its explanation or `null` |
 | `enforcement` | `checked`: the language evaluates the condition when the program runs, and a false one stops it. `trusted`: a `trust`, never evaluated |
