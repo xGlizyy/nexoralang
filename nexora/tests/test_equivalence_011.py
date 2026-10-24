@@ -27,10 +27,18 @@ belong to T5 and T6 (test_migrate_cli.py). The command each program runs with:
 
 The environment is created once, in .equivalence/ (ignored by git), and needs to reach PyPI the
 first time. `NEXORA_011_PYTHON` names another Python that already has the package. Setting
-`NEXORA_SKIP_EQUIVALENCE=1` skips these tests explicitly; otherwise a missing environment fails.
+`NEXORA_SKIP_EQUIVALENCE=1` skips these tests explicitly, outside continuous integration only: with
+`CI` set it fails the run instead. Otherwise a missing environment fails.
+
+The environment is checked before any comparison: the package and its metadata are 0.11.0, every
+installed file has the SHA-256 its wheel recorded, and neither this repository (except the
+environment itself) nor the environment that runs the tests is on its import path. The pin of the
+wheel is checked by pip when the environment is made, and the environment is made again when
+tests/migration/nexora-0.11.0.txt changes.
 """
 
 import bisect
+import hashlib
 import json
 import os
 import re
@@ -51,6 +59,10 @@ ENVIRONMENT = ROOT / ".equivalence" / "nexora-0.11.0"
 MANIFEST = json.loads((CORPUS / "manifest.json").read_text(encoding="utf-8"))["programs"]
 
 if os.environ.get("NEXORA_SKIP_EQUIVALENCE") == "1":
+    if os.environ.get("CI", "").strip().lower() not in ("", "0", "false"):
+        # In continuous integration the skip is never silent: it fails the run.
+        pytest.fail("NEXORA_SKIP_EQUIVALENCE=1 is not allowed in continuous integration (CI is set): "
+                    "the equivalence tests with 0.11.0 must run there", pytrace=False)
     pytest.skip("NEXORA_SKIP_EQUIVALENCE=1: the equivalence tests with 0.11.0 were skipped on purpose",
                 allow_module_level=True)
 
@@ -87,33 +99,75 @@ FILES = sorted({program["path"] for program in ACCEPTED} | set(MODULES))
 
 # The two versions
 
+def _requirement_digest() -> str:
+    return hashlib.sha256(REQUIREMENT.read_bytes()).hexdigest()
+
+
+# Written in the environment once the pinned wheel is installed: an environment made for another
+# pin, or left half-made, is made again instead of being trusted.
+_STAMP = ENVIRONMENT / "nexora-0.11.0.requirement.sha256"
+
+
 def _old_python() -> Path:
     named = os.environ.get("NEXORA_011_PYTHON")
     if named:
         return Path(named)
     python = ENVIRONMENT / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    if not python.exists():
-        venv.create(ENVIRONMENT, with_pip=True, clear=True)
+    if not (python.exists() and _STAMP.exists() and _STAMP.read_text(encoding="utf-8") == _requirement_digest()):
+        venv.create(ENVIRONMENT, with_pip=True, clear=True, system_site_packages=False)
         installed = subprocess.run(
             [str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--no-deps",
-             "--require-hashes", "--only-binary=:all:", "-r", str(REQUIREMENT)],
+             "--require-hashes", "--only-binary=:all:", "--no-cache-dir", "-r", str(REQUIREMENT)],
             capture_output=True, encoding="utf-8")
         if installed.returncode != 0:
             shutil.rmtree(ENVIRONMENT, ignore_errors=True)
             pytest.fail("could not install the published nexora-lang 0.11.0 (it needs PyPI the first time; "
-                        f"NEXORA_SKIP_EQUIVALENCE=1 skips these tests):\n{installed.stderr}")
+                        f"NEXORA_SKIP_EQUIVALENCE=1 skips these tests outside CI):\n{installed.stderr}")
+        _STAMP.write_text(_requirement_digest(), encoding="utf-8")
     return python
+
+
+# Run by the Python of 0.11.0, with -I: what it imports, from where, and whether every installed file
+# is still the one its wheel recorded (RECORD keeps the SHA-256 of each file of the wheel).
+_PROBE = r"""
+import base64, hashlib, importlib.metadata as metadata, json, sys
+import nexora
+dist = metadata.distribution("nexora-lang")
+changed, checked = [], 0
+for file in dist.files or ():
+    if not file.hash or file.hash.mode != "sha256":
+        continue
+    digest = base64.urlsafe_b64encode(hashlib.sha256(file.locate().read_bytes()).digest()).rstrip(b"=").decode()
+    checked += 1
+    if digest != file.hash.value:
+        changed.append(str(file))
+print(json.dumps({"version": nexora.__version__, "metadata_version": dist.version, "file": nexora.__file__,
+                  "path": sys.path, "prefix": sys.prefix, "checked": checked, "changed": changed}))
+"""
 
 
 @pytest.fixture(scope="module")
 def old_python() -> Path:
     python = _old_python()
-    # The package of that environment, and not this tree: version and place.
-    found = subprocess.run([str(python), "-I", "-c", "import nexora; print(nexora.__version__); print(nexora.__file__)"],
-                           capture_output=True, encoding="utf-8", cwd=python.parent)
-    version, location = found.stdout.split("\n")[:2]
-    assert version == "0.11.0", found
-    assert not Path(location).resolve().is_relative_to(ROOT / "src"), location
+    found = subprocess.run([str(python), "-I", "-c", _PROBE], capture_output=True, encoding="utf-8",
+                           cwd=python.parent)
+    assert found.returncode == 0, found.stderr
+    probe = json.loads(found.stdout)
+    # The published package, unmodified: version, metadata and every file against its wheel.
+    assert (probe["version"], probe["metadata_version"]) == ("0.11.0", "0.11.0"), probe
+    assert probe["checked"] > 0 and probe["changed"] == [], probe
+    # Isolated: nothing of this repository, or of the environment that runs the tests, is importable.
+    environment = Path(probe["prefix"]).resolve()
+    for entry in [probe["file"], *probe["path"]]:
+        if not entry:
+            continue
+        resolved = Path(entry).resolve()
+        assert not resolved.is_relative_to(Path(sys.prefix).resolve()), entry
+        assert not resolved.is_relative_to(ROOT.resolve()) or resolved.is_relative_to(environment), entry
+    assert Path(probe["file"]).resolve().is_relative_to(environment), probe["file"]
+    if not os.environ.get("NEXORA_011_PYTHON"):
+        configuration = (ENVIRONMENT / "pyvenv.cfg").read_text(encoding="utf-8")
+        assert re.search(r"^include-system-site-packages\s*=\s*false\s*$", configuration, re.M), configuration
     return python
 
 
