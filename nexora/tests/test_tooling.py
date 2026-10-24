@@ -116,6 +116,7 @@ def test_every_document_for_every_example_matches_its_schema(path):
     validate(tooling.inspect_source(source, path.name), "nexora-inspect.schema.json")
     validate(tooling.get_symbols(source, path.name), "nexora-symbols.schema.json")
     validate(tooling.get_context(source, path.name), "nexora-context.schema.json")
+    validate(tooling.get_evidence(source, path.name), "nexora-evidence.schema.json")
 
 
 @pytest.mark.parametrize("source", ["", BROKEN, NOT_NEXORA, "fn main() {", in_main("print(x)")],
@@ -125,6 +126,7 @@ def test_incorrect_input_still_produces_valid_documents(source):
     validate(tooling.inspect_source(source), "nexora-inspect.schema.json")
     validate(tooling.get_symbols(source), "nexora-symbols.schema.json")
     validate(tooling.get_context(source), "nexora-context.schema.json")
+    validate(tooling.get_evidence(source), "nexora-evidence.schema.json")
 
 
 def test_the_schemas_reject_documents_that_are_wrong():

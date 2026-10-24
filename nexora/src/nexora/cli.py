@@ -99,6 +99,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default="text",
         help="how to report the result (default: text). 'json' writes one JSON document to standard output",
     )
+    check_parser.add_argument(
+        "--evidence",
+        action="store_true",
+        help="also report what backs every needs, promises, trust, keeps and shrinks of the program "
+             "(nexora.evidence/1 with --format json). Nothing is run",
+    )
 
     inspect_parser = commands.add_parser(
         "inspect",
@@ -323,9 +329,10 @@ def _plural(count: int) -> str:
     return "1 error" if count == 1 else f"{count} errors"
 
 
-def _check(path: str, output_format: str) -> int:
+def _check(path: str, output_format: str, evidence: bool = False) -> int:
     source, failure = _load(path)
     if source is None:
+        analysis = Analysis(Source(path, ""), (failure,))
         reports, code = ((failure, Source(path, "")),), EXIT_UNREADABLE_FILE
     else:
         analysis = analyze(source, read=_module_reader(source))
@@ -333,10 +340,13 @@ def _check(path: str, output_format: str) -> int:
         code = EXIT_INVALID_PROGRAM if analysis.diagnostics else EXIT_OK
 
     if output_format == "json":
-        _print_json(_document(path, reports), sys.stdout)
+        # With --evidence, nexora.evidence/1 starts with the same fields as nexora.diagnostics/1.
+        _print_json(tooling.evidence_document(analysis) if evidence else _document(path, reports), sys.stdout)
     elif reports:
         _write_reports(reports)
         print(f"error: {path}: check failed with {_plural(len(reports))}", file=sys.stderr)
+    elif evidence:
+        print(tooling.render_evidence(tooling.evidence_document(analysis)))
     else:
         print(f"✓ Check passed: {path}")
     return code
@@ -789,7 +799,7 @@ def main(argv: list[str] | None = None) -> int:
                 lambda analysis: tooling.symbols_document(analysis, name=arguments.name, function=arguments.function),
                 tooling.render_symbols,
             )
-        return _check(arguments.file, arguments.format)
+        return _check(arguments.file, arguments.format, arguments.evidence)
     except KeyboardInterrupt:
         _flush_quietly()
         print(f"\ninterrupted: {arguments.file}", file=sys.stderr)

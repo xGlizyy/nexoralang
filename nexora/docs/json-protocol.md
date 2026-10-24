@@ -16,10 +16,11 @@ a **JSON Schema** in [`schemas/`](schemas/), and the tests validate the real out
 | `nexora.context/1` | A technical summary of the program | `nex context --format json`, `tooling.get_context` | [`nexora-context.schema.json`](schemas/nexora-context.schema.json) |
 | `nexora.spec/2` | The specification of the language, or a section | `tooling.get_language_spec` | [`nexora-spec.schema.json`](schemas/nexora-spec.schema.json) |
 | `nexora.capabilities/1` | What this version of NEXORA is | `tooling.get_capabilities` | [`nexora-capabilities.schema.json`](schemas/nexora-capabilities.schema.json) |
+| `nexora.evidence/1` | What backs every clause of the program | `nex check --evidence --format json`, `tooling.get_evidence` | [`nexora-evidence.schema.json`](schemas/nexora-evidence.schema.json) |
 | `nexora.result/1` | The result of checking or **running** a program | `nexora.api`, the [playground](playground.md) | [`nexora-result.schema.json`](schemas/nexora-result.schema.json) |
 | `nexora.test/1` | The result of **evaluating** the examples of a program | `nex test --format json`, `nexora.api.test_source` | [`nexora-test.schema.json`](schemas/nexora-test.schema.json) |
 
-The first six are **analysis** formats: producing them never runs the program. The last two are
+The first seven are **analysis** formats: producing them never runs the program. The last two are
 the only ones that can come from a run, and no analysis tool uses them.
 `nexora.test/1` is defined in [decision 0008](decisions/0008-ejemplos-y-nex-test.md), section 6.
 
@@ -202,6 +203,7 @@ History:
 | `nexora.spec/2` | Unreleased | **Incompatible change:** the specification is now written in English. `language` is `"en"` (it was `"es"`), and the section ids come from the English headings (`7-functions` instead of `7-funciones`). The rest of the document does not change |
 | `nexora.result/1` | Current version | |
 | `nexora.test/1` | 0.4.0 | First version |
+| `nexora.evidence/1` | Unreleased | First version, with the enforcement dimension only ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), section 5) |
 | `nexora.symbols/1`, `nexora.context/1`, `nexora.capabilities/1` | Current version | |
 
 Almost all the changes have been added fields. The exceptions are `nexora.spec/2`, which changes the

@@ -1,0 +1,293 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexora.invalid/schemas/nexora-evidence.schema.json",
+  "title": "nexora.evidence/1: what backs every clause of a program (nex check --evidence)",
+  "type": "object",
+  "required": [
+    "schema",
+    "nexora_version",
+    "file",
+    "ok",
+    "diagnostics",
+    "computed",
+    "clauses"
+  ],
+  "properties": {
+    "schema": {
+      "const": "nexora.evidence/1"
+    },
+    "nexora_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "file": {
+      "type": "string",
+      "description": "The name the source was given. A label, not necessarily a path."
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "True when the static analysis found no errors."
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "computed": {
+      "type": "object",
+      "required": [
+        "static",
+        "observed"
+      ],
+      "properties": {
+        "static": {
+          "type": "boolean"
+        },
+        "observed": {
+          "type": "boolean"
+        }
+      },
+      "description": "Which dimensions the command computed. The enforcement is always computed."
+    },
+    "clauses": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "One entry per needs, promises, trust, keeps and shrinks, by module path and then in the order of the file. Null when the program has errors."
+    }
+  },
+  "$defs": {
+    "span": {
+      "description": "A region of the source. Lines and columns start at 1; the end is exclusive. Columns count Unicode code points.",
+      "type": "object",
+      "required": [
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": [
+        "severity",
+        "category",
+        "code",
+        "message",
+        "label",
+        "hint",
+        "notes",
+        "file",
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "severity": {
+          "const": "error"
+        },
+        "category": {
+          "enum": [
+            "contract",
+            "file",
+            "lexical",
+            "runtime",
+            "semantic",
+            "syntax",
+            "test",
+            "type"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^E[0-9]{4}$",
+          "description": "Stable identifier of the problem."
+        },
+        "message": {
+          "type": "string",
+          "description": "Fixed title of the code."
+        },
+        "label": {
+          "type": "string",
+          "description": "What is wrong in this particular case."
+        },
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A suggested fix, only when a rule of the language supports it."
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Related information."
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "id",
+        "condition",
+        "message",
+        "enforcement",
+        "static",
+        "observed",
+        "summary"
+      ],
+      "properties": {
+        "id": {
+          "type": "object",
+          "required": [
+            "module",
+            "function",
+            "name",
+            "kind",
+            "stable"
+          ],
+          "properties": {
+            "module": {
+              "type": "string",
+              "description": "Relative to the directory of the entry file, with '/'; empty for the entry file."
+            },
+            "function": {
+              "type": "string"
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "enum": [
+                "needs",
+                "promises",
+                "trust",
+                "keeps",
+                "shrinks"
+              ]
+            },
+            "stable": {
+              "type": "boolean",
+              "description": "True for a named clause: (module, function, name) identifies it."
+            }
+          }
+        },
+        "condition": {
+          "type": "string"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enforcement": {
+          "enum": [
+            "checked",
+            "trusted"
+          ],
+          "description": "'trusted': the language never evaluates the condition."
+        },
+        "static": {
+          "$ref": "#/$defs/dimension"
+        },
+        "observed": {
+          "$ref": "#/$defs/dimension"
+        },
+        "summary": {
+          "enum": [
+            "broken",
+            "trusted",
+            "proved",
+            "exemplified",
+            "checked"
+          ],
+          "description": "The first rule of 5.5 that applies; each word comes from one dimension."
+        }
+      }
+    },
+    "dimension": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "not_applicable",
+            "not_computed",
+            "computed"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "description": "Only with not_computed: analysis_only, phase_not_implemented or static_errors. A reason a consumer does not know means 'not computed'."
+        }
+      }
+    }
+  }
+}

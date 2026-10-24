@@ -10,7 +10,7 @@ codes that the program accepts are documented here.
 
 ```text
 nex run <file> [--format text|json] [--allow-read PATH] [--allow-write PATH] [-- arguments...]
-nex check <file> [--format text|json]
+nex check <file> [--format text|json] [--evidence]
 nex inspect <file> [--format json]
 nex context <file> [--format text|json]
 nex symbols <file> [--format text|json] [--name NAME] [--function FUNCTION]
@@ -97,6 +97,34 @@ nex check examples/hello.nex
 |--------|--------|
 | `--format text` | Default |
 | `--format json` | It **always** writes a single JSON document to the **standard output**, whether the program is valid or not. It writes nothing to the standard error |
+| `--evidence` | Also reports what backs every `needs`, `promises`, `trust`, `keeps` and `shrinks` of the program. With `--format json`, the document is `nexora.evidence/1` instead of `nexora.diagnostics/1` |
+
+### `--evidence`
+
+The evidence of a clause has three dimensions ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md),
+section 5). `nex check --evidence` runs nothing, so it only computes one of them, the
+**enforcement**: whether the language evaluates the clause when the program runs.
+
+```text
+percentage.nex: 4 promises in 1 function (computed: enforcement)
+  percentage
+    needs whole_positive    checked
+    needs part_inside       checked
+    needs fits              checked
+    promises in_range       checked
+```
+
+| Word | Meaning |
+|------|---------|
+| `checked` | A `needs`, `promises`, `keeps` or `shrinks`: when the program runs, a false condition stops it. It does not say that the condition is never false |
+| `trusted` | A `trust`: the language never evaluates its condition. Only the explanation written by a person is behind it |
+
+A clause without a name is shown by its condition. A function of a module is followed by the path of
+its file, relative to the program. `example` clauses are not promises and are not listed: `nex test`
+evaluates them.
+
+The program has to pass the check: with errors, `--evidence` reports them as `nex check` does, with
+the same exit code, and the JSON document has `clauses` set to `null`.
 
 `nex check` does not detect what depends on computed values: division by zero, overflow,
 endless recursion or broken contracts. That is only seen with `nex run`.
