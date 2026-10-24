@@ -48,6 +48,11 @@ version = { attr = "nexora.version.__version__" }
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers"
+markers = [
+    # tests/test_equivalence_011.py. Continuous integration runs them in their own job and leaves
+    # them out of the matrix with -m "not equivalence" (decision 0019, 8.9).
+    "equivalence: T1-T4 of decision 0019, against the published nexora-lang 0.11.0",
+]
 
 [tool.coverage.run]
 source = ["nexora"]

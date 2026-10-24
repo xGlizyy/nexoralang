@@ -45,13 +45,54 @@ jobs:
       - name: Static analysis of the code
         run: python -m ruff check src tests
 
+      # The equivalence tests with 0.11.0 (T1-T4) are left out here on purpose, and run once in the
+      # job "equivalence" below. Coverage does not change: they only run nex in subprocesses.
       - name: Tests with coverage
-        run: python -m pytest --cov
+        run: python -m pytest --cov -m "not equivalence"
 
       - name: The installed command works
         run: |
           nex --version
           nex run examples/hello.nex
+
+  equivalence:
+    # T1-T4 of decision 0019 (8.9): the published nexora-lang 0.11.0 on the frozen corpus, against
+    # this version on the programs nex migrate writes. One job, Ubuntu and Python 3.12. No cache:
+    # the wheel is downloaded and its SHA-256 checked on every run. NEXORA_SKIP_EQUIVALENCE is never
+    # set here; with CI set, the tests fail instead of skipping if it is.
+    name: Equivalence with 0.11.0 (T1-T4)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nexora
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install NEXORA and the development tools
+        run: python -m pip install -e ".[dev]"
+
+      - name: Install the published nexora-lang 0.11.0, pinned by the SHA-256 of its wheel
+        run: |
+          cat tests/migration/nexora-0.11.0.txt
+          python -m venv "$RUNNER_TEMP/nexora-0.11.0"
+          "$RUNNER_TEMP/nexora-0.11.0/bin/python" -m pip install --no-deps --require-hashes \
+            --only-binary=:all: --no-cache-dir -r tests/migration/nexora-0.11.0.txt
+
+      - name: Show what the 0.11.0 environment is
+        run: |
+          grep include-system-site-packages "$RUNNER_TEMP/nexora-0.11.0/pyvenv.cfg"
+          "$RUNNER_TEMP/nexora-0.11.0/bin/python" -I -c \
+            "import nexora; print('nexora', nexora.__version__, 'from', nexora.__file__)"
+
+      - name: T1-T4 against 0.11.0
+        env:
+          NEXORA_011_PYTHON: ${{ runner.temp }}/nexora-0.11.0/bin/python
+        # -m equivalence selects only these tests; if none were collected pytest exits with 5.
+        run: python -m pytest -m equivalence -v -rs
 
   package:
     name: Installable package

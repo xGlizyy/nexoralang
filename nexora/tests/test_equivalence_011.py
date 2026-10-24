@@ -52,6 +52,9 @@ from pathlib import Path
 
 import pytest
 
+# The whole module: CI runs it in the job 'equivalence' and leaves it out of the matrix.
+pytestmark = pytest.mark.equivalence
+
 ROOT = Path(__file__).resolve().parents[1]
 CORPUS = ROOT / "tests" / "migration" / "corpus011"
 REQUIREMENT = ROOT / "tests" / "migration" / "nexora-0.11.0.txt"
