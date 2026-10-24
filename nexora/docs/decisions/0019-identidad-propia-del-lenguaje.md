@@ -1232,3 +1232,43 @@ together with the answers recorded in section 13.
 The approval accepts the documented design. It does **not** authorize starting phase 1 or
 implementing NEXORA 0.12, publishing packages, deploying the website or publishing the
 extension: each needs its own explicit authorization. Nothing in this decision is implemented.
+
+## Addendum 1 — Details of `nexora.evidence/1` left open by section 5 (provisional)
+
+- **Status:** provisional, kept by the person responsible for the project on 2026-10-24 while
+  phase 1 is reviewed. It adds to the decision and changes nothing in it: the text above is the
+  approved record and is not rewritten.
+- **Why:** section 5.7 shows one entry of the format, and 5.8 one text report. Implementing
+  `nex check --evidence` in phase 1 needed four details they do not fix. They are recorded here, with
+  what each one means and what it does not promise. `nexora.evidence/1` has not been published, so
+  any of them can still change without a new version; once 0.12.0 is published, changing one is a
+  change of the format, with the rules of [the JSON protocol](../json-protocol.md#versions-and-compatibility).
+
+| # | Detail | Choice | What it does not promise |
+|---|--------|--------|--------------------------|
+| A1 | The name of the list of entries | `clauses` | Nothing beyond the name. It follows the grammar (4.1: `header_clause`, `loop_clause`). The text report of 5.8 counts the same entries as "promises", a word of the report, not of the format, and not the kind `promises` |
+| A2 | `id.stable` | `true` exactly when the clause has a name, `false` when it has none | See below |
+| A3 | A function of an imported module in the text report | Its name followed by the path of its module: `area (lib/geo.nex)`; a function of the entry file, by its name alone | The text report is for people and is not a format: a tool reads `id.module` and `id.function` from the JSON document |
+| A4 | `nexora.evidence/1` among the `schemas` of `nexora.capabilities/1` | Listed, since it is an analysis format: producing it never runs the program | Listing it adds a value to a list, as an added error code or value of `features` does: `nexora.capabilities/1` keeps its number, and a consumer handles values it does not know |
+
+**The exact meaning of `stable` (A2).** It says whether the entry has an identity of its own in
+the sense of 7.1, and nothing else:
+
+- `true`: the clause has a name. Within **one version** of the program, `(id.module, id.function,
+  id.name)` names exactly one clause: a function is unique in its module (`E2002`), and a clause name
+  is unique in its function and its loops (`E2031`). It is the identity that the matching of 7.2
+  compares, by equal names, when it exists (phase 3).
+- `false`: the clause has no name. It has no identity (7.1): several entries of a function may
+  have the same kind and the same condition, and none of them can be told apart from the others
+  across versions.
+
+`stable` does **not** promise that:
+
+- the clause is the same in another version of the program. Two versions are only matched by equal
+  names, and a matched clause may have another condition or explanation (`condition_changed`,
+  `explanation_changed` in 7.2);
+- the identity survives renaming the clause, its function or its module, or moving the file:
+  none of these is inferred (7.2, steps 2 to 4, except the inferred clause rename of step 4);
+- the condition holds, or anything about its evidence: that is the business of `enforcement`,
+  `static`, `observed` and `summary`;
+- the position of the entry in `clauses` is stable: the order follows the files and their text.
