@@ -18,10 +18,12 @@ class Faulty(Files):
     """`Files`, with one failure injected."""
 
     def __init__(self, fail: str | None = None, at: int = 1, error: BaseException | None = None,
-                 change: str | None = None) -> None:
+                 change: str | None = None, reads_before_change: int = 0) -> None:
         self.fail, self.at, self.count = fail, at, 0
         self.error = error or OSError(28, "No space left on device")
-        self.change = change
+        # `change` is changed for every read after the first `reads_before_change` of it: `nex
+        # migrate` reads each file once before the re-read of G7.
+        self.change, self.reads_before_change, self.reads = change, reads_before_change, 0
         self.calls: list[tuple[str, str]] = []
 
     def _step(self, kind: str, path: str) -> None:
@@ -32,9 +34,12 @@ class Faulty(Files):
                 raise self.error
 
     def read(self, path):
+        self.calls.append(("read", path))
         data = super().read(path)
         if self.change and path == self.change:
-            data += b"// changed by someone else\n"   # what the re-read finds
+            self.reads += 1
+            if self.reads > self.reads_before_change:
+                data += b"// changed by someone else\n"   # what the re-read finds
         return data
 
     def create(self, path):
@@ -161,3 +166,23 @@ def test_the_byte_order_mark_goes_back_first():
     assert had_bom and text.startswith("fn main()")
     assert migrate_files.encode("fn main() {\n}\n", had_bom) == migrate_files.BOM + b"fn main() {\n}\n"
     assert migrate_files.encode("x", False) == b"x"
+
+
+def test_a_file_without_edits_is_read_again_and_never_written(program):
+    directory, planned = program
+    same = Planned(planned[1].path, planned[1].original, planned[1].original)
+    files = Faulty()
+    report = write_all([planned[0], same, planned[2]], files)
+    assert report.replaced == (planned[0].path, planned[2].path)
+    assert ("replace", same.path) not in files.calls
+    assert contents(directory)["b.nex"] == planned[1].original
+
+
+
+def test_a_change_to_a_file_without_edits_still_stops_everything(program):
+    directory, planned = program
+    before = contents(directory)
+    same = Planned(planned[1].path, planned[1].original, planned[1].original)
+    report = write_all([planned[0], same], Faulty(change=same.path))
+    assert report.changed == (same.path,) and report.not_written == (planned[0].path,)
+    assert contents(directory) == before

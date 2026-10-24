@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import api, tooling
+from . import api, migrate, migrate_files, tooling
 from .capabilities import Capabilities, Grants
 from .diagnostics import CONTRACT, MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Source, render
 from .host import LocalHost
@@ -34,7 +34,7 @@ exit codes:
   1   the program has lexical, syntax, semantic or type errors
   2   wrong command-line usage
   3   the program failed while running
-  4   the file could not be read
+  4   the file could not be read; nex migrate --write: a file could not be written
   5   the program broke a rule it declares while running: a contract
       ('needs', 'promises') or the condition of a refined type
   6   nex test: an example did not pass, or there was no example to run
@@ -170,6 +170,19 @@ def _build_parser() -> argparse.ArgumentParser:
         default="text",
         help="how to write the report (default: text). 'json' writes one nexora.test/1 document to standard output",
     )
+    migrate_parser = commands.add_parser(
+        "migrate",
+        help="rewrite a program of NEXORA 0.11 in the syntax of 0.12",
+        description=(
+            "Check a program and every module it imports with the front ends of 0.11 and of 0.12, and "
+            "show the edits that move it to the syntax of 0.12 (decision 0019). Without --write nothing "
+            "is written. With --write the files are replaced only if every check passed."
+        ),
+    )
+    migrate_parser.add_argument("file", help="path to the .nex file of the program")
+    migrate_parser.add_argument("--write", action="store_true",
+                                help="replace the files of the program with their migrated text")
+
     test_parser.add_argument("--function", help="only the examples declared in this function")
     test_parser.add_argument(
         "--allow-read", action="append", default=[], metavar="RUTA",
@@ -210,16 +223,22 @@ def _shown_path(declaration, importing_shown: str) -> str:
     return os.path.normpath(joined).replace("\\", "/")
 
 
-def _read_module(declaration, path: Path, key: str, shown: str, source=Source, diagnostic=Diagnostic):
+def _read_bytes(path: Path) -> bytes:
+    return path.read_bytes()
+
+
+def _read_module(declaration, path: Path, key: str, shown: str, source=Source, diagnostic=Diagnostic,
+                 read_bytes=_read_bytes):
     """Reads the module an import names (decision 0018, 1).
 
     This is the one place where the analysis touches the file system: the stages of the
     language never import `os` or `pathlib` (tests/test_security.py), so they ask here.
     `source` and `diagnostic` are the classes of the front end that asks: the frozen 0.11
-    front end of `nex migrate` has its own (decision 0019, 8.2).
+    front end of `nex migrate` has its own (decision 0019, 8.2). `nex migrate` also reads through
+    its own `read_bytes`, so that every file it reads goes through `migrate_files.Files` (8.9.2).
     """
     try:
-        data = path.read_bytes()
+        data = read_bytes(path)
     except OSError as error:
         return diagnostic(
             "E0001", f"{error.strerror or type(error).__name__}: {shown}", declaration.path_span,
@@ -234,7 +253,7 @@ def _read_module(declaration, path: Path, key: str, shown: str, source=Source, d
     return key, path.stem, source(shown, text)
 
 
-def _module_reader(entry: Source, source=Source, diagnostic=Diagnostic):
+def _module_reader(entry: Source, source=Source, diagnostic=Diagnostic, read_bytes=_read_bytes):
     """The `Reader` a command analyses with: a file is read once, however many import it.
 
     The answer is remembered with the path it was resolved to, so two imports that name
@@ -259,7 +278,7 @@ def _module_reader(entry: Source, source=Source, diagnostic=Diagnostic):
         key = str(path)
         if key not in read_once:
             shown[key] = _shown_path(declaration, shown.get(importing_file, importing_file))
-            read_once[key] = _read_module(declaration, path, key, shown[key], source, diagnostic)
+            read_once[key] = _read_module(declaration, path, key, shown[key], source, diagnostic, read_bytes)
         return read_once[key]
 
     return read
@@ -511,6 +530,235 @@ def _flush_quietly() -> None:
         pass
 
 
+# nex migrate (decision 0019, section 8)
+
+_VERIFIED = "structure verified; text outside the edits verified; behaviour not checked by this command"
+
+
+def _migrate(path: str, write: bool, files: migrate_files.Files | None = None) -> int:
+    """`nex migrate`: the routes of 8.2, the checks of 8.3 and, with `write`, the writing of G7.
+
+    Every file is read through `files` (8.9.2), once, and kept in memory: both front ends analyse
+    those bytes, and the writer reads them again before replacing anything (G7). The tests give
+    their own `files`; nothing else can.
+    """
+    from .legacy011 import diagnostics as diagnostics011
+    from .legacy011 import pipeline as pipeline011
+
+    files = files or migrate_files.Files()
+    if not path.endswith(".nex"):
+        print(f"error: nex migrate only migrates .nex files, not {path}", file=sys.stderr)
+        return EXIT_USAGE
+
+    read: dict[str, bytes] = {}       # the bytes of each file, as first read: key -> bytes
+    failed: list[str] = []
+
+    def read_bytes_once(file: Path | str) -> bytes:
+        # The program is known by the path it was given; a module, by its resolved path.
+        key = file if isinstance(file, str) else str(file)
+        if key not in read:
+            try:
+                read[key] = files.read(key)
+            except OSError:
+                failed.append(key)
+                raise
+            try:
+                migrate_files.decode(read[key])
+            except UnicodeDecodeError:
+                failed.append(key)
+                raise
+        return read[key]
+
+    try:
+        text, _ = migrate_files.decode(read_bytes_once(path))
+    except OSError as error:
+        _report((Diagnostic("E0001", f"{error.strerror or type(error).__name__}: {path}"),), Source(path, ""))
+        return EXIT_UNREADABLE_FILE
+    except UnicodeDecodeError:
+        _report((Diagnostic("E0002", f"{path} must be saved as UTF-8 text"),), Source(path, ""))
+        return EXIT_UNREADABLE_FILE
+
+    entry011 = diagnostics011.Source(path, text)
+    old = pipeline011.analyze(entry011, require_main=False, read=_module_reader(
+        entry011, diagnostics011.Source, diagnostics011.Diagnostic, read_bytes_once))
+    entry012 = Source(path, text)
+    new = analyze(entry012, require_main=False, read=_module_reader(entry012, read_bytes=read_bytes_once))
+    if failed:
+        # A module of the program could not be read: like the program itself, exit 4 (8.7.1).
+        _write_reports(tuple((d, s) for d, s in new.project.reports() if d.code in ("E0001", "E0002")))
+        print(f"error: {path}: a file of the program could not be read; nothing was migrated", file=sys.stderr)
+        return EXIT_UNREADABLE_FILE
+
+    if not old.ok and new.ok:
+        print(f"{path}: the program is already written in the syntax of 0.12; nothing to migrate")
+        return EXIT_OK
+    if not old.ok:
+        return _migrate_refused_both(path, old, new, diagnostics011)
+    if new.ok:
+        return _migrate_nothing(path, old, new)
+    return _migrate_files(path, old, read, write, files)
+
+
+def _migrate_modules(analysis) -> list:
+    """The modules of a program, in the order of their paths (G6, G7). The program is known by
+    the path it was given and a module by its resolved path, so both are resolved to be ordered."""
+    return sorted(analysis.project.modules, key=lambda module: _real_path(module.path))
+
+
+def _real_path(key: str) -> str:
+    return str(Path(key).resolve())
+
+
+def _migrate_refused_both(path: str, old, new, diagnostics011) -> int:
+    """8.2: a program that is neither a program of 0.11 nor one of 0.12, and why (8.2.1)."""
+    from .lexer import tokenize
+
+    print(f"error: {path}: this program passes neither the check of 0.11 nor the check of 0.12; "
+          "nothing was written", file=sys.stderr)
+    for module in _migrate_modules(new):
+        tokens, lexical = tokenize(module.source)
+        found = "it has lexical errors" if lexical else migrate.describe_markers(*migrate.markers(tokens))
+        print(f"  {module.source.name}: {found}", file=sys.stderr)
+    print("\nWith the front end of 0.11:\n", file=sys.stderr)
+    for diagnostic, source in old.project.reports():
+        print(diagnostics011.render(diagnostic, source), file=sys.stderr)
+        print(file=sys.stderr)
+    print("With the front end of 0.12:\n", file=sys.stderr)
+    _write_reports(new.project.reports())
+    return EXIT_INVALID_PROGRAM
+
+
+def _migrate_nothing(path: str, old, new) -> int:
+    """8.2.2: both checks pass, so no file has a function. The two safety checks still run."""
+    trees = {module.path: module.program for module in new.project.modules}
+    refusals = []
+    for module in _migrate_modules(old):
+        plan = migrate.plan(module.source.text, module.tokens, module.program)
+        if module.program.functions or plan.edits:
+            # Premise 3 of 8.2.2 is broken: a defect of NEXORA, not of the program.
+            print(f"internal error: {module.source.name} passes both checks and has something to migrate. "
+                  "This is a bug in NEXORA; nothing was written.", file=sys.stderr)
+            return EXIT_INTERNAL_ERROR
+        refusals += [(module.source.name, refusal) for refusal in plan.refusals]
+        if not refusals and not migrate.equivalent(module.program, trees[module.path]):
+            print(f"error: {module.source.name}: 0.11 and 0.12 read this file differently; "
+                  "nothing was written", file=sys.stderr)
+            return EXIT_INVALID_PROGRAM
+    if refusals:
+        return _migrate_refusals(path, refusals)
+    print(f"{path}: nothing to migrate: the program reads the same in 0.11 and in 0.12")
+    return EXIT_OK
+
+
+def _migrate_refusals(path: str, refusals) -> int:
+    """G5 and 8.6: every reason, with its file and position; nothing is written."""
+    for shown, refusal in refusals:
+        print(f"{shown}:{refusal.line}:{refusal.column}: {refusal.message}", file=sys.stderr)
+    print(f"error: {path}: nex migrate cannot decide {len(refusals)} "
+          f"{'case' if len(refusals) == 1 else 'cases'} for you; nothing was written", file=sys.stderr)
+    return EXIT_INVALID_PROGRAM
+
+
+def _migrate_files(path: str, old, read: dict[str, bytes], write: bool, files: migrate_files.Files) -> int:
+    """The route "migrate": the edits of every file (8.5), G2, G4 and G3, and then G7 or the text."""
+    modules = _migrate_modules(old)
+    plans, refusals = {}, []
+    for module in modules:
+        plan = migrate.plan(module.source.text, module.tokens, module.program)
+        plans[module.path] = plan
+        refusals += [(module.source.name, refusal) for refusal in plan.refusals]
+    if refusals:
+        return _migrate_refusals(path, refusals)
+
+    outputs = {}
+    for module in modules:
+        output = migrate.apply(module.source.text, plans[module.path].edits)
+        if not migrate.kept_outside(module.source.text, plans[module.path].edits, output):
+            return _migrate_defect(module.source.name, "a character outside the edits changed (G2)")
+        outputs[module.path] = output
+
+    # G4: the migrated program, read from memory, passes the check of 0.12.
+    def migrated_bytes(file: Path) -> bytes:
+        key = str(file)
+        return migrate_files.encode(outputs[key], read[key].startswith(migrate_files.BOM))
+
+    entry = Source(path, outputs[path])
+    checked = analyze(entry, require_main=False, read=_module_reader(entry, read_bytes=migrated_bytes))
+    if not checked.ok:
+        _write_reports(checked.project.reports())
+        return _migrate_defect(path, "the migrated program does not pass the check of 0.12 (G4)")
+    # G3: every file has the structure it had.
+    trees = {module.path: module.program for module in checked.project.modules}
+    for module in modules:
+        if not migrate.equivalent(module.program, trees[module.path]):
+            return _migrate_defect(module.source.name, "the migrated file is not structurally equivalent (G3)")
+
+    shown = {_real_path(module.path): module.source.name for module in modules}
+    if not write:
+        for module in modules:
+            edits = plans[module.path].edits
+            if not edits:
+                continue
+            print(f"--- {module.source.name}: {len(edits)} {'edit' if len(edits) == 1 else 'edits'}")
+            for edit in edits:
+                line, column = _position(module.source.text, edit.start)
+                before = module.source.text[edit.start:edit.end]
+                print(f"  {line}:{column}  {edit.kind}  {before!r} -> {edit.text!r}")
+            print(f"--- {module.source.name}: migrated text")
+            sys.stdout.write(outputs[module.path])
+            if not outputs[module.path].endswith(("\n", "\r")):
+                print()
+        print(_VERIFIED)
+        print("Nothing was written. Run it again with --write to replace the files.")
+        return EXIT_OK
+
+    planned = [migrate_files.Planned(_real_path(module.path), read[module.path],
+                                     migrate_files.encode(outputs[module.path],
+                                                          read[module.path].startswith(migrate_files.BOM)))
+               for module in modules]
+    report = migrate_files.write_all(planned, files)
+    if report.changed:
+        for key in report.changed:
+            print(f"{shown[key]}: This file changed while it was being migrated: run nex migrate again",
+                  file=sys.stderr)
+        print(f"error: {path}: nothing was written", file=sys.stderr)
+        return EXIT_INVALID_PROGRAM
+    for key in report.replaced:
+        print(f"replaced: {shown[key]}")
+    if report.ok:
+        if not report.replaced:
+            print(f"{path}: no file needed an edit")
+        print(_VERIFIED)
+        return EXIT_OK
+    sys.stdout.flush()
+    failed, reason = report.failed
+    what = "was interrupted" if report.interrupted else "could not be written"
+    print(f"error: {path}: {shown[failed]} {what}; the files already replaced stay replaced", file=sys.stderr)
+    print(f"  replaced: {', '.join(shown[key] for key in report.replaced) or '(none)'}", file=sys.stderr)
+    print(f"  failed: {shown[failed]} ({reason})", file=sys.stderr)
+    print(f"  not written: {', '.join(shown[key] for key in report.not_written) or '(none)'}", file=sys.stderr)
+    return EXIT_INTERRUPTED if report.interrupted else EXIT_UNREADABLE_FILE
+
+
+def _migrate_defect(shown: str, what: str) -> int:
+    """Code 70 (8.7.1): a check that the edits are designed to pass did not pass."""
+    print(f"internal error: {shown}: {what}. This is a bug in NEXORA; nothing was written.", file=sys.stderr)
+    return EXIT_INTERNAL_ERROR
+
+
+def _position(text: str, offset: int) -> tuple[int, int]:
+    """The line and column of an offset, with the line endings the lexer reads."""
+    line, start, index = 1, 0, 0
+    while index < offset:
+        character = text[index]
+        if character == "\r" or character == "\n":
+            if character == "\r" and index + 1 < len(text) and text[index + 1] == "\n":
+                index += 1
+            line, start = line + 1, index + 1
+        index += 1
+    return line, offset - start + 1
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point of `nex`. Returns the process exit code."""
     _use_utf8()
@@ -537,6 +785,8 @@ def main(argv: list[str] | None = None) -> int:
         if arguments.command == "test":
             return _test(arguments.file, arguments.format, arguments.function,
                          tuple(arguments.allow_read), tuple(arguments.allow_write))
+        if arguments.command == "migrate":
+            return _migrate(arguments.file, arguments.write)
         if arguments.command == "symbols":
             return _analysis_command(
                 arguments.file, arguments.format,

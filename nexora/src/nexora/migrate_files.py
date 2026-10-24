@@ -100,23 +100,27 @@ def encode(text: str, had_bom: bool) -> bytes:
 
 
 def write_all(planned: list[Planned], files: Files | None = None) -> Report:
-    """Writes the migrated files under G7. It only writes the files it is given."""
+    """Writes the migrated files under G7. It only writes the files it is given, and of those only
+    the ones whose output differs from their original: the others are only read again."""
     files = files or Files()
     for item in planned:
         if not item.path.endswith(".nex"):
             raise ValueError(f"nex migrate only writes .nex files, not {item.path}")
 
-    # The final re-read: nothing is written if any file changed since it was migrated.
+    # The final re-read, of every file of the program, also the ones that need no edit: nothing
+    # is written if any file changed since it was migrated.
     changed = tuple(item.path for item in planned if files.read(item.path) != item.original)
     if changed:
-        return Report(changed=changed, not_written=tuple(sorted(i.path for i in planned)))
+        return Report(changed=changed, not_written=tuple(sorted(i.path for i in planned if i.output != i.original)))
 
-    ordered = sorted(planned, key=lambda item: item.path)
+    # A file whose output is its original needs no writing.
+    ordered = sorted((item for item in planned if item.output != item.original), key=lambda item: item.path)
     replaced: list[str] = []
     for position, item in enumerate(ordered):
-        temporary = files.temporary_name(item.path)
+        temporary = None
         created = False
         try:
+            temporary = files.temporary_name(item.path)
             files.create(temporary)
             created = True
             files.write(temporary, item.output)
@@ -125,7 +129,7 @@ def write_all(planned: list[Planned], files: Files | None = None) -> Report:
             created = False
             replaced.append(item.path)
         except (OSError, KeyboardInterrupt) as stop:
-            if created:
+            if created and temporary is not None:
                 _remove(files, temporary)
             rest = tuple(other.path for other in ordered[position + 1:])
             if isinstance(stop, KeyboardInterrupt):

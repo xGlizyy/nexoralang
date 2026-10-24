@@ -15,8 +15,10 @@ import dataclasses
 import re
 from dataclasses import dataclass
 
+from . import ast_nodes as ast012
 from .legacy011 import ast_nodes as ast
 from .legacy011.tokens import Token, TokenType
+from .tokens import TokenType as TokenType012
 
 # The words that become keywords in 0.12 (decision 0019, section 9).
 NEW_KEYWORDS = ("needs", "gives", "promises", "keeps", "shrinks", "trust")
@@ -304,3 +306,97 @@ def kept_outside(text: str, edits: tuple[Edit, ...], output: str) -> bool:
         out += len(edit.text)
         position = edit.end
     return output[out:] == text[position:]
+
+
+# 8.4: structural equivalence
+
+def equivalent(old: ast.Program, new: ast012.Program) -> bool:
+    """G3 (8.4): the 0.11 tree of a file and the 0.12 tree of its migrated text are equal, field by
+    field, after the mapping of 8.4. Positions are never compared; the order of examples among the
+    clauses is not in the 0.11 tree, so it is left to G2 (8.4.1). `new` is a tree of `ast_nodes`."""
+    from . import ast_nodes as ast012
+
+    return _normal_011(ast.to_dict(old)) == _normal_012(ast012.to_dict(new))
+
+
+def _without_positions(node):
+    if isinstance(node, dict):
+        return {key: _without_positions(value) for key, value in node.items()
+                if key != "span" and not key.endswith("_span")}
+    if isinstance(node, list):
+        return [_without_positions(item) for item in node]
+    return node
+
+
+def _normal_011(tree):
+    def normal(node):
+        if isinstance(node, list):
+            return [normal(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+        node = {key: normal(value) for key, value in node.items()}
+        kind = node.get("kind")
+        if kind == "Function":
+            returned = node["return_type"]
+            if returned == {"kind": "TypeRef", "name": "Void", "arguments": [], "qualifier": None}:
+                node["return_type"] = None     # 0.11 `-> Void` is 0.12 "no gives"
+        elif kind in ("Contract", "LoopClause"):
+            node["clause"] = CLAUSE_WORDS.get(node["clause"], node["clause"])
+        elif kind == "Call":
+            node["callee"] = _renamed(node["callee"])
+        return node
+
+    return normal(_without_positions(tree))
+
+
+def _normal_012(tree):
+    absent = object()
+
+    def normal(node):
+        if isinstance(node, list):
+            return [normal(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+        node = {key: normal(value) for key, value in node.items()}
+        kind = node.get("kind")
+        if kind == "Function":
+            # 8.4.1: the header is projected onto the two lists of the 0.11 tree.
+            header = node.pop("header")
+            node["contracts"] = [item for item in header if item["kind"] == "Contract"]
+            node["examples"] = [item for item in header if item["kind"] == "Example"]
+        elif kind in ("Contract", "LoopClause"):
+            # The 0.11 tree has no names: every name must be absent.
+            if node.pop("name", absent) is not None:
+                node["name"] = "a name the 0.11 tree cannot have"
+        return node
+
+    return normal(_without_positions(tree))
+
+
+def _renamed(callee: str) -> str:
+    owner, _, function = callee.partition(".")
+    if owner in ("Option", "Result") and function in RENAMED_FUNCTIONS:
+        return f"{owner}.{RENAMED_FUNCTIONS[function]}"
+    return callee
+
+
+# 8.2.1: markers, for the diagnosis only
+
+def markers(tokens) -> tuple[bool, bool]:
+    """Whether the tokens of a file (from the 0.12 lexer) have the markers of the old syntax and
+    of the new one. They explain a refusal; they never decide a route."""
+    new_words = {TokenType012.GIVES, TokenType012.NEEDS, TokenType012.PROMISES, TokenType012.KEEPS,
+                 TokenType012.SHRINKS, TokenType012.TRUST}
+    old = any(token.type in (TokenType012.ARROW, TokenType012.OLD_CLAUSE) for token in tokens)
+    new = any(token.type in new_words for token in tokens)
+    return old, new
+
+
+def describe_markers(old: bool, new: bool) -> str:
+    if old and new:
+        return "mixed: it has markers of 0.11 and of 0.12"
+    if old:
+        return "markers of 0.11"
+    if new:
+        return "markers of 0.12"
+    return "neutral: no marker of either syntax"
