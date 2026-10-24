@@ -65,7 +65,9 @@ def test_only_the_cli_touches_the_operating_system():
         # worker.py is the other entry point: it reads its request from standard input.
         # host.py is the only module that gives a program its files, and it does it for the
         # paths the user allowed (decision 0015).
-        if path.name in ("cli.py", "__main__.py", "worker.py", "host.py"):
+        # migrate_files.py is the only module that writes files, for `nex migrate --write`
+        # (decision 0019, G7); the tests below pin down what it may do and who uses it.
+        if path.name in ("cli.py", "__main__.py", "worker.py", "host.py", "migrate_files.py"):
             continue
         names = set()
         for node in python_ast.walk(python_tree(path)):
@@ -97,6 +99,61 @@ def test_the_only_file_access_is_reading_the_program():
     attributes = {node.attr for node in python_ast.walk(tree) if isinstance(node, python_ast.Attribute)}
     assert "read_bytes" in attributes
     assert attributes & {"write_text", "write_bytes", "unlink", "mkdir", "rmdir", "rename", "system", "popen"} == set()
+    # `nex migrate --write` writes through migrate_files.py, never by itself: cli.py asks the
+    # operating system for nothing that changes a file.
+    os_calls = {node.func.attr for node in python_ast.walk(tree)
+                if isinstance(node, python_ast.Call) and isinstance(node.func, python_ast.Attribute)
+                and isinstance(node.func.value, python_ast.Name) and node.func.value.id == "os"}
+    # (It opens os.devnull, which changes no file; that is not on the list.)
+    assert os_calls & {"write", "replace", "rename", "remove", "unlink", "chmod", "mkdir", "rmdir"} == set()
+
+
+# The one module that writes files: migrate_files.py (decision 0019, G7)
+
+# What it may ask the operating system: open, read, write and close a file, read and copy its
+# permission bits, replace one file by another, remove a file, and draw a random name.
+WRITER_OS_CALLS = {"open", "read", "write", "close", "stat", "chmod", "replace", "remove", "urandom"}
+
+
+def test_the_writer_only_asks_the_system_for_its_few_operations_and_only_inside_files():
+    tree = python_tree(PACKAGE / "migrate_files.py")
+    found = {}
+    for klass in [node for node in tree.body if isinstance(node, python_ast.ClassDef)]:
+        for node in python_ast.walk(klass):
+            if (isinstance(node, python_ast.Call) and isinstance(node.func, python_ast.Attribute)
+                    and isinstance(node.func.value, python_ast.Name) and node.func.value.id == "os"):
+                found.setdefault(klass.name, set()).add(node.func.attr)
+    assert set(found) == {"Files"}
+    assert found["Files"] <= WRITER_OS_CALLS
+    # Outside the class `Files`, no function calls the operating system directly.
+    outside = [node for node in tree.body if not isinstance(node, python_ast.ClassDef)]
+    for top in outside:
+        for node in python_ast.walk(top):
+            if isinstance(node, python_ast.Call) and isinstance(node.func, python_ast.Attribute):
+                assert not (isinstance(node.func.value, python_ast.Name) and node.func.value.id == "os"), \
+                    python_ast.unparse(node)
+
+
+def test_only_the_cli_uses_the_writer():
+    for path in MODULES:
+        if path.name in ("cli.py", "migrate_files.py"):
+            continue
+        for node in python_ast.walk(python_tree(path)):
+            if isinstance(node, python_ast.ImportFrom):
+                module = node.module or ""
+                assert "migrate_files" not in module and "migrate_files" not in {a.name for a in node.names}, path.name
+            elif isinstance(node, python_ast.Import):
+                assert not any("migrate_files" in alias.name for alias in node.names), path.name
+
+
+def test_the_writer_only_writes_nex_files(tmp_path):
+    from nexora.migrate_files import Planned, write_all
+
+    other = tmp_path / "secrets.env"
+    other.write_text("TOKEN=1\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        write_all([Planned(str(other), other.read_bytes(), b"")])
+    assert other.read_text(encoding="utf-8") == "TOKEN=1\n"
 
 
 def test_the_package_has_no_runtime_dependencies():
