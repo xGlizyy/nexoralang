@@ -1,0 +1,6 @@
+fn main() -> Void {
+    let count = 3
+    if count {
+        print("some")
+    }
+}

@@ -1,0 +1,14 @@
+fn unit_price(total_cents: Int, units: Int) -> Int {
+    requires units > 0
+    ensures result >= 0
+    return total_cents / units
+}
+
+fn report(total_cents: Int, units: Int) -> Void {
+    let price = unit_price(total_cents, units)
+    print("Price: " + to_text(price))
+}
+
+fn main() -> Void {
+    report(1200, 3)
+}

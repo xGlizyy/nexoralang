@@ -1,0 +1,17 @@
+fn find(names: List[Text], wanted: Text) -> Option[Int] {
+    var index = 0
+    while index < List.length(names) {
+    decreases List.length(names) - index, "Each turn looks at one more name"
+        if List.get(names, index) == wanted {
+            return Some(index)
+        }
+        index = index + 1
+    }
+    return None
+}
+
+fn main() -> Void {
+    let names = ["ada", "grace"]
+    print(Option.unwrap_or(find(names, "grace"), -1))
+    print(Option.unwrap_or(find(names, "nobody"), -1))
+}

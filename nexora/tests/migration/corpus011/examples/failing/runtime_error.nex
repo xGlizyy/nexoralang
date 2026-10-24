@@ -1,0 +1,10 @@
+// Fails on purpose while running. It passes `nex check`: the error depends on a computed value.
+// `nex run examples/failing/runtime_error.nex` prints the first line, then reports the
+// division by zero and exits with code 3.
+fn main() -> Void {
+    let items = 12
+    let people = 3 - 3
+    print("Sharing the items...")
+    print(items / people)
+    print("This line is never reached")
+}

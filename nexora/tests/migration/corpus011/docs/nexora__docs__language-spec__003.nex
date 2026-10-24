@@ -1,0 +1,4 @@
+fn main() -> Void {
+    let xs = []                             // the type of the elements is unknown
+    print([])                               // neither is it here
+}

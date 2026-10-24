@@ -1,0 +1,8 @@
+fn main() -> Void {
+    let total = 10
+    if total > 5 {
+        let double = total * 2   // reads 'total' from the outer block
+        print(double)
+    }
+    // 'double' no longer exists here
+}

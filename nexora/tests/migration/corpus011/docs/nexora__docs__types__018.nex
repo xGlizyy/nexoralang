@@ -1,0 +1,11 @@
+fn parse(text: Text) -> Result[Int, Text] {
+    if Int.can_parse(text) {
+        return Ok(Int.parse(text))
+    }
+    return Err("not a whole number")
+}
+
+fn main() -> Void {
+    print(Result.unwrap_or(parse("42"), -1))
+    print(Result.error(parse("forty two")))
+}

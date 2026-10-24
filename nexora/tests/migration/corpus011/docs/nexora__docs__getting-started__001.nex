@@ -1,0 +1,6 @@
+fn main() -> Void {
+    let name = "Ada"
+    let year = 1843
+    print(name)
+    print(year)
+}

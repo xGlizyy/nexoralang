@@ -1,0 +1,7 @@
+fn main() -> Void {
+    print(square(7))
+}
+
+fn square(n: Int) -> Int {
+    return n * n
+}

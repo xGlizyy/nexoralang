@@ -1,0 +1,15 @@
+type Grade = Float where value >= 0.0 and value <= 100.0, "A grade goes from 0 to 100"
+
+fn average(total: Int, count: Int) -> Grade {
+    requires count > 0, "An average needs at least one mark"
+    return Grade(to_float(total) / to_float(count))
+}
+
+fn main() -> Void {
+    let mean = average(270, 4)
+    if mean >= 50.0 {
+        print("Passed with " + to_text(mean))
+    } else {
+        print("Failed")
+    }
+}

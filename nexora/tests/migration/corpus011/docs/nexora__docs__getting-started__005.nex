@@ -1,0 +1,15 @@
+fn describe(temperature: Int) -> Text {
+    if temperature < 0 {
+        return "freezing"
+    } else if temperature < 20 {
+        return "cool"
+    } else {
+        return "warm"
+    }
+}
+
+fn main() -> Void {
+    print(describe(-5))
+    print(describe(12))
+    print(describe(30))
+}

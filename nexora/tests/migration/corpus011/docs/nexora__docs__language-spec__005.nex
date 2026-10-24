@@ -1,0 +1,10 @@
+fn main() -> Void {
+    let numbers = [1, 2, 3]
+    let empty: List[Int] = []
+    let nested = [[1], [2, 3]]
+    print(numbers)
+    print(empty)
+    print(nested)
+    print(numbers == [1, 2, 3])
+    print(empty == [])
+}

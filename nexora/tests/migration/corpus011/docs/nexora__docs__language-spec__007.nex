@@ -1,0 +1,5 @@
+fn main() -> Void {
+    var count = 0                 // inferred type: Int
+    var total: Float = 0.0        // annotated type
+    count = count + 1             // assignment
+}

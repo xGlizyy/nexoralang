@@ -1,0 +1,13 @@
+fn main() -> Void {
+    let xs = [1, 2, 3]
+    print(xs)
+    print(List.length(xs))
+    print(List.get(xs, 1))
+    print(List.append(xs, 4))
+    print(List.contains(xs, 2))
+    var total = 0
+    for x in xs {
+        total = total + x
+    }
+    print(total)
+}

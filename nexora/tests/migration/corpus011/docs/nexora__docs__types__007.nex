@@ -1,0 +1,4 @@
+fn main() -> Void {
+    let a: String = "x"        // the text type is called Text
+    let b: Void = 1            // a variable cannot be Void
+}

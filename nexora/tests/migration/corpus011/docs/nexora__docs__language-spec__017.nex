@@ -1,0 +1,12 @@
+fn total(xs: List[Int]) -> Int {
+    var sum = 0
+    for x in xs {
+        invariant sum >= 0, "The total is never negative"
+        sum = sum + x
+    }
+    return sum
+}
+
+fn main() -> Void {
+    print(total([1, 2, 3, 4]))
+}

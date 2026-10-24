@@ -1,0 +1,4 @@
+fn main() -> Void {
+    let nothing = print("x")           // there is no value to store
+    print(print("x"))                  // nor to pass as an argument
+}

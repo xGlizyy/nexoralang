@@ -1,0 +1,9 @@
+fn add(a: Int, b: Int) -> Int {
+    return a + b
+}
+
+fn main() -> Void {
+    print(add(1))
+    print(add(1, "2"))
+    print(ad(1, 2))
+}

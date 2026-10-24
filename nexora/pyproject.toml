@@ -52,6 +52,10 @@ addopts = "--strict-markers"
 [tool.coverage.run]
 source = ["nexora"]
 branch = true
+# The frozen 0.11 front end of `nex migrate` is a byte copy of code that was covered while it
+# was live. It is checked by tests/test_legacy011.py (its diagnostics on the frozen corpus, and
+# that its files never change), not by line coverage. It goes away in 0.13.0 (decision 0019).
+omit = ["*/nexora/legacy011/*"]
 
 [tool.coverage.report]
 show_missing = true

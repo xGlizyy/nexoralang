@@ -1,0 +1,19 @@
+{
+ "description": "SHA-256 of each file of the frozen 0.11 front end, taken when it was copied from nexora 0.11.0 at commit 1af12a9. The files must not change (decision 0019, 8.2).",
+ "files": {
+  "ast_nodes.py": "d752159838382f41acb181fe3159971a0d37403eaee34b5d1cf250c537bdd87c",
+  "capabilities.py": "009c8cbbafa97562baa2a7149a5bfb50594ba1ff65234da864aa5e1082b4898d",
+  "checker.py": "726466295945f2fef1eae5f01e9bd5a572ca1e0980d2b13732d4e6113cc737eb",
+  "diagnostics.py": "9857782767903256cc7a17be110c13746645b12d64f6c0a643083b747e76bb87",
+  "interpreter.py": "b828c438b722a78e7f966c304a22d55ac9106971d57eea809cf69a438fb61e09",
+  "lexer.py": "4a9f64efcdccd85a320816f39ee3584a4b8b11c94241b791713611be3bc1df68",
+  "modules.py": "4f7b979d3e6aeb2c7d1b71ee2538508c2405592ae978c2704fcf39d01dd73f91",
+  "parser.py": "abfc6e876d2c87146aa9de60451cb17017c105ef5c1a5ae5fda319eab85d6d41",
+  "pipeline.py": "b74ed7d849f3c550f4239e7eec05ec8cf24fee0314ca2702d725fc9d6bdb93bd",
+  "prelude.py": "4bb6bd3923bb52c472fad1020ae172fa86c3d52aaad8b6cba494c21b5384cebe",
+  "tokens.py": "5d7f4a3b1fd00e8d5df77b77b83a6c85728d2ef8a8d6534f8454fcea6ccde45e",
+  "type_adapter.py": "91de22c4ca95cd1735b8178e2587df71f6c60615ef867d70fc8d5ca1effd6cf2",
+  "types.py": "9d8e644a42461b7702b6fcc35077fe6e65825612bed2fdf8b931014308d22e26",
+  "values.py": "e4582bef75c7278c0b5ffa1d92e474d8e270793cba7bfbbb4f9556c580ae161f"
+ }
+}

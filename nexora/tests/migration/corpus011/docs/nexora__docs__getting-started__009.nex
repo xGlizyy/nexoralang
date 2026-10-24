@@ -1,0 +1,6 @@
+fn main() -> Void {
+    let items = 12
+    let people = 3 - 3
+    print("Sharing...")
+    print(items / people)
+}

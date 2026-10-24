@@ -1,0 +1,9 @@
+fn main() -> Void {
+    var count = 3
+    while count > 0 {
+        decreases count, "One step closer to zero on every turn"
+        print(count)
+        count = count - 1
+    }
+    print("liftoff")
+}

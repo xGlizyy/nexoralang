@@ -1,0 +1,26 @@
+// Functions that carry their own examples: concrete inputs and the result they must give.
+//
+// `nex test examples/checked_examples.nex` evaluates every example, each on its own, and checks the
+// contracts of everything that runs. The analysis never evaluates an example, and `nex run`
+// ignores them: it runs main, as always.
+
+type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
+type Cents = Int where value >= 0, "An amount of money cannot be negative"
+
+fn apply_discount(price: Cents, percent: Percent) -> Cents {
+    ensures result <= price, "A discount never raises the price"
+    example apply_discount(10000, 20) == 8000, "Twenty percent off"
+    example apply_discount(999, 0) == 999, "No discount keeps the price"
+    return Cents(price * (100 - percent) / 100)
+}
+
+fn total(price: Cents, units: Int) -> Cents {
+    requires units > 0, "An order has at least one unit"
+    example total(250, 4) == 1000
+    example total(apply_discount(1000, 50), 3) == 1500
+    return Cents(price * units)
+}
+
+fn main() -> Void {
+    print(total(apply_discount(1200, 25), 2))
+}

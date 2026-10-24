@@ -1,0 +1,5 @@
+fn main() -> Void {
+    let a = to_float(1.5)      // expects an Int
+    let b = to_int(1)          // expects a Float
+    let c = to_int("12")       // there is no conversion from Text
+}

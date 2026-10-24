@@ -1,0 +1,13 @@
+fn divide(a: Float, b: Float) -> Float {
+    requires b != 0.0
+    return a / b
+}
+
+fn average(total: Float, count: Float) -> Float {
+    return divide(total, count)
+}
+
+fn main() -> Void {
+    print(average(90.0, 4.0))
+    print(average(90.0, 0.0))
+}

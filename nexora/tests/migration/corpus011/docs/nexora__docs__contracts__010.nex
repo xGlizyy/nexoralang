@@ -1,0 +1,16 @@
+fn average(total: Int, count: Int) -> Int {
+    requires count > 0, "There is nothing to average"
+    var quotient = 0
+    var rest = total
+    while rest >= count {
+        invariant quotient * count + rest == total, "No unit is lost while dividing"
+        decreases rest
+        rest = rest - count
+        quotient = quotient + 2
+    }
+    return quotient
+}
+
+fn main() -> Void {
+    print(average(10, 3))
+}

@@ -1,0 +1,11 @@
+fn main() -> Void {
+    let a = 10 + 2.5           // Int and Float do not mix
+    let b = 1 == 1.0           // not even when comparing
+    let c = true + 1           // a Bool does not allow arithmetic
+    let d = true < false       // nor ordering
+    let e = "a" + 1            // '+' joins Text with Text
+    let f = [1] == ["a"]       // lists compare elements of the same type
+    let g = 1 and 2            // 'and' needs two Bool
+    let h = not 0              // 'not' needs a Bool
+    let i = -"text"            // '-' needs a number
+}

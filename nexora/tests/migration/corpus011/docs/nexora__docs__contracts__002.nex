@@ -1,0 +1,9 @@
+fn half(n: Int) -> Int {
+    requires n
+    ensures result == "small"
+    return n / 2
+}
+
+fn main() -> Void {
+    print(half(8))
+}

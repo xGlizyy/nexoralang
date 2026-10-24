@@ -1,0 +1,17 @@
+fn sum_to(n: Int) -> Int {
+    requires n >= 0, "Only natural numbers"
+    ensures result == n * (n + 1) / 2
+    var total = 0
+    var i = 0
+    while i < n {
+        invariant total == i * (i + 1) / 2, "total is the sum of the numbers already added"
+        decreases n - i, "Each turn moves i one step closer to n"
+        i = i + 1
+        total = total + i
+    }
+    return total
+}
+
+fn main() -> Void {
+    print(sum_to(10000))
+}

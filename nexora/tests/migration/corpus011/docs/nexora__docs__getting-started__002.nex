@@ -1,0 +1,11 @@
+fn main() -> Void {
+    let title = "Analytical Engine"      // Text, deduced
+    let pages: Int = 25                  // Int, written
+    let price: Float = 19.99
+    let available: Bool = true
+
+    print(title)
+    print(pages * 2)
+    print(price / 2.0)
+    print(pages > 20 and available)
+}

@@ -1,0 +1,8 @@
+fn quantity(written: Text) -> Int {
+    requires Int.can_parse(written), "The quantity has to be written as a whole number"
+    return Int.parse(written)
+}
+
+fn main() -> Void {
+    print(quantity("12") * 2)
+}

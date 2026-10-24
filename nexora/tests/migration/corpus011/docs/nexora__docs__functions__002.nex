@@ -1,0 +1,7 @@
+fn label(count: Int) -> Text {
+    return count
+}
+
+fn main() -> Void {
+    print(label(3))
+}

@@ -1,0 +1,9 @@
+fn square(n: Int) -> Int {
+    return n * n
+}
+
+fn main() -> Void {
+    let side = 12
+    print("Side: " + to_text(side))
+    print("Area: " + to_text(square(side)))
+}

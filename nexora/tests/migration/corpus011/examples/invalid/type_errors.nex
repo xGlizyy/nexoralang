@@ -1,0 +1,26 @@
+// Invalid on purpose: type errors (category "type"). Every line of main breaks a typing rule.
+// `nex check examples/invalid/type_errors.nex` reports them all without running anything,
+// and exits with code 1.
+
+fn half(value: Float) -> Float {
+    return value / 2.0
+}
+
+fn label(count: Int) -> Text {
+    return count
+}
+
+fn main() -> Void {
+    let age: Int = "twenty"
+    let total = 10 + 2.5
+    let ok = true + 1
+    let big = 3 > "2"
+    let same = 1 == 1.0
+    let both = 1 and true
+    print(half(4))
+    print(half(1.0, 2.0))
+    if age {
+        print("adult")
+    }
+    let nothing = print("x")
+}

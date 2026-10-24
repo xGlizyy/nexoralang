@@ -1,0 +1,4 @@
+fn main() -> Void {
+    let total = 10
+    let total = 20
+}

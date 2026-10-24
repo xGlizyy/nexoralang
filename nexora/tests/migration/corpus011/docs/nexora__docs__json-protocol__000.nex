@@ -1,0 +1,7 @@
+fn double(n: Int) -> Int {
+    return n * 2
+}
+
+fn main() -> Void {
+    print(double("21"))
+}

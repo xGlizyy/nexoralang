@@ -1,0 +1,57 @@
+// Option and Result: saying "there is nothing here" or "this failed" without exceptions.
+//
+// An Option carries a value or its absence. A Result carries a value or an error. In both,
+// the variant is part of the value: None is never Some(x), and Ok(x) is never Err(x).
+
+fn find(names: List[Text], wanted: Text) -> Option[Int] {
+    var index = 0
+    while index < List.length(names) {
+    decreases List.length(names) - index, "Each turn looks at one more name"
+        if List.get(names, index) == wanted {
+            return Some(index)
+        }
+        index = index + 1
+    }
+    return None
+}
+
+fn parse(text: Text) -> Result[Int, Text] {
+    if Int.can_parse(text) {
+        return Ok(Int.parse(text))
+    }
+    return Err("not a whole number")
+}
+
+fn main() -> Void {
+    let names = ["ada", "grace", "alan"]
+
+    // An Option: the value, or its absence.
+    let found = find(names, "grace")
+    print(Option.is_some(found))
+    print(Option.is_none(found))
+    print(Option.unwrap_or(found, -1))
+    print(Option.unwrap_or(find(names, "nobody"), -1))
+
+    // A Result: the value, or the error that happened.
+    let good = parse("42")
+    let bad = parse("forty two")
+    print(Result.is_ok(good))
+    print(Result.is_err(bad))
+    print(Result.unwrap_or(good, 0))
+    print(Result.error(bad))
+
+    // The variants are different values, even with the same payload.
+    let same: Result[Int, Int] = Ok(1)
+    let other: Result[Int, Int] = Err(1)
+    print(same == same)
+    print(same == other)
+
+    // The absence is not a value: None is never Some(0).
+    let missing: Option[Int] = None
+    print(missing == Some(0))
+
+    // The value can also be read without a default, when the variant is known.
+    print(Option.unwrap(found))
+    print(Result.unwrap(good))
+    print(Result.error(bad))
+}

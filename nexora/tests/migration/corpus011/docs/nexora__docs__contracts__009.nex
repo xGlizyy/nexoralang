@@ -1,0 +1,18 @@
+fn gcd(a: Int, b: Int) -> Int {
+    requires a >= 0 and b >= 0, "Only natural numbers"
+    requires a > 0 or b > 0, "gcd(0, 0) is not defined"
+    var x = a
+    var y = b
+    while y != 0 {
+        invariant x >= 0 and y >= 0
+        decreases y, "The remainder is always smaller than the divisor"
+        let remainder = x - x / y * y
+        x = y
+        y = remainder
+    }
+    return x
+}
+
+fn main() -> Void {
+    print(gcd(1071, 462))
+}

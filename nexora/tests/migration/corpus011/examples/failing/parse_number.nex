@@ -1,0 +1,12 @@
+// Fails on purpose while running. It passes `nex check`, but reads a number from a text that is not
+// one. `nex run examples/failing/parse_number.nex` prints the first total, then reports the broken
+// 'requires' condition of Int.parse, with a hint, and exits with code 5.
+
+fn total(prices: Text) -> Int {
+    return Int.parse(prices) * 2
+}
+
+fn main() -> Void {
+    print(total("21"))
+    print(total("12a"))
+}
