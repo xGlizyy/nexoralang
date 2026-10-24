@@ -21,15 +21,26 @@ if (!fs.existsSync(source)) {
   process.exit(1);
 }
 
-fs.rmSync(target, { recursive: true, force: true });
-fs.mkdirSync(target, { recursive: true });
-const copied = [];
-for (const name of fs.readdirSync(source).sort()) {
-  if (name.endsWith('.py')) {
-    fs.copyFileSync(path.join(source, name), path.join(target, name));
-    copied.push(name);
+// The `.py` files of the package and of its subpackages, the directories that have an
+// `__init__.py` (the same ones setuptools puts in the wheel, such as `legacy011`). Nothing else
+// is copied: no `__pycache__`, no other files.
+function copyPackage(from, to, prefix, copied) {
+  fs.mkdirSync(to, { recursive: true });
+  const entries = fs.readdirSync(from, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1));
+  for (const entry of entries) {
+    const inner = path.join(from, entry.name);
+    if (entry.isFile() && entry.name.endsWith('.py')) {
+      fs.copyFileSync(inner, path.join(to, entry.name));
+      copied.push(prefix + entry.name);
+    } else if (entry.isDirectory() && entry.name !== '__pycache__' && fs.existsSync(path.join(inner, '__init__.py'))) {
+      copyPackage(inner, path.join(to, entry.name), `${prefix}${entry.name}/`, copied);
+    }
   }
 }
+
+fs.rmSync(target, { recursive: true, force: true });
+const copied = [];
+copyPackage(source, target, '', copied);
 fs.copyFileSync(path.join(root, '..', 'LICENSE'), path.join(root, 'LICENSE'));
 
 const versionFile = fs.readFileSync(path.join(source, 'version.py'), 'utf8');
