@@ -209,13 +209,17 @@ def test_a_file_that_cannot_be_read_is_code_4(tmp_path, monkeypatch, capsys):
     assert nex(["migrate", "latin.nex"], tmp_path, monkeypatch, capsys)[0] == 4
 
 
-def test_a_module_that_cannot_be_read_is_code_4_and_nothing_is_written(tmp_path, monkeypatch, capsys):
-    write(tmp_path, {"main.nex": OLD_MAIN})
+@pytest.mark.parametrize("module, error", [(None, "error[E0001]"), (b"pub fn f() -> Int {\n    return \xe9\n}\n", "error[E0002]")])
+def test_a_module_that_cannot_be_read_is_reported_as_by_every_command(module, error, tmp_path, monkeypatch, capsys):
+    # 8.7.1 gives code 4 to a file that cannot be read "as for every command": for a module, every
+    # command reports E0001 or E0002 and exits with 1. Nothing is written.
+    write(tmp_path, {"main.nex": OLD_MAIN, **({"lib/double.nex": module} if module else {})})
     before = snapshot(tmp_path)
-    code, _, err = nex(["migrate", "main.nex", "--write"], tmp_path, monkeypatch, capsys)
-    assert code == 4
-    assert "error[E0001]" in err and "a file of the program could not be read" in err
+    code, out, err = nex(["migrate", "main.nex", "--write"], tmp_path, monkeypatch, capsys)
+    assert (code, out) == (1, "")
+    assert error in err and "nothing was written" in err
     assert snapshot(tmp_path) == before
+    assert nex(["check", "main.nex"], tmp_path, monkeypatch, capsys)[0] == 1
 
 
 def test_wrong_usage_is_code_2(tmp_path, monkeypatch, capsys):
@@ -334,6 +338,33 @@ def test_an_injected_interruption_is_code_130_with_the_three_lists(step, tmp_pat
     assert code == 130
     assert out == "replaced: a.nex\n"
     assert err.splitlines()[1:] == ["  replaced: a.nex", "  failed: b.nex (interrupted)", "  not written: c.nex"]
+    assert sorted(snapshot(tmp_path)) == ["a.nex", "b.nex", "c.nex"]
+
+
+def test_a_temporary_file_that_could_not_be_removed_is_listed(tmp_path, monkeypatch, capsys):
+    write(tmp_path, THREE)
+    files = Faulty(fail="replace", at=2)
+    monkeypatch.setattr(files, "delete", lambda path: (_ for _ in ()).throw(OSError(13, "Permission denied")))
+    code, _, err = migrate_with(files, "a.nex", tmp_path, monkeypatch, capsys)
+    assert code == 4
+    left = [name for name in snapshot(tmp_path) if name.endswith(".tmp")]
+    assert len(left) == 1 and left[0].startswith("b.nex.")
+    assert err.splitlines()[-1] == (f"  left behind: {left[0]}, a temporary file that could not be removed "
+                                    "(Permission denied); it does not end in .nex, so no program reads it")
+
+
+def test_an_interruption_after_a_rename_lists_that_file_as_replaced(tmp_path, monkeypatch, capsys):
+    from test_migrate_files import LateInterrupt
+
+    write(tmp_path, THREE)
+    code, out, err = migrate_with(LateInterrupt(at=2), "a.nex", tmp_path, monkeypatch, capsys)
+    assert code == 130
+    assert out == "replaced: a.nex\nreplaced: b.nex\n"
+    assert err.splitlines() == [
+        "error: a.nex: interrupted; the files already replaced stay replaced",
+        "  replaced: a.nex, b.nex",
+        "  not written: c.nex",
+    ]
     assert sorted(snapshot(tmp_path)) == ["a.nex", "b.nex", "c.nex"]
 
 

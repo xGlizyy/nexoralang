@@ -551,22 +551,14 @@ def _migrate(path: str, write: bool, files: migrate_files.Files | None = None) -
         return EXIT_USAGE
 
     read: dict[str, bytes] = {}       # the bytes of each file, as first read: key -> bytes
-    failed: list[str] = []
 
     def read_bytes_once(file: Path | str) -> bytes:
-        # The program is known by the path it was given; a module, by its resolved path.
+        # The program is known by the path it was given; a module, by its resolved path. A module
+        # that cannot be read, or is not UTF-8, is E0001 or E0002 of the analysis, as in every
+        # command: code 4 is only for the file the command was given (8.7.1, "as for every command").
         key = file if isinstance(file, str) else str(file)
         if key not in read:
-            try:
-                read[key] = files.read(key)
-            except OSError:
-                failed.append(key)
-                raise
-            try:
-                migrate_files.decode(read[key])
-            except UnicodeDecodeError:
-                failed.append(key)
-                raise
+            read[key] = files.read(key)
         return read[key]
 
     try:
@@ -583,11 +575,6 @@ def _migrate(path: str, write: bool, files: migrate_files.Files | None = None) -
         entry011, diagnostics011.Source, diagnostics011.Diagnostic, read_bytes_once))
     entry012 = Source(path, text)
     new = analyze(entry012, require_main=False, read=_module_reader(entry012, read_bytes=read_bytes_once))
-    if failed:
-        # A module of the program could not be read: like the program itself, exit 4 (8.7.1).
-        _write_reports(tuple((d, s) for d, s in new.project.reports() if d.code in ("E0001", "E0002")))
-        print(f"error: {path}: a file of the program could not be read; nothing was migrated", file=sys.stderr)
-        return EXIT_UNREADABLE_FILE
 
     if not old.ok and new.ok:
         print(f"{path}: the program is already written in the syntax of 0.12; nothing to migrate")
@@ -731,12 +718,21 @@ def _migrate_files(path: str, old, read: dict[str, bytes], write: bool, files: m
         print(_VERIFIED)
         return EXIT_OK
     sys.stdout.flush()
-    failed, reason = report.failed
-    what = "was interrupted" if report.interrupted else "could not be written"
-    print(f"error: {path}: {shown[failed]} {what}; the files already replaced stay replaced", file=sys.stderr)
+    if report.failed is None:
+        # Interrupted between two files: none of them failed.
+        print(f"error: {path}: interrupted; the files already replaced stay replaced", file=sys.stderr)
+    else:
+        what = "was interrupted" if report.interrupted else "could not be written"
+        print(f"error: {path}: {shown[report.failed[0]]} {what}; the files already replaced stay replaced",
+              file=sys.stderr)
     print(f"  replaced: {', '.join(shown[key] for key in report.replaced) or '(none)'}", file=sys.stderr)
-    print(f"  failed: {shown[failed]} ({reason})", file=sys.stderr)
+    if report.failed is not None:
+        print(f"  failed: {shown[report.failed[0]]} ({report.failed[1]})", file=sys.stderr)
     print(f"  not written: {', '.join(shown[key] for key in report.not_written) or '(none)'}", file=sys.stderr)
+    if report.left is not None:
+        temporary, error = report.left
+        print(f"  left behind: {os.path.basename(temporary)}, a temporary file that could not be removed "
+              f"({error}); it does not end in .nex, so no program reads it", file=sys.stderr)
     return EXIT_INTERRUPTED if report.interrupted else EXIT_UNREADABLE_FILE
 
 
