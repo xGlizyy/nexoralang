@@ -31,6 +31,18 @@ test('the launcher runs the bundled interpreter', () => {
   const result = nex(['--version']);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.trim(), `NEXORA ${VERSION}`);
+
+  // `nex migrate` reads a 0.11 program with the frozen front end in the subpackage `legacy011`:
+  // it only works if the subpackages were bundled too.
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexora-npm-'));
+  try {
+    fs.writeFileSync(path.join(directory, 'old.nex'), 'fn main() -> Void {\n    print(1)\n}\n');
+    const migrated = nex(['migrate', 'old.nex'], { cwd: directory });
+    assert.equal(migrated.status, 0, migrated.stderr);
+    assert.match(lines(migrated.stdout), /fn main\(\) \{\n    print\(1\)\n\}/);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('it runs a program and passes its output through', () => {
@@ -59,7 +71,7 @@ test('JSON output stays clean JSON through the launcher', () => {
 test('relative paths are resolved from the directory of the caller', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexora-npm-'));
   try {
-    fs.writeFileSync(path.join(directory, 'local.nex'), 'fn main() -> Void {\n    print(6 * 7)\n}\n');
+    fs.writeFileSync(path.join(directory, 'local.nex'), 'fn main() {\n    print(6 * 7)\n}\n');
     const result = nex(['run', 'local.nex'], { cwd: directory });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(lines(result.stdout), '42\n');
@@ -135,17 +147,50 @@ test('an old Python is skipped and the next one is used', () => {
   assert.match(message, /python\.org/);
 });
 
+// Every file under a directory, as paths relative to it with '/', leaving out `__pycache__`.
+function filesUnder(directory, prefix = '') {
+  const found = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (entry.name === '__pycache__') continue;
+    if (entry.isDirectory()) found.push(...filesUnder(path.join(directory, entry.name), `${prefix}${entry.name}/`));
+    else found.push(prefix + entry.name);
+  }
+  return found.sort();
+}
+
 test('the package carries every module of the interpreter and nothing else from the repository', () => {
-  const source = fs.readdirSync(path.join(ROOT, '..', 'nexora', 'src', 'nexora')).filter((n) => n.endsWith('.py')).sort();
-  const bundled = fs.readdirSync(path.join(ROOT, 'python', 'nexora')).filter((n) => n !== '__pycache__').sort();
+  const sourceRoot = path.join(ROOT, '..', 'nexora', 'src', 'nexora');
+  const bundledRoot = path.join(ROOT, 'python', 'nexora');
+  // The modules of the package and of its subpackages (directories with an __init__.py), as in the wheel.
+  const isPackage = (file) => path.dirname(file) === '.' || fs.existsSync(path.join(sourceRoot, path.dirname(file), '__init__.py'));
+  const source = filesUnder(sourceRoot).filter((name) => name.endsWith('.py') && isPackage(name));
+  const bundled = filesUnder(bundledRoot);
+  assert.ok(source.some((name) => name.startsWith('legacy011/')), 'the subpackage legacy011 exists in the source');
   assert.deepEqual(bundled, source);
   for (const name of source) {
-    assert.equal(
-      fs.readFileSync(path.join(ROOT, 'python', 'nexora', name), 'utf8'),
-      fs.readFileSync(path.join(ROOT, '..', 'nexora', 'src', 'nexora', name), 'utf8'),
-      name,
-    );
+    assert.equal(fs.readFileSync(path.join(bundledRoot, name), 'utf8'), fs.readFileSync(path.join(sourceRoot, name), 'utf8'), name);
   }
+
+  // Every bundled module imports, from the bundled copy and nothing else (-I: no PYTHONPATH, no user site).
+  const found = findPython(process.env);
+  assert.ok(found.python, 'the tests need a Python 3.11+ on this machine');
+  const script = [
+    'import importlib, importlib.util, pathlib, sys',
+    'root = pathlib.Path(sys.argv[1])',
+    'sys.path.insert(0, str(root))',
+    'names = sorted("nexora." + ".".join(p.relative_to(root / "nexora").with_suffix("").parts)',
+    '               for p in (root / "nexora").rglob("*.py") if "__pycache__" not in p.parts)',
+    'names = [n[:-len(".__init__")] if n.endswith(".__init__") else n for n in names]',
+    'for name in names:',
+    '    # Importing __main__ would run the command line: it is only located, never executed.',
+    '    origin = importlib.util.find_spec(name).origin if name.endswith(".__main__") else importlib.import_module(name).__file__',
+    '    assert pathlib.Path(origin).resolve().is_relative_to(root.resolve()), origin',
+    'print(len(names))',
+  ].join('\n');
+  const imported = spawnSync(found.python.command, [...found.python.args, '-I', '-c', script, path.join(ROOT, 'python')],
+    { encoding: 'utf8' });
+  assert.equal(imported.status, 0, imported.stderr);
+  assert.equal(Number(imported.stdout.trim()), source.length);
 });
 
 test('npm test runs every test file of the package, and only files that exist', () => {
