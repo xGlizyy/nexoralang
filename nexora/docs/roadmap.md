@@ -54,6 +54,7 @@ there is a test that fails if it stops working.
 
 | Item | What there is | What is missing |
 |------|---------------|-----------------|
+| **0.12.0: the syntax and the evidence of [decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)** | Phase 1, implemented and validated locally on its own branch, not yet in `main`: clauses in the header (`needs`, `promises`, `trust`, `keeps`, `shrinks`), `gives`, clause names, `Option.value`, `nex migrate`, `nex check --evidence`, the [specification](language-spec.md) 0.12 and the equivalence tests with the published 0.11.0 (`tests/test_equivalence_011.py`, `tests/test_migrate_cli.py`) | Three stages, each with its own approval. **Integration**: merging it into `main` through a pull request, with the continuous integration green on GitHub, where its job `equivalence` has not run yet. **Release preparation**: the audit of versions, packages and clean installs, and the checklist. **Publication**: the version 0.12.0 on PyPI and npm, its tag, the VS Code extension and the website, which still runs 0.11.0 |
 | **Python API** (`nexora.tooling`) | Implemented and tested (`tests/test_tooling.py`) | Declaring it stable. Today it is experimental and may change |
 | **MCP server** (optional) | Seven analysis tools, tested with the client of the official SDK (`tests/test_mcp.py`). Checked by hand once in Claude Code. It does not run code | Testing it in other assistants. Including the specification in the installable package |
 | **Playground** (web) | Editor, API and execution in a separate process with limits; tested locally ([Playground](playground.md)) | Deploying it. Verifying the isolation with containers and the POSIX limits, which could not be tested on Windows |
@@ -78,6 +79,7 @@ solid:
 | 5 | **Refined types** (`type Percent = Int where ...`) | **Completed in 0.3.0** over the built-in types. Refining records is missing: it is not implemented |
 | 5b | **Loop requirements**: the measure (`decreases`) and the invariants (`invariant`), with their explanation, checked on every iteration | **Completed in 0.5.0** ([decision 0010](decisions/0010-var-y-while.md)) |
 | 6 | **Evaluating whether requirements in the code help an AI agent** not to break them | Planned; see the last row of [Under research](#under-research) |
+| 7 | **Promises with an identity, and what backs each one** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)): the clauses in the header of the function, names, `trust`, and the evidence of every clause | **Phase 1 completed locally** for 0.12.0, not published: the syntax, `nex migrate` and the enforcement (`nex check --evidence`). Planned: what the examples observe (`nex test --evidence`, 0.13.0), `nex impact` (0.14.0) and deciding a `needs` at the call sites with constants (later) |
 
 Until step 6 gives results, the feature is a hypothesis and is not presented as a
 proven advantage.
@@ -127,6 +129,7 @@ Ideas from the original design whose value or form is not decided:
 | 5 | Tools for agents: JSON protocol, `nex context`, `nex symbols`, Python API, MCP server | Implemented and tested locally, also the language server of the editor; no AI model has been evaluated |
 | 6 | Verifiable requirements: stable contracts, explanation of the rules and refined types | Completed (version 0.3.0). Examples (step 3) arrived in 0.4.0; steps 4 and 6 of the [main line](#main-line-verifiable-requirements) remain |
 | 7 | Repetition without recursion: `var` and loops that declare why they end and what they keep true | Completed (version 0.5.0) |
+| 8 | An identity of its own: promises in the header, `trust`, evidence per clause and `nex migrate` ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), phase 1) | Completed locally on the branch of 0.12.0 and validated with the suite and the equivalence tests; not integrated into `main` and not published |
 
 The website of the project (<https://nexoralang.org>, whose code is in a separate private repository)
 shows a summarized version of this roadmap. This document is the reference.
