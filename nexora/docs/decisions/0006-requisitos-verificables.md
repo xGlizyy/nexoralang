@@ -1,6 +1,8 @@
 # 0006 — Distinguishing feature: requirements are a verifiable part of the program
 
-- **Status:** accepted
+- **Status:** accepted. Its programs are written in the syntax of their time, before 0.12: since
+  0.12 the language writes them as [decision 0019](0019-identidad-propia-del-lenguaje.md) describes,
+  and `nex migrate` rewrites them.
 - **Version:** none yet. This decision sets a direction; it does not change the language by itself.
 
 ## Context

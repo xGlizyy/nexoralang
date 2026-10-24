@@ -1,7 +1,9 @@
 # 0019 — An identity of its own: promises, evidence and a syntax that says so
 
-- **Status:** accepted. The design is accepted; nothing in this document is implemented, and
-  phase 1 needs its own explicit authorization (8.11).
+- **Status:** accepted. **Phase 1 is implemented and validated locally** (2026-10-25), on the branch
+  of 0.12.0, which **is not published yet**; phases 2 to 4 have not started. When it was accepted
+  (2026-10-24): "The design is accepted; nothing in this document is implemented, and phase 1 needs
+  its own explicit authorization (8.11)."
 - **Version:** would start in 0.12.0
 - **Date:** 2026-10-24 (accepted)
 - **Incompatible:** yes. Every existing program with a function has to be migrated (sections 8

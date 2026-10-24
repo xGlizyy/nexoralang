@@ -1,6 +1,8 @@
 # 0018 — Modules and imports
 
-- **Status:** accepted
+- **Status:** accepted. Its programs are written in the syntax of their time, before 0.12: since
+  0.12 the language writes them as [decision 0019](0019-identidad-propia-del-lenguaje.md) describes,
+  and `nex migrate` rewrites them.
 - **Version:** 0.11.0 (state of the repository; not published in any package)
 - **Date:** 2026-10-22
 - **Working branch:** `feature/server-hardening`

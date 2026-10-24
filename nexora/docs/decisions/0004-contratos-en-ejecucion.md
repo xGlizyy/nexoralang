@@ -1,7 +1,13 @@
 # 0004 — Contracts at the beginning of the body, checked at run time
 
-- **Status:** accepted. It was experimental in 0.2; [decision 0007](0007-contratos-estables-y-tipos-refinados.md)
-  declares it stable in 0.3.0 without changing its syntax
+- **Status:** accepted. It was experimental in 0.2;
+  [decision 0007](0007-contratos-estables-y-tipos-refinados.md) declares it stable in 0.3.0 without
+  changing its syntax. **Since 0.12, [decision 0019](0019-identidad-propia-del-lenguaje.md) replaces
+  the position and the words of the clauses**: they go in the header of the function, between its
+  signature and its body, and are called `needs` (it was `requires`) and `promises` (it was
+  `ensures`). What they mean and when they are checked stand. Its programs are written in the syntax
+  of their time, before 0.12: since 0.12 the language writes them as
+  [decision 0019](0019-identidad-propia-del-lenguaje.md) describes, and `nex migrate` rewrites them.
 - **Version:** 0.2.0
 
 ## Decision

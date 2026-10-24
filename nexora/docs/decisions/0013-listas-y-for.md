@@ -1,6 +1,10 @@
 # 0013 — Lists, `for` over lists and the type model that supports them
 
-- **Status:** accepted
+- **Status:** accepted. **Since 0.12 the invariants of a `for` are written `keeps`**, in the header
+  of the loop ([decision 0019](0019-identidad-propia-del-lenguaje.md)); a `for` still has no
+  measure. Its programs are written in the syntax of their time, before 0.12: since 0.12 the
+  language writes them as [decision 0019](0019-identidad-propia-del-lenguaje.md) describes, and `nex
+  migrate` rewrites them.
 - **Version:** 0.7.0 (state of the repository; not published in any package)
 - **Date:** 2026-10-21
 - **Working branch:** `feature/server-hardening`

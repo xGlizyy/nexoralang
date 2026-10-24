@@ -1,6 +1,9 @@
 # 0003 — Functions with an explicit `return`, a single namespace and `if` as a statement
 
-- **Status:** accepted
+- **Status:** accepted. **Since 0.12, [decision 0019](0019-identidad-propia-del-lenguaje.md)
+  replaces the form of rule 1**: the result type is written after `gives` instead of `->`, and a
+  function that returns nothing has no `gives` (it was `-> Void`). The other rules of this decision
+  stand.
 - **Version:** 0.2.0
 
 ## Decision
