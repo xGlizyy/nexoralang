@@ -61,3 +61,19 @@ They pass `nex check`, because the failure depends on values that are only known
 | [`failing/refinement_violation.nex`](failing/refinement_violation.nex) | A computed value does not meet the condition of a refined type | `5` |
 | [`failing/loop_measure.nex`](failing/loop_measure.nex) | A loop that would not end: its measure stops decreasing | `5` |
 | [`failing/parse_number.nex`](failing/parse_number.nex) | Reads a number from a text that is not one: it breaks the `needs` of `Int.parse`, with a suggestion | `5` |
+
+## Migration from 0.11 (`migration/`)
+
+Written in the syntax of 0.11 **on purpose**, and kept as it was: it is not an example of how to
+write NEXORA today. It shows what `nex migrate` does with a program of 0.11
+([decision 0019](../docs/decisions/0019-identidad-propia-del-lenguaje.md),
+[CLI reference](../docs/cli-reference.md#nex-migrate)).
+
+| File | What happens | `nex run` ends with |
+|------|--------------|---------------------|
+| [`migration/before_0_12.nex`](migration/before_0_12.nex) | 0.12 rejects it without running it: `E1108` for `->` before the result type and `E1107` for `requires`, `ensures`, `invariant` and `decreases`. `nex migrate` shows it in the syntax of 0.12, and the migrated program prints what 0.11.0 printed | `1` |
+
+```bash
+nex migrate examples/migration/before_0_12.nex           # shows the edits and the migrated text
+nex migrate examples/migration/before_0_12.nex --write   # replaces the file
+```
