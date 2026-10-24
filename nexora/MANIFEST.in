@@ -4,3 +4,7 @@ include LICENSE CHANGELOG.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md
 recursive-include docs *.md *.json
 recursive-include examples *.nex *.md
 recursive-include tests *.py *.json *.stdout *.stderr
+# The frozen 0.11 corpus and the pin of the published 0.11.0, for the migration and equivalence
+# tests of decision 0019 (8.9). Their own extensions are not among the patterns above.
+recursive-include tests/migration/corpus011 *.nex
+include tests/migration/nexora-0.11.0.txt
