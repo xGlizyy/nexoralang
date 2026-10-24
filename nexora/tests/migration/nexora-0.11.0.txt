@@ -1,0 +1,4 @@
+# The published 0.11.0 package that the equivalence tests of decision 0019 (8.9) compare with.
+# Pinned by the SHA-256 that PyPI publishes for its wheel; installed with --require-hashes and
+# --no-deps (it has no dependencies) into an environment of its own (tests/test_equivalence_011.py).
+nexora-lang==0.11.0 --hash=sha256:1ce90dddcd2f7adb1b5a8ca96e6d88704d1cf725bed77c300a6b24d8441c3813
