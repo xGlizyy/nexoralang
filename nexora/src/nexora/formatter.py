@@ -56,7 +56,9 @@ _OPEN_GROUP = frozenset({TokenType.LPAREN, TokenType.LBRACKET})
 _CLOSE_GROUP = frozenset({TokenType.RPAREN, TokenType.RBRACKET})
 # The tokens that start the head of a function or of a loop. When that line does not end with
 # `{`, the lines of its header follow, one step further in, up to the `{` alone (decision 0019).
-_HEADS = frozenset({TokenType.FN, TokenType.PUB, TokenType.WHILE, TokenType.FOR})
+_HEADS = frozenset({TokenType.FN, TokenType.WHILE, TokenType.FOR})
+# The clauses that can have a name: `needs name: condition` (decision 0019).
+_CLAUSES = frozenset({TokenType.NEEDS, TokenType.PROMISES, TokenType.TRUST, TokenType.KEEPS, TokenType.SHRINKS})
 
 
 @dataclass(frozen=True)
@@ -148,13 +150,22 @@ def _render(source: str, tokens: list[Token]) -> str | None:
                 group += 1
             elif token.type in _CLOSE_GROUP:
                 group = max(0, group - 1)
-        if line and line[0].type in _HEADS and line[-1].type is not TokenType.LBRACE and group == 0:
+        if _opens_a_header(line) and group == 0:
             header = 1
 
     result = "".join(out)
     if result and not result.endswith(("\n", "\r")):
         result += "\n"
     return result
+
+
+def _opens_a_header(line: list[Token]) -> bool:
+    """Whether a line is the head of a function or a loop whose header follows on the next lines:
+    `fn`, `pub fn`, `while` or `for`, without the `{` of its body at the end."""
+    if not line or line[-1].type is TokenType.LBRACE:
+        return False
+    first = line[1] if line[0].type is TokenType.PUB and len(line) > 1 else line[0]
+    return first.type in _HEADS and (line[0].type is not TokenType.PUB or first.type is TokenType.FN)
 
 
 def _physical_lines(source: str) -> list[tuple[str, str]]:
@@ -197,9 +208,10 @@ def _needs_space(tokens: list[Token], index: int, parts: list[str]) -> bool:
     """Whether a space goes between the token written last and this one."""
     previous = tokens[index - 1]
     current = tokens[index]
-    if current.type is TokenType.LPAREN and (previous.type in _SPACE_AFTER or previous.type is TokenType.COLON):
-        # A parenthesis after a keyword or after the name of a clause opens an expression, not
-        # the arguments of a call: `needs ok: (x > 0 and`.
+    named_clause = index >= 3 and tokens[index - 3].type in _CLAUSES
+    if current.type is TokenType.LPAREN and previous.type is TokenType.COLON and named_clause:
+        # The condition of a named clause, `needs ok: (x > 0 and`: the name is followed by a
+        # space, as the type of a parameter is (decision 0019). Every other '(' keeps its shape.
         return True
     if previous.type in _NO_SPACE_AFTER or current.type in _NO_SPACE_BEFORE:
         return False

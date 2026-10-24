@@ -501,9 +501,15 @@ def test_inspect_has_a_qualifier_in_every_call():  # [20]
     assert (length["qualifier"], length["type"]) == ("Text", "Int")
     assert (length["callee_span"]["column"], length["callee_span"]["end_column"]) == (11, 22)
     jsonschema.validate(document, SCHEMAS["nexora-inspect.schema.json"])
-    # `nexora.inspect/3` (decision 0019, 8.8) is not a document of the schema of 0.5.1 any more.
+    # `nexora.inspect/3` (decision 0019, 8.8) changed the document and `Function`, not the calls:
+    # every Call, and the whole body, is still what the schema of 0.5.1 describes.
+    old = _schema_of_0_5_1()
     with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(document, _schema_of_0_5_1())
+        jsonschema.validate(document, old)
+    (main,) = document["program"]["functions"]
+    jsonschema.validate(main["body"], {"$defs": old["$defs"], "$ref": "#/$defs/Block"})
+    for call in calls.values():
+        jsonschema.validate(call, {"$defs": old["$defs"], "$ref": "#/$defs/Call"})
 
 
 def test_a_consumer_of_0_5_1_never_takes_a_qualified_call_for_a_name_of_the_program():  # [20]

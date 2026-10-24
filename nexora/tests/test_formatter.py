@@ -246,3 +246,23 @@ def test_a_named_condition_across_lines_keeps_its_parenthesis_apart_from_the_nam
         "    return x\n"
         "}\n"
     )
+
+
+def test_a_public_type_is_not_the_head_of_a_header():
+    source = "pub type P = Int where value > 0\npub fn f(x: P) gives Int\nneeds x > 1\n{\nreturn x\n}\n"
+    assert formatter.format_source(source).text == (
+        "pub type P = Int where value > 0\n"
+        "pub fn f(x: P) gives Int\n"
+        "    needs x > 1\n"
+        "{\n"
+        "    return x\n"
+        "}\n"
+    )
+
+
+def test_a_parenthesis_keeps_its_shape_outside_the_name_of_a_clause():
+    # Only `needs name: (` gained a space in 0.12; every other '(' is written as before.
+    source = "fn main() {\nreturn (1)\nlet p = Point(x: (1 + 2))\nif not (true) {\n}\n}\n"
+    assert formatter.format_source(source).text == (
+        "fn main() {\n    return(1)\n    let p = Point(x:(1 + 2))\n    if not(true) {\n    }\n}\n"
+    )
