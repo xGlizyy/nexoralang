@@ -51,7 +51,8 @@ Work of the branch of 0.12.0, phase 1 of [decision 0019](docs/decisions/0019-ide
 
 - The whole documentation is in English: the READMEs, `docs/` (guides, reference and `decisions/`), this changelog, `CONTRIBUTING.md`, `SECURITY.md` and `CODE_OF_CONDUCT.md`. Decision files keep their Spanish filenames.
 - [LSP](docs/lsp.md) describes the language server that exists since the editor work (`nexora-lsp`), instead of calling it planned.
-- The examples, the programs of the documentation and the golden outputs are written in the syntax of 0.12. The decisions are records: their programs keep the syntax of their time and are checked with the front end of 0.11.
+- The examples, the golden outputs and the programs of the documentation that the tests check (the blocks with a `nex:` marker) are written in the syntax of 0.12. The decisions are records: their programs keep the syntax of their time and are checked with the front end of 0.11.
+- **Not yet updated:** the text of the specification (`docs/language-spec.md`, still version 0.11: its grammar, keywords and sections 9.x) and of the guides that explain the clauses (`contracts.md`, `diagnostics.md`, `getting-started.md` and others) still describe the syntax of 0.11 outside their checked programs.
 
 ### Limitations
 
