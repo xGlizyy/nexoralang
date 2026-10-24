@@ -1,0 +1,50 @@
+syntax error[E1108]: Arrow before the return type
+  --> examples/migration/before_0_12.nex:12:19
+   |
+12 | fn sum_to(n: Int) -> Int {
+   |                   ^^^^^^ Write 'gives Int' instead of '-> Int'
+   = hint: 'nex migrate' rewrites a program written for 0.11 in the syntax of 0.12.
+
+syntax error[E1107]: Syntax before 0.12
+  --> examples/migration/before_0_12.nex:13:5
+   |
+13 |     requires n >= 0, "Only natural numbers"
+   |     ^^^^^^^^ 'requires' is the syntax before 0.12: write 'needs' in the header of the function
+   = hint: 'nex migrate' rewrites a program written for 0.11 in the syntax of 0.12.
+
+syntax error[E1107]: Syntax before 0.12
+  --> examples/migration/before_0_12.nex:14:5
+   |
+14 |     ensures result == n * (n + 1) / 2
+   |     ^^^^^^^ 'ensures' is the syntax before 0.12: write 'promises' in the header of the function
+   = hint: 'nex migrate' rewrites a program written for 0.11 in the syntax of 0.12.
+
+syntax error[E1107]: Syntax before 0.12
+  --> examples/migration/before_0_12.nex:18:9
+   |
+18 |         invariant total == i * (i + 1) / 2, "total is the sum of the numbers already added"
+   |         ^^^^^^^^^ 'invariant' is the syntax before 0.12: write 'keeps' in the header of the loop
+   = hint: 'nex migrate' rewrites a program written for 0.11 in the syntax of 0.12.
+
+syntax error[E1107]: Syntax before 0.12
+  --> examples/migration/before_0_12.nex:19:9
+   |
+19 |         decreases n - i
+   |         ^^^^^^^^^ 'decreases' is the syntax before 0.12: write 'shrinks' in the header of the loop
+   = hint: 'nex migrate' rewrites a program written for 0.11 in the syntax of 0.12.
+
+syntax error[E1108]: Arrow before the return type
+  --> examples/migration/before_0_12.nex:26:36
+   |
+26 | fn report(label: Text, value: Int) -> Void {
+   |                                    ^^^^^^^ Remove '-> Void': a function that gives nothing has no 'gives'
+   = hint: 'nex migrate' rewrites a program written for 0.11 in the syntax of 0.12.
+
+syntax error[E1108]: Arrow before the return type
+  --> examples/migration/before_0_12.nex:30:11
+   |
+30 | fn main() -> Void {
+   |           ^^^^^^^ Remove '-> Void': a function that gives nothing has no 'gives'
+   = hint: 'nex migrate' rewrites a program written for 0.11 in the syntax of 0.12.
+
+error: examples/migration/before_0_12.nex: not run because of 7 errors

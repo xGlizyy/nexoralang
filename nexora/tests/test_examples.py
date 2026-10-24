@@ -52,6 +52,15 @@ EXPECTED = {
     "failing/refinement_violation.nex": (5, 0),
     "failing/loop_measure.nex": (5, 0),
     "failing/parse_number.nex": (5, 0),
+    # Written in the syntax of 0.11 on purpose: 0.12 rejects it (E1107, E1108) and nex migrate
+    # rewrites it (decision 0019).
+    "migration/before_0_12.nex": (1, 1),
+}
+
+# What the published 0.11.0 prints when it runs the migration example, checked when the example was
+# added: the program that nex migrate writes has to print exactly the same.
+OUTPUT_IN_0_11 = {
+    "migration/before_0_12.nex": "sum to 4: 10\nsum to nothing: 0\n",
 }
 
 
@@ -140,6 +149,25 @@ def test_nex_test(name):
     assert result.returncode == TESTED[name]
     compare(f"{slug}.test.stdout", result.stdout)
     compare(f"{slug}.test.stderr", result.stderr)
+
+
+@pytest.mark.parametrize("name", sorted(OUTPUT_IN_0_11))
+def test_a_migration_example_is_migrated_and_then_behaves_as_in_0_11(name, tmp_path):
+    # Without --write: the edits and the migrated text, recorded; nothing is written.
+    before = (EXAMPLES / name).read_bytes()
+    shown = nex("migrate", f"examples/{name}")
+    slug = name.replace("/", "__").removesuffix(".nex")
+    assert (shown.returncode, shown.stderr) == (0, "")
+    compare(f"{slug}.migrate.stdout", shown.stdout)
+    assert (EXAMPLES / name).read_bytes() == before
+    # With --write, on a copy: the migrated program passes the check and prints what 0.11.0 printed.
+    copy = tmp_path / Path(name).name
+    copy.write_bytes(before)
+    written = nex("migrate", copy.name, "--write", cwd=tmp_path)
+    assert (written.returncode, written.stderr) == (0, ""), written.stderr
+    assert nex("check", copy.name, cwd=tmp_path).returncode == 0
+    run = nex("run", copy.name, cwd=tmp_path)
+    assert (run.returncode, run.stdout, run.stderr) == (0, OUTPUT_IN_0_11[name], "")
 
 
 def test_every_example_with_examples_is_tested():

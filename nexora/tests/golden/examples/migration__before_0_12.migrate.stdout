@@ -1,0 +1,54 @@
+--- examples/migration/before_0_12.nex: 13 edits
+  12:19  E1  '->' -> 'gives'
+  12:25  E5a  ' {' -> ''
+  13:5  E3  'requires' -> 'needs'
+  14:5  E3  'ensures' -> 'promises'
+  15:1  E6  '' -> '{\n'
+  17:16  E5a  ' {' -> ''
+  18:9  E3  'invariant' -> 'keeps'
+  19:9  E3  'decreases' -> 'shrinks'
+  20:1  E6  '' -> '    {\n'
+  26:35  E2  ' -> Void' -> ''
+  30:10  E2  ' -> Void' -> ''
+  33:38  E4  'unwrap_or' -> 'value_or'
+  34:44  E4  'unwrap_or' -> 'value_or'
+--- examples/migration/before_0_12.nex: migrated text
+// A program written for NEXORA 0.11, kept as it was: 0.12 rejects it, and nex migrate rewrites it.
+//
+// In 0.11 the clauses of a function went at the beginning of its body (requires, ensures), those of
+// a loop at the beginning of the body of the loop (invariant, decreases), the result type after an
+// arrow, and Option.unwrap_or read a value with a default. Since 0.12 the clauses go in the header
+// and are called needs, promises, keeps and shrinks, the result type goes after 'gives', and the
+// function is called Option.value_or (decision 0019).
+//
+//   nex check examples/migration/before_0_12.nex     E1108 and E1107: the syntax before 0.12
+//   nex migrate examples/migration/before_0_12.nex   the same program in the syntax of 0.12
+
+fn sum_to(n: Int) gives Int
+    needs n >= 0, "Only natural numbers"
+    promises result == n * (n + 1) / 2
+{
+    var total = 0
+    var i = 0
+    while i < n
+        keeps total == i * (i + 1) / 2, "total is the sum of the numbers already added"
+        shrinks n - i
+    {
+        i = i + 1
+        total = total + i
+    }
+    return total
+}
+
+fn report(label: Text, value: Int) {
+    print(label + ": " + to_text(value))
+}
+
+fn main() {
+    let found: Option[Int] = Some(4)
+    let missing: Option[Int] = None
+    report("sum to 4", sum_to(Option.value_or(found, 0)))
+    report("sum to nothing", sum_to(Option.value_or(missing, 0)))
+}
+structure verified; text outside the edits verified; behaviour not checked by this command
+Nothing was written. Run it again with --write to replace the files.

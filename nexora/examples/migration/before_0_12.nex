@@ -1,0 +1,35 @@
+// A program written for NEXORA 0.11, kept as it was: 0.12 rejects it, and nex migrate rewrites it.
+//
+// In 0.11 the clauses of a function went at the beginning of its body (requires, ensures), those of
+// a loop at the beginning of the body of the loop (invariant, decreases), the result type after an
+// arrow, and Option.unwrap_or read a value with a default. Since 0.12 the clauses go in the header
+// and are called needs, promises, keeps and shrinks, the result type goes after 'gives', and the
+// function is called Option.value_or (decision 0019).
+//
+//   nex check examples/migration/before_0_12.nex     E1108 and E1107: the syntax before 0.12
+//   nex migrate examples/migration/before_0_12.nex   the same program in the syntax of 0.12
+
+fn sum_to(n: Int) -> Int {
+    requires n >= 0, "Only natural numbers"
+    ensures result == n * (n + 1) / 2
+    var total = 0
+    var i = 0
+    while i < n {
+        invariant total == i * (i + 1) / 2, "total is the sum of the numbers already added"
+        decreases n - i
+        i = i + 1
+        total = total + i
+    }
+    return total
+}
+
+fn report(label: Text, value: Int) -> Void {
+    print(label + ": " + to_text(value))
+}
+
+fn main() -> Void {
+    let found: Option[Int] = Some(4)
+    let missing: Option[Int] = None
+    report("sum to 4", sum_to(Option.unwrap_or(found, 0)))
+    report("sum to nothing", sum_to(Option.unwrap_or(missing, 0)))
+}
