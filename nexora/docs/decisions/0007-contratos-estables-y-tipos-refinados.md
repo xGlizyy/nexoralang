@@ -1,6 +1,11 @@
 # 0007 — Stable contracts, explanation of the rules and refined types
 
-- **Status:** accepted
+- **Status:** accepted. **The syntax of contracts it declared stable lasted from 0.3 to 0.11**:
+  since 0.12, [decision 0019](0019-identidad-propia-del-lenguaje.md) moves the clauses to the header
+  and renames them `needs` and `promises`. The name `result`, the explanation after a comma and the
+  refined types of this decision stand. Its programs are written in the syntax of their time, before
+  0.12: since 0.12 the language writes them as
+  [decision 0019](0019-identidad-propia-del-lenguaje.md) describes, and `nex migrate` rewrites them.
 - **Version:** 0.3.0
 - **Replaces:** the provisional part of [0004](0004-contratos-en-ejecucion.md) (position of the
   clauses and the name `result`), which goes from experimental to stable.

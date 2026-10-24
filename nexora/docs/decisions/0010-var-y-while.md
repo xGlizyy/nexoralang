@@ -1,6 +1,11 @@
 # 0010 — Reassignable variables (`var`) and loops with requirements (`while`, `invariant`, `decreases`)
 
-- **Status:** accepted
+- **Status:** accepted. **Since 0.12, [decision 0019](0019-identidad-propia-del-lenguaje.md) renames
+  and moves the loop clauses**: `keeps` (it was `invariant`) and `shrinks` (it was `decreases`), in
+  the header of the loop, between its head and its body. Their rules (exactly one measure in a
+  `while`, checked on every iteration) stand. Its programs are written in the syntax of their time,
+  before 0.12: since 0.12 the language writes them as
+  [decision 0019](0019-identidad-propia-del-lenguaje.md) describes, and `nex migrate` rewrites them.
 - **Version:** 0.5.0
 - **Related to:** [decision 0003](0003-funciones-retorno-e-if.md) (return paths),
   [0004](0004-contratos-en-ejecucion.md) (parameters in `ensures`),

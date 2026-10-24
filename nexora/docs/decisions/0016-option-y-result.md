@@ -1,6 +1,10 @@
 # 0016 — Option and Result
 
-- **Status:** accepted
+- **Status:** accepted. **Since 0.12, [decision 0019](0019-identidad-propia-del-lenguaje.md) renames
+  the functions that read the value**: `Option.value` and `Option.value_or` (they were `unwrap` and
+  `unwrap_or`), and the same for `Result`. What they do stands. Its programs are written in the
+  syntax of their time, before 0.12: since 0.12 the language writes them as
+  [decision 0019](0019-identidad-propia-del-lenguaje.md) describes, and `nex migrate` rewrites them.
 - **Version:** 0.10.0 (state of the repository; not published in any package)
 - **Date:** 2026-10-22
 - **Working branch:** `feature/server-hardening`

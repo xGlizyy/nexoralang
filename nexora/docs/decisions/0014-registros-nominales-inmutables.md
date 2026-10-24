@@ -1,6 +1,8 @@
 # 0014 — Immutable nominal records
 
-- **Status:** accepted
+- **Status:** accepted. Its programs are written in the syntax of their time, before 0.12: since
+  0.12 the language writes them as [decision 0019](0019-identidad-propia-del-lenguaje.md) describes,
+  and `nex migrate` rewrites them.
 - **Version:** 0.8.0 (state of the repository; not published in any package). The decision was
   accepted with 0.7.0 and implemented in 0.8.0.
 - **Date:** 2026-10-21

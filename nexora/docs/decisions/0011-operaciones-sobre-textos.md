@@ -1,6 +1,11 @@
 # 0011 — Operations on texts: functions associated with a type that declare their requirements
 
-- **Status:** accepted
+- **Status:** accepted. **Since 0.12 the requirements of the functions of a type are called
+  `needs`** ([decision 0019](0019-identidad-propia-del-lenguaje.md)), in their diagnostics and in
+  `nexora.symbols/2`; `nexora.capabilities/1` keeps `requires`, the word it was published with. What
+  they require and when they are checked stand. Its programs are written in the syntax of their
+  time, before 0.12: since 0.12 the language writes them as
+  [decision 0019](0019-identidad-propia-del-lenguaje.md) describes, and `nex migrate` rewrites them.
 - **Version:** 0.6.0
 - **Related to:** [decision 0001](0001-tipos-estaticos-sin-conversiones-implicitas.md) (no
   implicit conversions), [0003](0003-funciones-retorno-e-if.md) (a single namespace),

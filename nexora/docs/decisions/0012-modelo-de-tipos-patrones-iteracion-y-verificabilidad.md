@@ -1,6 +1,8 @@
 # 0012 — Type model, patterns, iteration and verifiable evidence
 
-- **Status:** proposal under review. **Not accepted yet.**
+- **Status:** proposal under review. **Not accepted yet.** Its examples are written in the syntax of
+  their time, before 0.12, and as a proposal it is not updated: the syntax of 0.12 is the one of
+  [decision 0019](0019-identidad-propia-del-lenguaje.md)
 - **Date:** 2026-10-19.
 - **Work branch:** `feature/server-hardening`.
 - **Related to:** [0001](0001-tipos-estaticos-sin-conversiones-implicitas.md), [0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md), [0004](0004-contratos-en-ejecucion.md), [0005](0005-diagnosticos-y-esquemas-json.md), [0006](0006-requisitos-verificables.md), [0007](0007-contratos-estables-y-tipos-refinados.md), [0008](0008-ejemplos-y-nex-test.md), [0010](0010-var-y-while.md) and [0011](0011-operaciones-sobre-textos.md).
