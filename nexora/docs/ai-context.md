@@ -113,7 +113,7 @@ part if there is integer division, or which reserved words were used.
 
 ### JSON format
 
-Schema `nexora.context/1`, described in
+Schema `nexora.context/2`, described in
 [`schemas/nexora-context.schema.json`](schemas/nexora-context.schema.json). For a minimal program:
 
 <!-- nex:context-json -->
@@ -282,7 +282,7 @@ nex symbols program.nex --function unit_price --format json
 |--------|--------|
 | `--name NAME` | Only symbols with that name |
 | `--function FUNCTION` | Only that function and what is declared inside it |
-| `--format json` | The `nexora.symbols/1` document instead of plain text |
+| `--format json` | The `nexora.symbols/2` document instead of plain text |
 
 On the first program on this page, `nex symbols program.nex --format json` returns (shown with a shorter program for brevity):
 

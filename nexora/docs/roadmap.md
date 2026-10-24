@@ -40,7 +40,7 @@ there is a test that fails if it stops working.
 | Interpreter | `tests/test_interpreter.py` |
 | Diagnostics with code, category and position, as text and JSON | `tests/test_diagnostics.py`, `tests/test_cli.py` |
 | Commands `nex run`, `nex check`, `nex inspect` | `tests/test_cli.py` |
-| JSON representation of the program (`nexora.inspect/2`) | `tests/test_inspect.py` |
+| JSON representation of the program (`nexora.inspect/3`) | `tests/test_inspect.py` |
 | Symbols and references (`nex symbols`) and summary of the program (`nex context`) | `tests/test_tooling.py` |
 | Versioned JSON formats, with JSON Schemas generated from the code | `tests/test_tooling.py` validates the real output with them |
 | Partial tree, symbols and summary when the program has syntax errors | `tests/test_tooling.py`, including the program cut at every character |

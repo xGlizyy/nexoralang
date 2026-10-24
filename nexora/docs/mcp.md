@@ -51,9 +51,9 @@ caller, or runs anything.
 |------|-----------|---------|
 | `nexora_check` | `source`, `filename`* | `nexora.diagnostics/1` document: `ok` and the diagnostics |
 | `nexora_get_diagnostics` | `source`, `filename`* | Only `ok`, `count` and the list of diagnostics |
-| `nexora_inspect` | `source`, `filename`* | `nexora.inspect/2` document: the syntax tree with types |
-| `nexora_get_context` | `source`, `filename`* | `nexora.context/1` document: [technical summary](ai-context.md) |
-| `nexora_get_symbols` | `source`, `filename`*, `name`*, `function`* | `nexora.symbols/1` document: symbols and references |
+| `nexora_inspect` | `source`, `filename`* | `nexora.inspect/3` document: the syntax tree with types |
+| `nexora_get_context` | `source`, `filename`* | `nexora.context/2` document: [technical summary](ai-context.md) |
+| `nexora_get_symbols` | `source`, `filename`*, `name`*, `function`* | `nexora.symbols/2` document: symbols and references |
 | `nexora_get_language_spec` | `section`* | `nexora.spec/2` document: the index of the specification or the text of a section |
 | `nexora_get_capabilities` | — | `nexora.capabilities/1` document: keywords, types, built-in functions, error codes and limits |
 

@@ -37,9 +37,10 @@ runs the analyzed program.
 | Output | Command | Schema | Contains |
 |--------|---------|--------|----------|
 | Diagnostics | `nex check file.nex --format json` | `nexora.diagnostics/1` | The errors, with code, category, position and suggestion |
-| Structure | `nex inspect file.nex` | `nexora.inspect/2` | The syntax tree, with the type of every expression |
-| Symbols | `nex symbols file.nex --format json` | `nexora.symbols/1` | Functions, parameters and variables, with their type, their scope and every use |
-| Context | `nex context file.nex --format json` | `nexora.context/1` | A summary: signatures, contracts, who calls whom, features used |
+| Structure | `nex inspect file.nex` | `nexora.inspect/3` | The syntax tree, with the type of every expression |
+| Symbols | `nex symbols file.nex --format json` | `nexora.symbols/2` | Functions, parameters and variables, with their type, their scope and every use |
+| Context | `nex context file.nex --format json` | `nexora.context/2` | A summary: signatures, contracts, who calls whom, features used |
+| Evidence | `nex check file.nex --evidence --format json` | `nexora.evidence/1` | What backs every clause: `checked` or `trusted` ([JSON protocol](json-protocol.md#evidence)) |
 
 The last two are explained in [Structured context](ai-context.md); the formats, their
 versions and their rules, in [JSON protocol](json-protocol.md).
@@ -255,9 +256,10 @@ change before version 1.0. The rest of the modules (`lexer`, `parser`, `checker`
 | Function | Returns |
 |----------|---------|
 | `check_source(source, filename="source.nex")` | `nexora.diagnostics/1` document |
-| `inspect_source(source, filename="source.nex")` | `nexora.inspect/2` document |
-| `get_symbols(source, filename="source.nex", *, name=None, function=None)` | `nexora.symbols/1` document |
-| `get_context(source, filename="source.nex")` | `nexora.context/1` document |
+| `inspect_source(source, filename="source.nex")` | `nexora.inspect/3` document |
+| `get_symbols(source, filename="source.nex", *, name=None, function=None)` | `nexora.symbols/2` document |
+| `get_context(source, filename="source.nex")` | `nexora.context/2` document |
+| `get_evidence(source, filename="source.nex")` | `nexora.evidence/1` document: what backs every clause; only the enforcement is computed |
 | `get_language_spec(section=None)` | `nexora.spec/2` document: the index of the specification, or a section |
 | `get_capabilities()` | `nexora.capabilities/1` document: keywords, types, built-in functions, error codes, limits |
 | `render_context(document)`, `render_symbols(document)` | The text that `nex context` and `nex symbols` write |
@@ -380,7 +382,7 @@ The complete rules, the history and the JSON Schema files are in
 - **The MCP server has only been tested in one assistant** (Claude Code, a manual session), besides
   the automated tests with the SDK client.
 - **No AI model has been evaluated** with these tools.
-- The `Contract` and `TypeDecl` nodes are stable since `nexora.inspect/2`.
+- The `TypeDecl` node is stable since `nexora.inspect/2`. `Contract` changed in `nexora.inspect/3`: it is an item of `Function.header`, with the clause words of 0.12 and a `name` ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)).
 
 ## Use cases this allows
 

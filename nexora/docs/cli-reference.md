@@ -163,7 +163,7 @@ nex context examples/contracts.nex
 | Option | Effect |
 |--------|--------|
 | `--format text` | Default. A short summary to read |
-| `--format json` | A single JSON document (`nexora.context/1`) on the standard output, whether the program is valid or not |
+| `--format json` | A single JSON document (`nexora.context/2`) on the standard output, whether the program is valid or not |
 
 In both formats the summary goes to the standard output and includes the diagnostics of the program. The
 only exception: if the file cannot be read and the format is `text`, the error is written to the
@@ -183,7 +183,7 @@ nex symbols examples/functions.nex --name factorial --format json
 | Option | Effect |
 |--------|--------|
 | `--format text` | Default |
-| `--format json` | A single JSON document (`nexora.symbols/1`) on the standard output |
+| `--format json` | A single JSON document (`nexora.symbols/2`) on the standard output |
 | `--name NAME` | Only the symbols with that name |
 | `--function FUNCTION` | Only that function and what is declared inside it |
 
@@ -288,8 +288,8 @@ NEXORA 0.11.0
 |--------|----------|-----------------------|
 | `text` | People | [Diagnostics](diagnostics.md) |
 | `json` (diagnostics) | Programs. Schema `nexora.diagnostics/1` | [Specification, section 11.4](language-spec.md#114-json-format) |
-| `json` (inspection) | Programs. Schema `nexora.inspect/2` | [`inspect-schema.md`](inspect-schema.md) |
-| `json` (context and symbols) | Programs. Schemas `nexora.context/1` and `nexora.symbols/1` | [Structured context](ai-context.md) |
+| `json` (inspection) | Programs. Schema `nexora.inspect/3` | [`inspect-schema.md`](inspect-schema.md) |
+| `json` (context and symbols) | Programs. Schemas `nexora.context/2` and `nexora.symbols/2` | [Structured context](ai-context.md) |
 | `json` (tests) | Programs. Schema `nexora.test/1` | [Decision 0008](decisions/0008-ejemplos-y-nex-test.md), section 6 |
 
 The rules common to all JSON documents and their JSON Schemas are in
