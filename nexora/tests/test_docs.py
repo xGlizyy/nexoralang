@@ -51,6 +51,8 @@ from nexora.legacy011 import diagnostics as diagnostics011
 from nexora.legacy011 import interpreter as interpreter011
 from nexora.legacy011 import pipeline as pipeline011
 
+from helpers import in_continuous_integration
+
 ROOT = Path(__file__).resolve().parents[1]
 DECISIONS = ROOT / "docs" / "decisions"
 DOCUMENTS = sorted(
@@ -257,11 +259,22 @@ LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 @pytest.mark.parametrize("document", DOCUMENTS, ids=lambda path: path.relative_to(ROOT).as_posix())
 def test_relative_links_point_to_files_that_exist(document):
     text = re.sub(r"```.*?```", "", document.read_text(encoding="utf-8"), flags=re.S)
+    # A link that leaves nexora/ points into the rest of the repository (the VS Code extension, for
+    # one), which a source distribution does not carry. It is checked whenever the repository is
+    # there, and always in continuous integration; anywhere else the skip names it.
+    repository = (ROOT.parent / ".github").is_dir()
+    unchecked = []
     for target in LINK.findall(text):
         if target.startswith(("http://", "https://", "mailto:", "#")):
             continue
         path = (document.parent / target.split("#")[0]).resolve()
+        if not path.exists() and not path.is_relative_to(ROOT) and not repository and not in_continuous_integration():
+            unchecked.append(target)
+            continue
         assert path.exists(), f"{document.name}: broken link {target}"
+    if unchecked:
+        pytest.skip(f"{document.name}: every link inside nexora/ exists; not checked, because the repository "
+                    f"around nexora/ is not here: {', '.join(unchecked)}")
 
 
 @pytest.mark.parametrize("document", DOCUMENTS, ids=lambda path: path.relative_to(ROOT).as_posix())

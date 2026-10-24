@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from nexora import ast_nodes as ast
 from nexora.diagnostics import Diagnostic, NexoraRuntimeError, Source
 from nexora.interpreter import run
@@ -83,3 +85,10 @@ def run_failure_with_host(text: str, host) -> tuple[str, Diagnostic]:
     except NexoraRuntimeError as error:
         return "".join(output), error.diagnostic
     raise AssertionError("the program was expected to fail at run time")
+
+
+def in_continuous_integration() -> bool:
+    """Whether the suite runs in continuous integration: the variable CI, which GitHub Actions sets.
+    A test that can be skipped elsewhere fails there instead, so nothing is reported as checked
+    without having run."""
+    return os.environ.get("CI", "").strip().lower() not in ("", "0", "false")
