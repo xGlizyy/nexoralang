@@ -1,0 +1,16 @@
+// Fails on purpose while running. It passes `nex check`, but a value computed while the program
+// runs breaks the rule of a refined type. `nex run examples/failing/refinement_violation.nex`
+// prints the first result, then reports the broken rule and exits with code 5.
+
+type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
+
+fn as_percent(part: Int, whole: Int) -> Percent {
+    requires whole > 0, "A percentage of nothing is not defined"
+    return Percent(part * 100 / whole)
+}
+
+fn main() -> Void {
+    print(as_percent(30, 120))
+    print(as_percent(150, 120))
+    print("This line is never reached")
+}

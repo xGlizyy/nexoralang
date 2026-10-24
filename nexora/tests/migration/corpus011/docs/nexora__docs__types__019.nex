@@ -1,0 +1,3 @@
+fn main() -> Void {
+    let number: Result[Int, Text] = Ok(1)
+}

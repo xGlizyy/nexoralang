@@ -1,0 +1,12 @@
+fn share(total: Int, people: Int) -> Int {
+    return total / people
+}
+
+fn report(people: Int) -> Void {
+    print(share(100, people))
+}
+
+fn main() -> Void {
+    report(4)
+    report(0)
+}

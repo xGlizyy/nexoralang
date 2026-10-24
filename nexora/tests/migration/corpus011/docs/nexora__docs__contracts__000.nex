@@ -1,0 +1,17 @@
+fn divide(a: Float, b: Float) -> Float {
+    requires b != 0.0
+    return a / b
+}
+
+fn absolute(value: Int) -> Int {
+    ensures result >= 0
+    if value < 0 {
+        return -value
+    }
+    return value
+}
+
+fn main() -> Void {
+    print(divide(9.0, 2.0))
+    print(absolute(-42))
+}

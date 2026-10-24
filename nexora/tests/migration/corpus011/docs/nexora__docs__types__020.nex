@@ -1,0 +1,6 @@
+fn main() -> Void {
+    let failed: Result[Int, Text] = Err("boom")
+    if Result.is_err(failed) {
+        print(Result.error(failed))
+    }
+}

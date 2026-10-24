@@ -1,0 +1,36 @@
+// A refined type is a built-in type plus a rule that all its values satisfy.
+//
+// A constant given to a refined type is checked by `nex check`, without running anything.
+// Any other value is checked explicitly with the name of the type, as in Percent(x); that check
+// happens while the program runs, and stops it if the value breaks the rule.
+// A value of a refined type can be used wherever its base type is expected.
+
+type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
+type Cents = Int where value >= 0, "An amount of money cannot be negative"
+type SmallCents = Cents where value < 100000, "Small amounts stay under 1000.00"
+type Label = Text where value != "", "A label cannot be empty"
+
+fn apply_discount(price: Cents, percent: Percent) -> Cents {
+    ensures result <= price, "A discount never raises the price"
+    return Cents(price * (100 - percent) / 100)
+}
+
+fn describe(name: Label, price: Cents) -> Text {
+    return name + ": " + to_text(price) + " cents"
+}
+
+fn main() -> Void {
+    let discount: Percent = 25
+    let coffee: SmallCents = 350
+
+    // A SmallCents is a Cents, so it is accepted where a Cents is expected.
+    print(describe("Coffee", apply_discount(coffee, discount)))
+
+    // A value computed while running is checked explicitly before it becomes a Percent.
+    let weekend = Percent(discount * 2)
+    print(describe("Weekend coffee", apply_discount(coffee, weekend)))
+
+    // Arithmetic on refined values gives a value of the base type.
+    let total = apply_discount(12000, 10) + coffee
+    print(to_float(total) / 100.0)
+}

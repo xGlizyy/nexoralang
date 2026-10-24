@@ -1,0 +1,16 @@
+fn count_even(limit: Int) -> Int {
+    var i = 0
+    var even = 0
+    while i < limit {
+        decreases limit - i, "Each turn moves i one step closer to limit"
+        if i / 2 * 2 == i {
+            even = even + 1
+            i = i + 1
+        }
+    }
+    return even
+}
+
+fn main() -> Void {
+    print(count_even(10))
+}

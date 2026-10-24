@@ -1,0 +1,8 @@
+fn double(n: Int) -> Int {
+    return n * 2
+}
+
+fn main() -> Void {
+    let price = 2.5
+    print(double(price))
+}

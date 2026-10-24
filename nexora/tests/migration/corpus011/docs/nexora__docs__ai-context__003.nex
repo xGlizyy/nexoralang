@@ -1,0 +1,4 @@
+fn main() -> Void {
+    let total = 2 + 3
+    print(total)
+}

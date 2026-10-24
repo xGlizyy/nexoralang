@@ -1,0 +1,11 @@
+fn apply_discount(price_cents: Int, percent: Int) -> Int {
+    requires price_cents >= 0
+    requires percent >= 0 and percent <= 100
+    ensures result >= 0 and result <= price_cents
+    return price_cents * (100 - percent) / 100
+}
+
+fn main() -> Void {
+    print(apply_discount(10000, 20))
+    print(apply_discount(999, 0))
+}

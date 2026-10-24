@@ -1,0 +1,12 @@
+fn report(score: Int) -> Void {
+    if score < 0 {
+        print("invalid score")
+        return
+    }
+    print("score: " + to_text(score))
+}
+
+fn main() -> Void {
+    report(-1)
+    report(80)
+}

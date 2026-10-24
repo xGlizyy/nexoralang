@@ -1,0 +1,33 @@
+fn percentage(part: Int, whole: Int) -> Int {
+    requires whole > 0, "A percentage of nothing is not defined"
+    requires part >= 0 and part <= whole, "The part has to be inside the whole"
+    requires part <= 92233720368547758, "part * 100 has to fit in an Int"
+    ensures result >= 0 and result <= 100
+    example percentage(3, 12) == 25
+    example percentage(12, 12) == 100
+    return part * 100 / whole
+}
+
+fn find(names: List[Text], wanted: Text) -> Option[Int] {
+    var index = 0
+    while index < List.length(names) {
+        decreases List.length(names) - index, "Each turn looks at one more name"
+        if List.get(names, index) == wanted {
+            return Some(index)
+        }
+        index = index + 1
+    }
+    return None
+}
+
+fn show_all(names: List[Text]) -> Void {
+    for name in names {
+        print(name)
+    }
+}
+
+fn main() -> Void {
+    print(percentage(3, 12))
+    print(Option.unwrap_or(find(["ada", "grace"], "grace"), -1))
+    show_all(["ada", "grace"])
+}

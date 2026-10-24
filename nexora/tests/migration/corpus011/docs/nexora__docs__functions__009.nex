@@ -1,0 +1,8 @@
+fn area(width: Int, width: Int) -> Int {
+    let area = width * width
+    return area
+}
+
+fn main() -> Void {
+    print(area(2, 3))
+}

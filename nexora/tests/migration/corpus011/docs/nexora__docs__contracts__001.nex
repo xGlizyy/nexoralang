@@ -1,0 +1,11 @@
+fn withdraw(balance: Int, amount: Int) -> Int {
+    requires amount > 0, "A withdrawal moves some money"
+    requires amount <= balance, "An account cannot go below zero"
+    ensures result >= 0, "The balance after a withdrawal is never negative"
+    return balance - amount
+}
+
+fn main() -> Void {
+    print(withdraw(100, 30))
+    print(withdraw(100, 300))
+}

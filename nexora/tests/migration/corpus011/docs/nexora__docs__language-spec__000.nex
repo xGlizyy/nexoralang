@@ -1,0 +1,14 @@
+type Percent = Int where value >= 0 and value <= 100, "A percentage goes from 0 to 100"
+type Pass = Percent where value >= 50, "Passing starts at half"
+
+fn grade(points: Int, total: Int) -> Percent {
+    requires total > 0, "There is nothing to grade"
+    return Percent(points * 100 / total)
+}
+
+fn main() -> Void {
+    let minimum: Pass = 50
+    let score = grade(42, 60)
+    print(score)
+    print(score >= minimum)
+}

@@ -1,0 +1,9 @@
+fn main() -> Void {
+    let xs = [10, 20, 30]
+    print(List.length(xs))
+    print(List.get(xs, 1))
+    print(List.append(xs, 40))
+    print(List.concat(xs, [40, 50]))
+    print(List.contains(xs, 20))
+    print(List.contains(xs, 25))
+}

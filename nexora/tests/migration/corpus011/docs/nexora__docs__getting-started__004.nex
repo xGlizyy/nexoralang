@@ -1,0 +1,13 @@
+fn add(a: Int, b: Int) -> Int {
+    return a + b
+}
+
+fn greet(name: Text) -> Void {
+    print("Hello, " + name + "!")
+}
+
+fn main() -> Void {
+    let result: Int = add(2, 3)
+    print(result)
+    greet("Ada")
+}

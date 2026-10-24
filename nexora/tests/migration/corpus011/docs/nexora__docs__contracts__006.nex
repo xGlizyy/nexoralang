@@ -1,0 +1,6 @@
+fn double(n: Int) -> Int {
+    requires n >= 0, "Only natural numbers"
+    example double(2) == 4, "Two doubled"
+    example double(double(1)) == 4
+    return n * 2
+}

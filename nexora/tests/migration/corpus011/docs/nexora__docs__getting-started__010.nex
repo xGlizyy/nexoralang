@@ -1,0 +1,18 @@
+// Computes the average mark of three exams and decides whether they are passed.
+
+fn average(a: Int, b: Int, c: Int) -> Float {
+    return to_float(a + b + c) / 3.0
+}
+
+fn verdict(mean: Float) -> Text {
+    if mean >= 50.0 {
+        return "passed"
+    }
+    return "failed"
+}
+
+fn main() -> Void {
+    let mean = average(62, 48, 71)
+    print("Mean: " + to_text(mean))
+    print("Result: " + verdict(mean))
+}

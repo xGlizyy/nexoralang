@@ -1,0 +1,40 @@
+// The type system: inference, annotations, operators and explicit conversions.
+
+fn main() -> Void {
+    // The type of a variable is inferred from its value...
+    let name = "NEXORA"
+    let age = 25
+    let price = 19.99
+    let active = true
+
+    // ...or written explicitly. The value must have exactly that type.
+    let label: Text = "units"
+    let count: Int = 3
+    let ratio: Float = 0.5
+    let ready: Bool = false
+
+    // Comparisons produce a Bool. Both sides always have the same type.
+    print(age >= 18)
+    print(price < 20.0)
+    print(name == "NEXORA")
+    print(active != ready)
+
+    // 'and', 'or' and 'not' work on Bool values.
+    print(active and age >= 18)
+    print(ready or count > 2)
+    print(not ready)
+
+    // Int and Float are never mixed implicitly. Conversions are explicit function calls.
+    let total: Float = to_float(count) * price
+    print(total)
+    print(to_int(total))
+    print(to_float(count) * ratio)
+
+    // to_text turns any value into Text, so it can be joined with '+'.
+    print(to_text(count) + " " + label + " for " + to_text(total))
+    print("active: " + to_text(active))
+
+    // Int / Int is an Int: the fractional part is dropped. Float / Float keeps it.
+    print(7 / 2)
+    print(7.0 / 2.0)
+}

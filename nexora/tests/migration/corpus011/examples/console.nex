@@ -1,0 +1,24 @@
+// A program of the console: the arguments it was run with, and the standard input.
+//
+// The arguments are the ones written after '--' when the program is started, and the
+// standard input is what the keyboard or a pipe gives it. Neither needs a permission:
+// they are what the program was given, not something it reaches out for.
+//
+//   nex run examples/console.nex -- Ada
+//   echo "Grace" | nex run examples/console.nex
+
+fn greet(name: Text) -> Text {
+    return "Hola, " + name
+}
+
+fn main() -> Void {
+    var greeted = 0
+    for name in args() {
+        invariant greeted >= 0, "The count of greetings never goes down"
+        greeted = greeted + 1
+        print(greet(name))
+    }
+    if greeted == 0 {
+        print(greet(input()))
+    }
+}

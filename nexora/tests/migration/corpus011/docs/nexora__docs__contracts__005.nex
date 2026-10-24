@@ -1,0 +1,10 @@
+fn discount(price: Int, percent: Int) -> Int {
+    requires percent >= 0
+    ensures result <= price
+    return price * (100 + percent) / 100
+}
+
+fn main() -> Void {
+    print(discount(200, 0))
+    print(discount(200, 25))
+}

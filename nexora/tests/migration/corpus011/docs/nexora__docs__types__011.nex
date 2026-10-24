@@ -1,0 +1,5 @@
+fn main() -> Void {
+    let largest = 9223372036854775807
+    print(largest)
+    print(largest + 1)
+}

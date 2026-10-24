@@ -1,0 +1,10 @@
+type Point = { x: Int, y: Int }
+type Line = { from: Point, to: Point }
+
+fn main() -> Void {
+    let origin = Point(x: 0, y: 0)
+    let end = Point(x: 3, y: 4)
+    let segment = Line(from: origin, to: end)
+    print(segment.from.x)
+    print(segment)
+}

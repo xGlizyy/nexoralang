@@ -210,16 +210,18 @@ def _shown_path(declaration, importing_shown: str) -> str:
     return os.path.normpath(joined).replace("\\", "/")
 
 
-def _read_module(declaration, path: Path, key: str, shown: str):
+def _read_module(declaration, path: Path, key: str, shown: str, source=Source, diagnostic=Diagnostic):
     """Reads the module an import names (decision 0018, 1).
 
     This is the one place where the analysis touches the file system: the stages of the
     language never import `os` or `pathlib` (tests/test_security.py), so they ask here.
+    `source` and `diagnostic` are the classes of the front end that asks: the frozen 0.11
+    front end of `nex migrate` has its own (decision 0019, 8.2).
     """
     try:
         data = path.read_bytes()
     except OSError as error:
-        return Diagnostic(
+        return diagnostic(
             "E0001", f"{error.strerror or type(error).__name__}: {shown}", declaration.path_span,
             hint="An import names a file relative to the file that has it: "
                  'import "app/models.nex".',
@@ -228,11 +230,11 @@ def _read_module(declaration, path: Path, key: str, shown: str):
         # utf-8-sig also accepts files that start with a byte-order mark.
         text = data.decode("utf-8-sig")
     except UnicodeDecodeError:
-        return Diagnostic("E0002", f"{shown} is not valid UTF-8", declaration.path_span)
-    return key, path.stem, Source(shown, text)
+        return diagnostic("E0002", f"{shown} is not valid UTF-8", declaration.path_span)
+    return key, path.stem, source(shown, text)
 
 
-def _module_reader(entry: Source):
+def _module_reader(entry: Source, source=Source, diagnostic=Diagnostic):
     """The `Reader` a command analyses with: a file is read once, however many import it.
 
     The answer is remembered with the path it was resolved to, so two imports that name
@@ -257,7 +259,7 @@ def _module_reader(entry: Source):
         key = str(path)
         if key not in read_once:
             shown[key] = _shown_path(declaration, shown.get(importing_file, importing_file))
-            read_once[key] = _read_module(declaration, path, key, shown[key])
+            read_once[key] = _read_module(declaration, path, key, shown[key], source, diagnostic)
         return read_once[key]
 
     return read

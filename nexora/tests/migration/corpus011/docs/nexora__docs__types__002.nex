@@ -1,0 +1,3 @@
+fn main() -> Void {
+    let price: Float = 5
+}

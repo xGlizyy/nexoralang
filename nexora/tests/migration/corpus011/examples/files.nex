@@ -1,0 +1,20 @@
+// Reading and writing a file, with the permissions the program declares.
+//
+// The program says what it needs with 'uses', and whoever runs it has to allow it:
+// the three have to be there at the same time (the declaration, the permission and
+// what the environment allows).
+//
+//   nex run examples/files.nex --allow-read=datos --allow-write=salida
+//
+// The example works on the files of the directory it is started in: 'datos' has the
+// file to read and 'salida' is where the copy is written.
+
+uses read "datos/entradas.txt"
+uses write "salida/copiadas.txt"
+
+fn main() -> Void {
+    let entradas = read_file("datos/entradas.txt")
+    print(entradas)
+    write_file("salida/copiadas.txt", entradas)
+    print("copiado en salida/copiadas.txt")
+}

@@ -1,0 +1,11 @@
+fn main() -> Void {
+    let name = "Ada Lovelace"
+    let length = Text.length(name)
+    print(length)
+    print(Text.slice(name, 0, 3))
+    print(Text.contains(name, "Love") and Text.ends_with(name, "lace"))
+    print("Ada" < "ada")
+    if Int.can_parse("042") {
+        print(Int.parse("042") + 1)
+    }
+}

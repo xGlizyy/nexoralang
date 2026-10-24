@@ -1,0 +1,6 @@
+fn main() -> Void {
+    let found: Option[Int] = Some(42)
+    if Option.is_some(found) {
+        print(Option.unwrap_or(found, 0))
+    }
+}

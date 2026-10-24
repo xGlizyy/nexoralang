@@ -1,0 +1,7 @@
+fn main() -> Void {
+    let units = 3
+    let price = 2.5
+    let total = to_float(units) * price          // Int -> Float
+    print("Total: " + to_text(total))            // Float -> Text
+    print(to_int(total))                         // Float -> Int (drops the decimals)
+}

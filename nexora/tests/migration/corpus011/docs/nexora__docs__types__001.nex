@@ -1,0 +1,6 @@
+fn main() -> Void {
+    let name: Text = "NEXORA"
+    let age: Int = 25
+    let price: Float = 19.99
+    let active: Bool = true
+}
