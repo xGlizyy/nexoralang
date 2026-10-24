@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 from nexora.checker import BUILTINS
-from nexora.tokens import KEYWORDS, RESERVED_WORDS
+from nexora.tokens import KEYWORDS, OLD_CLAUSE_WORDS, RESERVED_WORDS
 
 EXTENSION = Path(__file__).resolve().parents[2] / "vscode-nexora"
 
@@ -65,6 +65,23 @@ def test_the_grammar_names_every_reserved_word_of_the_language():
     reserved = grammar["repository"]["reserved"]["patterns"][0]["match"]
     for word in RESERVED_WORDS:
         assert word in reserved, word
+
+
+def _words_of(patterns: list[dict]) -> set[str]:
+    """The alternatives of every `\\b(a|b|c)\\b` pattern, as whole words."""
+    return {word for pattern in patterns for group in re.findall(r"\\b\(([^)]*)\)\\b", pattern["match"])
+            for word in group.split("|")}
+
+
+def test_the_clause_words_of_0_11_are_reserved_and_not_keywords():
+    # Decision 0019, 9: they stay reserved for one minor version, so they are not highlighted as
+    # keywords, and 'ai' and 'tool' are ordinary names.
+    grammar = _grammar()["repository"]
+    keywords, reserved = _words_of(grammar["keywords"]["patterns"]), _words_of(grammar["reserved"]["patterns"])
+    assert set(OLD_CLAUSE_WORDS) <= reserved
+    assert not set(OLD_CLAUSE_WORDS) & keywords
+    assert not {"ai", "tool"} & (keywords | reserved)
+    assert keywords >= set(KEYWORDS)
 
 
 def test_the_grammar_names_every_built_in_function_of_the_language():
