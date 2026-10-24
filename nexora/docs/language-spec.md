@@ -1,8 +1,11 @@
 # NEXORA language specification
 
-- **Specification version:** 0.11
-- **Reference implementation:** `nexora` 0.11.0 (this repository, directory `nexora/`)
-- **Status:** describes exactly what the interpreter does today.
+- **Specification version:** 0.12
+- **Reference implementation:** the `nexora` package of this repository (directory `nexora/`), on the
+  branch of 0.12. It is not published: until it is, the package still reports the version 0.11.0.
+- **Status:** describes exactly what the interpreter of 0.12 does. The syntax of 0.12 comes from
+  [decision 0019](decisions/0019-identidad-propia-del-lenguaje.md); a program written for 0.11 is
+  rewritten with `nex migrate` ([CLI reference](cli-reference.md#nex-migrate)).
 
 This document is the reference for the language: it defines the syntax and the meaning of every
 construct. If the interpreter and this document disagree, that is a bug to be fixed.
@@ -70,20 +73,27 @@ Keywords:
 
 ```
 fn   let   var   return   if   else   while   for   in   true   false   and   or   not
-requires   ensures   example   invariant   decreases   type   where   uses   import   pub
+gives   needs   promises   trust   example   keeps   shrinks   type   where   uses   import   pub
 ```
 
 Words reserved for future versions. They cannot be used as names, and using them produces the
 error `E1103`:
 
 ```
-ai       assert   break    const    continue enum
-match    test     tool     try
+assert   break    const    continue enum     match    test     try
 ```
+
+The clause words of 0.11, `requires`, `ensures`, `invariant` and `decreases`, are not keywords and
+cannot be names either. Where a name is declared (`let`, `var`, `fn`, a parameter) or where a
+statement or a clause starts, which is where the syntax of 0.11 wrote them, they are the error
+`E1107`, whose hint is `nex migrate`; inside an expression, as any keyword there, `E1101`. They stay
+reserved only in the versions 0.12.x
+([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), section 9). `ai` and `tool`,
+reserved until 0.11, are ordinary names.
 
 These are not reserved words but predefined names: the types `Int`, `Float`, `Bool`, `Text` and
 `Void`; the functions `print`, `to_text`, `to_float`, `to_int`, `args`, `input`, `read_file` and
-`write_file`; `result`, which only has a special meaning inside an `ensures` clause; and
+`write_file`; `result`, which only has a special meaning inside a `promises` clause; and
 `value`, which only has one inside the condition of a refined type.
 
 ### 2.5 Literals
@@ -113,8 +123,11 @@ a text is an error (`E1005`): it is reserved for future interpolation.
 ### 2.6 Symbols
 
 ```
-(  )  {  }  [  ]  ,  :  .  =  ->  +  -  *  /  ==  !=  <  <=  >  >=
+(  )  {  }  [  ]  ,  :  .  =  +  -  *  /  ==  !=  <  <=  >  >=
 ```
+
+`->` is read as one symbol, but no construct of 0.12 uses it: after the parameters of a function it
+is the error `E1108` (the result type is written with `gives`), and anywhere else `E1101`.
 
 A `.` followed by a digit, inside a number, is part of the decimal number (`1.5`). Any
 other `.` is a symbol, which is only valid in a qualified call such as `Text.length(s)`
@@ -136,12 +149,16 @@ record_decl = [ "pub" ] "type" NAME "=" "{" record_fields "}" ;
 record_fields = record_field { "," record_field } ;
 record_field = NAME ":" type ;
 uses_decl  = "uses" ( "read" | "write" ) TEXT ;
-function   = [ "pub" ] "fn" NAME "(" [ params ] ")" "->" type { NEWLINE }
-             "{" { NEWLINE } { contract } { statement end } "}" ;
+function   = [ "pub" ] "fn" NAME "(" [ params ] ")" [ "gives" type ] body ;
+body       = block                                          (* no header clauses *)
+           | NEWLINE header_clause { header_clause } block ;
+header_clause = ( "needs" | "promises" ) [ clause_name ] expression [ explanation ] NEWLINE
+              | "trust" [ clause_name ] expression explanation NEWLINE   (* explanation required *)
+              | "example" expression [ explanation ] NEWLINE ;           (* no name *)
+clause_name = NAME ":" ;
 params     = param { "," param } ;
 param      = NAME ":" type ;
 type       = [ NAME "." ] NAME [ "[" type "]" ] ;
-contract   = ( "requires" | "ensures" | "example" ) expression [ explanation ] end ;
 explanation = "," TEXT ;
 
 block      = "{" { NEWLINE } { statement end } "}" ;
@@ -152,9 +169,11 @@ let        = "let" NAME [ ":" type ] "=" expression ;
 var        = "var" NAME [ ":" type ] "=" expression ;
 return     = "return" [ expression ] ;
 if         = "if" expression block [ "else" ( if | block ) ] ;
-while      = "while" expression "{" { NEWLINE } { loop_clause } { statement end } "}" ;
-for        = "for" NAME "in" expression "{" { NEWLINE } { loop_clause } { statement end } "}" ;
-loop_clause = ( "invariant" | "decreases" ) expression [ explanation ] end ;
+while      = "while" expression loop_body ;
+for        = "for" NAME "in" expression loop_body ;
+loop_body  = block                                          (* no header clauses *)
+           | NEWLINE loop_clause { loop_clause } block ;
+loop_clause = ( "keeps" | "shrinks" ) [ clause_name ] expression [ explanation ] NEWLINE ;
 assignment = NAME "=" expression ;
 field_assignment = NAME "." NAME "=" expression ;
 
@@ -188,9 +207,24 @@ Notes:
   to the file that declares it.
 - An explanation (`explanation`) is a single non-empty text literal, on one line. A text that is
   empty, made only of spaces or containing a line break (`\n`) is the error `E1101`.
-- The `requires`, `ensures` and `example` clauses go **at the beginning of the body** of a function,
-  before any statement; `invariant` and `decreases`, at the beginning of the body of a loop.
-  Anywhere else they are the error `E1106`.
+- **The header.** The clauses of a function (`needs`, `promises`, `trust`, `example`) go between its
+  signature and the `{` of its body, and those of a loop (`keeps`, `shrinks`) between its head and its
+  `{`. Inside a body they are the error `E1106`. Where the `{` goes:
+  - Without clauses, on the line of the signature or of the head of the loop: `fn main() {`. A `{`
+    alone on the next line is the error `E1101`.
+  - With clauses, the signature or the head ends its line, each clause takes its own line, and the
+    `{` goes **alone on the line after the last clause**. A `{` on the line of a clause is the error
+    `E1101`.
+  - Blank lines and comment lines may appear between the signature, the clauses and the `{`:
+    they are not tokens.
+- **Clause names.** `needs`, `promises`, `trust`, `keeps` and `shrinks` may carry a name before
+  their condition: `needs fits: part <= 92233720368547758`. A name is written in lowercase (`E1101`
+  otherwise) and cannot be a keyword (`E1101`). It is unique within the function, its loops included,
+  and different from the parameters and from `result` (`E2031`). A name is not a variable: no
+  expression can use it. Names are optional. An `example` has no name (`E1101`).
+- **The result type** is written after `gives`: `fn add(a: Int, b: Int) gives Int`. A function that
+  gives nothing has no `gives`. `->` before the result type is the error `E1108`, and `gives Void`
+  is the error `E2012`.
 - `else` is written on the same line as the `}` that closes the previous block: `} else {`.
 - Comparisons do not chain: `a < b < c` is a syntax error (`E1101`). Write
   `a < b and b < c`.
@@ -237,15 +271,15 @@ Notes:
 | `Bool` | `true`, `false` | |
 | `Text` | Unicode text | Immutable |
 | `List[T]` | Immutable, finite sequence of values of type `T` | `T` cannot be `Void`; there is no covariance (section 4.5) |
-| `Void` | No value | It can only be the return type of a function |
+| `Void` | No value | The type of a call to a function that has no `gives`. It is never written in a program |
 | A record | The values built with `Name(field: value, ...)` | Declared by the program: `type Point = { x: Int, y: Int }` (section 4.6) |
 
 `Int`, `Float`, `Bool` and `Text` are the built-in **value types**. `List[T]` is a compound value
 type (section 4.5); a program can also declare refined types over the built-in ones
 (section 4.4) and records (section 4.6). Value types are the ones a variable, a parameter or an
-expression can have. `Void` is not a value type: a variable or a parameter of type
-`Void` is the error `E2012`, and using a call to a `Void` function where a value is needed is
-the error `E2011`.
+expression can have. `Void` is not a value type: writing it, as the type of a variable or of a
+parameter or after `gives`, is the error `E2012` (`List[Void]` is `E1101`), and using a call to a
+function without `gives` where a value is needed is the error `E2011`.
 
 Writing a name that is not a type where a type is expected is the error `E2012`.
 
@@ -338,7 +372,7 @@ Rules of the declaration:
   value being checked and has the type of the base (`E2005` for any other name).
 - The condition cannot call functions of the program or check other refined types
   (`E2018`). It can use operators, literals and the built-in conversions. A refined type
-  describes a value and nothing more; rules that depend on other data are written with `requires`.
+  describes a value and nothing more; rules that depend on other data are written with `needs`.
 
 Using the values:
 
@@ -559,7 +593,7 @@ one or one that the record does not have is the error `E2023`. The value of a fi
 type of the field (`E2011`).
 
 **Reading.** `value.field`. The root is always a name: a variable, a parameter or `result` inside
-an `ensures`. Reads can be chained (`p.x.y`), with no length limit, as long as every intermediate
+a `promises`. Reads can be chained (`p.x.y`), with no length limit, as long as every intermediate
 step is a record; if the value is not a record, or the record does not have that field, it is the
 error `E2024`. A type name is not a value: `Point.x` does not read a field, it is a qualified call
 like those of section 8.1.
@@ -619,11 +653,12 @@ that text.
 | `Result.is_ok(x)` | `true` if `x` is an `Ok` |
 | `Result.is_err(x)` | `true` if `x` is an `Err` |
 
-**Reading the value.** `Option.unwrap_or(x, default)` returns the value of `x` if it is a `Some`, and
-`default` if it is a `None`; the default has the same type as the value. `Result.unwrap_or(x, default)`
-does the same with an `Ok` and an `Err`.
+**Reading the value.** `Option.value_or(x, fallback)` returns the value of `x` if it is a `Some`, and
+`fallback` if it is a `None`; the fallback has the same type as the value. `Result.value_or(x, fallback)`
+does the same with an `Ok` and an `Err`. (Until 0.11 these functions were called `unwrap_or`, and
+those of the next paragraph `unwrap`: the old names are the error `E2008`.)
 
-`Option.unwrap(x)`, `Result.unwrap(x)` and `Result.error(x)` read the value **without** a default: if the
+`Option.value(x)`, `Result.value(x)` and `Result.error(x)` read the value **without** a fallback: if the
 variant does not carry that value, the program stops with a diagnostic (`E3011`, `E3012` or `E3013`).
 There is no read that returns a made-up value, and none that makes the program fail without saying
 why.
@@ -636,8 +671,8 @@ are `false`.
 fields of a record. In diagnostics the text is quoted: `Err("boom")`.
 
 **What there is not.** There is no `match`, no `if let`, no `?` and no user enums: an `Option` or a
-`Result` is recognized with the functions above and read with `unwrap_or` when it is known which
-variant it has. The type of a `None` or of an empty list that is an **argument** of a function with
+`Result` is recognized with the functions above and read with `value_or`, or with `value` when it is
+known which variant it has. The type of a `None` or of an empty list that is an **argument** of a function with
 type variables is not deduced from the other arguments: the language does not infer a type through
 the arguments of a call. Give the type in a variable first.
 
@@ -655,7 +690,7 @@ let age: Int = 25             // annotated type
 - **Annotation:** with `: Type`, the value has to be exactly of that type. If it is not, the error
   is `E2011` and it points at the value. The variable keeps the annotated type, so that a single error is not
   repeated at every later use.
-- The value cannot be a call to a `Void` function (`E2011`).
+- The value cannot be a call to a function without `gives` (`E2011`).
 - **A `let` variable is immutable.** There is no way to change its value; `name = "x"` is the
   error `E2007`. The parameters of a function are immutable too. A variable that has to
   change is declared with `var` (section 5.3).
@@ -704,7 +739,7 @@ count = count + 1             // assignment
 - A `var` visible at that point can be assigned, also from an inner block. Assigning a
   `let` variable or a parameter is the error `E2007`; a name that is not a visible variable,
   `E2005`.
-- **Parameters cannot be assigned.** That way, in `ensures` and in diagnostics they always have the
+- **Parameters cannot be assigned.** That way, in `promises` and in diagnostics they always have the
   value the function was called with. To change it, copy it: `var rest = n`.
 - A `var` of a refined type keeps the guarantee of section 4.4: it is assigned a constant that
   meets the condition (checked without running, `E2017`) or a value checked with `Type(x)`.
@@ -796,7 +831,7 @@ if count { ... }              // E2011: the condition must be Bool, it is Int
 
 ### 6.4 Expressions as statements
 
-An expression used as a statement has to be a call to a `Void` function. Anything else
+An expression used as a statement has to be a call to a function without `gives`. Anything else
 is the error `E2010`, because its value would be lost: a loose operation (`40 + 2`) or a
 call whose result is not used (`add(1, 2)`).
 
@@ -811,7 +846,11 @@ fn add(a: Int, b: Int) gives Int {
 ```
 
 - Every parameter declares its type, which has to be a value type.
-- The return type is always written. `Void` means that the function returns nothing.
+- The result type is written after `gives`. A function without `gives` returns nothing: a call to it
+  is of type `Void`, and it can only be a statement. `Void` itself is never written (`gives Void`
+  is `E2012`).
+- Between the signature and the body, a function can declare its contracts (`needs`, `promises`,
+  `trust`) and its examples (`example`): the header of section 3, whose meaning is in section 9.
 - Functions are declared at the top level of the file, in any order. They cannot
   be declared inside another function.
 - There is no overloading: two functions with the same name are the error `E2002`. A function
@@ -829,15 +868,14 @@ fn main() {
 }
 ```
 
-Every program declares a `main` function, with no parameters and with return type `Void`. It is the entry
-point. If it is missing, the error is `E2001`; with parameters, `E2013`; with another return type,
-`E2004`.
+Every program declares a `main` function, with no parameters and without `gives`. It is the entry
+point. If it is missing, the error is `E2001`; with parameters, `E2013`; with a `gives`, `E2004`.
 
 ### 7.3 `return` and return paths
 
 - In a function that returns a value, `return expression` ends the function with that value. The
   type of the expression has to be the declared return type (`E2011` otherwise).
-- In a `Void` function, `return` without a value ends the function before reaching the end.
+- In a function without `gives`, `return` without a value ends the function before reaching the end.
   `return expression` is the error `E2011`. Reaching the end of the body also ends the function.
 - A `return` without a value in a function that returns a value is the error `E2011`.
 - **Every path returns.** A function that returns a value has to end with `return` on
@@ -891,7 +929,7 @@ A call is checked without running the program:
 | The function exists | `E2008` |
 | The number of arguments matches the number of parameters | `E2009` |
 | The type of every argument is that of the corresponding parameter | `E2011` |
-| No argument is a call to a `Void` function | `E2011` |
+| No argument is a call to a function without `gives` | `E2011` |
 
 The type of a call is the return type of the function.
 
@@ -899,9 +937,9 @@ When it runs, a call:
 
 1. Evaluates the arguments, from left to right.
 2. Creates a new scope and assigns each argument to its parameter, by position.
-3. Checks the `requires` clauses, in order (section 9).
+3. Checks the `needs` clauses, in order (section 9).
 4. Runs the body until a `return` or until the end.
-5. Checks the `ensures` clauses, in order.
+5. Checks the `promises` clauses, in order. A `trust` clause is never evaluated.
 6. Returns the value to the point of the call.
 
 Arguments are passed by value and all values are immutable, so a function cannot
@@ -954,7 +992,7 @@ file a name that its module does not make public is the error `E2028`.
 ```nexora
 import "app/models.nex"
 
-fn main() -> Void {
+fn main() {
     let p: models.Point = models.Point(x: 3, y: 4)
     print(models.area(p))
 }
@@ -982,8 +1020,10 @@ that the names it uses already exist when its body is checked.
 **What the analysis and the tools do with modules.** `nex check`, `nex run` and `nex test`
 analyze the entry file and all the ones it imports, and every error is shown with the file that
 has it. `nex test` only evaluates the examples of the entry file: those of a module are not
-run. `nex inspect`, `nex symbols` and `nex context` describe the entry file; the names
-that come from a module appear in it as qualified.
+run. `nex inspect` describes the entry file, where the names that come from a module appear as
+qualified. `nex symbols` and `nex context` also list the names and functions of the imported
+modules, each with the file that declares it, and `nex check --evidence` lists the clauses of every
+file of the program (section 9.3).
 
 **What this version does not support.**
 
@@ -1002,10 +1042,10 @@ that come from a module appear in it as qualified.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `print` | `print(value) -> Void` | Writes the value followed by a line break to the standard output. Accepts a value of any value type |
-| `to_text` | `to_text(value) -> Text` | Converts any value into the text that `print` would write |
-| `to_float` | `to_float(value: Int) -> Float` | Converts an integer into a decimal |
-| `to_int` | `to_int(value: Float) -> Int` | Converts a decimal into an integer by dropping the decimal part |
+| `print` | `print(value)` | Writes the value followed by a line break to the standard output. Accepts a value of any value type |
+| `to_text` | `to_text(value) gives Text` | Converts any value into the text that `print` would write |
+| `to_float` | `to_float(value: Int) gives Float` | Converts an integer into a decimal |
+| `to_int` | `to_int(value: Float) gives Int` | Converts a decimal into an integer by dropping the decimal part |
 
 Text produced by `print` and `to_text`:
 
@@ -1017,8 +1057,9 @@ Text produced by `print` and `to_text`:
 | `Float` | The shortest decimal representation that identifies the value; it always has a decimal point or an exponent | `3.5`, `2.0`, `0.30000000000000004`, `1e+16` |
 | `List[T]` | Square brackets, elements separated by `, `, no quotes around texts | `[1, 2, 3]`, `[[1], [2]]`, `[]` |
 
-`print` is the only way a program has to produce an effect. A NEXORA program cannot
-read files, open connections, run other programs or read input data.
+`print` writes to the standard output. The other effects a program can have are those of
+section 8.3: reading its arguments and the standard input, and the files it declares and is allowed
+to use. A NEXORA program cannot open connections or run other programs.
 
 ### 8.1 Functions of a type: `Text.length`, `Int.parse`…
 
@@ -1027,15 +1068,15 @@ Some built-in functions belong to a type and are called with its name in front
 
 | Function | What it does | Requirements |
 |----------|--------------|--------------|
-| `Text.length(text: Text) -> Int` | Number of characters | |
-| `Text.slice(text: Text, start: Int, end: Int) -> Text` | The characters from `start` (included) to `end` (excluded) | `start >= 0`, `start <= end`, `end <= Text.length(text)` |
-| `Text.contains(text: Text, part: Text) -> Bool` | Whether `part` appears in `text` | |
-| `Text.starts_with(text: Text, part: Text) -> Bool` | Whether `text` starts with `part` | |
-| `Text.ends_with(text: Text, part: Text) -> Bool` | Whether `text` ends with `part` | |
-| `Int.can_parse(text: Text) -> Bool` | Whether `text` is an integer written according to the grammar below, within the range of `Int` | |
-| `Int.parse(text: Text) -> Int` | The integer written in `text` | `Int.can_parse(text)` |
-| `Float.can_parse(text: Text) -> Bool` | Whether `text` is a decimal written according to the grammar below, whose rounded value is finite | |
-| `Float.parse(text: Text) -> Float` | The decimal written in `text`, rounded to the nearest `Float` | `Float.can_parse(text)` |
+| `Text.length(text: Text) gives Int` | Number of characters | |
+| `Text.slice(text: Text, start: Int, end: Int) gives Text` | The characters from `start` (included) to `end` (excluded) | `start >= 0`, `start <= end`, `end <= Text.length(text)` |
+| `Text.contains(text: Text, part: Text) gives Bool` | Whether `part` appears in `text` | |
+| `Text.starts_with(text: Text, part: Text) gives Bool` | Whether `text` starts with `part` | |
+| `Text.ends_with(text: Text, part: Text) gives Bool` | Whether `text` ends with `part` | |
+| `Int.can_parse(text: Text) gives Bool` | Whether `text` is an integer written according to the grammar below, within the range of `Int` | |
+| `Int.parse(text: Text) gives Int` | The integer written in `text` | `Int.can_parse(text)` |
+| `Float.can_parse(text: Text) gives Bool` | Whether `text` is a decimal written according to the grammar below, whose rounded value is finite | |
+| `Float.parse(text: Text) gives Float` | The decimal written in `text`, rounded to the nearest `Float` | `Float.can_parse(text)` |
 
 - **A character is a Unicode code point** and positions start at 0. `Text.length("año")`
   is 3. Nothing is normalized: an `e` followed by the combining accent is two characters.
@@ -1044,7 +1085,7 @@ Some built-in functions belong to a type and are called with its name in front
   in front of the dot; anything else is `E2008`, with a suggestion (`length(t)`
   suggests `Text.length`). A program cannot declare functions of a type.
 - **Requirements.** Before the operation its requirements are checked, in the order of the table. The
-  first one that is not met stops the program with `E4001`, like the `requires` of a function of the
+  first one that is not met stops the program with `E4001`, like the `needs` of a function of the
   program. There are no negative indices and no silent truncation: `Text.slice("abc", 2, 9)` does not return
   `"c"`. `Int.parse` and `Float.parse` add a suggestion depending on what failed.
 - **Numbers written in a text.** A single form, with ASCII characters only:
@@ -1117,11 +1158,11 @@ function like that cannot be declared.
 
 | Function | Signature | What it does | Requirements |
 |----------|-----------|--------------|--------------|
-| `List.length` | `List.length(xs: List[T]) -> Int` | Number of elements | |
-| `List.get` | `List.get(xs: List[T], i: Int) -> T` | Element at position `i`, starting at 0 | `0 <= i and i < List.length(xs)` |
-| `List.append` | `List.append(xs: List[T], x: T) -> List[T]` | New list with `x` at the end | |
-| `List.concat` | `List.concat(xs: List[T], ys: List[T]) -> List[T]` | New list with the elements of `xs` and then those of `ys` | |
-| `List.contains` | `List.contains(xs: List[T], x: T) -> Bool` | Whether some element is structurally equal to `x` | |
+| `List.length` | `List.length(xs: List[T]) gives Int` | Number of elements | |
+| `List.get` | `List.get(xs: List[T], i: Int) gives T` | Element at position `i`, starting at 0 | `0 <= i and i < List.length(xs)` |
+| `List.append` | `List.append(xs: List[T], x: T) gives List[T]` | New list with `x` at the end | |
+| `List.concat` | `List.concat(xs: List[T], ys: List[T]) gives List[T]` | New list with the elements of `xs` and then those of `ys` | |
+| `List.contains` | `List.contains(xs: List[T], x: T) gives Bool` | Whether some element is structurally equal to `x` | |
 
 - **`List.length`** is total. `List.length([])` does not compile if the empty list has no expected
   type (`E2011`); `let xs: List[Int] = []` and `List.length(xs)` do.
@@ -1174,10 +1215,10 @@ are **not**: they have to be declared and they have to be allowed.
 
 | Function | Signature | What it does |
 |----------|-----------|--------------|
-| `args` | `args() -> List[Text]` | The arguments the program was run with, in order |
-| `input` | `input() -> Text` | Reads **one line** from the standard input, without the line ending |
-| `read_file` | `read_file(path: Text) -> Text` | Reads a whole text file |
-| `write_file` | `write_file(path: Text, text: Text) -> Void` | Writes a text file, and creates it if it does not exist |
+| `args` | `args() gives List[Text]` | The arguments the program was run with, in order |
+| `input` | `input() gives Text` | Reads **one line** from the standard input, without the line ending |
+| `read_file` | `read_file(path: Text) gives Text` | Reads a whole text file |
+| `write_file` | `write_file(path: Text, text: Text)` | Writes a text file, and creates it if it does not exist |
 
 **Arguments.** `nex run program.nex -- one two` gives the program the arguments `one` and `two`.
 `args()` returns a `List[Text]`, empty if there are none. Arguments need no
@@ -1230,21 +1271,21 @@ recognized and read with these functions:
 
 | Function | Signature | What it does |
 |----------|-----------|--------------|
-| `Some` | `Some(value: T) -> Option[T]` | The variant of `Option` that has a value |
-| `None` | `None -> Option[T]` | The variant of `Option` without a value; `T` is given by the context |
-| `Ok` | `Ok(value: T) -> Result[T, E]` | The variant of `Result` that succeeded |
-| `Err` | `Err(error: E) -> Result[T, E]` | The variant of `Result` that failed; `T` is given by the context |
-| `Option.is_some` | `Option.is_some(x: Option[T]) -> Bool` | Whether `x` has a value |
-| `Option.is_none` | `Option.is_none(x: Option[T]) -> Bool` | Whether `x` has no value |
-| `Option.unwrap_or` | `Option.unwrap_or(x: Option[T], default: T) -> T` | The value of `x`, or `default` if it has none |
-| `Option.unwrap` | `Option.unwrap(x: Option[T]) -> T` | The value of `x`; if it has none, `E3011` |
-| `Result.is_ok` | `Result.is_ok(x: Result[T, E]) -> Bool` | Whether `x` succeeded |
-| `Result.is_err` | `Result.is_err(x: Result[T, E]) -> Bool` | Whether `x` failed |
-| `Result.unwrap_or` | `Result.unwrap_or(x: Result[T, E], default: T) -> T` | The value of `x`, or `default` if it failed |
-| `Result.unwrap` | `Result.unwrap(x: Result[T, E]) -> T` | The value of `x`; if it failed, `E3012` |
-| `Result.error` | `Result.error(x: Result[T, E]) -> E` | The error of `x`; if it succeeded, `E3013` |
+| `Some` | `Some(value: T) gives Option[T]` | The variant of `Option` that has a value |
+| `None` | `None`: `Option[T]` | The variant of `Option` without a value; `T` is given by the context |
+| `Ok` | `Ok(value: T) gives Result[T, E]` | The variant of `Result` that succeeded |
+| `Err` | `Err(error: E) gives Result[T, E]` | The variant of `Result` that failed; `T` is given by the context |
+| `Option.is_some` | `Option.is_some(x: Option[T]) gives Bool` | Whether `x` has a value |
+| `Option.is_none` | `Option.is_none(x: Option[T]) gives Bool` | Whether `x` has no value |
+| `Option.value_or` | `Option.value_or(x: Option[T], fallback: T) gives T` | The value of `x`, or `fallback` if it has none |
+| `Option.value` | `Option.value(x: Option[T]) gives T` | The value of `x`; if it has none, `E3011` |
+| `Result.is_ok` | `Result.is_ok(x: Result[T, E]) gives Bool` | Whether `x` succeeded |
+| `Result.is_err` | `Result.is_err(x: Result[T, E]) gives Bool` | Whether `x` failed |
+| `Result.value_or` | `Result.value_or(x: Result[T, E], fallback: T) gives T` | The value of `x`, or `fallback` if it failed |
+| `Result.value` | `Result.value(x: Result[T, E]) gives T` | The value of `x`; if it failed, `E3012` |
+| `Result.error` | `Result.error(x: Result[T, E]) gives E` | The error of `x`; if it succeeded, `E3013` |
 
-The last three **read the value without a default**: if the variant does not carry it, the program stops with
+`Option.value`, `Result.value` and `Result.error` **read the value without a fallback**: if the variant does not carry it, the program stops with
 a diagnostic that says which variant it had (`E3011`, `E3012`, `E3013`). None of them returns a
 made-up value.
 
@@ -1277,22 +1318,33 @@ fn absolute(value: Int) gives Int
 
 ### 9.1 Rules
 
-- The clauses go at the beginning of the body, one per line, before any statement. There can
-  be several of each kind and in any order.
+- The clauses go in the header of the function: between its signature and the `{` of its body, one
+  per line (section 3). There can be several of each kind, in any order, and mixed with the
+  `example` clauses (section 9.4).
 - The condition of a clause has to be of type `Bool` (`E2011`).
-- **`requires`** is a precondition. The parameters of the function are visible in it, and
+- **`needs`** is a precondition. The parameters of the function are visible in it, and
   no other name: neither the variables of the body nor `result`.
-- **`ensures`** is a postcondition. The parameters are visible in it and, if the function
-  returns a value, `result`, which is **the value returned by the function** and has its return
-  type. In a `Void` function `result` does not exist.
-- Parameters are immutable, so in `ensures` they have the same value as on entry.
-- `result` is a contextual name: it only means "the returned value" inside `ensures`. In the
+- **`promises`** is a postcondition. The parameters are visible in it and, if the function
+  has `gives`, `result`, which is **the value returned by the function** and has its result
+  type. In a function without `gives`, `result` does not exist (`E2005`).
+- **`trust`** states a condition the function relies on and the language **does not check**. The
+  parameters are visible in it, as in `needs`, and no other name. Its condition is checked for
+  being a well-written `Bool` and is **never evaluated**: not when the program runs, not by
+  `nex check`, not by `nex test`. It cannot fail and cannot stop the program, and removing every
+  `trust` clause from a program does not change what it does. Its explanation is required
+  (`E1101` without it): it is the only thing behind the condition.
+- Parameters are immutable, so in `promises` they have the same value as on entry.
+- `result` is a contextual name: it only means "the returned value" inside `promises`. In the
   body of a function it is a variable name like any other. A parameter cannot be
   named `result` (`E2013`).
 - A condition can call functions.
 - After the condition there may be, after a comma, **the explanation of the rule**: a text that says
   why it exists. It does not change what is checked; it appears in the diagnostic when the condition is
   false, as `Reason: ...`.
+- **A clause can have a name**, written before its condition: `needs positive: n > 0`. The name is
+  unique within the function and its loops, and different from the parameters and from `result`
+  (`E2031`); it is not a variable. A diagnostic of a named clause names it:
+  `This call breaks needs 'positive' of 'f'`. The rules of the names are in section 3.
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -1328,16 +1380,17 @@ error: program.nex: the program stopped because a contract was broken
 
 | Moment | What is checked |
 |--------|-----------------|
-| Without running (`nex check`) | That every condition is well formed: visible names, correct types, `Bool` result |
-| When running, on every call | `requires`: after assigning the arguments and **before** running the body |
-| When running, on every call | `ensures`: **after** computing the return value, before handing it to the caller |
+| Without running (`nex check`) | That every condition is well formed: visible names, correct types, `Bool` result, and the names of the clauses |
+| When running, on every call | `needs`: after assigning the arguments and **before** running the body, in order |
+| When running, on every call | `promises`: **after** computing the return value, before handing it to the caller, in order |
+| Never | `trust`: its condition is not evaluated |
 
-If the condition is false, the program stops with a contract diagnostic:
+If the condition of a `needs` or a `promises` is false, the program stops with a contract diagnostic:
 
 - **`E4001` Precondition violated.** The position pointed at is **the call**: the caller did not meet
-  what the function requires. The diagnostic shows the broken clause and the values of the
+  what the function needs. The diagnostic shows the broken clause and the values of the
   arguments. The body of the function never runs.
-- **`E4002` Postcondition violated.** The position pointed at is **the `ensures` clause**: the function
+- **`E4002` Postcondition violated.** The position pointed at is **the `promises` clause**: the function
   did not meet what it promises. The diagnostic shows the returned value and the arguments.
 
 <!-- nex:fails exit=5 -->
@@ -1378,27 +1431,52 @@ violation.
   no run has broken is not proven.
 - It is not checked that conditions are "pure": a condition can call a function that
   uses `print`.
-- Contracts cannot be turned off: they are always checked.
+- `needs` and `promises` cannot be turned off: they are always checked.
+- **A `trust` is neither proved nor checked.** The language does not evaluate it when running, does
+  not decide it before running and does not observe it in examples. A tool, a report or a document
+  must never present a `trust` clause as verified.
 
-Since version 0.3 the syntax of contracts is stable: the clauses go at the beginning of the
-body, the returned value is called `result` and the explanation goes after a comma. The reasons are in
-[decision 0007](decisions/0007-contratos-estables-y-tipos-refinados.md).
+**What backs each clause.** `nex check --evidence` reports, for every `needs`, `promises`, `trust`,
+`keeps` and `shrinks` of the program, whether the language evaluates it when the program runs:
+`checked` for all of them except `trust`, which is `trusted`. It runs nothing, and `checked` does not
+say that a condition holds, only that a false one stops the program. The format is
+`nexora.evidence/1` ([JSON protocol](json-protocol.md#evidence)); deciding a `needs` at its call sites
+and observing the clauses in the examples are later phases of
+[decision 0019](decisions/0019-identidad-propia-del-lenguaje.md) (section 5) and do not exist in this
+version.
+
+The syntax of contracts was stable from version 0.3
+([decision 0007](decisions/0007-contratos-estables-y-tipos-refinados.md)) to 0.11, with the
+clauses at the beginning of the body. Version 0.12 moves them to the header and renames them
+([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)): `needs` keeps the rules of
+`requires`, `promises` those of `ensures`, and `trust` is new. The returned value is still called
+`result` and the explanation still goes after a comma.
 
 ### 9.4 Examples (`example`)
 
-An example is one more clause at the beginning of the body, next to `requires` and `ensures`: it says what
+An example is one more clause of the header, next to `needs` and `promises`: it says what
 concrete result the function gives with some concrete inputs. The complete definition (statuses,
-report format, exit codes) is in [decision 0008](decisions/0008-ejemplos-y-nex-test.md).
+report format, exit codes) is in [decision 0008](decisions/0008-ejemplos-y-nex-test.md); its place
+in the header, in [decision 0019](decisions/0019-identidad-propia-del-lenguaje.md).
 
-```text
-fn double(n: Int) -> Int {
-    requires n >= 0, "Only natural numbers"
+<!-- nex:valid -->
+```nex
+fn double(n: Int) gives Int
+    needs n >= 0, "Only natural numbers"
     example double(2) == 4, "Two doubled"
+{
     return n * 2
+}
+
+fn main() {
+    print(double(2))
 }
 ```
 
-- The expression is of type `Bool` (`E2011`) and can carry its explanation after a comma.
+- The expression is of type `Bool` (`E2011`) and can carry its explanation after a comma. An
+  example has no name (`E1101`).
+- Its place among the other clauses of the header has no effect: examples are never evaluated by a
+  call, only by `nex test`, in the order in which they are written.
 - **It has to contain a call of its own**: a call to its function written in the expression itself
   (`double(2)`, also nested, as in `double(double(1))`). Without it, `E2020`. A call that
   only happens inside another function does not count.
@@ -1412,11 +1490,12 @@ fn double(n: Int) -> Int {
   `false`: `E4004`, category `test`) or `error` (a runtime error or a broken rule, which
   keeps its code and gains a note with the example that caused it).
 
-### 9.5 Loops: `while`, `invariant` and `decreases`
+### 9.5 Loops: `while`, `keeps` and `shrinks`
 
-A loop repeats its body while its condition is `true`. Like a function, it declares at the beginning
-of its body the requirements that make it correct, and the interpreter checks them on every iteration
-([decision 0010](decisions/0010-var-y-while.md)):
+A loop repeats its body while its condition is `true`. Like a function, it declares in its header,
+between its head and its `{`, the requirements that make it correct, and the interpreter checks them on
+every iteration ([decision 0010](decisions/0010-var-y-while.md); their place and their words since
+0.12, [decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)):
 
 <!-- nex:run -->
 ```nex
@@ -1447,15 +1526,16 @@ fn main() {
 
 | Clause | How many | What it declares | Type |
 |--------|----------|------------------|------|
-| `decreases` | **Exactly one** | The **measure**: an integer that never goes below 0 and decreases on every iteration. It is the reason why the loop ends | `Int` |
-| `invariant` | Zero or more | A condition that holds before every evaluation of the loop condition: on arrival, after every iteration and, therefore, on exit | `Bool` |
+| `shrinks` | **Exactly one** | The **measure**: an integer that never goes below 0 and decreases on every iteration. It is the reason why the loop ends | `Int` |
+| `keeps` | Zero or more | An **invariant**: a condition that holds before every evaluation of the loop condition: on arrival, after every iteration and, therefore, on exit | `Bool` |
 
 Rules:
 
-- **Every `while` declares its measure.** Without `decreases`, or with more than one, it is the error `E2021`.
+- **Every `while` declares its measure.** Without `shrinks`, or with more than one, it is the error `E2021`.
 - The condition of the loop is `Bool` (`E2011`), and the measure, `Int` (`E2011`).
 - The clauses see what is visible where the loop is (parameters, `let`, `var`), not what
-  its body declares. They carry an optional explanation after a comma, like contracts.
+  its body declares. They carry an optional explanation after a comma and an optional name, like
+  contracts; a name is unique within the function, its header included (`E2031`).
 - Every iteration opens a new scope: what is declared in the body exists only during that iteration. What
   has to survive between iterations is declared with `var` before the loop.
 - A `return` inside the body ends the function.
@@ -1465,7 +1545,7 @@ Rules:
 
 Every time a loop runs:
 
-1. The `invariant` clauses are checked, in order. A false one stops the program: **`E4005`**.
+1. The `keeps` clauses are checked, in order. A false one stops the program: **`E4005`**.
 2. The condition is evaluated. If it is `false`, the loop ends.
 3. The measure is evaluated. If it is negative, or it is not strictly smaller than in the previous iteration of that
    same run of the loop, the program stops: **`E4006`**.
@@ -1561,8 +1641,8 @@ Rules:
   receive a new value (`E2007`). It cannot shadow a visible name either (`E2006`). It is not visible
   after the loop. Every iteration opens a new environment: what the body declares exists only during
   that iteration, and assignments to an outer `var` are kept.
-- **It has no `decreases`.** The list is finite by construction; a `decreases` in a `for` is the
-  error `E2022`. A `for` can declare zero or more `invariant` clauses, with the same semantics as in a
+- **It has no `shrinks`.** The list is finite by construction; a `shrinks` in a `for` is the
+  error `E2022`. A `for` can declare zero or more `keeps` clauses, with the same semantics as in a
   `while`: they are checked before every iteration and once after the last one. On an empty list they are
   checked once, before the first iteration, which never runs; there is no separate additional
   check. An invariant must be `Bool` (`E2011`) and, if it is false, the program stops
@@ -1597,7 +1677,10 @@ find errors:
 statement and no function runs. The only thing stage 3 evaluates is the conditions of
 refined types on the constants written in the code (section 4.4). Those conditions can only
 use `value`, literals, operators and built-in conversions, they do not call functions of the
-program, and the total work is bounded (`E2019`). They do not evaluate examples either (section 9.4).
+program, and the total work is bounded (`E2019`). They do not evaluate examples either (section 9.4),
+and no stage ever evaluates a `trust` (section 9.1). `nex check --evidence` is the same analysis.
+`nex migrate` runs stages 1 to 3 twice, with the front end of 0.11 and with that of 0.12, and never
+runs the program either.
 `nex run` runs the four stages, and never starts a program that has any error from stages
 1 to 3. `nex test` does too, but in stage 4 it evaluates the examples instead of `main`, and in stage 3
 it does not require `main`.
@@ -1614,7 +1697,7 @@ All of the following is reported by `nex check`, without running a single statem
 - Calls to functions that do not exist or with a wrong number of arguments.
 - **All type errors**: annotations, assignments, operators, arguments, return
   values, conditions, conditions of contracts and of loops, measures and use of `Void` as a value.
-- `while` loops without a measure, or with more than one, and a `decreases` in a `for`.
+- `while` loops without a measure, or with more than one, and a `shrinks` in a `for`.
 - Badly formed refined type declarations, and **every constant that does not meet the condition of the
   refined type where it is used** (`E2017`).
 - Functions that can end without `return`, and unreachable code after a `return`.
@@ -1634,11 +1717,11 @@ static analysis claims nothing about them:
 | `to_int` of a value that does not fit in an `Int` | `E3005` |
 | A `Text` longer than the limit of the environment, if it sets one | `E3006` |
 | The program runs out of available memory | `E3007` |
-| A false `requires` condition, also that of a function of a type (`Text.slice`, `Int.parse`, `List.get`…, section 8) | `E4001` |
-| A false `ensures` condition | `E4002` |
+| A false `needs` condition, also that of a function of a type (`Text.slice`, `Int.parse`, `List.get`…, section 8) | `E4001` |
+| A false `promises` condition | `E4002` |
 | A value checked with `Percent(x)` that does not meet the condition of its type | `E4003` |
-| A false `invariant` | `E4005` |
-| A measure (`decreases`) that is negative or does not decrease | `E4006` |
+| A false `keeps` | `E4005` |
+| A measure (`shrinks`) that is negative or does not decrease | `E4006` |
 
 The analysis does not decide whether a program ends. When it runs, an endless recursion stops with
 `E3004` and an endless loop, with `E4006`.
@@ -1700,7 +1783,7 @@ a summary of the command, not a diagnostic.
 | `semantic` | Names, scopes or structure of the program | Without running |
 | `type` | Types | Without running |
 | `runtime` | Depends on computed values | When running |
-| `contract` | A rule that the program declares was broken: `requires`, `ensures`, the condition of a refined type, an `invariant` or a measure | When running |
+| `contract` | A rule that the program declares was broken: `needs`, `promises`, the condition of a refined type, a `keeps` or a measure | When running |
 | `test` | An example evaluated by `nex test` turned out false | When running `nex test` |
 
 ### 11.3 Error codes
@@ -1721,11 +1804,11 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E1103` | Reserved word | `syntax` | A word reserved for a future version is used |
 | `E1105` | Expression too deeply nested | `syntax` | The nesting limits of section 3 are exceeded |
 | `E1106` | Misplaced contract clause | `syntax` | `needs`, `promises`, `trust` or `example` inside the body of a function, or `keeps` or `shrinks` inside the body of a loop |
-| `E1107` | Syntax before 0.12 | `syntax` | `requires`, `ensures`, `invariant` or `decreases`, the clause words of 0.11 (decision 0019) |
-| `E1108` | Arrow before the return type | `syntax` | `-> Type` after the parameters of a function (decision 0019) |
+| `E1107` | Syntax before 0.12 | `syntax` | `requires`, `ensures`, `invariant` or `decreases`, the clause words of 0.11, where a name is declared or a statement or clause starts (decision 0019). Only in the versions 0.12.x |
+| `E1108` | Arrow before the return type | `syntax` | `-> Type` after the parameters of a function (decision 0019). Only in the versions 0.12.x |
 | `E2001` | Missing main function | `semantic` | The program does not declare `main` |
 | `E2002` | Duplicate function | `semantic` | Two functions with the same name, or with that of a built-in one |
-| `E2004` | Invalid return type | `type` | `main` declares a return type other than `Void` |
+| `E2004` | Invalid return type | `type` | `main` has a `gives` |
 | `E2005` | Unknown variable | `semantic` | A name is used that is not declared or not visible |
 | `E2006` | Name already declared | `semantic` | A name is declared that is already visible, or that of a function |
 | `E2007` | Cannot reassign variable | `semantic` | An attempt to give a new value to a variable declared with `let`, to a parameter or to the iterator of a `for` |
@@ -1733,7 +1816,7 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E2009` | Wrong number of arguments | `type` | A call does not pass as many arguments as there are parameters |
 | `E2010` | Unused value | `semantic` | A computed value that is lost |
 | `E2011` | Type mismatch | `type` | A type is not the one the corresponding rule requires |
-| `E2012` | Invalid type | `type` | A name that is not a type, `List` without an argument, `Void` where a value type is needed, or a type argument that does not exist |
+| `E2012` | Invalid type | `type` | A name that is not a type, `List` without an argument, `Void` written as a type (also `gives Void`), or a type argument that does not exist |
 | `E2013` | Invalid parameter | `semantic` | `main` with parameters, or a parameter named `result` |
 | `E2014` | Missing return | `semantic` | A function that returns a value can end without `return` |
 | `E2015` | Unreachable code | `semantic` | Code placed after a `return` |
@@ -1742,7 +1825,7 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E2018` | Invalid refinement condition | `semantic` | The condition of a refined type calls a function of the program or checks another refined type |
 | `E2019` | Too many refinement checks | `semantic` | Checking the constants against their refined types exceeds the work limit of the analysis (section 4.4) |
 | `E2020` | Example without its function | `semantic` | An example contains no call to its function (section 9.4) |
-| `E2021` | Missing loop measure | `semantic` | A `while` without `decreases`, or with more than one (section 9.5) |
+| `E2021` | Missing loop measure | `semantic` | A `while` without `shrinks`, or with more than one (section 9.5) |
 | `E2022` | Unsupported loop clause | `semantic` | A `shrinks` in a `for`, which does not accept it (section 9.6) |
 | `E2023` | Invalid record construction | `type` | A construction of a record that is missing a field, has an extra one or is given the same one twice (section 4.6) |
 | `E2024` | Invalid field access | `type` | A field is read from a value that is not a record, or from a record that does not have that field (section 4.6) |
@@ -1763,13 +1846,13 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E3008` | Permission denied | `runtime` | The program tries to use a file it cannot use: it does not declare it, it is not allowed by whoever runs it, or the environment does not support files (section 8.3) |
 | `E3009` | No more input | `runtime` | `input()` is called when the standard input has already ended (section 8.3) |
 | `E3010` | File error | `runtime` | The file could be used, but it could not be read or written: it does not exist, it is not UTF-8 text, or the operating system prevented it |
-| `E3011` | Option has no value | `runtime` | `Option.unwrap` is called with a `None`: the variant does not carry the value (section 8.4) |
-| `E3012` | Result is an error | `runtime` | `Result.unwrap` is called with an `Err`: the variant does not carry the value (section 8.4) |
+| `E3011` | Option has no value | `runtime` | `Option.value` is called with a `None`: the variant does not carry the value (section 8.4) |
+| `E3012` | Result is an error | `runtime` | `Result.value` is called with an `Err`: the variant does not carry the value (section 8.4) |
 | `E3013` | Result is not an error | `runtime` | `Result.error` is called with an `Ok`: the variant does not carry the error (section 8.4) |
-| `E4001` | Precondition violated | `contract` | A `requires` condition is false in a call |
-| `E4002` | Postcondition violated | `contract` | An `ensures` condition is false when a function ends |
+| `E4001` | Precondition violated | `contract` | A `needs` condition is false in a call |
+| `E4002` | Postcondition violated | `contract` | A `promises` condition is false when a function ends |
 | `E4003` | Refinement violated | `contract` | A value checked with `Type(x)` does not meet the condition of the refined type |
-| `E4005` | Loop invariant violated | `contract` | An `invariant` is false before an iteration or after the last one of its loop (sections 9.5 and 9.6) |
+| `E4005` | Loop invariant violated | `contract` | A `keeps` is false before an iteration or after the last one of its loop (sections 9.5 and 9.6) |
 | `E4006` | Loop measure did not decrease | `contract` | The measure of a loop is negative or is not smaller than in the previous iteration (section 9.5) |
 | `E4004` | Example failed | `test` | An example evaluated by `nex test` is `false` (section 9.4) |
 
@@ -1940,12 +2023,12 @@ In [`examples/`](../examples/README.md) there are more programs, all of them run
 | `let x = 1 < 2 < 3` | `E1101` | Comparisons do not chain |
 | `break` | `E1103` | `break` is a reserved word |
 | `for x in 3 { }` | `E2011` | A `for` only goes through a `List[T]` |
-| `for x in xs { decreases 1 }` | `E2022` | A `for` has no measure |
+| `for x in xs` with the header `shrinks 1` | `E2022` | A `for` has no measure |
 | `for x in xs { x = 1 }` | `E2007` | The iterator of a `for` is immutable |
 | `print(total)` without declaring `total` | `E2005` | Unknown variable |
 | `let x = 1` and then `let x = 2` | `E2006` | The name is already declared |
 | `let x = 1` and then `x = 2` | `E2007` | A `let` variable does not change; declare it with `var` |
-| `while i < n { i = i + 1 }` | `E2021` | The measure is missing: `decreases n - i` |
+| `while i < n { i = i + 1 }` | `E2021` | The measure is missing: `shrinks n - i` |
 | `let age: Int = "twenty"` | `E2011` | `Int` was expected and the value is `Text` |
 | `let total = 10 + 2.5` | `E2011` | `Int` and `Float` do not mix |
 | `let ok = true + 1` | `E2011` | A `Bool` does not allow arithmetic |
@@ -1970,11 +2053,11 @@ In [`examples/`](../examples/README.md) there are more programs, all of them run
 | `add(1, "2")` | `E2011` | The second argument must be `Int` |
 | `add(1, 2)` as a statement | `E2010` | The returned value is not used |
 | `launch()` without declaring `launch` | `E2008` | The function does not exist |
-| A `-> Int` function without `return` on some path | `E2014` | A `return` is missing |
-| `return "x"` in a `-> Int` function | `E2011` | The returned value is not of the declared type |
-| `requires n` with `n` of type `Int` | `E2011` | The condition of a contract must be `Bool` |
+| A `gives Int` function without `return` on some path | `E2014` | A `return` is missing |
+| `return "x"` in a `gives Int` function | `E2011` | The returned value is not of the declared type |
+| `needs n` with `n` of type `Int` | `E2011` | The condition of a contract must be `Bool` |
 | `print(10 / 0)` | `E3001` | Division by zero (detected when running) |
-| `divide(1.0, 0.0)` with `requires b != 0.0` | `E4001` | Broken contract (detected when running) |
+| `divide(1.0, 0.0)` with `needs b != 0.0` | `E4001` | Broken contract (detected when running) |
 | `List.get([1, 2], 2)` | `E4001` | Index outside the list (detected when running) |
 | A file without `fn main` | `E2001` | The entry point is missing |
 
@@ -1982,7 +2065,7 @@ In [`examples/`](../examples/README.md) there are more programs, all of them run
 
 These are real limitations of this version, not bugs:
 
-- There are two forms of loop: `while`, which always declares its measure (`decreases`), and `for` over a
+- There are two forms of loop: `while`, which always declares its measure (`shrinks`), and `for` over a
   `List[T]`, which does not need one. There is no `break` or `continue`, and no compound assignments (`+=`).
 - `List[T]` lists are immutable and finite. There is no index syntax (`xs[i]`), no mutation of
   elements, no `List.set`, `map`, `filter`, sorting or total variant of `List.get`: to read
@@ -1998,7 +2081,7 @@ These are real limitations of this version, not bugs:
 - There are no maps, enumerations or `for` over ranges or `Text`. Records (section 4.6) have
   immutable fields and allow no methods, refinements or recursion. `List[T]` lists are
   immutable and finite. For `Option` and `Result` (section 4.7) there is no `match` or `if let`: the
-  variants are recognized with functions, and the value is read with `unwrap_or`.
+  variants are recognized with functions, and the value is read with `value_or` or `value`.
 - The operations on texts are those of section 8.1: there is no `trim`, case conversion, `split`,
   `replace` or search for positions. A character is a code point: graphemes are not counted.
 - There is no remainder operator (`%`).
@@ -2024,9 +2107,10 @@ These are real limitations of this version, not bugs:
 - The condition of a refined type cannot call functions of the program.
 - There are no type aliases without a condition (`type Id = Int`): a refined type always carries `where`. A
   record (section 4.6) is declared without `where`, because its fields carry no condition.
-- `nex inspect` only has JSON output, and does not show the tree if the program has lexical
-  or syntax errors.
-- There is no formatter, no language server and no other tools.
+- `nex inspect` only has JSON output. With lexical errors it has no tree; with syntax errors the
+  tree is partial (`complete` is `false`) and leaves out the parts that have them.
+- The formatter is only reachable through the language server (`nexora-lsp`): there is no `nex`
+  command for it ([LSP](lsp.md)).
 
 The complete list, with the limits of the implementation and the known risks, is in
 [Limitations](limitations.md).
@@ -2046,9 +2130,13 @@ Nothing of what follows works today. It is the direction of the design, taken fr
 - A broader effect system. Declared effects (`uses`) already exist for files
   (section 8.3), but a module does not declare what it needs and the rest of the language has no effects.
 - The network, external processes and environment variables.
-- AI-related features (`ai fn`, `tool fn`). There is no integration with
-  AI models: what exists are the structured representations (`nex inspect`, diagnostics in
-  JSON) that an external tool could consume.
+- There is no integration with AI models, and no design for one: what exists are the structured
+  representations (`nex inspect`, diagnostics in JSON) that an external tool could consume. The
+  words `ai` and `tool`, reserved for it until 0.11, are ordinary names since 0.12
+  ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), section 9).
+- Deciding a `needs` without running, at the call sites whose arguments are constants, and
+  reporting what the examples observe of each clause (`nex test --evidence`): later phases of
+  [decision 0019](decisions/0019-identidad-propia-del-lenguaje.md).
 
 ### Differences from the design draft
 
@@ -2061,13 +2149,13 @@ This specification takes precedence over the draft in what is already implemente
 | "No value" type | `Unit` | `Void` |
 | Joining texts | Not allowed; interpolation is used | `+` joins two `Text`, because interpolation does not exist yet |
 | Value of a function | The last expression of the block | Always with `return` |
-| Contracts | Between the signature and the body | At the beginning of the body, with an optional explanation after a comma |
-| Examples | `example` between the signature and the body; `nexora test` | At the beginning of the body, with the same rules as contracts; `nex test` |
+| Contracts | Between the signature and the body | Between the signature and the body (since 0.12; at the beginning of the body until 0.11), with an optional name and an optional explanation after a comma |
+| Examples | `example` between the signature and the body; `nexora test` | `example` between the signature and the body, with the same rules as contracts but without a name; `nex test` |
 | Dynamic value to refined type | `Percent.from(n)`, which returns a `Result` | `Percent(n)`, which stops the program with `E4003` if the condition is not met |
 | Aliases without a condition | `type UserId = Int` | They do not exist |
 | Conversion between numbers | `Int.to_float(x)` | `to_float(x)`, `to_int(x)` |
 | Unused variables | They are an error | Not checked yet |
-| Loops | `while` and `for`, without requirements | `while` with a required measure (`decreases`) and `for` over `List[T]`; both with optional invariants, checked on every iteration |
+| Loops | `while` and `for`, without requirements | `while` with a required measure (`shrinks`) and `for` over `List[T]`; both with optional invariants (`keeps`), checked on every iteration |
 | Naming conventions | Required (`snake_case`…) | Not checked yet |
 | Input | An `Input` record with `main(input)` | `args()` and `input()`, without changing the form of `main` (section 8.3) |
 | Files | No rule: the program can read them | They have to be declared with `uses` and allowed with `--allow-read` (section 8.3) |

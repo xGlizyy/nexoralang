@@ -133,7 +133,7 @@ def test_symbols_filters():
 
 def test_language_spec():
     index = call("nexora_get_language_spec").structured_content
-    assert (index["available"], index["spec_version"], index["section"]) == (True, "0.11", None)
+    assert (index["available"], index["spec_version"], index["section"]) == (True, "0.12", None)
     section = call("nexora_get_language_spec", {"section": "7-functions"}).structured_content["section"]
     assert section == tooling.get_language_spec("7-functions")["section"]
     assert section["text"].startswith("## 7. Functions")

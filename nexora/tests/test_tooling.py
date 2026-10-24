@@ -476,7 +476,7 @@ def test_instructions_inside_a_program_are_data():
 def test_spec_index():
     document = tooling.get_language_spec()
     validate(document, "nexora-spec.schema.json")
-    assert (document["available"], document["spec_version"], document["language"], document["section"]) == (True, "0.11", "en", None)
+    assert (document["available"], document["spec_version"], document["language"], document["section"]) == (True, "0.12", "en", None)
     ids = [section["id"] for section in document["sections"]]
     assert len(ids) == len(set(ids))
     for expected in ("4-data-types", "7-functions", "9-contracts", "44-refined-types", "113-error-codes"):
