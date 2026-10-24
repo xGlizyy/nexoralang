@@ -15,6 +15,7 @@ nex inspect <file> [--format json]
 nex context <file> [--format text|json]
 nex symbols <file> [--format text|json] [--name NAME] [--function FUNCTION]
 nex test <file> [--format text|json] [--function FUNCTION] [--allow-read PATH] [--allow-write PATH]
+nex migrate <file> [--write]
 nex --version
 nex --help
 ```
@@ -27,6 +28,7 @@ nex --help
 | `nex context` | Yes | **No** | A summary of the program |
 | `nex symbols` | Yes | **No** | The declared names and where they are used |
 | `nex test` | Yes | Its examples, not `main` | The result of each example |
+| `nex migrate` | Yes, with the front ends of 0.11 and of 0.12 | **No** | The migrated text; with `--write`, the files of the program |
 
 All the commands use the same lexer, the same parser and the same static
 checker. What `nex check` accepts is exactly what `nex run` runs.
@@ -199,6 +201,43 @@ that identifies the example). The overall result is:
 - What a function prints during an example is only shown if the example does not pass; in JSON it is
   always there, in the `output` field.
 
+## `nex migrate`
+
+Rewrites a program written for NEXORA 0.11 in the syntax of 0.12
+([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), section 8). It works on the whole
+program: the file and every module it imports.
+
+```bash
+nex migrate program.nex            # shows the edits and the migrated text; writes nothing
+nex migrate program.nex --write    # replaces the files, only if every check passed
+```
+
+The program is checked with the frozen front end of 0.11 and with the one of 0.12, without
+requiring `main`:
+
+| 0.11 | 0.12 | What happens | Exit code |
+|------|------|--------------|-----------|
+| Passes | Fails | The edits are computed; the text outside them, the structure and the check of 0.12 of the result are verified | `0` |
+| Fails | Passes | The program is already migrated: nothing is edited | `0` |
+| Fails | Fails | Refused: the markers of each file and the diagnostics of both front ends | `1` |
+| Passes | Passes | Nothing to migrate, if both read the files the same way; refused otherwise, or if a module is named like a new keyword | `0` or `1` |
+
+A case the tool cannot decide for the person (a clause on the line of the `{`, a name that is a
+keyword in 0.12…) is refused with its file, line and column, and nothing is written (code `1`). If a
+check that the edits are designed to pass does not pass, it is a defect of NEXORA: code `70`, and
+nothing is written.
+
+With `--write`, every file is read again before any is replaced; if one changed, nothing is written
+(code `1`). Then each file is written, in the order of the paths, to a temporary file beside it
+(whose name never ends in `.nex`) with the permission bits of the original, and put in its place
+with one rename. Replacing several files is **not** one transaction: on the first failed write
+(code `4`) or an interruption (Ctrl+C, code `130`), it stops, removes the temporary file of that file
+and lists the files replaced, the file that failed and the files not written. The files already
+replaced stay replaced. A crash or a power cut is not handled: a temporary file may be left behind.
+
+The command says only what it checked: *structure verified; text outside the edits verified;
+behaviour not checked by this command*.
+
 ## `nex --version`
 
 ```bash
@@ -246,10 +285,10 @@ Where each thing appears:
 | Code | Meaning | Commands |
 |------|---------|----------|
 | `0` | Success | All |
-| `1` | The program has lexical, syntax, semantic or type errors | `run`, `check`, `inspect`, `context`, `symbols`, `test` |
+| `1` | The program has lexical, syntax, semantic or type errors; `nex migrate`: refused, nothing written | `run`, `check`, `inspect`, `context`, `symbols`, `test`, `migrate` |
 | `2` | Wrong use of the command line | All |
 | `3` | The program failed while running (category `runtime`) | `run` |
-| `4` | The file does not exist, cannot be read or is not UTF-8 | `run`, `check`, `inspect`, `context`, `symbols`, `test` |
+| `4` | The file does not exist, cannot be read or is not UTF-8; for `nex migrate`, also a file of the program that could not be written | `run`, `check`, `inspect`, `context`, `symbols`, `test`, `migrate` |
 | `5` | While running, the program broke a rule that it declares: a contract, a refined type, an invariant or the measure of a loop (category `contract`) | `run` |
 | `6` | Some example did not pass (`failed` or `error`), or there was no example to evaluate | `test` |
 | `70` | Internal error of NEXORA: a failure of the tool, not of the program. A program that runs out of memory while running gives `3` in `run` and `6` in `test`, with the diagnostic `E3007` | All |
