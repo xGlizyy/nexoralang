@@ -345,6 +345,43 @@ _TEST_SKIPPED_CALL = {
     },
 }
 
+# nexora.evidence/1 (decision 0019, 5.3 and 5.7). Each dimension is an object with a status,
+# never null; "computed" only appears in the phases that compute it (2 and 4).
+_EVIDENCE_DIMENSION = {
+    "type": "object",
+    "required": ["status"],
+    "properties": {
+        "status": {"enum": ["not_applicable", "not_computed", "computed"]},
+        "reason": {"type": "string",
+                   "description": "Only with not_computed: analysis_only, phase_not_implemented or static_errors. "
+                                  "A reason a consumer does not know means 'not computed'."},
+    },
+}
+
+_EVIDENCE = {
+    "type": "object",
+    "required": ["id", "condition", "message", "enforcement", "static", "observed", "summary"],
+    "properties": {
+        "id": {"type": "object", "required": ["module", "function", "name", "kind", "stable"],
+               "properties": {
+                   "module": {"type": "string", "description": "Relative to the directory of the entry file, "
+                                                               "with '/'; empty for the entry file."},
+                   "function": {"type": "string"},
+                   "name": _NULLABLE_STRING,
+                   "kind": {"enum": ["needs", "promises", "trust", "keeps", "shrinks"]},
+                   "stable": {"type": "boolean",
+                              "description": "True for a named clause: (module, function, name) identifies it."}}},
+        "condition": {"type": "string"},
+        "message": _NULLABLE_STRING,
+        "enforcement": {"enum": ["checked", "trusted"],
+                        "description": "'trusted': the language never evaluates the condition."},
+        "static": {"$ref": "#/$defs/dimension"},
+        "observed": {"$ref": "#/$defs/dimension"},
+        "summary": {"enum": ["broken", "trusted", "proved", "exemplified", "checked"],
+                    "description": "The first rule of 5.5 that applies; each word comes from one dimension."},
+    },
+}
+
 _TEST_EXAMPLE = {
     "type": "object",
     "required": ["function", "index", "span", "expression", "message", "status", "values", "not_evaluated",
@@ -489,6 +526,18 @@ def all_schemas() -> dict[str, dict]:
         [*_HEADER_REQUIRED, "status", "filter", "summary", "examples"],
         {**base, "example": _TEST_EXAMPLE, "call": _TEST_CALL, "skipped_call": _TEST_SKIPPED_CALL},
     )
+    evidence = _document(
+        "nexora-evidence", "nexora.evidence/1: what backs every clause of a program (nex check --evidence)",
+        {**_header("nexora.evidence/1"),
+         "computed": {"type": "object", "required": ["static", "observed"],
+                      "properties": {"static": {"type": "boolean"}, "observed": {"type": "boolean"}},
+                      "description": "Which dimensions the command computed. The enforcement is always computed."},
+         "clauses": {"oneOf": [{"type": "array", "items": {"$ref": "#/$defs/evidence"}}, {"type": "null"}],
+                     "description": "One entry per needs, promises, trust, keeps and shrinks, by module path and "
+                                    "then in the order of the file. Null when the program has errors."}},
+        [*_HEADER_REQUIRED, "computed", "clauses"],
+        {**base, "evidence": _EVIDENCE, "dimension": _EVIDENCE_DIMENSION},
+    )
     result = _document(
         "nexora-result", "nexora.result/1: the outcome of checking or running a program (nexora.api, playground)",
         {"schema": {"const": "nexora.result/1"},
@@ -510,4 +559,5 @@ def all_schemas() -> dict[str, dict]:
         "nexora-capabilities.schema.json": capabilities,
         "nexora-result.schema.json": result,
         "nexora-test.schema.json": test,
+        "nexora-evidence.schema.json": evidence,
     }

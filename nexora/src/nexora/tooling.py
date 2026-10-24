@@ -44,6 +44,7 @@ SYMBOLS_SCHEMA = "nexora.symbols/2"
 CONTEXT_SCHEMA = "nexora.context/2"
 SPEC_SCHEMA = "nexora.spec/2"
 CAPABILITIES_SCHEMA = "nexora.capabilities/1"
+EVIDENCE_SCHEMA = "nexora.evidence/1"
 
 DEFAULT_FILENAME = "source.nex"
 
@@ -671,6 +672,143 @@ def render_symbols(document: dict) -> str:
     return "\n".join(lines)
 
 
+# Evidence (decision 0019, section 5)
+
+# Whether the language evaluates each kind of clause when the program runs (5.2).
+_ENFORCEMENT = {"needs": "checked", "promises": "checked", "keeps": "checked", "shrinks": "checked",
+                "trust": "trusted"}
+_NOT_APPLICABLE = {"status": "not_applicable"}
+
+
+def _static_of(kind: str) -> dict:
+    """Only a `needs` can be decided at its call sites, and no phase before 4 does it (5.3)."""
+    if kind == "needs":
+        return {"status": "not_computed", "reason": "phase_not_implemented"}
+    return dict(_NOT_APPLICABLE)
+
+
+def _observed_of(kind: str) -> dict:
+    """A `trust` is never evaluated; the rest could be observed, but the analysis runs nothing (5.3)."""
+    if kind == "trust":
+        return dict(_NOT_APPLICABLE)
+    return {"status": "not_computed", "reason": "analysis_only"}
+
+
+def _path_parts(path: str) -> list[str]:
+    """The parts of a path, with `.` and `..` resolved on the text: no file is looked at."""
+    parts: list[str] = []
+    for part in path.replace("\\", "/").split("/"):
+        if part == "..":
+            if parts and parts[-1] != "..":
+                parts.pop()
+            else:
+                parts.append(part)
+        elif part != ".":
+            parts.append(part)
+    return parts
+
+
+def _module_id(path: str, entry_path: str) -> str:
+    """A module as 7.1 identifies it: its path relative to the directory of the entry file, with
+    `/`; `""` for the entry file. Computed on the text of the paths, as the analysis knows them."""
+    if path == entry_path:
+        return ""
+    target, base = _path_parts(path), _path_parts(entry_path)[:-1]
+    shared = 0
+    while shared < min(len(target), len(base)) and target[shared] == base[shared]:
+        shared += 1
+    if shared == 0 and target and (target[0] == "" or target[0].endswith(":")):
+        return "/".join(target)     # an absolute path outside the directory: no relative path
+    return "/".join([".."] * (len(base) - shared) + target[shared:])
+
+
+def _clauses_of(function: ast.Function) -> list[ast.Contract | ast.LoopClause]:
+    """The `needs`, `promises`, `trust`, `keeps` and `shrinks` of a function, in the order of the
+    file: the header first, then the loops of the body."""
+    loops = [clause for node in _walk(function.body) if isinstance(node, (ast.While, ast.For))
+             for clause in node.clauses]
+    return [*function.contracts, *loops]
+
+
+def _evidence_entry(module: str, function: ast.Function, clause: ast.Contract | ast.LoopClause,
+                    source: Source) -> dict:
+    kind = clause.clause
+    return {
+        # Only a named clause has an identity that survives an edit (7.1).
+        "id": {"module": module, "function": function.name, "name": clause.name, "kind": kind,
+               "stable": clause.name is not None},
+        "condition": _text_of(source, clause.condition.span),
+        "message": clause.message,
+        "enforcement": _ENFORCEMENT[kind],
+        "static": _static_of(kind),
+        "observed": _observed_of(kind),
+        # 5.5: with nothing observed and nothing decided, the word comes from the enforcement.
+        "summary": _ENFORCEMENT[kind],
+    }
+
+
+def evidence_document(analysis: Analysis) -> dict:
+    """The `nexora.evidence/1` document of an analysis (`nex check --evidence`): what backs every
+    clause of the program. Only the enforcement dimension is computed; nothing is run, decided or
+    observed. `clauses` is null when the program has errors."""
+    if analysis.project is not None:
+        reports = analysis.project.reports()
+        document = _header(EVIDENCE_SCHEMA, analysis.source.name, tuple(d for d, _ in reports),
+                           [file.name for _, file in reports])
+    else:
+        document = _header(EVIDENCE_SCHEMA, analysis.source.name, analysis.diagnostics)
+    document["computed"] = {"static": False, "observed": False}
+    if analysis.checked is None:
+        document["clauses"] = None
+        return document
+
+    if analysis.project is not None:
+        # Each module is known by the path it is shown with, relative to the program (decision 0018).
+        entry_path = analysis.project.entry.source.name
+        modules = [(_module_id(module.source.name, entry_path), module) for module in analysis.project.modules]
+        files = [(name, module.program, module.source) for name, module in modules]
+    else:
+        files = [("", analysis.program, analysis.source)]
+    clauses = []
+    # By module path, compared by code point, as 7.2 orders a report; the entry file, "", first.
+    for name, program, source in sorted(files, key=lambda item: item[0]):
+        for function in program.functions:
+            clauses += [_evidence_entry(name, function, clause, source) for clause in _clauses_of(function)]
+    document["clauses"] = clauses
+    return document
+
+
+def get_evidence(source: str, filename: str = DEFAULT_FILENAME) -> dict:
+    """What backs every `needs`, `promises`, `trust`, `keeps` and `shrinks` of a program, as a
+    `nexora.evidence/1` document. Computed by the same analysis as `check_source`: the program is
+    not run, so the only dimension computed is the enforcement (decision 0019, section 5)."""
+    return evidence_document(analyze(Source(filename, source)))
+
+
+def _count_of(number: int, noun: str) -> str:
+    return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+
+
+def render_evidence(document: dict) -> str:
+    """A `nexora.evidence/1` document as text for people (what `nex check --evidence` prints)."""
+    clauses = document["clauses"]
+    functions: dict[tuple[str, str], list[dict]] = {}
+    for clause in clauses:
+        functions.setdefault((clause["id"]["module"], clause["id"]["function"]), []).append(clause)
+    computed = ", ".join(["enforcement", *(name for name in ("static", "observed") if document["computed"][name])])
+    lines = [f"{document['file']}: {_count_of(len(clauses), 'promise')} in "
+             f"{_count_of(len(functions), 'function')} (computed: {computed})"]
+
+    def label(clause: dict) -> str:
+        return f"{clause['id']['kind']} {clause['id']['name'] or clause['condition']}"
+
+    width = max((len(label(clause)) for clause in clauses), default=0) + 4
+    for (module, function), entries in functions.items():
+        lines.append(f"  {function}" if module == "" else f"  {function} ({module})")
+        lines.extend(f"    {label(clause):<{width}}{clause['summary']}" for clause in entries)
+    return "\n".join(lines)
+
+
 # The language itself
 
 def _slug(heading: str) -> str:
@@ -765,6 +903,6 @@ def get_capabilities() -> dict:
             "int_max": INT_MAX,
         },
         "schemas": [DIAGNOSTICS_SCHEMA, INSPECT_SCHEMA, SYMBOLS_SCHEMA, CONTEXT_SCHEMA, SPEC_SCHEMA,
-                    CAPABILITIES_SCHEMA],
+                    CAPABILITIES_SCHEMA, EVIDENCE_SCHEMA],
         "analysis_executes_code": False,
     }
