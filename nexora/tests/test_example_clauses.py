@@ -247,9 +247,10 @@ def test_inspect_puts_the_examples_in_the_header_of_the_function():
     assert first["condition"]["left"]["callee"] == "double" and first["condition"]["left"]["type"] == "Int"
 
 
-def test_a_consumer_of_0_3_1_notices_that_the_tree_changed_in_0_12():
+def test_a_consumer_of_0_3_1_reads_every_node_below_a_function_and_is_told_the_function_changed():
     # Case 38 held up to 0.11: the schema only gained fields. `nexora.inspect/3` removes
-    # `contracts` and `examples` from Function (decision 0019, 8.8), so an old consumer is told.
+    # `contracts` and `examples` from Function (decision 0019, 8.8): an old consumer rejects the
+    # document and the function, and still reads its parameters, its body and its clauses.
     import json
     from pathlib import Path
 
@@ -259,12 +260,24 @@ def test_a_consumer_of_0_3_1_notices_that_the_tree_changed_in_0_12():
 
     old = json.loads((Path(__file__).parent / "golden" / "schemas" / "nexora-inspect-0.3.1.schema.json")
                      .read_text(encoding="utf-8"))
+
+    def valid(kind: str, node: dict) -> bool:
+        try:
+            jsonschema.validate(node, {"$defs": old["$defs"], "$ref": f"#/$defs/{kind}"})
+        except jsonschema.ValidationError:
+            return False
+        return True
+
     document = tooling.inspect_source(TWO_EXAMPLES)
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(document, old)
-    old_order = old["$defs"]["Function"]["required"]
     function = document["program"]["functions"][1]
-    assert "contracts" in old_order and "contracts" not in function
+    assert not valid("Function", function)
+    assert "contracts" in old["$defs"]["Function"]["required"] and "contracts" not in function
+    assert all(valid("Param", param) for param in function["params"])
+    assert valid("TypeRef", function["return_type"]) and valid("Block", function["body"])
+    # An `Example` node of 0.12 has the fields of 0.4.0; 0.3.1 had no examples at all.
+    assert [list(item) for item in function["header"]] == [["kind", "span", "condition", "message"]] * 2
 
 
 def test_context_lists_examples_last_and_keeps_the_call_graph():

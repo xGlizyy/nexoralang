@@ -28,8 +28,10 @@ name the documented diagnostics show.
 
 The decisions in docs/decisions/ are records: their programs are written in the syntax of the
 version that decided them. Up to 0.11 that syntax is no longer accepted (decision 0019), so a
-checked block of a decision is checked with the frozen front end of 0.11, `nexora.legacy011`: it
-must still pass, or still fail, the analysis of 0.11, and its documented output is not compared.
+checked block of a decision is checked with the frozen front end and interpreter of 0.11,
+`nexora.legacy011`, and its documented output is compared, character by character, with what
+`nex run` of 0.11 printed: the same interpreter and the same rendering of the diagnostics. A
+decision is never rewritten, so its expected output is never regenerated either.
 
 After an intended change in the output, rewrite the expected blocks and review the result:
 
@@ -46,6 +48,7 @@ import pytest
 from nexora import __version__, cli
 from nexora.diagnostics import CATEGORIES, CODES
 from nexora.legacy011 import diagnostics as diagnostics011
+from nexora.legacy011 import interpreter as interpreter011
 from nexora.legacy011 import pipeline as pipeline011
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -149,6 +152,35 @@ def assert_expected(block: Block, actual: str) -> None:
     assert expected.text == actual, f"{block.label}: the documented output is not what NEXORA produces"
 
 
+def run_0_11(source: str) -> tuple[int, str]:
+    """What `nex run program.nex` of 0.11 exits with and writes (standard output, then errors)."""
+    file = diagnostics011.Source("program.nex", source + "\n")
+    analysis = pipeline011.analyze(file)
+    assert analysis.ok, [(d.code, d.label) for d in analysis.diagnostics]
+    printed: list[str] = []
+    try:
+        interpreter011.run(analysis.checked, printed.append)
+    except diagnostics011.NexoraRuntimeError as error:
+        contract = error.diagnostic.category == diagnostics011.CONTRACT
+        summary = "a contract was broken" if contract else "of a runtime error"
+        report = f"{diagnostics011.render(error.diagnostic, file)}\n\nerror: program.nex: the program stopped because {summary}\n"
+        return (5 if contract else 3), "".join(printed) + report
+    return 0, "".join(printed)
+
+
+def check_record_of_0_11(block: Block) -> None:
+    """A checked block of a decision, with the frozen front end and interpreter of 0.11."""
+    assert block.marker in ("run", "fails", "valid", "check-fails"), f"{block.label}: nex:{block.marker}"
+    analysis = pipeline011.analyze(diagnostics011.Source("program.nex", block.text + "\n"))
+    assert analysis.ok is (block.marker != "check-fails"), f"{block.label}: {analysis.diagnostics}"
+    if block.marker in ("run", "fails"):
+        code, output = run_0_11(block.text)
+        assert code == int(block.options.get("exit", 0)), f"{block.label}: exit code {code}"
+        assert block.expected is not None, f"{block.label}: a `text` block with the expected output must follow"
+        actual = "\n".join(line.rstrip() for line in output.strip("\n").split("\n"))
+        assert block.expected.text == actual, f"{block.label}: the record is not what NEXORA 0.11 produced"
+
+
 def test_the_documentation_has_checked_examples():
     assert len(CHECKED) >= 40
     assert {block.marker for block in CHECKED} == MARKERS
@@ -171,10 +203,7 @@ def test_documented_example(block, tmp_path, monkeypatch, capsys):
     source = block.text
 
     if DECISIONS in block.document.parents:
-        # A record in the syntax of 0.11: checked with the frozen front end of 0.11.
-        assert block.marker in ("run", "fails", "valid", "check-fails"), f"{block.label}: nex:{block.marker}"
-        analysis = pipeline011.analyze(diagnostics011.Source("program.nex", source + "\n"))
-        assert analysis.ok is (block.marker != "check-fails"), f"{block.label}: {analysis.diagnostics}"
+        check_record_of_0_11(block)
         return
     if block.marker == "run":
         code, out, err = run("run")

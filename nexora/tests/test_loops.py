@@ -588,22 +588,40 @@ def test_inspect_has_the_new_nodes_and_follows_its_schema():
     assert loop_node["clauses"][1]["condition"]["type"] == "Int"
 
 
+def _valid_in(schema: dict, kind: str, node: dict) -> bool:
+    """Whether `node` is a valid `kind` for the definitions of an old schema."""
+    try:
+        jsonschema.validate(node, {"$defs": schema["$defs"], "$ref": f"#/$defs/{kind}"})
+    except jsonschema.ValidationError:
+        return False
+    return True
+
+
 def _schema_of_0_4_0() -> dict:
     path = Path(__file__).parent / "golden" / "schemas" / "nexora-inspect-0.4.0.schema.json"
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def test_a_consumer_of_0_4_0_notices_that_the_tree_changed_in_0_12():
-    # Decision 0019, 8.8: `nexora.inspect/3` removes fields and changes their meaning, so even a
-    # program without loops is no longer a document of the old schema.
+def test_a_program_without_loops_keeps_the_body_of_0_4_0_and_only_its_function_changed():
+    # Decision 0019, 8.8: `nexora.inspect/3` changes the document and `Function` (`header`
+    # replaces `contracts` and `examples`, `return_type` can be null). Everything below a
+    # function is unchanged, so a body without loops is still a Block of 0.4.0.
+    old = _schema_of_0_4_0()
+    document = tooling.inspect_source(in_main("let x = 1\nprint(x)"))
+    (main,) = document["program"]["functions"]
+    assert _valid_in(old, "Block", main["body"])
+    assert not _valid_in(old, "Function", main)
     with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(tooling.inspect_source(in_main("let x = 1\nprint(x)")), _schema_of_0_4_0())
+        jsonschema.validate(document, old)
 
 
 def test_a_consumer_of_0_4_0_notices_a_var_instead_of_reading_it_as_a_let():
     # Decision 0010, section 11: a new kind of node, not a new field that an old tool would ignore.
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(tooling.inspect_source(in_main("var x = 1\nprint(x)")), _schema_of_0_4_0())
+    # Checked on the body, which 0.12 did not change, so the Var is what the old schema rejects.
+    old = _schema_of_0_4_0()
+    (main,) = tooling.inspect_source(in_main("var x = 1\nprint(x)"))["program"]["functions"]
+    assert not _valid_in(old, "Block", main["body"])
+    assert _valid_in(old, "ExprStatement", main["body"]["statements"][1])
 
 
 def test_symbols_say_which_variables_change_and_where():
