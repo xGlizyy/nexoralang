@@ -1,12 +1,18 @@
 # Contracts
 
-> **Status: stable since version 0.3.0.** The position of the clauses, the name `result` and the
-> explanation after a comma are final ([decision 0007](decisions/0007-contratos-estables-y-tipos-refinados.md)).
+> **Status: since version 0.12** the clauses go in the header of the function, between its
+> signature and its body, and are called `needs`, `promises` and `trust`
+> ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)). From 0.3 to 0.11 they were
+> `requires` and `ensures`, at the beginning of the body
+> ([decision 0007](decisions/0007-contratos-estables-y-tipos-refinados.md)); `nex migrate` rewrites a
+> program of 0.11. The name `result` and the explanation after a comma do not change.
 
 A contract is a condition that a function declares as part of itself:
 
-- **`requires`**: what the function **expects** from its caller (precondition).
-- **`ensures`**: what the function **promises** when it ends (postcondition).
+- **`needs`**: what the function **expects** from its caller (precondition).
+- **`promises`**: what the function **promises** when it ends (postcondition).
+- **`trust`**: something the function **relies on** and the language does **not** check (see
+  [`trust`](#trust-what-the-language-does-not-check)).
 
 Contracts are evaluated with the normal rules of the language. They are deterministic and no
 AI model is involved.
@@ -51,18 +57,23 @@ fn main() {
 
 ## Rules
 
-- The clauses go **at the beginning of the body**, one per line, before any statement.
-  There can be several of each kind.
+- The clauses go **in the header**: after the signature, one per line, and the `{` of the body goes
+  alone on the line after the last one. There can be several of each kind, in any order.
 - The condition has to be of type `Bool`.
-- In `requires` only **the parameters** of the function are visible.
-- In `ensures` the parameters and **`result`** are visible; `result` is the value returned by the function
-  and has its return type. In a `Void` function `result` does not exist.
-- Parameters do not change their value, so in `ensures` they are worth the same as on entry.
+- In `needs` and `trust` only **the parameters** of the function are visible.
+- In `promises` the parameters and **`result`** are visible; `result` is the value returned by the
+  function and has its result type. In a function without `gives`, `result` does not exist.
+- Parameters do not change their value, so in `promises` they are worth the same as on entry.
 - A condition can call functions.
-- `result` only has this meaning inside `ensures`. In the body it is an ordinary name.
+- `result` only has this meaning inside `promises`. In the body it is an ordinary name.
   A parameter cannot be named `result`.
 - After the condition there may be, after a comma, the **explanation** of the rule (next
   section).
+- A clause can have a **name**, before its condition: `needs fits: part <= 92233720368547758`. It
+  is written in lowercase, it is unique within the function and its loops, and it cannot be a
+  parameter or `result` (`E2031`). It is not a variable: no expression uses it. When the clause
+  is broken, the diagnostic names it: `This call breaks needs 'fits' of 'percentage'`. Names are
+  optional.
 
 ## The explanation of a rule
 
@@ -70,7 +81,7 @@ A condition says *what* is required; its explanation says *why*. It is written a
 text:
 
 ```text
-requires amount <= balance, "An account cannot go below zero"
+needs amount <= balance, "An account cannot go below zero"
 ```
 
 The explanation does not change what is checked. When the condition is false, it appears in the
@@ -108,17 +119,19 @@ contract error[E4001]: Precondition violated
 error: program.nex: the program stopped because a contract was broken
 ```
 
-It is optional. It is worth writing it when the condition does not explain itself: `requires b != 0.0` does not
-need it; `requires amount <= balance` does, because the rule belongs to the business, not to arithmetic. It is
-a single sentence: an empty text or one with a line break is an error (`E1101`).
+It is optional, except in a `trust`. It is worth writing it when the condition does not explain itself:
+`needs b != 0.0` does not need it; `needs amount <= balance` does, because the rule belongs to the
+business, not to arithmetic. It is a single sentence: an empty text or one with a line break is an
+error (`E1101`).
 
 ## When each thing is checked
 
 | Moment | What is checked |
 |--------|-----------------|
 | Without running (`nex check`) | That the condition is well written: visible names, correct types, `Bool` result |
-| When running, on **every** call | `requires`: after receiving the arguments and **before** running the body |
-| When running, on **every** call | `ensures`: **after** computing the return value |
+| When running, on **every** call | `needs`: after receiving the arguments and **before** running the body |
+| When running, on **every** call | `promises`: **after** computing the return value |
+| Never | `trust`: its condition is not evaluated |
 
 `nex check` rejects a badly typed condition without running anything:
 
@@ -154,7 +167,7 @@ type error[E2011]: Type mismatch
 error: program.nex: check failed with 2 errors
 ```
 
-## When `requires` does not hold
+## When `needs` does not hold
 
 The program stops **before** running the body of the function. The diagnostic points at **the
 call**, because the caller is the one who breaks it, and it shows the condition and the values received:
@@ -194,10 +207,12 @@ error: program.nex: the program stopped because a contract was broken
 Without the contract, the same program would fail with a division by zero inside `divide`. With it,
 the error says which rule was broken and from where.
 
-### The functions of the language also have `requires`
+<a id="the-functions-of-the-language-also-have-requires"></a>
+
+### The functions of the language also have `needs`
 
 The functions of a type that do not always have an answer (`Text.slice`, `Int.parse`,
-`Float.parse`) declare their `requires` in NEXORA, with their explanation, and fail with the same `E4001`
+`Float.parse`) declare their `needs` in NEXORA, with their explanation, and fail with the same `E4001`
 ([specification](language-spec.md), section 8.1). The caller can move the requirement to its
 own function:
 
@@ -219,9 +234,9 @@ fn main() {
 ```
 
 `nex symbols` shows the requirements of every built-in function in its `contracts` field, so a
-tool knows before running anything that `Int.parse` requires `Int.can_parse`.
+tool knows before running anything that `Int.parse` needs `Int.can_parse`.
 
-## When `ensures` does not hold
+## When `promises` does not hold
 
 The diagnostic points at **the clause**, because it is the function that does not meet what it promises, and
 it shows the returned value:
@@ -257,6 +272,57 @@ error: program.nex: the program stopped because a contract was broken
 ```
 
 Here the contract has found a real bug in the body: it adds the percentage instead of subtracting it.
+
+## `trust`: what the language does not check
+
+A `trust` states a condition the function relies on and NEXORA **does not check**. It is written like
+a `needs`, with an explanation that is required: the explanation is the only thing behind it.
+
+<!-- nex:run -->
+```nex
+fn hours_slept(minutes: Int) gives Int
+    needs minutes >= 0, "Time does not run backwards"
+    trust plausible: minutes < 1440, "The sensor sends one night at a time"
+{
+    return minutes / 60
+}
+
+fn main() {
+    print(hours_slept(450))
+    print(hours_slept(5000))
+}
+```
+
+```text
+7
+83
+```
+
+- Its condition is checked for being a well-written `Bool`, and it sees only the parameters.
+- It is **never evaluated**: not on a call, not by `nex check`, not by `nex test`. It cannot fail and
+  cannot stop the program: `hours_slept(5000)` runs, although the trusted condition is false.
+  Removing every `trust` from a program does not change what it does.
+- A trusted condition is **neither proved nor checked**. A tool, a report or a document must never
+  present it as verified.
+
+Use it to write down an assumption that a person vouches for and that the program cannot or should
+not check on every call; when the rule can be checked, write a `needs`.
+
+## What backs each clause
+
+`nex check --evidence` says, for every clause of the program, whether the language evaluates it when
+the program runs ([CLI reference](cli-reference.md#--evidence)):
+
+```text
+program.nex: 2 promises in 1 function (computed: enforcement)
+  hours_slept
+    needs minutes >= 0    checked
+    trust plausible       trusted
+```
+
+`checked` means that a false condition stops the program, not that it is never false; `trusted`,
+that nothing checks it. It runs nothing. Deciding a `needs` without running, and counting what the
+examples observe, are later phases of [decision 0019](decisions/0019-identidad-propia-del-lenguaje.md).
 
 ## Examples (`example`)
 
@@ -327,7 +393,7 @@ error: program.nex: 2 of 2 examples did not pass (1 failed, 1 error)
 ```
 
 The first example is `failed` (`E4004`): the function answered, but not what was expected. The second one is
-`error`: it never got to answer, because the call breaks the `requires`; it keeps the `E4001` and gains
+`error`: it never got to answer, because the call breaks the `needs`; it keeps the `E4001` and gains
 a note with the example that caused it.
 
 A file without examples is not taken as tested:
@@ -344,15 +410,18 @@ program.nex: no examples to run
 error: program.nex: nothing was tested
 ```
 
-## Loops: `invariant` and `decreases`
+<a id="loops-invariant-and-decreases"></a>
 
-A `while` loop declares its requirements at the beginning of its body, just like a function
-([decision 0010](decisions/0010-var-y-while.md)):
+## Loops: `keeps` and `shrinks`
 
-- **`decreases`** (exactly one): the **measure**, an `Int` that never goes below 0 and that decreases on
+A `while` loop declares its requirements in its header, between its condition and its `{`, just like
+a function ([decision 0010](decisions/0010-var-y-while.md); the words and the place since 0.12,
+[decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)):
+
+- **`shrinks`** (exactly one): the **measure**, an `Int` that never goes below 0 and that decreases on
   every iteration. It is the reason why the loop ends, written in the code.
-- **`invariant`** (as many as needed): a condition that holds before every evaluation of the
-  condition of the loop; that is, on arrival, after every iteration and on exit.
+- **`keeps`** (as many as needed): an **invariant**, a condition that holds before every evaluation
+  of the condition of the loop; that is, on arrival, after every iteration and on exit.
 
 <!-- nex:run -->
 ```nex
@@ -383,7 +452,8 @@ fn main() {
 ```
 
 The clauses see what is visible where the loop is, not what its body declares, and they carry their
-explanation after a comma. A loop without `decreases` does not pass `nex check` (`E2021`).
+explanation after a comma and, optionally, a name. A loop without `shrinks` does not pass
+`nex check` (`E2021`). A `for` takes `keeps` but no `shrinks` (`E2022`): its list is finite.
 
 The interpreter checks them **on every iteration**. A false invariant is `E4005`; a measure that is negative
 or is not smaller than in the previous iteration is `E4006`. That way, no loop keeps repeating
@@ -431,14 +501,16 @@ error: program.nex: the program stopped because a contract was broken
 
 | Situation | Code | Category | `nex run` ends with |
 |-----------|------|----------|---------------------|
-| False `requires` condition | `E4001` | `contract` | `5` |
-| False `ensures` condition | `E4002` | `contract` | `5` |
-| False `invariant` in a loop | `E4005` | `contract` | `5` |
-| Measure (`decreases`) that does not decrease or is negative | `E4006` | `contract` | `5` |
+| False `needs` condition | `E4001` | `contract` | `5` |
+| False `promises` condition | `E4002` | `contract` | `5` |
+| False `keeps` in a loop | `E4005` | `contract` | `5` |
+| Measure (`shrinks`) that does not decrease or is negative | `E4006` | `contract` | `5` |
 | Loop without a measure, or with more than one | `E2021` | `semantic` | `1` (it does not run) |
 | Badly typed condition | `E2011` | `type` | `1` (it does not run) |
-| Clause outside the beginning of the body | `E1106` | `syntax` | `1` (it does not run) |
-| Explanation that is empty, longer than one line or not a text | `E1101` | `syntax` | `1` (it does not run) |
+| Clause inside a body instead of the header | `E1106` | `syntax` | `1` (it does not run) |
+| Explanation that is empty, longer than one line or not a text, or a `trust` without one | `E1101` | `syntax` | `1` (it does not run) |
+| A clause name used twice, or equal to a parameter or `result` | `E2031` | `semantic` | `1` (it does not run) |
+| `requires`, `ensures`, `invariant` or `decreases`, the words of 0.11 | `E1107` | `syntax` | `1` (it does not run) |
 
 If evaluating the condition itself produces an error (for example, a division by zero inside
 the condition), the error reported is that one (`runtime`, exit code `3`), not a contract
@@ -453,14 +525,14 @@ What contracts do **not** do. It is important not to attribute to them more guar
 - **Only the calls that run are checked.** A program ending without violations
   means that that run, with those values, met the contracts. It says nothing about other
   values.
-- **A condition that can never hold is accepted.** `requires n > 0 and n < 0` passes `nex check`;
+- **A condition that can never hold is accepted.** `needs n > 0 and n < 0` passes `nex check`;
   the violation appears on the first call.
 - **It is not checked that conditions have no effects.** A condition can call a
   function that uses `print`.
-- **They cannot be turned off.** They are always checked, and every check has a running
-  cost.
+- **They cannot be turned off.** `needs` and `promises` are always checked, and every check has a
+  running cost. A `trust` is never checked (see above).
 - There are no conditions on values "before" and "after" a function: parameters do not change,
-  so in `ensures` they have the value the function was called with. Invariants only exist in
+  so in `promises` they have the value the function was called with. Invariants only exist in
   loops. The rules on the values of a type are written with
   [refined types](types.md#refined-types).
 - **A measure guarantees that the loop ends, not that it ends soon.** An initial measure of a
@@ -477,5 +549,6 @@ Whether that really helps people and AI tools, and how much, **has not been meas
 it is a working hypothesis, not a result.
 
 The design decisions and their alternatives are in
-[`decisions/0004`](decisions/0004-contratos-en-ejecucion.md) and
-[`decisions/0007`](decisions/0007-contratos-estables-y-tipos-refinados.md).
+[`decisions/0004`](decisions/0004-contratos-en-ejecucion.md),
+[`decisions/0007`](decisions/0007-contratos-estables-y-tipos-refinados.md) and, for the syntax of 0.12
+and `trust`, [`decisions/0019`](decisions/0019-identidad-propia-del-lenguaje.md).

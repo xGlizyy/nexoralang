@@ -32,8 +32,8 @@ Hello from NEXORA
 
 What each part means:
 
-- `fn main() -> Void { ... }` declares the `main` function. Every program starts running
-  there. `Void` means that it returns no value.
+- `fn main() { ... }` declares the `main` function. Every program starts running
+  there. It has no `gives`, because it returns no value.
 - `print(...)` writes a value to the screen, followed by a line break.
 - Statements end at the end of the line. No semicolon is used.
 - NEXORA files have the `.nex` extension and are saved as UTF-8 text.
@@ -167,7 +167,7 @@ Hello, Ada!
 ```
 
 - `return` returns the result and ends the function.
-- A function that returns nothing uses `Void`, like `greet` and `main`.
+- A function that returns nothing has no `gives`, like `greet` and `main`.
 - Functions can be declared in any order.
 
 ## 6. Deciding with `if`
@@ -206,8 +206,8 @@ variable of type `Bool`, or a combination with `and`, `or` and `not`.
 ### Repeating with `while`
 
 `while` repeats a block while its condition is true. What changes from one iteration to the next is
-declared with `var`. Every loop says, with `decreases`, why it ends: a number that goes down on every
-iteration and never goes below 0.
+declared with `var`. Every loop says, with `shrinks`, why it ends: a number that goes down on every
+iteration and never goes below 0. It goes in the header of the loop, between its condition and its `{`.
 
 <!-- nex:run -->
 ```nex
@@ -231,8 +231,8 @@ liftoff
 ```
 
 If the number does not go down (for example, because you forget `count = count - 1`), the program does not
-hang: it stops on the second iteration and tells you which values it had. [Contracts](contracts.md#loops-invariant-and-decreases)
-also explain `invariant`, to say what stays true on every iteration.
+hang: it stops on the second iteration and tells you which values it had. [Contracts](contracts.md#loops-keeps-and-shrinks)
+also explain `keeps`, to say what stays true on every iteration.
 
 The guide on [functions](functions.md) explains the rest: return paths, recursion and limits.
 

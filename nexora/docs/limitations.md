@@ -21,7 +21,7 @@ NEXORA is an early-stage project (before version 1.0):
 | The path analysis recognizing that a `for` always returns | It does not consider it a complete return path, even if all its iterations contain a `return`; if the loop is the last statement, a `return` has to be added after it |
 | Compound assignments (`+=`, `++`) | Write `x = x + 1` |
 | Reassigning a parameter or the iterator of a `for` | Copy it first into a `var` |
-| A `while` without a measure (`decreases`) | Every `while` declares why it ends; if a measure cannot be written, put an explicit maximum number of iterations (`decreases limit - turns`). A `for` over a finite list does not need one |
+| A `while` without a measure (`shrinks`) | Every `while` declares why it ends; if a measure cannot be written, put an explicit maximum number of iterations (`shrinks limit - turns`). A `for` over a finite list does not need one |
 | `if` as an expression | `if` cannot be used to give a variable its value |
 | Indexing a list (`xs[i]`) or modifying its elements | Use `List.get(xs, i)` to read; `List.append` and `List.concat` create another list. There is no `List.set` and no mutation |
 | A total variant of `List.get` | `List.get` requires `0 <= i and i < List.length(xs)` and fails with `E4001`; there is no `Option` to represent the absence |

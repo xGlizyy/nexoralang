@@ -168,7 +168,7 @@ async def main():
     async with Client(server) as client:
         tools = await client.list_tools()
         print([tool.name for tool in tools.tools])
-        result = await client.call_tool("nexora_check", {"source": "fn main() -> Void {\n    print(x)\n}"})
+        result = await client.call_tool("nexora_check", {"source": "fn main() {\n    print(x)\n}"})
         print(result.structured_content["diagnostics"][0]["code"])   # E2005
 
 asyncio.run(main())

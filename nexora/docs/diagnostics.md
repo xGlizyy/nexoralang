@@ -60,7 +60,7 @@ The category says at which stage the problem was found.
 | `semantic` | Names, scopes or structure of the program | Without running | `1` |
 | `type` | Types | Without running | `1` |
 | `runtime` | Depends on computed values | When running | `3` (with `nex test`, `6`) |
-| `contract` | A rule that the program declares was broken: a `requires` or `ensures` condition, or the condition of a refined type | When running | `5` (with `nex test`, `6`) |
+| `contract` | A rule that the program declares was broken: a `needs` or `promises` condition, a `keeps` or a measure of a loop, or the condition of a refined type | When running | `5` (with `nex test`, `6`) |
 | `test` | An example evaluated by `nex test` turned out false | When running `nex test` | `6` |
 
 The stages run in order and each one only runs if the previous one found no errors.
@@ -107,7 +107,7 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 
 | Code | Title | What it means | What to do |
 |------|-------|---------------|------------|
-| `E2001` | Missing main function | The program does not declare `main` | Add `fn main() -> Void { ... }` |
+| `E2001` | Missing main function | The program does not declare `main` | Add `fn main() { ... }` |
 | `E2002` | Duplicate function | Two functions with the same name, or with that of a built-in one | Rename one of them |
 | `E2005` | Unknown variable | A name is used that is not declared or is no longer visible | Declare it first with `let`, or fix the name |
 | `E2006` | Name already declared | A name is declared that is already visible, or that of a function | Choose another name |
@@ -118,10 +118,10 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E2014` | Missing return | A function that returns a value can end without `return` | Make sure that all branches end with `return` |
 | `E2015` | Unreachable code | Code placed after a `return` | Remove it or move it before the `return` |
 | `E2016` | Invalid type declaration | A refined type with a lowercase name, a repeated one or one of a built-in type, a chain of types that does not end in a built-in type, or a base that is a list. Also a record with an invalid or repeated name, a repeated field, or a record that contains itself | Fix the name or the base; the message says which of the cases it is |
-| `E2018` | Invalid refinement condition | The condition of a refined type calls a function of the program or checks another refined type | Write the rule with operators on `value`, or move it to a `requires` |
+| `E2018` | Invalid refinement condition | The condition of a refined type calls a function of the program or checks another refined type | Write the rule with operators on `value`, or move it to a `needs` |
 | `E2019` | Too many refinement checks | Checking the constants against their refined types exceeds the work limit of the analysis (100,000 condition nodes). It only happens with many constants of long chains of refined types | Use fewer constants of those types or shorter conditions |
 | `E2020` | Example without its function | An example contains no call to its own function: its expression does not name it anywhere. A call that only happens inside another function does not count | Write the call with its inputs: `example f(2) == 4` |
-| `E2021` | Missing loop measure | A `while` does not declare its measure (`decreases`), or declares more than one. Without a measure, nothing says why the loop ends | Add `decreases` with an `Int` that goes down on every iteration and does not go below 0, for example `decreases n - i` |
+| `E2021` | Missing loop measure | A `while` does not declare its measure (`shrinks`), or declares more than one. Without a measure, nothing says why the loop ends | Add `shrinks`, in the header of the loop, with an `Int` that goes down on every iteration and does not go below 0, for example `shrinks n - i` |
 | `E2022` | Unsupported loop clause | A `for` declares `shrinks`, but it goes through a finite list and has no measure | Remove the `shrinks`; if you need invariants, write them with `keeps` |
 | `E2026` | Missing capability declaration | A file is read or written without declaring it with `uses` ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Declare it at the beginning of the file: `uses read "data/inputs.txt"` |
 | `E2025` | Cannot reassign a field | A field of a record, which is immutable, is assigned to ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) | Build another record with the value you want |
@@ -135,10 +135,10 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 
 | Code | Title | What it means | What to do |
 |------|-------|---------------|------------|
-| `E2004` | Invalid return type | `main` declares a return type other than `Void` | Write `fn main() -> Void` |
+| `E2004` | Invalid return type | `main` has a `gives` | Write `fn main() {` |
 | `E2009` | Wrong number of arguments | The call does not pass as many arguments as the function has parameters | The note shows the signature of the function |
-| `E2011` | Type mismatch | A type is not the one the rule requires: annotation, assignment, operator, argument, return, condition, element of a list, iterable of a `for`, measure of a loop (`Int`), or a `Void` used as a value | The message says the expected type and the one found. Convert explicitly if a conversion exists |
-| `E2012` | Invalid type | A name that is not a type, `List` without an argument, a type argument that does not exist, or `Void` where a value type is needed | The types are `Int`, `Float`, `Bool`, `Text`, `Void` and `List[T]`, the refined types that the program declares and its records |
+| `E2011` | Type mismatch | A type is not the one the rule requires: annotation, assignment, operator, argument, return, condition, element of a list, iterable of a `for`, measure of a loop (`Int`), or a call to a function without `gives` used as a value | The message says the expected type and the one found. Convert explicitly if a conversion exists |
+| `E2012` | Invalid type | A name that is not a type, `List` without an argument, a type argument that does not exist, or `Void` written as a type (also `gives Void`) | The types are `Int`, `Float`, `Bool`, `Text` and `List[T]`, the refined types that the program declares and its records. `Void` is never written: a function that gives nothing has no `gives` |
 | `E2023` | Invalid record construction | A construction of a record that is missing a field, has an extra one or is given the same one twice ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) | Give each field once, with the name of the field |
 | `E2024` | Invalid field access | A field is read from a value that is not a record, or from a record that does not have that field ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) | The message says which fields the record has |
 | `E2017` | Value outside refined type | A constant used as a value of a refined type does not meet its condition. The notes show the condition, the value and the explanation of the rule | Change the value, or review the rule if it was wrong |
@@ -147,7 +147,7 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 
 | Code | Title | What it means | What to do |
 |------|-------|---------------|------------|
-| `E3001` | Division by zero | The divisor is zero | Check the divisor before dividing, or declare a `requires` |
+| `E3001` | Division by zero | The divisor is zero | Check the divisor before dividing, or declare a `needs` |
 | `E3002` | Integer overflow | An `Int` result does not fit in 64 bits | Use smaller values, or `Float` if you do not need exactness |
 | `E3003` | Float result out of range | A `Float` result is too large | Review the operation |
 | `E3004` | Too many nested calls | More than 1000 nested calls, or the stack ran out before | It is usually a recursion that does not reach its base case |
@@ -157,19 +157,19 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E3008` | Permission denied | The program tries to use a file it cannot use: it does not declare it with `uses`, whoever runs it has not allowed it with `--allow-read` or `--allow-write`, or the environment does not support files ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Declare the capability and ask for the permission: `uses read "data.txt"` and `nex run program.nex --allow-read=data` |
 | `E3009` | No more input | `input()` was called when the standard input had already ended | Check that there is more input before reading, or end the program |
 | `E3010` | File error | The file could be used, but it could not be read or written: it does not exist, it is not UTF-8 text, or the operating system prevented it | Check the path and that the file is UTF-8 text |
-| `E3011` | Option has no value | `Option.unwrap` was called with a `None`: the variant does not carry the value ([decision 0016](decisions/0016-option-y-result.md)) | Check first with `Option.is_none(...)`, or use `Option.unwrap_or(x, default)` |
-| `E3012` | Result is an error | `Result.unwrap` was called with an `Err`: the variant does not carry the value | Check first with `Result.is_err(...)`, or use `Result.unwrap_or(x, default)` |
+| `E3011` | Option has no value | `Option.value` was called with a `None`: the variant does not carry the value ([decision 0016](decisions/0016-option-y-result.md)) | Check first with `Option.is_none(...)`, or use `Option.value_or(x, fallback)` |
+| `E3012` | Result is an error | `Result.value` was called with an `Err`: the variant does not carry the value | Check first with `Result.is_err(...)`, or use `Result.value_or(x, fallback)` |
 | `E3013` | Result is not an error | `Result.error` was called with an `Ok`: the variant does not carry the error | Check first with `Result.is_ok(...)` |
 
 ### Contract
 
 | Code | Title | What it means | What to do |
 |------|-------|---------------|------------|
-| `E4001` | Precondition violated | A call does not meet a `requires` condition, of a function of the program or of a function of a type (`Text.slice`, `Int.parse`, `List.get`). It points at the call | Fix the arguments, or check the condition before calling (`Int.can_parse` before `Int.parse`, a valid index before `List.get`) |
-| `E4002` | Postcondition violated | A function does not meet its own `ensures` condition. It points at the clause | Fix the body of the function (or the condition, if it was wrong) |
+| `E4001` | Precondition violated | A call does not meet a `needs` condition, of a function of the program or of a function of a type (`Text.slice`, `Int.parse`, `List.get`). It points at the call | Fix the arguments, or check the condition before calling (`Int.can_parse` before `Int.parse`, a valid index before `List.get`) |
+| `E4002` | Postcondition violated | A function does not meet its own `promises` condition. It points at the clause | Fix the body of the function (or the condition, if it was wrong) |
 | `E4003` | Refinement violated | A value checked with `Type(x)` does not meet the condition of the refined type. It points at the check | Fix the computation that produces the value, or check it first with an `if` |
-| `E4005` | Loop invariant violated | An `invariant` is false before an iteration or after the last one: on arrival, after an iteration or when the list of a `for` runs out. It points at the clause; the notes say after which iteration and with which values | Fix the body of the loop, or the invariant if it did not describe what the loop keeps true |
-| `E4006` | Loop measure did not decrease | The measure (`decreases`) of a `while` is negative, or is not smaller than in the previous iteration: the loop was not going to end. It points at the measure; the label gives both values and the notes, the iteration and the variables | Make every iteration move towards the end of the loop, or fix the measure |
+| `E4005` | Loop invariant violated | A `keeps` is false before an iteration or after the last one: on arrival, after an iteration or when the list of a `for` runs out. It points at the clause; the notes say after which iteration and with which values | Fix the body of the loop, or the invariant if it did not describe what the loop keeps true |
+| `E4006` | Loop measure did not decrease | The measure (`shrinks`) of a `while` is negative, or is not smaller than in the previous iteration: the loop was not going to end. It points at the measure; the label gives both values and the notes, the iteration and the variables | Make every iteration move towards the end of the loop, or fix the measure |
 
 ### Test
 

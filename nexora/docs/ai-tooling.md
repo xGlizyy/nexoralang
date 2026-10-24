@@ -267,7 +267,7 @@ change before version 1.0. The rest of the modules (`lexer`, `parser`, `checker`
 ```python
 from nexora.tooling import check_source
 
-result = check_source('fn main() -> Void {\n    print(total)\n}', "demo.nex")
+result = check_source('fn main() {\n    print(total)\n}', "demo.nex")
 print(result["ok"])                        # False
 print(result["diagnostics"][0]["code"])    # E2005
 ```
