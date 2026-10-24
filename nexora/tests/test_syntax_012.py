@@ -205,6 +205,19 @@ def test_the_old_arrow_to_void_says_to_remove_it():
     assert (error.code, error.label) == ("E1108", "Remove '-> Void': a function that gives nothing has no 'gives'")
 
 
+@pytest.mark.parametrize("program", [
+    "fn main() {\n    let x: Void = 1\n}\n",
+    "fn f(x: Void) {\n}\nfn main() {\n}\n",
+    "fn f() gives Void {\n}\nfn main() {\n}\n",
+])
+def test_void_is_never_written_and_no_hint_says_otherwise(program):
+    # Before 0.12 the hint of a Void variable said it could be the return type of a function.
+    (error,) = diagnostics_of(program)
+    assert error.code == "E2012"
+    assert "return type" not in error.hint
+    assert "no 'gives'" in error.hint
+
+
 def test_ai_and_tool_are_ordinary_names_from_0_12():
     assert run_text("fn main() {\n    let ai = 1\n    let tool = 2\n    print(ai + tool)\n}\n") == "3\n"
 
