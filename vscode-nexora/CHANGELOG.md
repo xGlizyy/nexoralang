@@ -12,6 +12,9 @@ The version follows the one of the language. It has not been published on the ma
   (`E1108` before the result type).
 - It needs `nexora-lang` 0.12.0 or newer for the language server. The diagnostics, the
   completion and the formatting come from that package.
+- **Fixed:** the `.vsix` did not carry `vscode-languageclient`, which the extension loads when
+  it starts. Installed from the package, it highlighted the code but could not start the language
+  server or register its commands. The package now carries its production dependencies.
 
 ## 0.10.0
 
