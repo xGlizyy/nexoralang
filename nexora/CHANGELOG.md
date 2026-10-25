@@ -4,7 +4,7 @@ Changelog for NEXORA, with the most recent version first.
 
 All versions are prior to 1.0: the language may change incompatibly between versions. Each incompatible change is indicated here and explained in `docs/decisions/`.
 
-This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Versions 0.10.0, with `Option` and `Result`, and 0.11.0, with modules and imports, are also tagged (`v0.10.0`, `v0.11.0`) and published in both registries. Earlier ones only identify code states: they were never tagged or published.
+This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Versions 0.10.0, with `Option` and `Result`, 0.11.0, with modules and imports, and 0.12.0, with the syntax of decision 0019, are also tagged (`v0.10.0`, `v0.11.0`, `v0.12.0`) and published in both registries. Earlier ones only identify code states: they were never tagged or published.
 
 Each version groups its changes into these sections, when they contain content:
 
@@ -19,7 +19,7 @@ Each version groups its changes into these sections, when they contain content:
 
 ## 0.12.0 — An identity of its own: promises in the header, `trust` and `nex migrate`
 
-It implements phase 1 of [decision 0019](docs/decisions/0019-identidad-propia-del-lenguaje.md): a syntax that says what each clause is, and the evidence behind it. Every program of 0.11 with a function has to be migrated: `nex migrate program.nex --write` does it.
+This version is tagged (`v0.12.0`) and published: the `nexora-lang` package is on PyPI and npm. It implements phase 1 of [decision 0019](docs/decisions/0019-identidad-propia-del-lenguaje.md): a syntax that says what each clause is, and the evidence behind it. Every program of 0.11 with a function has to be migrated: `nex migrate program.nex --write` does it.
 
 ### Added
 

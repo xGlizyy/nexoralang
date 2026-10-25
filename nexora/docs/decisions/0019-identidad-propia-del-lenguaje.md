@@ -1,10 +1,11 @@
 # 0019 — An identity of its own: promises, evidence and a syntax that says so
 
-- **Status:** accepted. **Phase 1 is implemented and validated locally** (2026-10-25), on the branch
-  of 0.12.0, which **is not published yet**; phases 2 to 4 have not started. When it was accepted
+- **Status:** accepted. **Phase 1 is implemented and published in 0.12.0** (2026-10-25): tag
+  `v0.12.0`, package `nexora-lang` 0.12.0 on PyPI and npm. The tests of 4.3 and 8.9 were written and
+  pass, also in the continuous integration of `main` before the tag. Phases 2 to 4 have not started. When it was accepted
   (2026-10-24): "The design is accepted; nothing in this document is implemented, and phase 1 needs
   its own explicit authorization (8.11)."
-- **Version:** would start in 0.12.0
+- **Version:** phase 1 in 0.12.0 (published); the later phases as in 8.11
 - **Date:** 2026-10-24 (accepted)
 - **Incompatible:** yes. Every existing program with a function has to be migrated (sections 8
   and 12).
@@ -1245,6 +1246,8 @@ extension: each needs its own explicit authorization. Nothing in this decision i
   what each one means and what it does not promise. `nexora.evidence/1` has not been published, so
   any of them can still change without a new version; once 0.12.0 is published, changing one is a
   change of the format, with the rules of [the JSON protocol](../json-protocol.md#versions-and-compatibility).
+- **Note (2026-10-25):** 0.12.0 is published, with `nexora.evidence/1` as this addendum describes it.
+  Whether the addendum stops being provisional is for the person responsible to decide.
 
 | # | Detail | Choice | What it does not promise |
 |---|--------|--------|--------------------------|
