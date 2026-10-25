@@ -17,9 +17,9 @@ Each version groups its changes into these sections, when they contain content:
 | Documentation | Relevant documentation changes |
 | Limitations | Known restrictions worth being aware of |
 
-## Unreleased
+## 0.12.0 — An identity of its own: promises in the header, `trust` and `nex migrate`
 
-Work of the branch of 0.12.0, phase 1 of [decision 0019](docs/decisions/0019-identidad-propia-del-lenguaje.md): a syntax that says what each clause is, and the evidence behind it. The version number stays 0.11.0 until it is published.
+It implements phase 1 of [decision 0019](docs/decisions/0019-identidad-propia-del-lenguaje.md): a syntax that says what each clause is, and the evidence behind it. Every program of 0.11 with a function has to be migrated: `nex migrate program.nex --write` does it.
 
 ### Added
 
@@ -45,6 +45,7 @@ Work of the branch of 0.12.0, phase 1 of [decision 0019](docs/decisions/0019-ide
 - **`ai` and `tool` are no longer reserved**: they are ordinary names.
 - **`nex inspect` moves to `nexora.inspect/3`.** `Function.header`, one ordered list of `Contract` and `Example`, replaces `contracts` and `examples`; `return_type` is `null` when the function has no `gives`; `Contract.clause` is `needs`, `promises` or `trust`, `LoopClause.clause` is `keeps` or `shrinks`, and both have a `name` field ([inspect schema](docs/inspect-schema.md)).
 - **`nex context` moves to `nexora.context/2`** and **`nex symbols` to `nexora.symbols/2`**: the clauses take the new names, and the contracts of `nexora.context/2` and its loop clauses have a `name` field. How to update, for the three formats: read the new clause words, and in `nexora.inspect/3` read the clauses from `header`. `nexora.capabilities/1` keeps `requires` and `ensures` for the contracts of the built-in functions, so that its version does not change.
+- The specification moves to version 0.12 and the reference implementation to 0.12.0. The versions already published on npm and PyPI (0.9.0, 0.10.0 and 0.11.0) are not touched.
 - **The specification is written in English, and `get_language_spec` moves to `nexora.spec/2`.** `language` is `"en"` (it was `"es"`), and the section ids come from the English headings (`7-functions` instead of `7-funciones`). How to update: read the ids again from the index the tool returns, or from `docs/language-spec.md`. The rest of the document does not change ([JSON protocol](docs/json-protocol.md)).
 
 ### Documentation
