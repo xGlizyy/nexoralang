@@ -121,7 +121,7 @@ fn main() {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.11.0",
+  "nexora_version": "0.12.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -246,14 +246,14 @@ History:
 | `nexora.inspect/2` | 0.11.0 | New `imports` field in `Program` (with the `ImportDecl` node), `public` field in `Function`, in `TypeDecl` and in `RecordDecl`, and `qualifier` field in `TypeRef` and in `RecordConstruction`: a program can be made of several files ([decision 0018](decisions/0018-modulos-e-importaciones.md)) |
 | `nexora.context/1` | 0.11.0 | New `file` field in every function of `functions`: the file that declares it, relative to the program and with `/` ([decision 0018](decisions/0018-modulos-e-importaciones.md)) |
 | `nexora.symbols/1` | 0.11.0 | New `file` field in every symbol: the file that declares it, relative to the program and with `/` ([decision 0018](decisions/0018-modulos-e-importaciones.md)) |
-| `nexora.spec/2` | Unreleased | **Incompatible change:** the specification is now written in English. `language` is `"en"` (it was `"es"`), and the section ids come from the English headings (`7-functions` instead of `7-funciones`). The rest of the document does not change |
+| `nexora.spec/2` | 0.12.0 | **Incompatible change:** the specification is now written in English. `language` is `"en"` (it was `"es"`), and the section ids come from the English headings (`7-functions` instead of `7-funciones`). The rest of the document does not change |
 | `nexora.result/1` | Current version | |
 | `nexora.test/1` | 0.4.0 | First version |
-| `nexora.inspect/3` | Unreleased | **Incompatible change** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), 8.8): `Function.header`, one ordered list of `Contract` and `Example`, replaces `contracts` and `examples`; `Function.return_type` is `null` when the function has no `gives`; `Contract.clause` is `needs`, `promises` or `trust`, `LoopClause.clause` is `keeps` or `shrinks`, and both have a `name` field ([inspect schema](inspect-schema.md)) |
-| `nexora.context/2` | Unreleased | **Incompatible change** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), 8.8): the `clause` of a contract is `needs`, `promises` or `trust` (it was `requires` or `ensures`), and every contract and loop clause has a `name` field, `null` when the clause has none |
-| `nexora.symbols/2` | Unreleased | **Incompatible change** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), 8.8): the contracts of the built-in functions use `needs` and `promises` |
-| `nexora.capabilities/1` | Unreleased | Kept at `/1`: the contracts of the built-in functions keep `requires` and `ensures`, as published. `schemas` gains the value `nexora.evidence/1`; `keywords` and `reserved_words` describe the language of 0.12 (the four clause words of 0.11 are reserved words, `ai` and `tool` are not) |
-| `nexora.evidence/1` | Unreleased | First version, with the enforcement dimension only ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), section 5) |
+| `nexora.inspect/3` | 0.12.0 | **Incompatible change** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), 8.8): `Function.header`, one ordered list of `Contract` and `Example`, replaces `contracts` and `examples`; `Function.return_type` is `null` when the function has no `gives`; `Contract.clause` is `needs`, `promises` or `trust`, `LoopClause.clause` is `keeps` or `shrinks`, and both have a `name` field ([inspect schema](inspect-schema.md)) |
+| `nexora.context/2` | 0.12.0 | **Incompatible change** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), 8.8): the `clause` of a contract is `needs`, `promises` or `trust` (it was `requires` or `ensures`), and every contract and loop clause has a `name` field, `null` when the clause has none |
+| `nexora.symbols/2` | 0.12.0 | **Incompatible change** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), 8.8): the contracts of the built-in functions use `needs` and `promises` |
+| `nexora.capabilities/1` | 0.12.0 | Kept at `/1`: the contracts of the built-in functions keep `requires` and `ensures`, as published. `schemas` gains the value `nexora.evidence/1`; `keywords` and `reserved_words` describe the language of 0.12 (the four clause words of 0.11 are reserved words, `ai` and `tool` are not) |
+| `nexora.evidence/1` | 0.12.0 | First version, with the enforcement dimension only ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), section 5) |
 
 Almost all the changes have been added fields. The exceptions are `nexora.inspect/3`, `nexora.context/2`
 and `nexora.symbols/2`, whose fields change meaning with the syntax of 0.12, and `nexora.spec/2`, which

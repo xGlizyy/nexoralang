@@ -120,7 +120,7 @@ whether the program has errors or not.
   "diagnostics": [],
   "message": null,
   "duration_ms": 104,
-  "version": "0.11.0"
+  "version": "0.12.0"
 }
 ```
 
@@ -404,8 +404,8 @@ docker image inspect nexora-worker --format '{{.Id}} {{.Created}}'   # it exists
 - Build it before enabling the playground and build it again on every update (step 8):
   it contains its own copy of the interpreter. Each request creates a new container, so the
   next request already uses the rebuilt image.
-- To pin a version, build it also with a tag (`-t nexora-worker:0.11.0`) and write that
-  tag at the end of the command (`"nexora-worker:0.11.0"`). To go back to a previous version that
+- To pin a version, build it also with a tag (`-t nexora-worker:0.12.0`) and write that
+  tag at the end of the command (`"nexora-worker:0.12.0"`). To go back to a previous version that
   you keep, change the tag of the command and restart the service. The tag is the only thing in the
   command that can be changed.
 - If the image is not on the machine (it was not built, or it was deleted with `docker image rm` or
@@ -786,7 +786,7 @@ curl -s https://tu-dominio.example/api/playground/info     # enabled: the new ve
 ```
 
 The worker image has to be rebuilt on every update of the language: it contains its own
-copy of the interpreter. If the command uses a tag (`nexora-worker:0.11.0`), build the image with
+copy of the interpreter. If the command uses a tag (`nexora-worker:0.12.0`), build the image with
 the new tag, change it in `PLAYGROUND_WORKER_COMMAND` and restart the service; see
 [Worker image](#3-worker-image).
 
