@@ -108,8 +108,8 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package --no-dependencies",
-    "publish:marketplace": "vsce publish --no-dependencies --pat",
+    "package": "vsce package",
+    "publish:marketplace": "vsce publish --pat",
     "verify": "npm run compile && npm run package"
   },
   "dependencies": {
