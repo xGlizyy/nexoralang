@@ -99,6 +99,25 @@ def test_the_clause_words_of_0_11_are_reserved_and_not_keywords():
     assert keywords >= set(KEYWORDS)
 
 
+def test_the_arrow_of_0_11_is_an_error_and_not_an_operator():
+    # Decision 0019, 8.7: '->' before the result type is E1108, and anywhere else E1101.
+    grammar = _grammar()
+    assert {"include": "#arrow"} in grammar["patterns"]
+    assert grammar["patterns"].index({"include": "#arrow"}) < grammar["patterns"].index({"include": "#operators"})
+    arrow = grammar["repository"]["arrow"]["patterns"]
+    assert [(pattern["name"], pattern["match"]) for pattern in arrow] == [("invalid.illegal.arrow.nexora", "->")]
+    for pattern in grammar["repository"]["operators"]["patterns"]:
+        assert "->" not in pattern["match"], pattern
+
+
+def test_the_readme_names_the_package_the_manifest_builds():
+    manifest = _manifest()
+    readme = (EXTENSION / "README.md").read_text(encoding="utf-8")
+    built = f"{manifest['name']}-{manifest['version']}.vsix"
+    assert f"leaves {built}" in readme
+    assert set(re.findall(r"nexora-[0-9.]+\.vsix", readme)) == {built}
+
+
 def test_the_grammar_names_every_built_in_function_of_the_language():
     grammar = _grammar()
     patterns = [pattern["match"] for pattern in grammar["repository"]["builtins"]["patterns"]]

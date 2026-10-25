@@ -12,6 +12,7 @@
     { "include": "#keywords" },
     { "include": "#reserved" },
     { "include": "#functions" },
+    { "include": "#arrow" },
     { "include": "#operators" }
   ],
   "repository": {
@@ -110,11 +111,19 @@
         }
       ]
     },
+    "arrow": {
+      "patterns": [
+        {
+          "name": "invalid.illegal.arrow.nexora",
+          "match": "->"
+        }
+      ]
+    },
     "operators": {
       "patterns": [
         {
           "name": "keyword.operator.nexora",
-          "match": "->|==|!=|<=|>=|[-+*/=<>]"
+          "match": "==|!=|<=|>=|[-+*/=<>]"
         },
         { "name": "punctuation.separator.nexora", "match": "[,:.]" },
         { "name": "punctuation.accessor.nexora", "match": "[\\[\\](){}]" }

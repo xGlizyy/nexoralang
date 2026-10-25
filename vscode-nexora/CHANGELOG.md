@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.12.0
+
+For NEXORA 0.12.0 ([decision 0019](../nexora/docs/decisions/0019-identidad-propia-del-lenguaje.md)).
+The version follows the one of the language. It has not been published on the marketplace.
+
+- The highlighting is that of 0.12: `needs`, `gives`, `promises`, `trust`, `keeps` and `shrinks`
+  are keywords. `requires`, `ensures`, `invariant` and `decreases` are shown as reserved words,
+  because 0.12 rejects them (`E1107`). `ai` and `tool` are ordinary names.
+- `->` is no longer shown as an operator but as an error, because it is not valid in 0.12
+  (`E1108` before the result type).
+- It needs `nexora-lang` 0.12.0 or newer for the language server. The diagnostics, the
+  completion and the formatting come from that package.
+
 ## 0.10.0
 
 First release of the extension.
