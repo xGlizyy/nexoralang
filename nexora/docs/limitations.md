@@ -72,8 +72,13 @@ message ([decision 0009](decisions/0009-memoria-agotada.md)).
 ## Performance
 
 The interpreter walks the syntax tree directly, without compiling. It is a reference
-implementation, meant to be correct and easy to understand, not fast. Its speed **has not been
-measured**, and no claim is made about it.
+implementation, meant to be correct and easy to understand, not fast. A small benchmark suite
+(three-run medians, Windows 11, Python 3.12.10) measured `fib(20)` at 0.172 s / 0.04 MiB, a
+100,000-iteration loop at 0.694 s / 0.03 MiB, and building a 1,000-element list with `List.append`
+at 0.010 s / 0.07 MiB. Timing runs use no memory tracing; peak traced Python allocation
+(`tracemalloc`) is measured in separate runs and is not total process memory. These figures are a
+baseline for this machine, with no cross-language comparison or performance guarantee. See
+[Testing](testing.md#benchmarks).
 
 ## Contracts and refined types
 

@@ -17,6 +17,7 @@ With the virtual environment activated and the development tools installed
 python -m ruff check src tests     # static analysis of the Python code
 python -m pytest                   # all the tests
 python -m pytest --cov             # tests with coverage measurement
+python benchmarks/benchmark_interpreter.py  # execution-time and peak-memory baseline
 ```
 
 Useful options:
@@ -29,6 +30,16 @@ python -m pytest --cov --cov-report=html       # browsable report in htmlcov/ind
 ```
 
 The full suite takes about three minutes. The tests need no internet connection.
+
+## Benchmarks
+
+`benchmarks/benchmark_interpreter.py` runs three small NEXORA programs: recursive `fib(20)`, a
+100,000-iteration `while`, and building a 1,000-element list with `List.append`. By default it
+reports the median of three end-to-end timing runs, without `tracemalloc`, and peak traced Python
+allocation from a separate set of runs with `tracemalloc` enabled. Both include analysis and
+execution through `nexora.api.run_source`. Run it from this directory; `--repeats N` changes the
+sample count for each set. The baseline and its environment are recorded in
+[Limitations](limitations.md#performance). These are measurements, not pass/fail performance tests.
 
 ## Latest measurement
 
@@ -752,7 +763,8 @@ The `README` shows no status badge.
 - **Other platforms.** They have been run on Windows 11 with Python 3.12 and on Linux (Ubuntu 24.04
   on WSL 2) with Python 3.11, 3.12 and 3.13, and on Linux, Windows and macOS by the continuous
   integration. Other distributions and Linux without WSL, no.
-- **Performance.** There are no tests of speed or memory use.
+- **Performance guarantees.** The benchmark suite records a small local baseline; it does not
+  enforce thresholds or compare platforms.
 - **Unlimited time and memory.** A program can take time or use memory indefinitely; there
   are no tests about it because the interpreter does not prevent it.
 - **Exhaustiveness.** The tests with generated inputs are a sample of a few thousand cases, not
