@@ -18,12 +18,13 @@ wherever an Int is expected.
 from __future__ import annotations
 
 import difflib
+import re
 from dataclasses import dataclass, field, fields
 
 from . import ast_nodes as ast
 from . import types as type_model
 from .capabilities import READ, WRITE, Capabilities
-from .diagnostics import MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Span
+from .diagnostics import ERROR, MAX_DIAGNOSTICS, WARNING, Diagnostic, NexoraRuntimeError, Span
 from .type_adapter import TypeAdapter
 from .values import BOOL, FLOAT, INT, NONE, TEXT, VALUE_TYPES, VOID
 
@@ -49,6 +50,14 @@ LOGICAL = ("and", "or")
 # How many type arguments each built-in type with arguments takes.
 _TYPE_ARGUMENT_COUNTS = {"List": 1, "Option": 1, "Result": 2}
 
+# The naming convention of every value name: variables, parameters, iterators and the
+# functions that are not part of a public interface. Types keep their own convention
+# (PascalCase), and the names of the standard library are not checked.
+_SNAKE_CASE = re.compile(r"^_?[a-z][a-z0-9_]*$")
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+_ACRONYM_BOUNDARY = re.compile(r"(?<=[A-Z])(?=[A-Z][a-z])")
+_NOT_A_NAME_CHARACTER = re.compile(r"[^A-Za-z0-9]+")
+
 # The identity of every record declaration of the process: nothing but this counter
 # tells two declarations apart, not their name nor their fields (decision 0014, 3).
 _IDENTITY = 0
@@ -59,6 +68,17 @@ def _next_identity() -> int:
     global _IDENTITY
     _IDENTITY += 1
     return _IDENTITY
+
+
+def _snake_case(name: str) -> str:
+    """The snake_case spelling suggested for `name` (which is not snake_case)."""
+    prefix = "_" if name.startswith("_") else ""
+    body = name[1:] if prefix else name
+    body = _CAMEL_BOUNDARY.sub("_", body)
+    body = _ACRONYM_BOUNDARY.sub("_", body)
+    body = _NOT_A_NAME_CHARACTER.sub("_", body)
+    body = re.sub(r"_+", "_", body).strip("_").lower()
+    return prefix + (body or "value")
 
 
 @dataclass(frozen=True)
@@ -234,6 +254,9 @@ class Symbol:
     function: str | None          # the function it belongs to (None for a function itself)
     scope: Span | None            # the block where it is visible (None for a function: the whole file)
     references: list[Span] = field(default_factory=list)
+    # The references that read the value. A reference that gives it a new value is in
+    # `references` and in `assignments`, but not here.
+    reads: list[Span] = field(default_factory=list)
     # True only for a variable declared with 'var'.
     mutable: bool = False
     # True for the iterator a 'for' loop declares: it is immutable for its own reason.
@@ -603,7 +626,7 @@ class Checker:
 
     def check(self, program: ast.Program,
               declared: dict[str, ast.Function] | None = None) -> tuple[CheckedProgram, list[Diagnostic]]:
-        """Checks a program. The CheckedProgram may only be run when the list is empty.
+        """Checks a program. The CheckedProgram may only be run when there is no error.
 
         A project of modules is checked by calling this once per module, in the order
         they are imported, giving the same `declared` to every call: the analysis of the
@@ -611,10 +634,18 @@ class Checker:
         (decision 0018, 2). The diagnostics are the ones of all the modules checked."""
         if declared is None:
             declared = {}
+        symbols_before = len(self._symbols)
+        errors_before = sum(1 for diagnostic in self._diagnostics if diagnostic.severity == ERROR)
         try:
             self._check_program(program, declared)
         except _TooManyErrors:
             pass
+        errors_after = sum(1 for diagnostic in self._diagnostics if diagnostic.severity == ERROR)
+        # A warning only helps when the program is otherwise correct: on top of an error it
+        # would describe a program that is already going to be rejected. The warnings of a
+        # module checked before an error are kept; the ones of the modules after it are not.
+        if errors_before == 0 and errors_after == 0:
+            self._warnings(program, self._symbols[symbols_before:])
         checked = CheckedProgram(
             program, declared, self._types, tuple(self._symbols), tuple(self._calls), dict(self._refined),
             dict(self._records), self._capabilities, dict(self._targets),
@@ -1159,6 +1190,65 @@ class Checker:
         self._diagnostics.append(Diagnostic(code, label, span, hint, notes))
         if len(self._diagnostics) >= MAX_DIAGNOSTICS:
             raise _TooManyErrors
+
+    def _warnings(self, program: ast.Program, symbols: list[Symbol]) -> None:
+        """The warnings of one module, once it is known to have no errors.
+
+        Warnings describe improvements, not failures: an unused name, a `var` whose value
+        never changes, or a name that does not follow the convention. They never stop the
+        program and they are not emitted when the program already has an error.
+        """
+        pending: list[Diagnostic] = []
+        public_functions = {function.name for function in program.functions if function.public}
+        for symbol in symbols:
+            if symbol.category not in ("variable", "parameter") or symbol.name == "_":
+                continue
+            kind = "parameter" if symbol.category == "parameter" else (
+                "iterator" if symbol.loop_variable else "variable")
+            if not symbol.reads:
+                if kind == "parameter":
+                    hint = "Remove it, or use it in the body. Name it '_' if the signature must keep the position."
+                elif kind == "iterator":
+                    hint = "Remove it, or use it in the body of the loop."
+                else:
+                    hint = "Remove it, or use its value in an expression."
+                pending.append(Diagnostic(
+                    "W2001", f"The {kind} '{symbol.name}' is never used", symbol.span,
+                    hint=hint, severity=WARNING,
+                ))
+            elif symbol.mutable and not symbol.assignments:
+                pending.append(Diagnostic(
+                    "W2002", f"'{symbol.name}' is declared with 'var' but is never reassigned",
+                    symbol.span,
+                    hint="Declare it with 'let': its value never changes.",
+                    severity=WARNING,
+                ))
+            # A parameter of a public function is part of what another module sees, so its
+            # spelling is left alone here: the interface is not renamed behind its callers.
+            if symbol.category == "parameter" and symbol.function in public_functions:
+                continue
+            if _SNAKE_CASE.fullmatch(symbol.name) is None:
+                pending.append(Diagnostic(
+                    "W2003", f"The {kind} name '{symbol.name}' does not follow snake_case",
+                    symbol.span,
+                    hint=f"Write it as '{_snake_case(symbol.name)}'.",
+                    severity=WARNING,
+                ))
+        for function in program.functions:
+            # Types of the standard library and public functions keep their own spelling:
+            # a public name belongs to every module that imports this one.
+            if function.public or function.name == "_":
+                continue
+            if _SNAKE_CASE.fullmatch(function.name) is None:
+                pending.append(Diagnostic(
+                    "W2003", f"The function name '{function.name}' does not follow snake_case",
+                    function.name_span,
+                    hint=f"Write it as '{_snake_case(function.name)}'.",
+                    severity=WARNING,
+                ))
+        pending.sort(key=lambda diagnostic: (diagnostic.span.line, diagnostic.span.column, diagnostic.code)
+                     if diagnostic.span is not None else (0, 0, diagnostic.code))
+        self._diagnostics.extend(pending)
 
     # Declarations
 
@@ -1997,6 +2087,7 @@ class Checker:
         found = scope.find(node.name)
         if found is not None:
             found.references.append(node.span)
+            found.reads.append(node.span)
             return found.type
         if self._key(node.name) in self._type_names:
             self._report(

@@ -29,7 +29,7 @@ from pathlib import Path
 
 from . import ast_nodes as ast
 from .checker import BUILTINS, MAX_REFINEMENT_STEPS, CheckedProgram, Signature
-from .diagnostics import CATEGORIES, CODES, MAX_DIAGNOSTICS, Source, Span
+from .diagnostics import CATEGORIES, CODES, ERROR, MAX_DIAGNOSTICS, Source, Span
 from .interpreter import MAX_CALL_DEPTH
 from .parser import MAX_EXPRESSION_DEPTH, MAX_NESTING
 from .pipeline import Analysis, analyze
@@ -68,7 +68,7 @@ def _span(span: Span | None) -> dict | None:
 
 
 def _header(schema: str, filename: str, diagnostics: tuple, files: Sequence[str] | None = None) -> dict:
-    """The common part of every document: its schema, its version, its file and its errors.
+    """The common part of every document: its schema, its version, its file and its diagnostics.
 
     `files` names the file each diagnostic belongs to, when a program is made of several
     files (decision 0018). The document keeps `filename` as the file of the program itself.
@@ -77,7 +77,7 @@ def _header(schema: str, filename: str, diagnostics: tuple, files: Sequence[str]
         "schema": schema,
         "nexora_version": __version__,
         "file": filename,
-        "ok": not diagnostics,
+        "ok": not any(diagnostic.severity == ERROR for diagnostic in diagnostics),
         "diagnostics": [diagnostic.to_dict(files[index] if files else filename)
                         for index, diagnostic in enumerate(diagnostics)],
     }
@@ -837,6 +837,10 @@ def _spec_sections(text: str) -> list[dict]:
     return sections
 
 
+# Section ids that were renamed with their heading. The old id keeps answering with the section it had.
+_SPEC_SECTION_ALIASES = {"113-error-codes": "113-diagnostic-codes"}
+
+
 def get_language_spec(section: str | None = None) -> dict:
     """The official language specification, or one section of it.
 
@@ -871,6 +875,7 @@ def get_language_spec(section: str | None = None) -> dict:
         sections=[{"id": s["id"], "title": s["title"], "level": s["level"]} for s in sections],
     )
     if section is not None:
+        section = _SPEC_SECTION_ALIASES.get(section, section)
         wanted = next((s for s in sections if s["id"] == section), None)
         if wanted is None:
             raise ToolingError("unknown_section", f"The specification has no section with the id '{section}'.")

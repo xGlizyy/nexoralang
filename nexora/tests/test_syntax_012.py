@@ -91,7 +91,7 @@ ACCEPTED = {
     "A8": "fn g(x: Int) gives Int\n    // why\n    needs x > 0\n\n    promises result > 0\n{\n    return x\n}\n",
     "A9": "fn g(x: Int) gives Int\n    needs ok: (x > 0 and\n        x < 10)\n{\n    return x\n}\n",
     "A10": ("fn c(xs: List[Int]) gives Int {\n    var count = 0\n    for x in xs\n        keeps seen: count >= 0\n"
-            "    {\n        count = count + 1\n    }\n    return count\n}\n"),
+            "    {\n        count = count + x\n    }\n    return count\n}\n"),
     "A11": "fn h(x: Int) gives Int\n    example h(1) == 2\n{\n    return x * 2\n}\n",
     "A12": "pub fn p(x: Int) gives Int\n    needs positive: x > 0\n    promises result > 0\n{\n    return x\n}\n",
 }

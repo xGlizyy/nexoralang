@@ -16,7 +16,7 @@ import typing
 from dataclasses import fields
 
 from . import ast_nodes as ast
-from .diagnostics import CATEGORIES, Span
+from .diagnostics import CATEGORIES, SEVERITIES, Span
 
 _DRAFT = "https://json-schema.org/draft/2020-12/schema"
 _BASE = "https://nexora.invalid/schemas/"   # identifiers only: nothing is published at this address
@@ -37,9 +37,9 @@ DIAGNOSTIC = {
     "required": ["severity", "category", "code", "message", "label", "hint", "notes", "file",
                  "line", "column", "end_line", "end_column"],
     "properties": {
-        "severity": {"const": "error"},
+        "severity": {"enum": list(SEVERITIES)},
         "category": {"enum": sorted(set(CATEGORIES.values()))},
-        "code": {"type": "string", "pattern": "^E[0-9]{4}$", "description": "Stable identifier of the problem."},
+        "code": {"type": "string", "pattern": "^[EW][0-9]{4}$", "description": "Stable identifier of the problem."},
         "message": {"type": "string", "description": "Fixed title of the code."},
         "label": {"type": "string", "description": "What is wrong in this particular case."},
         "hint": {**_NULLABLE_STRING, "description": "A suggested fix, only when a rule of the language supports it."},

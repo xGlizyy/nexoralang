@@ -37,16 +37,8 @@ from .tokens import KEYWORDS, RESERVED_WORDS, TokenType
 # The language this server speaks.
 LANGUAGE_ID = "nexora"
 
-# The severity of a diagnostic, by the category the language uses.
-_SEVERITY = {
-    "syntax": 1,    # Error
-    "lexical": 1,
-    "type": 1,
-    "semantic": 1,
-    "contract": 1,
-    "runtime": 1,
-    "test": 1,
-}
+# The severity numbers of the protocol: 1 is an error and 2 a warning.
+_SEVERITY = {"error": 1, "warning": 2}
 
 
 def _position(line: int, column: int) -> dict[str, int]:
@@ -414,7 +406,7 @@ def _diagnostic(diagnostic: Diagnostic) -> dict[str, Any]:
     """A diagnostic of the language, in the shape of the protocol."""
     result: dict[str, Any] = {
         "range": _range(diagnostic.span),
-        "severity": _SEVERITY.get(diagnostic.category, 1),
+        "severity": _SEVERITY.get(diagnostic.severity, 1),
         "code": diagnostic.code,
         "source": "nexora",
         "message": diagnostic.label,

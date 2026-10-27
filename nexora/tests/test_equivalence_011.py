@@ -487,7 +487,13 @@ def test_t1_the_trees_are_equal_after_the_mapping(file, old_python, corpus):
     assert (old["schema"], new["schema"]) == ("nexora.inspect/2", "nexora.inspect/3")
     assert old["program"] is not None and old["complete"] is True
     assert (old["ok"], old["complete"], code_old) == (new["ok"], new["complete"], code_new)
-    assert [d["code"] for d in old["diagnostics"]] == [d["code"] for d in new["diagnostics"]]
+    # Warnings are new in 0.12: 0.11 has none, so only the errors can be compared. What is not an
+    # error in 0.12 has to be a warning, and 0.11 must not report any.
+    assert all(d.get("severity", "error") == "error" for d in old["diagnostics"])
+    assert all(d["code"].startswith("W") for d in new["diagnostics"] if d.get("severity", "error") != "error")
+    old_errors = [d["code"] for d in old["diagnostics"] if d.get("severity", "error") == "error"]
+    new_errors = [d["code"] for d in new["diagnostics"] if d.get("severity", "error") == "error"]
+    assert old_errors == new_errors
     # Types included: every expression has the same type in both.
     assert _mapped_011(_positionless(old["program"])) == _projected_012(_positionless(new["program"]))
 
@@ -670,6 +676,14 @@ def test_t2_the_migrated_program_behaves_the_same(program, command, options, std
         return
     old_document = carried.document(old_document, path.name)
     new_document = {key: value for key, value in new_document.items() if key != "nexora_version"}
+    # Warnings are new in 0.12 and 0.11 has none: 0.11 must not report any, and the 0.12 ones must
+    # be warnings. The errors and every other field still have to be exactly the same.
+    assert all(d.get("severity", "error") == "error" for d in old_document["diagnostics"])
+    assert all(d["code"].startswith("W") for d in new_document["diagnostics"] if d.get("severity", "error") != "error")
+    old_document["diagnostics"] = [d for d in old_document["diagnostics"]
+                                   if d.get("severity", "error") == "error"]
+    new_document["diagnostics"] = [d for d in new_document["diagnostics"]
+                                   if d.get("severity", "error") == "error"]
     # Code and category in the same order, then every other field: positions carried, words mapped.
     assert [(d["code"], d["category"]) for d in old_document["diagnostics"]] == \
         [(d["code"], d["category"]) for d in new_document["diagnostics"]]

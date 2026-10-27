@@ -157,7 +157,8 @@ def test_append_and_concat_keep_the_element_type() -> None:
     text = in_main(
         "let xs = [1, 2]\n"
         "let grown = List.append(xs, 3)\n"
-        "let joined = List.concat(xs, grown)"
+        "let joined = List.concat(xs, grown)\n"
+        "print(List.length(joined))"
     )
     analysis = analyze(Source("test.nex", text))
 

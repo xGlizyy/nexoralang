@@ -74,7 +74,8 @@ and without access to the outside world (`openWorldHint: false`).
 ### A program with errors is not an error of the tool
 
 If the code has errors, `nexora_check` **succeeds** and returns `ok: false` with the
-diagnostics. A call only fails (`isError`) when the arguments are not valid:
+diagnostics. A program with only warnings (`severity: "warning"`) has `ok: true`.
+A call only fails (`isError`) when the arguments are not valid:
 
 | Situation | Result |
 |-----------|--------|

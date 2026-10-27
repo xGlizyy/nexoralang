@@ -158,11 +158,11 @@ def test_a_refined_type_named_list_does_not_hide_the_list_constructor() -> None:
     text = (
         "type List = Int where value > 0\n"
         "\n"
-        "fn f(xs: List[Int]) {\n"
+        "fn f(_: List[Int]) {\n"
         "}\n"
         "\n"
         "fn main() {\n"
-        "    let n: List = 1\n"
+        "    let _: List = 1\n"
         "}\n"
     )
 

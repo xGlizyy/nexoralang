@@ -35,7 +35,8 @@ whose rules it replaces say so at the top.
 Decisions that will probably have to be revisited and that would affect existing programs:
 
 - **Unused variables and naming conventions.** The design draft treats them as errors.
-  If they are enabled, programs that are valid today will stop being so.
+  They are warnings since 0.12.0 (`W2001` and `W2003`), so a program that is valid today stays
+  valid. Making them errors would be an incompatible change.
 - **`+` between texts (0001).** It exists because there is no interpolation. When there is, it could be withdrawn.
 - **`if` as an expression (0003).** If `if` comes to produce a value, the rule of "expression used
   as a statement" (`E2010`) will have to be revisited.

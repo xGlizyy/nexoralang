@@ -598,6 +598,7 @@ runs in some test; not that all combinations of inputs have been tested.
 | `test_lexer.py` | 51 | Tokens, literals, comments, line endings, positions, invalid characters, unclosed texts |
 | `test_parser.py` | 68 | Valid programs, precedence, shape of the tree, every syntax error with its position, recovery after an error, nesting limits |
 | `test_checker.py` | 56 | `main`, variables, scopes, duplicate declarations, calls, order of the stages |
+| `test_warnings.py` | 69 | The three warnings (`W2001`, `W2002`, `W2003`): what each reports, what it must not report, that they never stop a program, and that the examples have none |
 | `test_types.py` | 140 | Inference, annotations, every operator with every combination of types, conversions, conditions |
 | `test_refined_types.py` | 68 | Refined types (`type Name = Base where condition`): that constants are checked by the static analysis (`E2017`) and any other value only when checked with `Name(x)` while the program runs (`E4003`) |
 | `test_functions.py` | 56 | Parameters, arguments, returns, return paths, `if` / `else`, functions that return nothing, recursion and its limit |

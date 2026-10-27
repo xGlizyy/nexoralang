@@ -351,7 +351,7 @@ def test_valid_arithmetic_and_refined_measures_are_differentially_equivalent(mon
 
 def test_a_text_length_measure_is_valid(monkeypatch):
     text = in_main(
-        'var t = "abc"\n'
+        'let t = "abc"\n'
         'var i = 0\n'
         'while i < Text.length(t)\n'
         '    shrinks Text.length(t) - i\n'

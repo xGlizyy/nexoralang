@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The warnings of NEXORA (`W2001`, `W2002`, `W2003`) appear as warnings in the editor. They come from
+  the language server of `nexora-lang`; the extension itself does not change.
+
 ## 0.12.0
 
 For NEXORA 0.12.0 ([decision 0019](../nexora/docs/decisions/0019-identidad-propia-del-lenguaje.md)).
