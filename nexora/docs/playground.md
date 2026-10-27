@@ -17,6 +17,7 @@ run it locally and how to deploy it on your own server.
 | Part | Status |
 |-------|--------|
 | Core interface (`nexora.api`) and worker process | Implemented and tested |
+| Statement debugger in the interpreter and Playground controls | Implemented; interpreter, worker, API and controller tests pass; browser visual review remains |
 | Server API (`/api/playground`) | Implemented and tested |
 | Page (`web/playground.html`) | Implemented. Logic tested automatically; the drawing, checked by hand in Chrome |
 | Limits of time, size, output, concurrency and requests | Implemented and tested |
@@ -83,12 +84,30 @@ All the routes are under `/api/playground`. Responses are always JSON.
 |------|--------|---------|
 | `/check` | `POST` | Analyses the program **without running it** |
 | `/run` | `POST` | Analyses the program and, if it has no errors, runs it |
+| `/debug` | `POST` | Starts a paused interpreter session; returns the first statement snapshot |
+| `/debug/:id` | `POST` | Sends `step`, `continue`, `stop` or `set_breakpoints` to that session |
 | `/status` | `GET` | Whether the playground is enabled (`{"enabled": true}` or `false`). It always answers, also when disabled, and does not start the worker |
 | `/info` | `GET` | Language version, words of the language and limits of the service |
 | `/examples` | `GET` | The example programs |
 
 The page asks `/status` first. With the playground disabled it does not request `/info` nor `/examples`:
 it shows «Disabled» and leaves Run and Check disabled.
+
+### Debugger
+
+The Debug button starts the checked program in a dedicated worker and pauses immediately before its
+first statement. Step executes the current statement and pauses before the next one; Continue runs
+until a breakpoint or completion; Stop ends the session. The Debugger panel shows the active source
+line, function stack, visible variables and output produced so far. Values are formatted with size
+limits. Click a line number to toggle a breakpoint; the worker caps a session at 10,000 statements
+and 256 breakpoints.
+
+The worker stays alive while paused and reads control commands from its standard input. NEXORA
+programs run with `NoHost`, so a program cannot consume debugger commands as user input or access
+files. Debug sessions share the worker concurrency limit, expire after 60 seconds without activity
+and after five minutes in total, and each command has a 10 second timeout. The server stops active
+sessions during shutdown. The playground remains disabled on a public server until Docker isolation
+has been validated; implementing these routes does not change that deployment requirement.
 
 ### Request
 
@@ -192,6 +211,9 @@ the server.
 |--------|---------------|----------|-------------------------|
 | Program size | 64 KiB | `PLAYGROUND_MAX_CODE_BYTES` | HTTP 413 |
 | Execution time | 2 s | `PLAYGROUND_TIMEOUT_MS` | The process is killed; state `timeout` |
+| Debug command | 10 s | `PLAYGROUND_DEBUG_COMMAND_TIMEOUT_MS` | The debug worker is stopped |
+| Debug idle session | 60 s | `PLAYGROUND_DEBUG_IDLE_MS` | The paused worker is stopped |
+| Debug session lifetime | 5 min | `PLAYGROUND_DEBUG_LIFETIME_MS` | The worker is stopped |
 | Output | 64 KiB | `PLAYGROUND_MAX_OUTPUT_BYTES` | The program is stopped; state `output_limit` |
 | Length of a text | 262 144 characters | `PLAYGROUND_MAX_TEXT_CHARS` | Runtime error `E3006` |
 | Worker memory | 512 MiB | `PLAYGROUND_MEMORY_MB` | State `memory_limit`. **Only on Linux**: on macOS, the operating system accepts the limit but does not apply it |
