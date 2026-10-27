@@ -99,8 +99,9 @@ first:
    value and errors without exceptions.
 4. ~~**Data input**~~: done in 0.9.0, with the arguments of the program, the standard input and files with explicit permissions ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). The network and external processes remain.
 5. ~~**Modules and imports**~~: done in 0.11.0 ([decision 0018](decisions/0018-modulos-e-importaciones.md)).
-6. ~~**Warnings** (unused variables, a `var` that never changes) and naming conventions~~:
-   done after 0.12.0, unreleased (`W2001`, `W2002`, `W2003`).
+6. **Warnings** (unused variables, a `var` that never changes) and naming conventions:
+   implemented after 0.12.0 (`W2001`, `W2002`, `W2003`), but **not released yet**. It is
+   marked as done when the version that ships it is published.
 7. **More tolerant analysis**: keeping the functions whose declaration has an error, and giving
    structure also with lexical errors. The partial tree with syntax errors already exists.
 8. ~~**Language server (LSP)** and **formatter**~~: done with the VS Code extension
