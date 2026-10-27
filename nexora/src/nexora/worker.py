@@ -314,6 +314,7 @@ def _debug_session(request: dict) -> int:
 
 def main() -> int:
     # Bytes in, bytes out, always UTF-8: no dependence on the locale of the host.
+    is_debug = False
     try:
         raw = sys.stdin.buffer.readline(MAX_REQUEST_BYTES + 1)
         if len(raw) > MAX_REQUEST_BYTES:
@@ -338,7 +339,7 @@ def main() -> int:
     except Exception as error:  # the host must always get a well-formed answer
         # Only the kind of failure is reported: no message, no traceback, no source code.
         print(f"nexora worker failed: {type(error).__name__}", file=sys.stderr)
-        if locals().get("is_debug", False):
+        if is_debug:
             _debug_line({"schema": DEBUG_SCHEMA, "state": INTERNAL_ERROR})
             return 1
         response = {"schema": api.RESULT_SCHEMA, "status": INTERNAL_ERROR}
