@@ -17,6 +17,15 @@ Each version groups its changes into these sections, when they contain content:
 | Documentation | Relevant documentation changes |
 | Limitations | Known restrictions worth being aware of |
 
+## 0.13.0 — Network and external processes
+
+### Added
+
+- **Network and external processes.** `Net.get` reads a bounded HTTPS response and `Process.run`
+  launches a direct child process. Both need a `uses` declaration, a matching CLI permission and a
+  host that allows them. The Playground worker denies both capabilities.
+- **Runtime diagnostic `E3014`** for failed network requests and external programs.
+
 ## 0.12.1 — Warnings
 
 A release of the checker only: no syntax or semantics change, so every program of 0.12.0 runs as before.

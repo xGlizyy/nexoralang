@@ -97,7 +97,7 @@ first:
 2. ~~**A first compound type: lists**~~: done in 0.7.0, with `for` over lists ([decision 0013](decisions/0013-listas-y-for.md)). The type model and lists are described in the [specification](language-spec.md), sections 4.5, 8.2 and 9.6.
 3. ~~**Records**~~: done in 0.8.0, with nominal identity and immutable fields ([decision 0014](decisions/0014-registros-nominales-inmutables.md)); they are described in the [specification](language-spec.md), section 4.6. What remains is **optional values** (`Option`, `Result`), to represent the absence of a
    value and errors without exceptions.
-4. ~~**Data input**~~: done in 0.9.0, with the arguments of the program, the standard input and files with explicit permissions ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). The network and external processes remain.
+4. ~~**Data input and host capabilities**~~: arguments, standard input and files in 0.9.0 ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)); bounded HTTPS reads and explicitly granted external processes in 0.13.0 ([decision 0020](decisions/0020-red-y-procesos-externos.md)).
 5. ~~**Modules and imports**~~: done in 0.11.0 ([decision 0018](decisions/0018-modulos-e-importaciones.md)).
 6. ~~**Warnings** (unused variables, a `var` that never changes) and naming conventions~~:
    done in 0.12.1 (`W2001`, `W2002`, `W2003`).

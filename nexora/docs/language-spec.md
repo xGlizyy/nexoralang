@@ -1,8 +1,8 @@
 # NEXORA language specification
 
-- **Specification version:** 0.12
-- **Reference implementation:** `nexora` 0.12.1 (this repository, directory `nexora/`)
-- **Status:** describes exactly what the interpreter of 0.12 does. The syntax of 0.12 comes from
+- **Specification version:** 0.13
+- **Reference implementation:** `nexora` 0.13.0 (this repository, directory `nexora/`)
+- **Status:** describes exactly what the interpreter of 0.13 does. The syntax of 0.12 comes from
   [decision 0019](decisions/0019-identidad-propia-del-lenguaje.md); a program written for 0.11 is
   rewritten with `nex migrate` ([CLI reference](cli-reference.md#nex-migrate)).
 
@@ -91,8 +91,8 @@ reserved only in the versions 0.12.x
 reserved until 0.11, are ordinary names.
 
 These are not reserved words but predefined names: the types `Int`, `Float`, `Bool`, `Text` and
-`Void`; the functions `print`, `to_text`, `to_float`, `to_int`, `args`, `input`, `read_file` and
-`write_file`; `result`, which only has a special meaning inside a `promises` clause; and
+`Void`; the functions `print`, `to_text`, `to_float`, `to_int`, `args`, `input`, `read_file`,
+`write_file`, `Net.get` and `Process.run`; `result`, which only has a special meaning inside a `promises` clause; and
 `value`, which only has one inside the condition of a refined type.
 
 ### 2.5 Literals
@@ -1206,11 +1206,12 @@ Apart from these five functions there is no `map`, `filter`, `fold`, sorting, `s
 of `List.get`. They will come, if they are decided, with `Option`/`Result` and the other pending
 decisions.
 
-### 8.3 Input, arguments and files
+### 8.3 Input, arguments and host capabilities
 
 A program can receive data from outside: the arguments it was run with, the standard
-input and files. Arguments and standard input are allowed by default. Files
-are **not**: they have to be declared and they have to be allowed.
+input, files, HTTPS responses and output from an external process. Arguments and standard input
+are allowed by default. Files, network requests and process execution are **not**: each operation
+has to be declared and granted by the user, and the host must enable it.
 
 | Function | Signature | What it does |
 |----------|-----------|--------------|
@@ -1218,6 +1219,8 @@ are **not**: they have to be declared and they have to be allowed.
 | `input` | `input() gives Text` | Reads **one line** from the standard input, without the line ending |
 | `read_file` | `read_file(path: Text) gives Text` | Reads a whole text file |
 | `write_file` | `write_file(path: Text, text: Text)` | Writes a text file, and creates it if it does not exist |
+| `Net.get` | `Net.get(url: Text) gives Text` | Reads a bounded UTF-8 response from an HTTPS GET request |
+| `Process.run` | `Process.run(command: Text, arguments: List[Text]) gives Text` | Runs one executable directly and returns its standard output |
 
 **Arguments.** `nex run program.nex -- one two` gives the program the arguments `one` and `two`.
 `args()` returns a `List[Text]`, empty if there are none. Arguments need no
@@ -1228,29 +1231,30 @@ line returns the empty text. When there is nothing left to read, the program sto
 `E3009`: it is not possible to read "until the end" without stopping, and there is no way to tell the end from an
 empty line.
 
-**Files.** A program declares what it needs with `uses`, at the top level of the file:
+**Files, network and processes.** A program declares what it needs with `uses`, at the top level of the file:
 
 ```nexora
 uses read "data/inputs.txt"
 uses write "data/output.txt"
+uses network "https://api.example.com"
+uses process "python"
 ```
 
 The effective capability is the **intersection** of three things:
 
-1. **What the program declares**: a `uses read` (or `uses write`) that covers the path.
-2. **What whoever runs it grants**: `--allow-read=PATH` (or `--allow-write=PATH`) in the
-   `nex run` command, repeatable. Reading and writing are granted separately.
-3. **What the environment allows**: whether the environment supports files.
+1. **What the program declares**: `uses read` or `uses write` for a path, `uses network` for an HTTPS
+   origin, or `uses process` for an executable.
+2. **What whoever runs it grants**: the matching `--allow-read`, `--allow-write`, `--allow-network`
+   or `--allow-process` option in `nex run`; each option can be repeated.
+3. **What the environment allows**: whether the host permits that operation.
 
-All three have to be there. Declaring does not grant: a program that declares `uses read "secret.txt"`
-and runs without `--allow-read` gets `E3008`. Granting does not enable: `--allow-read` does not open a
-file that the program does not declare. And the environment has the last word: in an environment that does not support files
-no combination enables them.
+All three have to be there. Declaring does not grant; granting does not enable an undeclared target;
+and a restricted environment has the last word. A missing declaration is `E2026`; a missing user
+grant or a host that denies the operation is `E3008`.
 
-`nex check` warns about a missing declaration, when the path of the call is a literal and
-no declaration covers it: it is the error `E2026`. It is a help, not the security. If the path is
-computed, the analysis cannot know it and does not warn; the interpreter makes the decision, on every
-access.
+`nex check` reports a missing declaration when a literal path, URL or executable is not covered: it
+is `E2026`. This is a help, not the security. If the value is computed, the analysis cannot know it
+and does not report the missing declaration; the host makes the decision on every operation.
 
 **Paths.** Relative paths are resolved against the **working directory** of the process.
 Confinement is applied to the **resolved** path: a `..` that leaves the granted scope and a
@@ -1259,9 +1263,23 @@ that `data2` is not inside `data`. On Windows, a path with backslashes has to be
 written with doubled backslashes (`"C:\\data"`) or with forward slashes (`"C:/data"`), which
 work on both systems.
 
-**Restricted environments.** The playground of the website and the MCP server do not support files: the
-worker has no field in its protocol to ask for them and the program gets `E3008` even if it
-declares the capability. The MCP server only analyzes: it never runs anything.
+**Network.** `Net.get` only makes HTTPS GET requests to the exact declared and granted origin, on
+port 443. It does not follow redirects or use configured proxies. Each request has a five-second
+timeout and reads at most one MiB. The response has to be UTF-8 text. A network or process failure
+stops the program with `E3014`.
+
+**Processes.** `Process.run` starts the declared and granted executable directly, without a shell,
+with the given list of text arguments and no standard input. It returns standard output only for exit
+status zero; otherwise the diagnostic includes the exit status and standard error. It runs for at
+most five seconds, limits standard output and standard error to one MiB each and receives a small
+environment. The executable still runs with the local user's operating-system permissions. On
+Windows, if it starts child processes, a timeout only guarantees that the direct process is stopped;
+those children may remain running.
+
+**Restricted environments.** The web Playground worker uses `NoHost`, and the worker protocol has
+no fields to grant files, network origins or processes. It rejects these operations with `E3008`,
+even when a program declares them. The production Docker worker also has no network interface. The
+MCP server only analyzes: it never runs a program.
 
 ### 8.4 The functions of `Option` and `Result`
 
@@ -1836,7 +1854,7 @@ do.
 | `E2023` | Invalid record construction | `type` | A construction of a record that is missing a field, has an extra one or is given the same one twice (section 4.6) |
 | `E2024` | Invalid field access | `type` | A field is read from a value that is not a record, or from a record that does not have that field (section 4.6) |
 | `E2025` | Cannot reassign a field | `semantic` | A field of a record, which is immutable, is assigned to (section 4.6) |
-| `E2026` | Missing capability declaration | `semantic` | A file is read or written without declaring it with `uses` (section 8.3) |
+| `E2026` | Missing capability declaration | `semantic` | A file, HTTPS origin or executable is used without declaring it with `uses` (section 8.3) |
 | `E2027` | Unknown module | `semantic` | The name of a module that the program does not import is used (section 7.6) |
 | `E2028` | Private name | `semantic` | A name of another module is used that this module does not declare with `pub` (section 7.6) |
 | `E2029` | Circular import | `semantic` | Modules import each other, so that none can be analyzed before the one it needs (section 7.6) |
@@ -1852,12 +1870,13 @@ do.
 | `E3005` | Conversion out of range | `runtime` | `to_int` of a `Float` that does not fit in an `Int` |
 | `E3006` | Text too long | `runtime` | A `Text` built with `+` exceeds the limit set by the environment. `nex run` sets none; the playground does |
 | `E3007` | Out of memory | `runtime` | The program runs out of memory while it runs. No position ([decision 0009](decisions/0009-memoria-agotada.md)) |
-| `E3008` | Permission denied | `runtime` | The program tries to use a file it cannot use: it does not declare it, it is not allowed by whoever runs it, or the environment does not support files (section 8.3) |
+| `E3008` | Permission denied | `runtime` | The program tries to use a file, network origin or process that is not declared, granted or enabled by the host (section 8.3) |
 | `E3009` | No more input | `runtime` | `input()` is called when the standard input has already ended (section 8.3) |
 | `E3010` | File error | `runtime` | The file could be used, but it could not be read or written: it does not exist, it is not UTF-8 text, or the operating system prevented it |
 | `E3011` | Option has no value | `runtime` | `Option.value` is called with a `None`: the variant does not carry the value (section 8.4) |
 | `E3012` | Result is an error | `runtime` | `Result.value` is called with an `Err`: the variant does not carry the value (section 8.4) |
 | `E3013` | Result is not an error | `runtime` | `Result.error` is called with an `Ok`: the variant does not carry the error (section 8.4) |
+| `E3014` | External operation failed | `runtime` | An HTTPS request or an external process failed, exceeded its limit or produced invalid text (section 8.3) |
 | `E4001` | Precondition violated | `contract` | A `needs` condition is false in a call |
 | `E4002` | Postcondition violated | `contract` | A `promises` condition is false when a function ends |
 | `E4003` | Refinement violated | `contract` | A value checked with `Type(x)` does not meet the condition of the refined type |
@@ -1890,7 +1909,7 @@ fn main() {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.12.1",
+  "nexora_version": "0.13.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -2106,7 +2125,7 @@ These are real limitations of this version, not bugs:
 - `print` receives a single argument and always adds a line break.
 - Input and files are those of section 8.3. It is not possible to read "until the end" of the
   standard input without stopping (`input()` fails with `E3009`), there are no directories or files that are not
-  text, and there is no network, no processes and no environment variables.
+  text, no direct environment-variable access and no HTTP methods other than GET.
 - A program is the entry file plus the files it imports (section 7.6). There are no module
   aliases, no selective imports, no search path outside the folder tree of the program,
   no packages, no versions and no re-exporting. A module only runs as part of another one: there is no
@@ -2137,9 +2156,10 @@ Nothing of what follows works today. It is the direction of the design, taken fr
     `Option[T]` and `Result[T, E]` (section 4.7) already exist, but not user generics
     (`fn f[T]`), higher-order functions or functions as values.
 - Static verification of contracts, and test blocks (`test`) outside functions.
-- A broader effect system. Declared effects (`uses`) already exist for files
-  (section 8.3), but a module does not declare what it needs and the rest of the language has no effects.
-- The network, external processes and environment variables.
+- A broader effect system. Declared effects (`uses`) exist for files, HTTPS origins and external
+  processes (section 8.3), but a module does not declare what it needs and the rest of the language
+  has no effect propagation.
+- Direct environment-variable access and HTTP methods other than GET.
 - There is no integration with AI models, and no design for one: what exists are the structured
   representations (`nex inspect`, diagnostics in JSON) that an external tool could consume. The
   words `ai` and `tool`, reserved for it until 0.11, are ordinary names since 0.12

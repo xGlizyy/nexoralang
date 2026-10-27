@@ -80,6 +80,14 @@ def _build_parser() -> argparse.ArgumentParser:
              "has to declare it with 'uses write'",
     )
     run_parser.add_argument(
+        "--allow-network", action="append", default=[], metavar="ORIGIN",
+        help="allow HTTPS requests to this origin (repeatable); the program must declare 'uses network'",
+    )
+    run_parser.add_argument(
+        "--allow-process", action="append", default=[], metavar="COMMAND",
+        help="allow this executable to run (can be repeated). A program also has to declare it with 'uses process'",
+    )
+    run_parser.add_argument(
         "args", nargs="*",
         help="the arguments of the program, written after '--'",
     )
@@ -197,6 +205,14 @@ def _build_parser() -> argparse.ArgumentParser:
     test_parser.add_argument(
         "--allow-write", action="append", default=[], metavar="RUTA",
         help="allow the examples to write the files under this path (can be repeated)",
+    )
+    test_parser.add_argument(
+        "--allow-network", action="append", default=[], metavar="ORIGIN",
+        help="allow examples to make HTTPS requests to this origin (can be repeated)",
+    )
+    test_parser.add_argument(
+        "--allow-process", action="append", default=[], metavar="COMMAND",
+        help="allow examples to run this executable (can be repeated)",
     )
     return parser
 
@@ -381,7 +397,8 @@ def _analysis_command(path: str, output_format: str, build, render_text=None) ->
 
 
 def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
-         allow_read: tuple[str, ...] = (), allow_write: tuple[str, ...] = ()) -> int:
+         allow_read: tuple[str, ...] = (), allow_write: tuple[str, ...] = (),
+         allow_network: tuple[str, ...] = (), allow_process: tuple[str, ...] = ()) -> int:
     def fail(reports, summary: str, code: int) -> int:
         # Whatever the program printed before failing is shown first.
         sys.stdout.flush()
@@ -404,8 +421,10 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
 
     host = LocalHost(
         arguments=arguments,
-        grants=Grants(read=allow_read, write=allow_write),
+        grants=Grants(read=allow_read, write=allow_write, network=allow_network, process=allow_process),
         declarations=analysis.checked.capabilities,
+        network_allowed=True,
+        processes_allowed=True,
     )
     try:
         run(analysis.checked, sys.stdout.write, host=host)
@@ -425,7 +444,8 @@ def _count(number: int, noun: str) -> str:
 
 
 def _test(path: str, output_format: str, function: str | None,
-          allow_read: tuple[str, ...] = (), allow_write: tuple[str, ...] = ()) -> int:
+          allow_read: tuple[str, ...] = (), allow_write: tuple[str, ...] = (),
+          allow_network: tuple[str, ...] = (), allow_process: tuple[str, ...] = ()) -> int:
     """`nex test` (decision 0008). Nothing is written until every selected example was evaluated,
     so an internal error or Ctrl+C never leaves a partial report behind."""
     source, failure = _load(path)
@@ -434,8 +454,10 @@ def _test(path: str, output_format: str, function: str | None,
     else:
         analysis = analyze(source, require_main=False, read=_module_reader(source))
     host = LocalHost(
-        grants=Grants(read=allow_read, write=allow_write),
+        grants=Grants(read=allow_read, write=allow_write, network=allow_network, process=allow_process),
         declarations=analysis.checked.capabilities if analysis.checked else Capabilities(),
+        network_allowed=True,
+        processes_allowed=True,
     )
     try:
         report = api.run_examples(analysis, function, host=host)
@@ -789,7 +811,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if arguments.command == "run":
             return _run(arguments.file, arguments.format, tuple(arguments.args),
-                        tuple(arguments.allow_read), tuple(arguments.allow_write))
+                        tuple(arguments.allow_read), tuple(arguments.allow_write),
+                        tuple(arguments.allow_network), tuple(arguments.allow_process))
         if arguments.command == "inspect":
             return _analysis_command(arguments.file, "json", tooling.inspect_document)
         if arguments.command == "context":
@@ -797,7 +820,8 @@ def main(argv: list[str] | None = None) -> int:
                                      tooling.render_context)
         if arguments.command == "test":
             return _test(arguments.file, arguments.format, arguments.function,
-                         tuple(arguments.allow_read), tuple(arguments.allow_write))
+                         tuple(arguments.allow_read), tuple(arguments.allow_write),
+                         tuple(arguments.allow_network), tuple(arguments.allow_process))
         if arguments.command == "migrate":
             return _migrate(arguments.file, arguments.write)
         if arguments.command == "symbols":

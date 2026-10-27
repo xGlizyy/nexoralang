@@ -538,7 +538,7 @@ def test_symbols_describe_the_functions_of_the_types():  # [21]
         ("needs", "end <= Text.length(text)", True), ("promises", "Text.length(result) == end - start", False),
     ]
     assert builtins["print"]["contracts"] == [] and builtins["Text.contains"]["contracts"] == []
-    assert {name.split(".")[0] for name in BUILTINS if "." in name} == set(TYPE_FUNCTIONS)
+    assert {name.split(".")[0] for name in BUILTINS if "." in name} - {"Net", "Process"} == set(TYPE_FUNCTIONS)
 
 
 def test_context_names_the_functions_of_the_types_and_their_requirements():  # [21]
@@ -568,7 +568,7 @@ def test_the_checker_knows_every_implementation():
     # can fail in the interpreter, which needs the position of the argument to say where the
     # variant was wrong.
     failing = {"Option.value", "Result.value", "Result.error"}
-    of_a_type = {name for name in BUILTINS if "." in name}
+    of_a_type = {name for name in BUILTINS if "." in name} - {"Net.get", "Process.run"}
     assert of_a_type - failing == set(prelude.IMPLEMENTATIONS)
     assert failing <= of_a_type
     assert set(prelude.CONTRACTS) <= set(prelude.IMPLEMENTATIONS)

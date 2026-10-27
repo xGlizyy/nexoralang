@@ -433,26 +433,27 @@ class Parser:
         if capability.type is not TokenType.IDENT or capability.lexeme not in CAPABILITIES:
             raise self._error(
                 "E1101",
-                f"Expected 'read' or 'write' after 'uses', found {capability.describe()}",
+                f"Expected 'read', 'write', 'network' or 'process' after 'uses', found {capability.describe()}",
                 capability,
-                hint='A program declares what it needs with: uses read "datos/entradas.txt"',
+                hint='A program declares what it needs with: uses read "datos/entradas.txt", '
+                     'uses network "https://example.com" or uses process "python"',
             )
         self._advance()
         path = self._peek()
         if path.type is not TokenType.STRING:
             raise self._error(
                 "E1101",
-                f"Expected the path of the capability after 'uses {capability.lexeme}'",
+                f"Expected the scope of the capability after 'uses {capability.lexeme}'",
                 path,
-                hint='Write the path as a text: uses read "datos/entradas.txt"',
+                hint='Write its scope as text, for example: uses network "https://example.com"',
             )
         self._advance()
         if not path.value:
             raise self._error(
                 "E1101",
-                "The path of a capability cannot be empty",
+                "The scope of a capability cannot be empty",
                 path,
-                hint='Write the path of the file: uses read "datos/entradas.txt"',
+                hint='Write a non-empty path, HTTPS origin or executable name after the capability',
             )
         return ast.UsesDecl(keyword.span.to(path.span), capability.lexeme, path.value, path.span)
 

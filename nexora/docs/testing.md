@@ -636,6 +636,7 @@ runs in some test; not that all combinations of inputs have been tested.
 | `test_permissions_files.py` | 23 | Files and permissions: the three rules of the model, path confinement and the errors of the file system |
 | `test_permissions_static.py` | 12 | What the static analysis detects of missing declarations (`E2026`) |
 | `test_permissions_environments.py` | 8 | That the playground worker and the MCP server always reject access to files |
+| `test_network_process.py` | 13 | HTTPS origin checks, bounded text responses, explicit process grants, process timeout/output limits and default host denial, including the Playground worker |
 | `test_robustness.py` | 86 | Truncated, mutated, random, binary, huge or very nested inputs; regressions of real defects |
 | `test_api.py` | 42 | Checking and running code in memory (`nexora.api`), with its output and text limits |
 | `test_worker.py` | 23 | The single-use process of the playground: valid and invalid requests, limits, environment |

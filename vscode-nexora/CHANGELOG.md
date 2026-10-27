@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.0
+
+For NEXORA 0.13.0. Highlights the `Net.get` and `Process.run` capability functions.
+
 ## 0.12.1
 
 For NEXORA 0.12.1. The version follows the one of the language.

@@ -1,6 +1,6 @@
 # Limitations
 
-What NEXORA does **not** do in version 0.12.1, and the risks worth knowing before using it.
+What NEXORA does **not** do in version 0.13.0, and the risks worth knowing before using it.
 Nothing that appears here as "does not exist" works today, even if it is mentioned in the design
 draft, in the roadmap or in a decision that is accepted and pending implementation.
 
@@ -37,15 +37,14 @@ NEXORA is an early-stage project (before version 1.0):
 | Reading numbers with spaces, `+`, separators or in other bases | `Int.parse` and `Float.parse` only read one form (`"-42"`, `"2.5e3"`) |
 | Remainder operator (`%`) and powers | |
 | Mathematical functions (root, rounding, absolute value…) | They have to be written |
-| Data input: the network and external processes | A program can print, read its arguments and the standard input, and use the files that it declares with `uses` and that it is allowed with `--allow-read` or `--allow-write` ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). There is no network and there are no external processes |
 | Modules and imports | Modules and imports are implemented in 0.11.0 ([decision 0018](decisions/0018-modulos-e-importaciones.md)). The playground does not support them; `nex test` only evaluates the examples of the file it is given; there are no aliases and no selective imports. |
 | Functions as values, anonymous functions, overloading, default values | |
 | Warnings | Only unused variables (`W2001`), a `var` that is never reassigned (`W2002`) and names outside `snake_case` (`W2003`). Other quality problems are not reported |
 | Block comments, multi-line texts | |
 | Hexadecimal literals or literals with an exponent (`1e-3`) | |
 
-With these limitations NEXORA is useful for small computation programs and for studying the
-language itself. It is not yet useful for writing applications.
+With these limitations NEXORA is useful for small tools and for studying the language itself. It is
+not yet a general-purpose replacement for established languages.
 
 ## Limits of the implementation
 
@@ -120,21 +119,18 @@ Stable since 0.3.0. Their limits, in detail, in [contracts](contracts.md#limitat
 
 ## Security
 
-A NEXORA program can compute, write text, read its arguments and the standard input, and
-use the files that it declares with `uses` and that it is allowed with `--allow-read` or `--allow-write`.
-It has no construct to use the network or run other programs, and the tests
-check that the interpreter does not use `eval` or `exec`. Even so:
+A NEXORA program can use files, HTTPS GET requests and external processes only when the program
+declares them, the local CLI grants them, and the host enables them. The in-memory API and Playground
+worker use `NoHost` and reject these operations. `Process.run` executes an explicitly allowed command
+with the local user's permissions. Even with these checks:
 
 - **NEXORA is not a sandbox.** It runs inside a normal Python process,
   with the permissions of whoever launches it.
 - **There are no time or memory limits** when using `nex`. A malicious program can make
   the process use resources.
-- The [playground](playground.md) does run each program in a separate process with time,
-  output and size limits, but **that is not a sandbox either**: the container isolation
-  is configured and **has not been tested**. The CPU, file and process limits of the operating
-  system exist on Linux and macOS, and have been checked on both; the memory limit of the
-  operating system is only enforced on Linux: on macOS, the kernel accepts it and does not apply it. It is not
-  deployed on any server.
+- The [playground](playground.md) runs in a restricted Docker container with `--network none` and
+  has been verified on the production VPS. This is an operational check, not an adversarial escape
+  audit. The worker denies file, network and process capabilities regardless of program declarations.
 - The MCP server does not run programs, but it runs with the permissions of whoever starts it.
 - It has not been audited.
 

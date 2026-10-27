@@ -29,6 +29,7 @@ whose rules it replaces say so at the top.
 | [0017](0017-un-editor-la-extension-de-vs-code.md) | One editor: the VS Code extension, with its language server and its formatter, built on the analyzer of the language itself | Accepted | No |
 | [0018](0018-modulos-e-importaciones.md) | Modules and imports: `import "path/file.nex"`, one namespace per file, privacy with `pub` and circular imports forbidden | Accepted | No |
 | [0019](0019-identidad-propia-del-lenguaje.md) | An identity of its own: promises in the header (`needs`, `promises`, `gives`), named promises, evidence per promise, `trust`, `nex migrate` and `nex impact` | Accepted. Phase 1 published in 0.12.0; phases 2 to 4 not started | Yes |
+| [0020](0020-red-y-procesos-externos.md) | HTTPS requests and external processes behind explicit capabilities, limited to the local CLI | Accepted | No |
 
 ## Possible incompatible changes in the future
 

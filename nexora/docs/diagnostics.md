@@ -124,7 +124,7 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E2020` | Example without its function | An example contains no call to its own function: its expression does not name it anywhere. A call that only happens inside another function does not count | Write the call with its inputs: `example f(2) == 4` |
 | `E2021` | Missing loop measure | A `while` does not declare its measure (`shrinks`), or declares more than one. Without a measure, nothing says why the loop ends | Add `shrinks`, in the header of the loop, with an `Int` that goes down on every iteration and does not go below 0, for example `shrinks n - i` |
 | `E2022` | Unsupported loop clause | A `for` declares `shrinks`, but it goes through a finite list and has no measure | Remove the `shrinks`; if you need invariants, write them with `keeps` |
-| `E2026` | Missing capability declaration | A file is read or written without declaring it with `uses` ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Declare it at the beginning of the file: `uses read "data/inputs.txt"` |
+| `E2026` | Missing capability declaration | A file, HTTPS origin or executable is used without declaring it with `uses` ([decisions 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md) and [0020](decisions/0020-red-y-procesos-externos.md)) | Declare it at the beginning of the file, for example `uses network "https://api.example.com"` |
 | `E2025` | Cannot reassign a field | A field of a record, which is immutable, is assigned to ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) | Build another record with the value you want |
 | `E2027` | Unknown module | The name of a module that the program does not import is used ([decision 0018](decisions/0018-modulos-e-importaciones.md)) | Declare it at the beginning of the file: `import "app/models.nex"` |
 | `E2028` | Private name | A name of another module is used that this module does not declare with `pub` ([decision 0018](decisions/0018-modulos-e-importaciones.md)) | Write `pub` in front of the function or the type in the file that declares it |
@@ -155,12 +155,13 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E3005` | Conversion out of range | `to_int` of a `Float` that does not fit in an `Int` | Check the value before converting |
 | `E3006` | Text too long | A text built with `+` exceeds the limit of the environment where it runs. It only happens where a limit is set, as in the playground | Build shorter texts |
 | `E3007` | Out of memory | The program needed more memory than was available while it ran. It points at no position; the notes show the chain of calls | Reduce the size of the values the program creates, above all those that grow on every call |
-| `E3008` | Permission denied | The program tries to use a file it cannot use: it does not declare it with `uses`, whoever runs it has not allowed it with `--allow-read` or `--allow-write`, or the environment does not support files ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) | Declare the capability and ask for the permission: `uses read "data.txt"` and `nex run program.nex --allow-read=data` |
+| `E3008` | Permission denied | The program tries to use a file, network origin or process that is not declared, granted or enabled by the environment | Declare the capability, use the matching `--allow-*` option and run in an enabled host |
 | `E3009` | No more input | `input()` was called when the standard input had already ended | Check that there is more input before reading, or end the program |
 | `E3010` | File error | The file could be used, but it could not be read or written: it does not exist, it is not UTF-8 text, or the operating system prevented it | Check the path and that the file is UTF-8 text |
 | `E3011` | Option has no value | `Option.value` was called with a `None`: the variant does not carry the value ([decision 0016](decisions/0016-option-y-result.md)) | Check first with `Option.is_none(...)`, or use `Option.value_or(x, fallback)` |
 | `E3012` | Result is an error | `Result.value` was called with an `Err`: the variant does not carry the value | Check first with `Result.is_err(...)`, or use `Result.value_or(x, fallback)` |
 | `E3013` | Result is not an error | `Result.error` was called with an `Ok`: the variant does not carry the error | Check first with `Result.is_ok(...)` |
+| `E3014` | External operation failed | An HTTPS request or external process failed, exceeded its limit or produced invalid text | Check the URL or command and its output; the limits are described in section 8.3 of the specification |
 
 ### Contract
 
@@ -261,7 +262,7 @@ fn main() {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.12.1",
+  "nexora_version": "0.13.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

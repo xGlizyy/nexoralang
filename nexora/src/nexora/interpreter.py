@@ -699,6 +699,10 @@ class Interpreter:
         if node.callee == "write_file":
             self._write_file(node, value, arguments[1])
             return None
+        if node.callee == "Net.get":
+            return self._network_get(node, value)
+        if node.callee == "Process.run":
+            return self._run_process(node, value, arguments[1])
         if node.callee == "to_text":
             return format_value(value)
         if node.callee == "to_float":
@@ -814,6 +818,46 @@ class Interpreter:
                 f"The file '{path}' could not be written: {reason}",
                 node.arguments[0].span,
             ) from None
+
+    def _network_get(self, node: ast.Call, url: str) -> str:
+        """`Net.get(url)`: reads a bounded HTTPS response through the host."""
+        try:
+            result = self._host.get_url(url)
+        except NotAllowed as error:
+            raise self._fail(
+                "E3008", str(error), node.arguments[0].span,
+                hint="A program needs 'uses network' and the matching --allow-network origin; "
+                     "the environment may still deny network access.",
+            ) from None
+        except OSError as error:
+            raise self._fail("E3014", str(error), node.arguments[0].span) from None
+        if self._text_limit is not None and len(result) > self._text_limit:
+            raise self._fail(
+                "E3006", f"The network response is longer than {self._text_limit} characters",
+                node.arguments[0].span,
+                hint="This environment limits the length of a Text value.",
+            )
+        return result
+
+    def _run_process(self, node: ast.Call, command: str, arguments: tuple[str, ...]) -> str:
+        """`Process.run(command, arguments)`: starts one explicitly allowed executable."""
+        try:
+            result = self._host.run_process(command, arguments)
+        except NotAllowed as error:
+            raise self._fail(
+                "E3008", str(error), node.arguments[0].span,
+                hint="A program needs 'uses process' and the matching --allow-process command; "
+                     "the environment may still deny external processes.",
+            ) from None
+        except OSError as error:
+            raise self._fail("E3014", str(error), node.arguments[0].span) from None
+        if self._text_limit is not None and len(result) > self._text_limit:
+            raise self._fail(
+                "E3006", f"The process output is longer than {self._text_limit} characters",
+                node.arguments[0].span,
+                hint="This environment limits the length of a Text value.",
+            )
+        return result
 
     def _check_requirements(self, node: ast.Call, arguments: list[Value]) -> None:
         """Checks the `needs` of a function of a type, in the order they are written, and stops

@@ -14,30 +14,56 @@ from typing import Protocol
 # The capabilities a program can declare with `uses`.
 READ = "read"
 WRITE = "write"
-CAPABILITIES = (READ, WRITE)
+NETWORK = "network"
+PROCESS = "process"
+CAPABILITIES = (READ, WRITE, NETWORK, PROCESS)
 
 
 @dataclass(frozen=True)
 class Capabilities:
-    """The paths a program declared, by capability.
+    """The scopes a program declared, by capability.
 
-    `read` and `write` hold the paths as they were written: they are resolved when they
-    are used, not here. A program that declares nothing has no capability at all.
+    File paths and process names are kept as written; network scopes are HTTPS origins.
+    File paths are resolved when used, not here. A program that declares nothing has no
+    capability at all.
     """
 
     read: tuple[str, ...] = ()
     write: tuple[str, ...] = ()
+    network: tuple[str, ...] = ()
+    process: tuple[str, ...] = ()
 
     def of(self, capability: str) -> tuple[str, ...]:
         """The paths declared for a capability."""
-        return self.read if capability == READ else self.write
+        return {
+            READ: self.read,
+            WRITE: self.write,
+            NETWORK: self.network,
+            PROCESS: self.process,
+        }.get(capability, ())
 
     def covers(self, capability: str, path: str) -> bool:
-        """Whether a declaration covers `path`.
+        """Whether a declaration covers a file path, HTTPS origin or executable.
 
         The paths are compared as they were written: a path that is not a literal cannot
         be checked here, and the interpreter decides at run time.
         """
+        if capability == NETWORK:
+            from urllib.parse import urlsplit
+
+            def origin(value: str) -> tuple[str, str, int] | None:
+                try:
+                    parsed = urlsplit(value)
+                    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+                        return None
+                    return parsed.scheme, parsed.hostname.encode("idna").decode("ascii").lower(), parsed.port or 443
+                except (UnicodeError, ValueError):
+                    return None
+
+            target = origin(path)
+            return target is not None and any(origin(scope) == target for scope in self.network)
+        if capability == PROCESS:
+            return bool(path) and path in self.process
         return any(is_inside(scope, path) for scope in self.of(capability))
 
     def comparable(self, capability: str, path: str) -> bool:
@@ -49,6 +75,8 @@ class Capabilities:
         would be guessing: guessing wrong here would reject a program that the
         interpreter would run.
         """
+        if capability in (NETWORK, PROCESS):
+            return True
         scopes = self.of(capability)
         if not scopes:
             return True
@@ -59,16 +87,23 @@ class Capabilities:
 class Grants:
     """What the user allowed on the command line, by capability.
 
-    The paths are the ones written in `--allow-read` and `--allow-write`. They are
-    resolved when they are used.
+    The scopes are the values written in the corresponding `--allow-*` options. File
+    paths are resolved when they are used.
     """
 
     read: tuple[str, ...] = ()
     write: tuple[str, ...] = ()
+    network: tuple[str, ...] = ()
+    process: tuple[str, ...] = ()
 
     def of(self, capability: str) -> tuple[str, ...]:
         """The paths allowed for a capability."""
-        return self.read if capability == READ else self.write
+        return {
+            READ: self.read,
+            WRITE: self.write,
+            NETWORK: self.network,
+            PROCESS: self.process,
+        }.get(capability, ())
 
 
 class NotAllowed(Exception):
@@ -111,6 +146,12 @@ class Host(Protocol):
         `OSError` when the file itself cannot be written.
         """
 
+    def get_url(self, url: str) -> str:
+        """Fetches a bounded HTTPS text response from an explicitly allowed origin."""
+
+    def run_process(self, command: str, arguments: tuple[str, ...]) -> str:
+        """Runs one explicitly allowed executable without a shell and returns its stdout."""
+
 
 class NoHost:
     """The host of a program that runs with nothing: no arguments, no input, no files.
@@ -131,6 +172,12 @@ class NoHost:
 
     def write_file(self, path: str, text: str) -> None:
         raise NotAllowed(f"this environment does not allow writing files, so '{path}' cannot be written")
+
+    def get_url(self, url: str) -> str:
+        raise NotAllowed("this environment does not allow network access")
+
+    def run_process(self, command: str, arguments: tuple[str, ...]) -> str:
+        raise NotAllowed("this environment does not allow external processes")
 
 
 def _split(path: str) -> tuple[str, list[str]]:
