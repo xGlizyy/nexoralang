@@ -1,7 +1,7 @@
 # NEXORA language specification
 
 - **Specification version:** 0.12
-- **Reference implementation:** `nexora` 0.12.0 (this repository, directory `nexora/`)
+- **Reference implementation:** `nexora` 0.12.1 (this repository, directory `nexora/`)
 - **Status:** describes exactly what the interpreter of 0.12 does. The syntax of 0.12 comes from
   [decision 0019](decisions/0019-identidad-propia-del-lenguaje.md); a program written for 0.11 is
   rewritten with `nex migrate` ([CLI reference](cli-reference.md#nex-migrate)).
@@ -1890,7 +1890,7 @@ fn main() {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.12.0",
+  "nexora_version": "0.12.1",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
