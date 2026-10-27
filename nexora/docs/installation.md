@@ -19,9 +19,9 @@ NEXORA works offline.
 | Environment | Status |
 |-------------|--------|
 | Windows 11, Python 3.12 | **Checked**: development-mode installation in a clean environment, installation from the built package, and full test suite |
-| Windows 11, Node.js 24, npm package | **Checked**: built with `npm pack`, installed from the file and used. Published on npm as `nexora-lang` 0.9.0, 0.10.0, 0.11.0 and 0.12.0 |
+| Windows 11, Node.js 24, npm package | **Checked**: built with `npm pack`, installed from the file and used. Published on npm as `nexora-lang` 0.9.0, 0.10.0, 0.11.0, 0.12.0 and 0.12.1 |
 | Linux (Ubuntu 24.04 on WSL 2), Python 3.12 | **Checked** on 17 October 2026: full test suite, with none skipped, with a non-root user; package built and installed from the file in a clean environment, and `nex run` used. Other distributions and Linux without WSL, not checked |
-| Linux, Node.js 24, npm package | **Checked**: built with `npm pack`, installed from the file and used with `npx nex`. Published on npm as `nexora-lang` 0.9.0, 0.10.0, 0.11.0 and 0.12.0 |
+| Linux, Node.js 24, npm package | **Checked**: built with `npm pack`, installed from the file and used with `npx nex`. Published on npm as `nexora-lang` 0.9.0, 0.10.0, 0.11.0, 0.12.0 and 0.12.1 |
 | macOS | **Run** on `macos-latest` by the [continuous integration](testing.md#continuous-integration): test suite with Python 3.11, 3.12 and 3.13, the npm package and the server. On a local Mac, not checked |
 | Python 3.11 and 3.13 | **Run** on Linux, Windows and macOS by the continuous integration, and **checked** by hand on Linux (3.11.17 and 3.13.16): full test suite, without installing the built package |
 
@@ -121,9 +121,9 @@ The `nex` command can be distributed in two ways. The package is called **`nexor
 because the name `nexora` already belongs to other projects on PyPI and on npm. The command is still
 `nex`.
 
-**Both are published** (0.9.0, 0.10.0, 0.11.0 and 0.12.0): `pip install nexora-lang` and
-`npm install -g nexora-lang` install them, the latest version; `pip install nexora-lang==0.12.0` and
-`npm install -g nexora-lang@0.12.0` install a precise one. Before publishing them it was checked, on Windows 11, that both packages are built, are installed
+**Both are published** (0.9.0, 0.10.0, 0.11.0, 0.12.0 and 0.12.1): `pip install nexora-lang` and
+`npm install -g nexora-lang` install them, the latest version; `pip install nexora-lang==0.12.1` and
+`npm install -g nexora-lang@0.12.1` install a precise one. Before publishing them it was checked, on Windows 11, that both packages are built, are installed
 from the local file and leave a `nex` command that works.
 
 | | pip | npm |
@@ -170,7 +170,8 @@ npm publish
 The credentials are entered when running those commands; they are not stored in the repository. Versions
 0.9.0, 0.10.0 and 0.11.0 were published this way, with the test suite and the continuous integration
 green. 0.12.0 too, from the files built in a clean copy of the tag `v0.12.0`: the same files that were
-installed and tried before, checked by their SHA-256 before and after the upload.
+installed and tried before, checked by their SHA-256 before and after the upload. 0.12.1 too, from a clean copy of
+the tag `v0.12.1`, with its files checked by their SHA-256 before the upload.
 
 ## Common problems
 
