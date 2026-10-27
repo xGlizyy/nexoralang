@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.12.1
+
+For NEXORA 0.12.1. The version follows the one of the language.
 
 - The warnings of NEXORA (`W2001`, `W2002`, `W2003`) appear as warnings in the editor. They come from
   the language server of `nexora-lang`; the extension itself does not change.

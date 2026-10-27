@@ -2,7 +2,7 @@
   "name": "nexora",
   "displayName": "NEXORA",
   "description": "The NEXORA programming language: syntax, diagnostics, navigation and formatting.",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "publisher": "nexoralang",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -60,7 +60,7 @@
         "nexora.python.path": {
           "type": "string",
           "default": "",
-          "markdownDescription": "The Python that runs the language server. Empty means the `python` of the PATH. It needs the package `nexora-lang` 0.12.0 or newer: `python -m pip install nexora-lang`."
+          "markdownDescription": "The Python that runs the language server. Empty means the `python` of the PATH. It needs the package `nexora-lang` 0.12.1 or newer: `python -m pip install nexora-lang`."
         },
         "nexora.trace.server": {
           "type": "string",

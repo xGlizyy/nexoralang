@@ -20,7 +20,7 @@ AI assistants). NEXORA includes none of those tools: it only provides the data.
 ```json
 {
   "schema": "nexora.inspect/3",
-  "nexora_version": "0.12.0",
+  "nexora_version": "0.12.1",
   "file": "hello.nex",
   "ok": true,
   "diagnostics": [],

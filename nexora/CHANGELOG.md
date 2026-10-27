@@ -17,7 +17,9 @@ Each version groups its changes into these sections, when they contain content:
 | Documentation | Relevant documentation changes |
 | Limitations | Known restrictions worth being aware of |
 
-## Unreleased
+## 0.12.1 — Warnings
+
+A release of the checker only: no syntax or semantics change, so every program of 0.12.0 runs as before.
 
 ### Added
 
