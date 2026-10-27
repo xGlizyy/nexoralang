@@ -21,6 +21,7 @@ from dataclasses import dataclass, field, replace
 from . import ast_nodes as ast
 from .capabilities import Host, NoHost, NotAllowed
 from .checker import BUILTINS, CheckedProgram, refinement_notes
+from .debugging import DebugEvent, DebugFrame, DebugObserver, DebugStop
 from .diagnostics import Diagnostic, NexoraRuntimeError, Span
 from .prelude import IMPLEMENTATIONS, error, ok, parse_hint, requirements, some
 from .values import (
@@ -122,7 +123,8 @@ class Environment:
 
 class Interpreter:
     def __init__(self, checked: CheckedProgram, write: Callable[[str], object],
-                 text_limit: int | None = None, host: Host | None = None) -> None:
+                 text_limit: int | None = None, host: Host | None = None,
+                 debug_observer: DebugObserver | None = None) -> None:
         """`write` receives the text produced by `print`. `text_limit`, if given, is the longest
         Text (in characters) a program may build; a host sets it to bound memory use. `host` is
         what the program may do besides computing: its arguments, its input and the files it may
@@ -141,6 +143,8 @@ class Interpreter:
         self._host = host if host is not None else NoHost()
         self._write = write
         self._text_limit = text_limit
+        self._debug_observer = debug_observer
+        self._debug_step = 0
         # The calls in progress: (function name, where it was called from). main has no call site.
         self._stack: list[tuple[str, Span | None]] = []
         # Where each loop in progress is, outermost first: the note _in_loop adds for it. Like _stack,
@@ -348,10 +352,27 @@ class Interpreter:
 
     def _block(self, block: ast.Block, environment: Environment) -> _Returned | None:
         for statement in block.statements:
+            self._observe_statement(statement, environment)
             outcome = self._statement(statement, environment)
             if outcome is not None:
                 return outcome
         return None
+
+    def _observe_statement(self, statement: ast.Statement, environment: Environment) -> None:
+        """Offers a pre-execution snapshot to an optional debugger controller."""
+        if self._debug_observer is None:
+            return
+        self._debug_step += 1
+        call_stack = tuple(DebugFrame(function, site) for function, site in reversed(self._stack))
+        event = DebugEvent(
+            step=self._debug_step,
+            span=statement.span,
+            function=call_stack[0].function if call_stack else "<module>",
+            call_stack=call_stack,
+            variables=tuple(environment.visible()),
+        )
+        if self._debug_observer(event):
+            raise DebugStop(event)
 
     def _statement(self, statement: ast.Statement, environment: Environment) -> _Returned | None:
         if isinstance(statement, (ast.Let, ast.Var)):
@@ -883,12 +904,19 @@ def broken_rule(chain: tuple[ast.TypeDecl, ...], value: Value) -> ast.TypeDecl |
 
 
 def run(checked: CheckedProgram, write: Callable[[str], object], *, text_limit: int | None = None,
-        host: Host | None = None) -> None:
-    """Runs a program that passed the static checks.
+        host: Host | None = None, debug_observer: DebugObserver | None = None) -> DebugEvent | None:
+    """Runs a program that passed the static checks, optionally observing each statement.
 
     `host` is what the program may do besides computing: its arguments, its input and the files
-    it may touch. Without one, the program can only compute and print (decision 0015)."""
-    Interpreter(checked, write, text_limit, host).run()
+    it may touch. Without one, the program can only compute and print (decision 0015). When
+    `debug_observer` returns True, the program stops before that statement and this function
+    returns its `DebugEvent`; otherwise it returns None.
+    """
+    try:
+        Interpreter(checked, write, text_limit, host, debug_observer).run()
+    except DebugStop as stopped:
+        return stopped.event
+    return None
 
 
 def run_example(checked: CheckedProgram, example: ast.Example, own_calls: list[ast.Call],
