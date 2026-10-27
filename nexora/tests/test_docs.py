@@ -351,7 +351,7 @@ def test_exit_codes_are_the_same_everywhere():
 
 def test_the_diagnostics_guide_explains_every_code():
     guide = (ROOT / "docs" / "diagnostics.md").read_text(encoding="utf-8")
-    rows = dict(re.findall(r"^\| `(E\d{4})` \| ([^|]+?) \|", guide, flags=re.M))
+    rows = dict(re.findall(r"^\| `([EW]\d{4})` \| ([^|]+?) \|", guide, flags=re.M))
     assert rows == CODES
     for category in set(CATEGORIES.values()):
         assert f"`{category}`" in guide, category

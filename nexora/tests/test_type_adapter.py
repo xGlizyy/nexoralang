@@ -159,7 +159,8 @@ def test_record_expression_is_explicit_about_unknown_names():
 
 
 def test_refined_types_are_adapted_with_their_real_chain():
-    checker, checked, diagnostics = shadow(with_main(f"{PERCENT}\n{SMALL}", "let p: Percent = 40\nlet s: Small = 5"))
+    checker, checked, diagnostics = shadow(with_main(
+        f"{PERCENT}\n{SMALL}", "let p: Percent = 40\nlet s: Small = 5\nprint(p)\nprint(s)"))
     assert diagnostics == []
     adapter = checker._type_adapter
 
@@ -180,7 +181,7 @@ def test_refined_types_are_adapted_with_their_real_chain():
 
 
 def test_refined_identity_is_still_the_declared_name():
-    checker, _, diagnostics = shadow(with_main(f"{PERCENT}\n{SMALL}", "let p: Percent = 40"))
+    checker, _, diagnostics = shadow(with_main(f"{PERCENT}\n{SMALL}", "let p: Percent = 40\nprint(p)"))
     assert diagnostics == []
     adapter = checker._type_adapter
     percent = adapter.refined("Percent")
@@ -192,7 +193,7 @@ def test_refined_identity_is_still_the_declared_name():
 
 
 def test_refined_model_keeps_the_exact_declaration_reference():
-    checker, checked, diagnostics = shadow(with_main(f"{PERCENT}\n{SMALL}", "let p: Percent = 40"))
+    checker, checked, diagnostics = shadow(with_main(f"{PERCENT}\n{SMALL}", "let p: Percent = 40\nprint(p)"))
     assert diagnostics == []
     adapter = checker._type_adapter
 
@@ -257,7 +258,7 @@ def test_root_matches_legacy_for_every_known_primitive(name: str):
 
 
 def test_root_matches_legacy_for_a_valid_refined_chain():
-    checker, _, diagnostics = shadow(with_main(f"{PERCENT}\n{SMALL}", "let p: Small = 5"))
+    checker, _, diagnostics = shadow(with_main(f"{PERCENT}\n{SMALL}", "let p: Small = 5\nprint(p)"))
     assert diagnostics == []
     assert checker._root("Small") == legacy_root(checker, "Small") == "Int"
     assert checker._root("Percent") == legacy_root(checker, "Percent") == "Int"
@@ -305,7 +306,7 @@ def test_root_does_not_hide_a_missing_primitive_model(monkeypatch):
 
 
 def test_root_does_not_hide_a_missing_refined_model(monkeypatch):
-    checker, _, diagnostics = shadow(with_main(PERCENT, "let p: Percent = 50"))
+    checker, _, diagnostics = shadow(with_main(PERCENT, "let p: Percent = 50\nprint(p)"))
     assert diagnostics == []
     monkeypatch.setattr(checker._type_adapter, "refined", lambda name: None)
     with pytest.raises(RuntimeError, match="refined type 'Percent' is missing"):
@@ -313,7 +314,7 @@ def test_root_does_not_hide_a_missing_refined_model(monkeypatch):
 
 
 def test_accepts_keeps_its_legacy_refined_chain():
-    checker, _, diagnostics = shadow(with_main(f"{PERCENT}\n{SMALL}", "let p: Small = 5"))
+    checker, _, diagnostics = shadow(with_main(f"{PERCENT}\n{SMALL}", "let p: Small = 5\nprint(p)"))
     assert diagnostics == []
     assert checker._accepts("Int", "Small")
     assert checker._accepts("Percent", "Small")
@@ -346,7 +347,7 @@ def test_root_is_differentially_equivalent_on_examples(monkeypatch):
 
 
 def test_accepts_matches_legacy_for_representable_types():
-    checker, _, diagnostics = shadow(with_main(f"{PERCENT}\n{SMALL}", "let p: Small = 5"))
+    checker, _, diagnostics = shadow(with_main(f"{PERCENT}\n{SMALL}", "let p: Small = 5\nprint(p)"))
     assert diagnostics == []
     cases = (
         ("Int", "Int", True),
@@ -370,7 +371,7 @@ def test_accepts_matches_legacy_for_representable_types():
 def test_accepts_uses_the_chain_but_not_only_the_root():
     grade = "type Grade = Int where value >= 0 and value <= 10"
     checker, _, diagnostics = shadow(
-        with_main(f"{PERCENT}\n{grade}", "let p: Percent = 5\nlet g: Grade = 5")
+        with_main(f"{PERCENT}\n{grade}", "let p: Percent = 5\nlet g: Grade = 5\nprint(p)\nprint(g)")
     )
     assert diagnostics == []
     cases = (
@@ -477,7 +478,7 @@ def test_accepts_does_not_hide_a_missing_primitive_model(monkeypatch):
 
 
 def test_accepts_does_not_hide_a_missing_refined_model(monkeypatch):
-    checker, _, diagnostics = shadow(with_main(PERCENT, "let p: Percent = 50"))
+    checker, _, diagnostics = shadow(with_main(PERCENT, "let p: Percent = 50\nprint(p)"))
     assert diagnostics == []
     monkeypatch.setattr(checker._type_adapter, "refined", lambda name: None)
     for expected, found in (
@@ -612,7 +613,7 @@ def test_expect_type_matches_legacy_for_dropped_refinements():
 
 
 def test_expect_type_does_not_hide_a_missing_refined_model(monkeypatch):
-    checker, _, diagnostics = shadow(with_main(PERCENT, "let p: Percent = 50"))
+    checker, _, diagnostics = shadow(with_main(PERCENT, "let p: Percent = 50\nprint(p)"))
     assert diagnostics == []
     monkeypatch.setattr(checker._type_adapter, "refined", lambda name: None)
     node = name_node()
@@ -700,6 +701,7 @@ def test_resolved_expression_types_match_the_public_strings():
     text = with_main(
         f"{PERCENT}\n{SMALL}",
         'let p: Percent = 40\nlet s: Small = 5\nlet n = 1\nlet f = 1.5\nlet b = true\nlet t = "x"\n'
+        "print(p)\nprint(n)\nprint(f)\nprint(b)\nprint(t)\n"
         "let total = p + 1\nif total > 0 {\n    print(s)\n}\n",
     )
     checker, checked, diagnostics = shadow(text)
@@ -747,7 +749,7 @@ def test_composite_names_still_fail_as_written_types(name: str):
 
 
 def test_public_documents_keep_strings_and_existing_values():
-    text = with_main(f"{PERCENT}\n{SMALL}", "let p: Percent = 40\nlet s: Small = 5\nprint(s)")
+    text = with_main(f"{PERCENT}\n{SMALL}", "let p: Percent = 40\nlet s: Small = 5\nprint(p)\nprint(s)")
     documents = {
         "check": tooling.check_source(text),
         "inspect": tooling.inspect_source(text),

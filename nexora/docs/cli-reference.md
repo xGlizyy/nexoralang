@@ -92,6 +92,8 @@ nex check examples/hello.nex
 - If the program is correct, it writes the line above to the standard output.
 - If it is not, it writes the diagnostics to the standard error and a final line with the number of
   errors.
+- A correct program with warnings writes them to the standard error and a final line with the
+  number of warnings to the standard output. It still exits with `0`.
 
 | Option | Effect |
 |--------|--------|

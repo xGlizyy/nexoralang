@@ -90,7 +90,7 @@ def test_block_variables_end_with_the_block():
 
 
 def test_sibling_blocks_may_reuse_a_name():
-    assert check_codes(in_main("{\n    let x = 1\n}\n{\n    let x = 2\n    print(x)\n}")) == []
+    assert check_codes(in_main("{\n    let x = 1\n    print(x)\n}\n{\n    let x = 2\n    print(x)\n}")) == []
 
 
 def test_reassignment_is_rejected():

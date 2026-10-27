@@ -26,7 +26,7 @@ be run by hand.
 
 | LSP feature | Method |
 |-------------|--------|
-| Diagnostics, with the code, the position and the hint | `textDocument/publishDiagnostics`, sent after opening, changing or saving a document |
+| Diagnostics (errors and warnings), with the code, the position and the hint | `textDocument/publishDiagnostics`, sent after opening, changing or saving a document |
 | Completion: keywords, built-in functions, names in scope and reserved words | `textDocument/completion` |
 | *Hover* with the type of a value or the signature of a function | `textDocument/hover` |
 | Go to definition, find references, highlight | `textDocument/definition`, `textDocument/references`, `textDocument/documentHighlight` |

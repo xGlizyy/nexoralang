@@ -47,8 +47,8 @@ failures: a division by zero or a broken contract only appears when running.
 
 When JSON is asked for (`--format json`):
 
-- The standard output contains **a single JSON document** and nothing else: no warnings, no
-  decorative messages, no Markdown blocks.
+- The standard output contains **a single JSON document** and nothing else: no decorative
+  messages, no Markdown blocks. Warnings travel inside `diagnostics`, not as extra text.
 - It holds for any input: a missing, empty or binary file, or one that is not NEXORA, still produces
   a valid document, with the error inside `diagnostics`.
 - The encoding is UTF-8.
@@ -147,9 +147,9 @@ fn main() {
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `severity` | text | Always `"error"`: in this version there are no warnings |
-| `category` | text | `file`, `lexical`, `syntax`, `semantic`, `type`, `runtime` or `contract` |
-| `code` | text | Stable identifier: `E` and four digits. It never changes its meaning |
+| `severity` | text | `"error"` or `"warning"`. A warning does not change `ok` |
+| `category` | text | `file`, `lexical`, `syntax`, `semantic`, `type`, `runtime`, `contract` or `test` |
+| `code` | text | Stable identifier: `E` or `W` and four digits. It never changes its meaning |
 | `message` | text | Fixed title associated with the code |
 | `label` | text | Explanation of this concrete case |
 | `hint` | text or `null` | Suggested fix |

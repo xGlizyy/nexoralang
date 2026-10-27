@@ -22,7 +22,7 @@ from dataclasses import dataclass, replace
 
 from . import ast_nodes as ast
 from .checker import CheckedProgram, Checker
-from .diagnostics import Diagnostic, Source
+from .diagnostics import ERROR, Diagnostic, Source
 from .lexer import tokenize
 from .parser import parse
 from .tokens import Token
@@ -48,8 +48,8 @@ class Module:
     source: Source
     # The syntax tree, available whenever the text has no lexical errors.
     program: ast.Program | None
-    # The errors of this file: the ones of the lexer and of the parser, plus the ones the
-    # checker reported while checking this module.
+    # The diagnostics of this file: the errors and warnings of the lexer, the parser and the
+    # checker. A warning alone does not stop the program (`ok` is still true).
     diagnostics: tuple[Diagnostic, ...]
     tokens: tuple[Token, ...] | None
     # True when the tree covers the whole file.
@@ -61,7 +61,7 @@ class Module:
 
     @property
     def ok(self) -> bool:
-        return not self.diagnostics
+        return not any(diagnostic.severity == ERROR for diagnostic in self.diagnostics)
 
 
 @dataclass(frozen=True)
@@ -183,6 +183,7 @@ class _Loader:
         broken = (entry is None or entry.program is None or not entry.complete or self._broken)
         facts: CheckedProgram | None = None
         reported = 0
+        has_errors = False
         for index, module in enumerate(self.modules):
             if module.program is None:
                 continue
@@ -194,8 +195,9 @@ class _Loader:
             if diagnostics[reported:] and not broken:
                 module = replace(module, diagnostics=module.diagnostics + tuple(diagnostics[reported:]))
                 self.modules[index] = module
+            has_errors = has_errors or any(diagnostic.severity == ERROR for diagnostic in diagnostics)
             reported = len(diagnostics)
-        checked = facts if facts is not None and not broken and not reported else None
+        checked = facts if facts is not None and not broken and not has_errors else None
         return checked, facts
 
     # Reading one file

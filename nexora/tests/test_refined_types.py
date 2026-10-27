@@ -300,7 +300,7 @@ def test_a_type_built_on_an_invalid_type_is_not_usable():
 
 def test_check_never_claims_that_a_computed_value_is_valid():
     # Passes the check, fails when it runs: the analysis does not reason about computed values.
-    text = program(PERCENT, "let n = 99\nlet p = Percent(n + 2)")
+    text = program(PERCENT, "let n = 99\nlet p = Percent(n + 2)\nprint(p)")
     assert check_codes(text) == []
     _, error = run_failure(text)
     assert error.code == "E4003"
@@ -374,12 +374,16 @@ def test_an_explanation_is_one_line():
     assert error.code == "E1101"
 
 
-def chain_program(types: int, terms: int, uses: int) -> str:
+def chain_program(types: int, terms: int, uses: int, *, read: bool = False) -> str:
     chain = "".join(
         f"type T{i} = {'Int' if i == 0 else f'T{i - 1}'} where " + " and ".join(["value >= 0"] * terms) + "\n"
         for i in range(types)
     )
-    body = "\n".join(f"    let v{i}: T{types - 1} = {i}" for i in range(uses))
+    # `read` prints each constant, so that a program with no errors has no unused-variable warning.
+    # The program that must fit the playground does not use it: an error hides the warnings anyway.
+    body = "\n".join(
+        f"    let v{i}: T{types - 1} = {i}" + (f"\n    print(v{i})" if read else "") for i in range(uses)
+    )
     return chain + "fn main() {\n" + body + "\n}\n"
 
 
@@ -411,4 +415,4 @@ def test_the_cost_of_checking_constants_is_bounded(monkeypatch):
 
 
 def test_ordinary_programs_are_far_from_the_limit():
-    assert check_codes(chain_program(5, 3, 300)) == []
+    assert check_codes(chain_program(5, 3, 300, read=True)) == []

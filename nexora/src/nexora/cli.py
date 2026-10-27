@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import api, migrate, migrate_files, tooling
 from .capabilities import Capabilities, Grants
-from .diagnostics import CONTRACT, MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Source, render
+from .diagnostics import CONTRACT, ERROR, MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Source, render
 from .host import LocalHost
 from .interpreter import run
 from .pipeline import Analysis, analyze
@@ -337,16 +337,21 @@ def _check(path: str, output_format: str, evidence: bool = False) -> int:
     else:
         analysis = analyze(source, read=_module_reader(source))
         reports = _reports(analysis)
-        code = EXIT_INVALID_PROGRAM if analysis.diagnostics else EXIT_OK
+        code = EXIT_OK if analysis.ok else EXIT_INVALID_PROGRAM
 
+    errors = [diagnostic for diagnostic, _ in reports if diagnostic.severity == ERROR]
     if output_format == "json":
         # With --evidence, nexora.evidence/1 starts with the same fields as nexora.diagnostics/1.
         _print_json(tooling.evidence_document(analysis) if evidence else _document(path, reports), sys.stdout)
+    elif errors:
+        _write_reports(reports)
+        print(f"error: {path}: check failed with {_plural(len(errors))}", file=sys.stderr)
+    elif evidence:
+        _write_reports(reports)
+        print(tooling.render_evidence(tooling.evidence_document(analysis)))
     elif reports:
         _write_reports(reports)
-        print(f"error: {path}: check failed with {_plural(len(reports))}", file=sys.stderr)
-    elif evidence:
-        print(tooling.render_evidence(tooling.evidence_document(analysis)))
+        print(f"✓ Check passed with {_count(len(reports), 'warning')}: {path}")
     else:
         print(f"✓ Check passed: {path}")
     return code
@@ -393,7 +398,8 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
 
     analysis = analyze(source, read=_module_reader(source))
     if analysis.checked is None:
-        summary = f"not run because of {_plural(len(analysis.diagnostics))}"
+        errors = sum(1 for diagnostic in analysis.diagnostics if diagnostic.severity == ERROR)
+        summary = f"not run because of {_plural(errors)}"
         return fail(_reports(analysis), summary, EXIT_INVALID_PROGRAM)
 
     host = LocalHost(
@@ -471,7 +477,8 @@ def _test_report_lines(report: api.TestReport, path: str) -> list[tuple[str, str
         for diagnostic, file in _reports(report.analysis):
             lines += [(_ERR, render(diagnostic, file)), (_ERR, "")]
         if source.text or report.analysis.diagnostics[0].category != "file":
-            lines.append((_ERR, f"error: {path}: not tested because of {_plural(len(report.analysis.diagnostics))}"))
+            errors = sum(1 for diagnostic in report.analysis.diagnostics if diagnostic.severity == ERROR)
+            lines.append((_ERR, f"error: {path}: not tested because of {_plural(errors)}"))
         else:
             lines.append((_ERR, f"error: {path}: the file could not be read"))
         return lines

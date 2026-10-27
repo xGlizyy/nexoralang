@@ -157,7 +157,7 @@ def test_binary_result_returns_none_for_names_outside_the_model():
 
 
 def test_binary_result_keeps_the_root_of_a_refined_operand():
-    text = with_main(f"{PERCENT}\n{SMALL}\n{ACCEPTED}", "let n = 1")
+    text = with_main(f"{PERCENT}\n{SMALL}\n{ACCEPTED}", "let n = 1\nprint(n)")
     checker, _, diagnostics = shadow(text)
     assert diagnostics == []
     # The previous rooting of `_infer` is what `_binary_result` relies on.
@@ -291,7 +291,7 @@ def test_binary_result_does_not_hide_a_missing_primitive_model(monkeypatch):
 
 
 def test_binary_result_does_not_hide_a_missing_refined_model(monkeypatch):
-    checker, _, diagnostics = shadow(with_main(PERCENT, "let n = 1"))
+    checker, _, diagnostics = shadow(with_main(PERCENT, "let n = 1\nprint(n)"))
     assert diagnostics == []
     monkeypatch.setattr(checker._type_adapter, "refined", lambda name: None)
     with pytest.raises(RuntimeError, match="refined type 'Percent' is missing"):

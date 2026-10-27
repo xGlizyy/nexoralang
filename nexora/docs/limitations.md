@@ -40,7 +40,7 @@ NEXORA is an early-stage project (before version 1.0):
 | Data input: the network and external processes | A program can print, read its arguments and the standard input, and use the files that it declares with `uses` and that it is allowed with `--allow-read` or `--allow-write` ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)). There is no network and there are no external processes |
 | Modules and imports | Modules and imports are implemented in 0.11.0 ([decision 0018](decisions/0018-modulos-e-importaciones.md)). The playground does not support them; `nex test` only evaluates the examples of the file it is given; there are no aliases and no selective imports. |
 | Functions as values, anonymous functions, overloading, default values | |
-| Warnings | Every diagnostic is an error. An unused variable produces no warning |
+| Warnings | Only unused variables (`W2001`), a `var` that is never reassigned (`W2002`) and names outside `snake_case` (`W2003`). Other quality problems are not reported |
 | Block comments, multi-line texts | |
 | Hexadecimal literals or literals with an exponent (`1e-3`) | |
 

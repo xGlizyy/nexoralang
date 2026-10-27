@@ -39,12 +39,17 @@ def test_inferred_types_are_enforced_later():
 
 # Annotations
 
-@pytest.mark.parametrize("declaration", [
-    'let name: Text = "NEXORA"', "let age: Int = 25", "let price: Float = 19.99", "let active: Bool = true",
-    "let sum: Int = 1 + 2", "let ok: Bool = 1 < 2", 'let s: Text = "a" + "b"',
+@pytest.mark.parametrize("declaration, name", [
+    ('let name: Text = "NEXORA"', "name"),
+    ("let age: Int = 25", "age"),
+    ("let price: Float = 19.99", "price"),
+    ("let active: Bool = true", "active"),
+    ("let sum: Int = 1 + 2", "sum"),
+    ("let ok: Bool = 1 < 2", "ok"),
+    ('let s: Text = "a" + "b"', "s"),
 ])
-def test_annotations_that_match_the_value(declaration):
-    assert check_codes(in_main(declaration)) == []
+def test_annotations_that_match_the_value(declaration, name):
+    assert check_codes(in_main(f"{declaration}\nprint({name})")) == []
 
 
 @pytest.mark.parametrize("declaration, expected, found", [

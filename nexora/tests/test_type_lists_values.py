@@ -61,7 +61,7 @@ def test_malformed_list_literals_are_syntax_errors(text: str) -> None:
 
 
 def test_the_type_of_a_literal_is_inferred_from_its_elements() -> None:
-    text = in_main("let xs = [1, 2, 3]")
+    text = in_main("let xs = [1, 2, 3]\nprint(List.length(xs))")
     analysis = analyze(Source("test.nex", text))
 
     assert analysis.diagnostics == ()
@@ -73,7 +73,7 @@ def test_the_type_of_a_literal_is_inferred_from_its_elements() -> None:
 
 
 def test_nested_literal_types_are_inferred() -> None:
-    text = in_main("let xs = [[1], [2, 3]]")
+    text = in_main("let xs = [[1], [2, 3]]\nprint(List.length(xs))")
     analysis = analyze(Source("test.nex", text))
 
     assert analysis.diagnostics == ()
@@ -209,7 +209,7 @@ def test_equality_between_different_list_types_is_rejected() -> None:
 
 
 def test_the_type_of_an_equality_is_bool() -> None:
-    text = in_main("let a = [1]\nlet result = a == a")
+    text = in_main("let a = [1]\nlet result = a == a\nprint(result)")
     analysis = analyze(Source("test.nex", text))
 
     assert analysis.diagnostics == ()

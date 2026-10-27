@@ -101,7 +101,7 @@ def test_to_dict_is_complete_and_json_friendly():
 
 
 def test_every_code_is_documented_in_the_spec_with_the_same_title_and_category():
-    rows = re.findall(r"^\| `(E\d{4})` \| ([^|]+?) \| `(\w+)` \|", SPEC.read_text(encoding="utf-8"), re.MULTILINE)
+    rows = re.findall(r"^\| `([EW]\d{4})` \| ([^|]+?) \| `(\w+)` \|", SPEC.read_text(encoding="utf-8"), re.MULTILINE)
     assert {code: title for code, title, _ in rows} == CODES
     assert {code: category for code, _, category in rows} == CATEGORIES
 
@@ -122,12 +122,16 @@ def test_every_category_has_a_stage_and_codes_follow_their_ranges():
                 "runtime": "E3", "contract": "E4", "test": "E4"}
     assert set(CATEGORIES.values()) == set(prefixes)
     for code, category in CATEGORIES.items():
-        assert code.startswith(prefixes[category]), code
+        expected = prefixes[category]
+        # A warning uses the same stage number as the error of its category, with W.
+        if code.startswith("W"):
+            expected = "W" + expected[1:]
+        assert code.startswith(expected), code
 
 
 def test_every_code_in_the_source_is_registered():
     package = Path(__file__).resolve().parents[1] / "src" / "nexora"
     used = set()
     for path in package.glob("*.py"):
-        used.update(re.findall(r'"(E\d{4})"', path.read_text(encoding="utf-8")))
+        used.update(re.findall(r'"([EW]\d{4})"', path.read_text(encoding="utf-8")))
     assert used == set(CODES)

@@ -76,7 +76,7 @@ def test_result_exists_only_in_ensures_of_a_function_that_returns_a_value():
 
 
 def test_result_has_the_return_type():
-    text = function('promises result == "ok"', 'return "ok"', "f(n: Int) gives Text")
+    text = function('promises result == "ok"', 'print(n)\nreturn "ok"', "f(n: Int) gives Text")
     assert check_codes(with_main(text, "print(f(1))")) == []
     assert check_codes(with_main(function('promises result == "ok"'), "print(f(1))")) == ["E2011"]
 
