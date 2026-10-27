@@ -223,10 +223,14 @@ def _debug_session(request: dict) -> int:
             try:
                 command = json.loads(raw.decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError):
-                _debug_line({"schema": DEBUG_SCHEMA, "state": "command_error", "message": "The command is not valid JSON."})
+                _debug_line(
+                    {"schema": DEBUG_SCHEMA, "state": "command_error", "message": "The command is not valid JSON."}
+                )
                 continue
             if not isinstance(command, dict):
-                _debug_line({"schema": DEBUG_SCHEMA, "state": "command_error", "message": "The command must be an object."})
+                _debug_line(
+                    {"schema": DEBUG_SCHEMA, "state": "command_error", "message": "The command must be an object."}
+                )
                 continue
             action = command.get("command")
             if action == "step":
@@ -248,7 +252,9 @@ def _debug_session(request: dict) -> int:
                 try:
                     replacement = _valid_breakpoints(command.get("lines"), lines)
                 except ValueError:
-                    _debug_line({"schema": DEBUG_SCHEMA, "state": "command_error", "message": "Invalid breakpoint lines."})
+                    _debug_line(
+                        {"schema": DEBUG_SCHEMA, "state": "command_error", "message": "Invalid breakpoint lines."}
+                    )
                     continue
                 breakpoints.clear()
                 breakpoints.update(replacement)
