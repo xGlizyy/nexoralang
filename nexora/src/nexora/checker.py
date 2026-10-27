@@ -23,7 +23,7 @@ from dataclasses import dataclass, field, fields
 
 from . import ast_nodes as ast
 from . import types as type_model
-from .capabilities import READ, WRITE, Capabilities
+from .capabilities import NETWORK, PROCESS, READ, WRITE, Capabilities
 from .diagnostics import ERROR, MAX_DIAGNOSTICS, WARNING, Diagnostic, NexoraRuntimeError, Span
 from .type_adapter import TypeAdapter
 from .values import BOOL, FLOAT, INT, NONE, TEXT, VALUE_TYPES, VOID
@@ -39,8 +39,13 @@ ANY_VALUE = "Int | Float | Bool | Text"
 # Ordinary programs stay far below it; a program above it is rejected (E2019), never half-checked.
 MAX_REFINEMENT_STEPS = 100_000
 
-# The functions that touch a file, and the capability each one needs (decision 0015).
-FILE_FUNCTIONS = {"read_file": READ, "write_file": WRITE}
+# Built-ins that need a declared host capability.
+CAPABILITY_FUNCTIONS = {
+    "read_file": READ,
+    "write_file": WRITE,
+    "Net.get": NETWORK,
+    "Process.run": PROCESS,
+}
 
 ARITHMETIC = ("+", "-", "*", "/")
 EQUALITY = ("==", "!=")
@@ -158,6 +163,11 @@ BUILTINS: dict[str, Signature] = {
         Signature("input", (), TEXT, builtin=True),
         Signature("read_file", (("path", TEXT),), TEXT, builtin=True),
         Signature("write_file", (("path", TEXT), ("text", TEXT)), VOID, builtin=True),
+        Signature("Net.get", (("url", TEXT),), TEXT, builtin=True),
+        _parametric_signature(
+            "Process.run", (("command", type_model.TEXT), ("arguments", type_model.list_of(type_model.TEXT))),
+            type_model.TEXT,
+        ),
         Signature("Text.length", (("text", TEXT),), INT, builtin=True),
         Signature("Text.slice", (("text", TEXT), ("start", INT), ("end", INT)), TEXT, builtin=True),
         Signature("Text.contains", (("text", TEXT), ("part", TEXT)), BOOL, builtin=True),
@@ -238,7 +248,7 @@ BUILTINS: dict[str, Signature] = {
 # The functions of each built-in type, by type: {"Text": ["contains", ...], ...}.
 TYPE_FUNCTIONS: dict[str, list[str]] = {}
 for _name in sorted(BUILTINS):
-    if "." in _name:
+    if "." in _name and _name not in CAPABILITY_FUNCTIONS:
         _type, _function = _name.split(".")
         TYPE_FUNCTIONS.setdefault(_type, []).append(_function)
 
@@ -846,27 +856,28 @@ class Checker:
     # Record types
 
     def _declare_uses(self, declarations: tuple[ast.UsesDecl, ...]) -> None:
-        """The capabilities the program declares that it needs (decision 0015, 2).
+        """The capabilities the program declares that it needs (decisions 0015 and 0020).
 
         Declaring is not granting: the user has to allow the capability too, and the
-        environment has to permit it. The interpreter checks the three when the program
-        touches a file.
+        environment has to permit it. The host checks the three when an operation runs.
         """
-        read: list[str] = []
-        write: list[str] = []
+        declared: dict[str, list[str]] = {capability: [] for capability in (READ, WRITE, NETWORK, PROCESS)}
         for declaration in declarations:
-            paths = read if declaration.capability == READ else write
-            if declaration.path not in paths:
-                paths.append(declaration.path)
-        self._capabilities = Capabilities(read=tuple(read), write=tuple(write))
+            values = declared[declaration.capability]
+            if declaration.path not in values:
+                values.append(declaration.path)
+        self._capabilities = Capabilities(
+            read=tuple(declared[READ]), write=tuple(declared[WRITE]),
+            network=tuple(declared[NETWORK]), process=tuple(declared[PROCESS]),
+        )
 
     def _check_capability(self, node: ast.Call) -> None:
-        """A call that touches a file needs a declaration that covers its path.
+        """A host operation needs a declaration that covers its target.
 
         This is a help, not the security: the interpreter checks the permissions again
         when the program runs (decision 0015, 5).
         """
-        capability = FILE_FUNCTIONS[node.callee]
+        capability = CAPABILITY_FUNCTIONS[node.callee]
         if not node.arguments:
             return
         path = node.arguments[0]
@@ -2271,7 +2282,7 @@ class Checker:
             # there is nothing safe to report as the type of this failed call.
             return None if signature.parametric is not None else signature.return_type
 
-        if node.callee in FILE_FUNCTIONS:
+        if node.callee in CAPABILITY_FUNCTIONS:
             self._check_capability(node)
 
         if signature.parametric is not None:

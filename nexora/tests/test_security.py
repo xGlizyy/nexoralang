@@ -19,10 +19,11 @@ from helpers import check_codes, in_main
 PACKAGE = Path(__file__).resolve().parents[1] / "src" / "nexora"
 MODULES = sorted(PACKAGE.glob("*.py"))
 
-# Standard-library modules the interpreter is allowed to import, and nothing else.
+# Standard-library modules the language core is allowed to import, and nothing else.
 ALLOWED_IMPORTS = {
     "__future__", "argparse", "dataclasses", "difflib", "enum", "errno", "json", "math", "os", "pathlib",
-    "re", "sys", "typing", "collections.abc", "time", "resource", "signal", "types",
+    "re", "sys", "typing", "collections.abc", "time", "resource", "signal", "types", "subprocess",
+    "threading", "shutil", "urllib.error", "urllib.parse", "urllib.request",
 }
 # The one module that may import something else: the optional MCP server needs the MCP SDK.
 OPTIONAL_IMPORTS = {"mcp_server.py": {"mcp.server", "mcp.server.mcpserver.exceptions", "mcp.types"}}
@@ -63,8 +64,8 @@ def test_only_the_cli_touches_the_operating_system():
     # language (lexer, parser, checker, interpreter) never import os, pathlib or subprocess.
     for path in MODULES:
         # worker.py is the other entry point: it reads its request from standard input.
-        # host.py is the only module that gives a program its files, and it does it for the
-        # paths the user allowed (decision 0015).
+        # host.py is the only module that gives a program local files, network access and
+        # subprocesses, behind an explicit declaration, a CLI grant and an environment switch.
         # migrate_files.py is the only module that writes files, for `nex migrate --write`
         # (decision 0019, G7); the tests below pin down what it may do and who uses it.
         if path.name in ("cli.py", "__main__.py", "worker.py", "host.py", "migrate_files.py"):
@@ -180,6 +181,8 @@ def test_the_built_in_functions_are_exactly_the_documented_ones():
         # The input and the files (decision 0015). The arguments and the standard input
         # need no declaration; the files do.
         "args", "input", "read_file", "write_file",
+        # The opt-in host operations (decision 0020).
+        "Net.get", "Process.run",
     }
 
 

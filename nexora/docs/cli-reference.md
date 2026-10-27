@@ -1,7 +1,7 @@
 # CLI reference
 
 `nex` is the command-line tool of NEXORA. This page describes version
-`nexora` 0.12.1. An automated test checks that all the commands, options and exit
+`nexora` 0.13.0. An automated test checks that all the commands, options and exit
 codes that the program accepts are documented here.
 
 `python -m nexora` is equivalent to `nex` and accepts exactly the same arguments.
@@ -9,12 +9,12 @@ codes that the program accepts are documented here.
 ## Summary
 
 ```text
-nex run <file> [--format text|json] [--allow-read PATH] [--allow-write PATH] [-- arguments...]
+nex run <file> [--format text|json] [--allow-read PATH] [--allow-write PATH] [--allow-network ORIGIN] [--allow-process COMMAND] [-- arguments...]
 nex check <file> [--format text|json] [--evidence]
 nex inspect <file> [--format json]
 nex context <file> [--format text|json]
 nex symbols <file> [--format text|json] [--name NAME] [--function FUNCTION]
-nex test <file> [--format text|json] [--function FUNCTION] [--allow-read PATH] [--allow-write PATH]
+nex test <file> [--format text|json] [--function FUNCTION] [--allow-read PATH] [--allow-write PATH] [--allow-network ORIGIN] [--allow-process COMMAND]
 nex migrate <file> [--write]
 nex --version
 nex --help
@@ -69,11 +69,13 @@ Hello from NEXORA
 | `--format json` | If the program is invalid or fails, it writes a JSON document to the **standard error**. If it ends well, it writes nothing extra. The output of the program does not change |
 | `--allow-read PATH` | Allows the program to read the files of that path. It can be repeated. A program also has to declare it with `uses read` |
 | `--allow-write PATH` | Allows the program to write the files of that path. It can be repeated. A program also has to declare it with `uses write` |
+| `--allow-network ORIGIN` | Allows HTTPS GET requests to an exact origin, such as `https://api.example.com`. It can be repeated. The program also has to declare `uses network` |
+| `--allow-process COMMAND` | Allows this executable to run. It can be repeated. The program also has to declare `uses process` |
 | `-- one two` | The arguments of the program. They are written after `--` and the program reads them with `args()` |
 
-Permissions are explicit and reproducible: the files a program can use are the
-intersection of what it declares (`uses`), what the command allows (`--allow-read`,
-`--allow-write`) and what the environment supports. Declaring does not grant, and granting does not enable
+Permissions are explicit and reproducible: files, network origins and executables are the
+intersection of what the program declares (`uses`), what the command allows (`--allow-read`,
+`--allow-write`, `--allow-network`, `--allow-process`) and what the environment supports. Declaring does not grant, and granting does not enable
 ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)).
 
 ## `nex check`
@@ -275,7 +277,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.12.1
+NEXORA 0.13.0
 ```
 
 ## `nex --help`

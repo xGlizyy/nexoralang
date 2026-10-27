@@ -59,7 +59,7 @@
       "patterns": [
         {
           "name": "support.function.nexora",
-          "match": "\\b(Text|Int|Float|List|Option|Result)\\.[a-z_]+\\b"
+          "match": "\\b(Text|Int|Float|List|Option|Result|Net|Process)\\.[a-z_]+\\b"
         },
         {
           "name": "support.function.nexora",

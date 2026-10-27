@@ -68,8 +68,8 @@ Rules of the flow:
 | `checker.py` | Static analysis. **The only place that decides which type rule applies to each expression**; the model of `types.py` defines identity and compatibility | `ast_nodes`, `diagnostics`, `values`, `types`, `type_adapter` |
 | `interpreter.py` | Execution, contracts and runtime errors | `ast_nodes`, `checker`, `diagnostics`, `prelude`, `values`, `capabilities` |
 | `prelude.py` | The functions of a type (`Text.length`, `Int.parse`, `List.get`…): their contracts, written in NEXORA, their implementations and the grammar of numbers written in a text | `ast_nodes`, `diagnostics`, `lexer`, `parser`, `values` |
-| `capabilities.py` | The permission model: what a program declares, what whoever runs it grants and the comparison of two paths. **It does not touch the operating system** | — |
-| `host.py` | What a program can do besides computing: its arguments, its input and the files it can use, with the check of the three permissions. **The only module that opens files** | `capabilities` |
+| `capabilities.py` | The permission model: what a program declares, what whoever runs it grants and how targets are compared. **It does not touch the operating system** | — |
+| `host.py` | What a program can do besides computing: input, files, HTTPS and external processes. **The only runtime module that touches those resources** | `capabilities` |
 | `pipeline.py` | Chains lexer, parser and checker | All three |
 | `api.py` | Checking or running code in memory, with optional limits. The interface for whoever integrates NEXORA into another program | `pipeline`, `interpreter`, `checker`, `tokens`, `diagnostics` |
 | `worker.py` | Single-use process that handles a JSON request; used by the [playground](playground.md) | `api` |
@@ -79,7 +79,7 @@ Rules of the flow:
 | `cli.py` | Arguments, reading the file, output formats, exit codes, and the permissions granted to the program | `pipeline`, `interpreter`, `tooling`, `diagnostics`, `capabilities`, `host` |
 | `__main__.py` | Allows `python -m nexora` | `cli` |
 
-Only the entry points touch the operating system: `cli.py` reads the file and writes to the
+Only the entry points and the host touch the operating system: `cli.py` reads the file and writes to the
 terminal, `worker.py` reads a request from its standard input, `mcp_server.py` talks over the standard input
 and output, and `tooling.py` reads a single fixed file (the specification of the project), without
 any argument influencing the path. The lexer, the
@@ -87,10 +87,10 @@ parser, the checker and the interpreter work with text and structures in memory;
 receives a `write` function for the output, which allows testing it without a terminal. A test
 (`tests/test_security.py`) checks that those modules do not import `os`, `pathlib` or `subprocess`.
 
-The only exception is `host.py`: it is the module that gives a program its arguments, its input
-and the files it can use, and that is why it is the only one that opens files. The interpreter does not import it:
-it receives a *host* and asks it ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)).
-The permission model, in `capabilities.py`, does not touch the operating system: it only compares paths.
+`host.py` is the module that gives a program its input, files, network and process access. The interpreter
+does not import it: it receives a *host* and asks it ([decisions 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)
+and [0020](decisions/0020-red-y-procesos-externos.md)). The API and Playground use `NoHost`, so they
+cannot perform these external operations.
 
 ## The pieces, one by one
 
