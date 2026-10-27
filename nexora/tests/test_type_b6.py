@@ -198,7 +198,7 @@ def test_not_outside_bool_has_the_base_hint():
 
 
 def test_unary_keeps_the_root_of_a_refined_operand():
-    text = with_main(f"{PERCENT}\n{SMALL}\n{ACCEPTED}", "let n = 1")
+    text = with_main(f"{PERCENT}\n{SMALL}\n{ACCEPTED}", "let n = 1\nprint(n)")
     checker, _, diagnostics = shadow(text)
     assert diagnostics == []
     assert checker._root("Percent") == checker._root("Small") == "Int"
@@ -318,7 +318,7 @@ def test_unary_current_type_model_does_not_hide_a_missing_primitive_model(monkey
 
 
 def test_unary_does_not_hide_a_missing_refined_model(monkeypatch):
-    checker, _, diagnostics = shadow(with_main(PERCENT, "let n = 1"))
+    checker, _, diagnostics = shadow(with_main(PERCENT, "let n = 1\nprint(n)"))
     assert diagnostics == []
     monkeypatch.setattr(checker, "_root", lambda kind: "Percent")
     monkeypatch.setattr(checker._type_adapter, "refined", lambda name: None)
@@ -328,7 +328,7 @@ def test_unary_does_not_hide_a_missing_refined_model(monkeypatch):
 
 
 def test_unary_does_not_hide_a_missing_model_through_root(monkeypatch):
-    checker, _, diagnostics = shadow(in_main("let n = 1"))
+    checker, _, diagnostics = shadow(in_main("let n = 1\nprint(n)"))
     assert diagnostics == []
     monkeypatch.setattr(checker._type_adapter, "resolve", lambda name: None)
     checker._expression = lambda operand, scope: INT

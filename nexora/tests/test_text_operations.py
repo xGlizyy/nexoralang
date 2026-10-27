@@ -285,10 +285,14 @@ def test_the_built_in_contracts_are_valid_nexora_that_cannot_fail(name):  # [9]
     else:
         params, return_type = concrete
     some_value = {"Int": "0", "Float": "0.0", "Text": '""', "Bool": "true"}[return_type]
+    parameter_names = [part.split(":", 1)[0].strip() for part in params.split(",") if part.strip()]
+    # Every parameter is read, so the probe does not warn about one it does not use. The
+    # block lets each discarded name be declared without colliding with the next one.
+    uses = "".join(f"    {{\n        let _ = {parameter}\n    }}\n" for parameter in parameter_names)
     for contract in prelude.CONTRACTS[name]:
         # The clause, checked by the real checker in a function with the same parameters and result.
         program = (f"fn probe({params}) gives {return_type}\n    {contract.clause} {contract.source}\n{{\n"
-                   f"    return {some_value}\n}}\n") + in_main("")
+                   f"{uses}    return {some_value}\n}}\n") + in_main("")
         assert check_codes(program) == [], (name, contract.source)
         assert unparse(contract.condition) == contract.source
         # Only functions that have an answer for any text or any list.

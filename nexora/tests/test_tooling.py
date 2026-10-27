@@ -479,15 +479,22 @@ def test_spec_index():
     assert (document["available"], document["spec_version"], document["language"], document["section"]) == (True, "0.12", "en", None)
     ids = [section["id"] for section in document["sections"]]
     assert len(ids) == len(set(ids))
-    for expected in ("4-data-types", "7-functions", "9-contracts", "44-refined-types", "113-error-codes"):
+    for expected in ("4-data-types", "7-functions", "9-contracts", "44-refined-types", "113-diagnostic-codes"):
         assert expected in ids
 
 
+def test_the_renamed_section_still_answers_to_its_old_id():
+    # Section 11.3 was "Error codes" before it listed warnings. A client that kept the old id still works.
+    old = tooling.get_language_spec("113-error-codes")["section"]
+    assert old == tooling.get_language_spec("113-diagnostic-codes")["section"]
+    assert old["id"] == "113-diagnostic-codes"
+
+
 def test_spec_section_is_the_text_of_the_real_document():
-    document = tooling.get_language_spec("113-error-codes")
+    document = tooling.get_language_spec("113-diagnostic-codes")
     validate(document, "nexora-spec.schema.json")
     section = document["section"]
-    assert section["text"].startswith("### 11.3 Error codes")
+    assert section["text"].startswith("### 11.3 Diagnostic codes")
     spec = (ROOT / "docs" / "language-spec.md").read_text(encoding="utf-8")
     assert section["text"] in spec
     for code in CODES:

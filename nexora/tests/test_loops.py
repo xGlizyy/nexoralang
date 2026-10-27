@@ -167,11 +167,11 @@ PERCENT = 'type Percent = Int where value >= 0 and value <= 100, "A percentage g
     ("p = Percent(p + 1)", []),
 ])
 def test_assignments_to_a_refined_variable_keep_its_guarantee(assignment, codes):
-    assert check_codes(PERCENT + in_main(f"var p: Percent = 20\n{assignment}")) == codes
+    assert check_codes(PERCENT + in_main(f"var p: Percent = 20\n{assignment}\nprint(p)")) == codes
 
 
 def test_a_refined_value_can_be_assigned_to_a_var_of_its_base():
-    assert check_codes(PERCENT + in_main("var total = 0\nlet p: Percent = 20\ntotal = p")) == []
+    assert check_codes(PERCENT + in_main("var total = 0\nlet p: Percent = 20\ntotal = p\nprint(total)")) == []
 
 
 def test_constants_of_assignments_count_for_the_refinement_budget():  # [7]

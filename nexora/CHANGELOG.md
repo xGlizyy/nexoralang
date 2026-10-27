@@ -17,6 +17,21 @@ Each version groups its changes into these sections, when they contain content:
 | Documentation | Relevant documentation changes |
 | Limitations | Known restrictions worth being aware of |
 
+## Unreleased
+
+### Added
+
+- **Warnings.** `nex check` reports an unused variable, parameter or iterator (`W2001`), a `var`
+  that is never reassigned (`W2002`) and a name outside `snake_case` (`W2003`). Warnings are only
+  reported when the file has no errors, never stop the program, and do not change the exit code.
+  `nex run` does not print them; the language server shows them as warnings.
+
+### Changed
+
+- Section 11.3 of the specification is now "Diagnostic codes" because it lists warnings too, so its id in the
+  index of `get_language_spec` is `113-diagnostic-codes`. The old id `113-error-codes` still answers with the
+  same section, so no client breaks; read the ids from the index the tool returns.
+
 ## 0.12.0 — An identity of its own: promises in the header, `trust` and `nex migrate`
 
 It implements phase 1 of [decision 0019](docs/decisions/0019-identidad-propia-del-lenguaje.md): a syntax that says what each clause is, and the evidence behind it. Every program of 0.11 with a function has to be migrated: `nex migrate program.nex --write` does it.

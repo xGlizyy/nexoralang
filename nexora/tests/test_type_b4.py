@@ -195,7 +195,7 @@ def test_condition_keeps_the_legacy_fallback_for_a_dropped_refinement():
 def test_condition_does_not_route_through_accepts():
     # B4 resolves `found` and uses `assignable` directly; it must not call `_accepts`, which
     # would resolve the expected `Bool` model as well. This keeps the exact B4 strategy.
-    checker, _, diagnostics = shadow(with_main(PERCENT, "let n = 1"))
+    checker, _, diagnostics = shadow(with_main(PERCENT, "let n = 1\nprint(n)"))
     assert diagnostics == []
 
     def fail(*args, **kwargs):
@@ -225,7 +225,7 @@ def test_condition_does_not_hide_a_missing_primitive_model(monkeypatch):
 def test_condition_does_not_hide_a_missing_refined_model(monkeypatch):
     node = ast.BoolLiteral(span=SPAN, value=True)
     for implementation in ("new", "legacy"):
-        checker, _, diagnostics = shadow(with_main(PERCENT, "let n = 1"))
+        checker, _, diagnostics = shadow(with_main(PERCENT, "let n = 1\nprint(n)"))
         assert diagnostics == []
         monkeypatch.setattr(checker._type_adapter, "refined", lambda name: None)
         checker._expression = lambda condition, scope: "Percent"
@@ -359,7 +359,7 @@ def test_condition_is_differentially_equivalent_on_examples(monkeypatch):
 def test_public_type_surface_is_unchanged():
     text = with_main(
         f"{PERCENT}\n{SMALL}\n{ACCEPTED}",
-        "let p: Percent = 40\nlet s: Small = 5\nlet ok: Accepted = true\nif ok {\n    print(s)\n}",
+        "let p: Percent = 40\nlet s: Small = 5\nlet ok: Accepted = true\nprint(p)\nif ok {\n    print(s)\n}",
     )
     analysis = analyze(Source("test.nex", text))
     assert analysis.diagnostics == ()

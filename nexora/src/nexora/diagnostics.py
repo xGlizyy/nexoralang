@@ -56,6 +56,12 @@ class Source:
 # anyone, and a file that is not NEXORA at all could produce one per character or per line.
 MAX_DIAGNOSTICS = 100
 
+# A warning never stops the analysis or the program. It points at something that can be
+# improved, and `nex check` still succeeds when it is the only diagnostic.
+ERROR = "error"
+WARNING = "warning"
+SEVERITIES = (ERROR, WARNING)
+
 # Categories: which stage found the problem, and therefore what kind of problem it is.
 FILE = "file"            # the file could not be loaded
 LEXICAL = "lexical"      # the text contains something that is not a NEXORA token
@@ -120,6 +126,12 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E2030": ("Module name clash", SEMANTIC),
     "E2031": ("Duplicate clause name", SEMANTIC),
 
+    # Warnings. They have their own prefix, so a tool can tell them apart from an error
+    # without reading the severity. Their number follows the same stage ranges as the errors.
+    "W2001": ("Unused variable", SEMANTIC),
+    "W2002": ("Variable never reassigned", SEMANTIC),
+    "W2003": ("Name is not snake_case", SEMANTIC),
+
     "E3001": ("Division by zero", RUNTIME),
     "E3002": ("Integer overflow", RUNTIME),
     "E3003": ("Float result out of range", RUNTIME),
@@ -156,7 +168,7 @@ class Diagnostic:
     span: Span | None = None
     hint: str | None = None
     notes: tuple[str, ...] = ()
-    severity: str = "error"
+    severity: str = ERROR
 
     @property
     def message(self) -> str:

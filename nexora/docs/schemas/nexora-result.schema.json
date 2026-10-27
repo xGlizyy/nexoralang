@@ -96,7 +96,10 @@
       ],
       "properties": {
         "severity": {
-          "const": "error"
+          "enum": [
+            "error",
+            "warning"
+          ]
         },
         "category": {
           "enum": [
@@ -112,7 +115,7 @@
         },
         "code": {
           "type": "string",
-          "pattern": "^E[0-9]{4}$",
+          "pattern": "^[EW][0-9]{4}$",
           "description": "Stable identifier of the problem."
         },
         "message": {

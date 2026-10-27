@@ -28,7 +28,7 @@ error: program.nex: check failed with 1 error
 | Part | In the example | Meaning |
 |------|----------------|---------|
 | Category | `semantic` | What kind of problem it is and which stage found it |
-| Severity | `error` | In this version, always `error`. There are no warnings |
+| Severity | `error` | `error` stops the program; `warning` points at something that can be improved and does not |
 | Code | `E2006` | Stable identifier of the problem |
 | Title | `Name already declared` | Fixed text associated with the code |
 | Position | `program.nex:3:9` | File, line and column. Both start at 1 |
@@ -68,7 +68,8 @@ That is why a file with a syntax error does not show type errors at the same tim
 first.
 
 Within a stage all the independent errors found are reported, up to a
-maximum of 100.
+maximum of 100. Warnings are only reported when the file has no errors: they never stop the
+program, and `nex check` still exits with `0` when they are the only diagnostic.
 
 ## All the codes
 
@@ -183,6 +184,21 @@ An example that stops because of a runtime error or a broken rule does not give 
 diagnostic of that error, with one more note that says which example caused it.
 
 When the broken rule has an explanation, the diagnostic shows it in a `Reason: ...` note.
+
+### Warnings
+
+A warning describes an improvement, not a failure. It has its own `W` code and the same fields
+as an error.
+
+| Code | Title | What it means | What to do |
+|------|-------|---------------|------------|
+| `W2001` | Unused variable | A variable, parameter or iterator is declared and its value is never read. A variable that only receives assignments is unused too | Remove it, or use its value. A parameter that must keep its position can be named `_` |
+| `W2002` | Variable never reassigned | `var` declares a value that can change, but this one never does | Declare it with `let`, which says that it does not change |
+| `W2003` | Name is not snake_case | A variable, parameter, iterator or private function does not follow `snake_case` | Write it in `snake_case`. Type names keep PascalCase, and a public function and its parameters keep the spelling of their interface |
+
+Warnings appear after the errors of the same file, and a file with errors has none. The
+`--format json` document keeps them in `diagnostics`, with `"severity": "warning"`, and `ok`
+stays `true`.
 
 ### Retired codes
 

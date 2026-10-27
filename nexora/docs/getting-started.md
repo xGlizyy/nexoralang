@@ -53,6 +53,10 @@ nex check program.nex
 `nex run` does that same check before starting: a program with errors never gets to
 run. `nex check` is useful while you write, because it produces no effect.
 
+`nex check` also reports **warnings**: a variable that is never used (`W2001`), a `var` that is
+never reassigned (`W2002`) and a name that is not in `snake_case` (`W2003`). A warning does not
+fail the check or stop the program; see [diagnostics](diagnostics.md#warnings).
+
 ## 3. Variables
 
 `let` declares a variable and gives it a value:

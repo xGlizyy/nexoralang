@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 from . import ast_nodes as ast
 from .checker import CheckedProgram
-from .diagnostics import Diagnostic, Source
+from .diagnostics import ERROR, Diagnostic, Source
 from .modules import Project, Reader, load
 from .tokens import Token
 
@@ -32,7 +32,8 @@ class Analysis:
     program: ast.Program | None = None
     # Types of the expressions the checker could type: id(node) -> type.
     types: dict[int, str] | None = None
-    # Set only when there are no diagnostics: the one thing the interpreter accepts.
+    # Set only when there are no errors: the one thing the interpreter accepts. A warning
+    # does not clear it.
     checked: CheckedProgram | None = None
     # What the checker learned (symbols, references, calls), available whenever there is a
     # tree, with or without errors. For tools; never for running.
@@ -48,7 +49,7 @@ class Analysis:
 
     @property
     def ok(self) -> bool:
-        return not self.diagnostics
+        return not any(diagnostic.severity == ERROR for diagnostic in self.diagnostics)
 
 
 def analyze(source: Source, *, require_main: bool = True, read: Reader | None = None) -> Analysis:

@@ -1755,7 +1755,8 @@ type error[E2011]: Type mismatch
 error: program.nex: check failed with 1 error
 ```
 
-- The first line is `<category> error[<code>]: <title>`.
+- The first line is `<category> <severity>[<code>]: <title>`, with `error` or `warning` as the
+  severity.
 - The concrete explanation goes next to the `^` marker, which underlines the affected fragment.
 - The `= note:` lines give related information (where something was declared, the signature of a
   function, the chain of calls).
@@ -1768,6 +1769,10 @@ pass: after a syntax error the parser continues at the next statement or functio
 static analysis reports all the independent errors it finds. Every stage reports
 at most 100 errors per file; when it reaches that number it stops, and the final summary of the
 command says so.
+
+Warnings are reported only for a file without errors: on top of an error they would describe a
+program that is already rejected. They use `warning[W…]`, they are written to the standard error
+like errors, and `nex check` still exits with 0 when they are the only diagnostic.
 
 The last line that `nex check` and `nex run` write when there are errors (`error: file: …`) is
 a summary of the command, not a diagnostic.
@@ -1785,9 +1790,11 @@ a summary of the command, not a diagnostic.
 | `contract` | A rule that the program declares was broken: `needs`, `promises`, the condition of a refined type, a `keeps` or a measure | When running |
 | `test` | An example evaluated by `nex test` turned out false | When running `nex test` |
 
-### 11.3 Error codes
+### 11.3 Diagnostic codes
 
-A code never changes its meaning. If it stops being used it is retired, not reused.
+A code never changes its meaning. If it stops being used it is retired, not reused. Codes that
+start with `E` are errors and stop the program; codes that start with `W` are warnings and never
+do.
 
 | Code | Title | Category | When it appears |
 |------|-------|----------|-----------------|
@@ -1835,6 +1842,9 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E2029` | Circular import | `semantic` | Modules import each other, so that none can be analyzed before the one it needs (section 7.6) |
 | `E2030` | Module name clash | `semantic` | Two different files are imported as the same module, because they have the same name (section 7.6) |
 | `E2031` | Duplicate clause name | `semantic` | A clause name used twice in a function and its loops, or equal to a parameter or to `result` (decision 0019) |
+| `W2001` | Unused variable | `semantic` | A variable, parameter or iterator is declared and its value is never read. A name that only receives assignments is unused too |
+| `W2002` | Variable never reassigned | `semantic` | A variable is declared with `var` and never receives a new value: `let` says what the program means |
+| `W2003` | Name is not snake_case | `semantic` | A variable, parameter, iterator or private function is not written in `snake_case`. Type names keep PascalCase, and public functions and their parameters keep the spelling of their interface |
 | `E3001` | Division by zero | `runtime` | Division by zero |
 | `E3002` | Integer overflow | `runtime` | An `Int` result out of the 64-bit range |
 | `E3003` | Float result out of range | `runtime` | A `Float` result that is too large |
@@ -1908,9 +1918,9 @@ fn main() {
 |-------|------|---------|
 | `schema` | text | Name and version of the format |
 | `file` | text | The analyzed file, as it was passed to the command |
-| `ok` | boolean | `true` if there are no diagnostics |
+| `ok` | boolean | `true` if there are no errors. A warning does not make it false |
 | `diagnostics` | list | The diagnostics, in the order in which they were found |
-| `severity` | text | Always `"error"` in this version |
+| `severity` | text | `"error"` or `"warning"` |
 | `category` | text | One of the categories of section 11.2 |
 | `code` | text | Stable code (section 11.3) |
 | `message` | text | Fixed title of the code |
@@ -2090,8 +2100,9 @@ These are real limitations of this version, not bugs:
 - Literals only allow decimal notation: there is no hexadecimal and no exponents (`1e-3`).
 - The minimum integer `-9223372036854775808` cannot be written as a literal. It can be obtained:
   `-9223372036854775807 - 1`.
-- A variable or a parameter that is declared and never used produces no warning.
-- There are no warnings: every diagnostic is an error.
+- A variable, parameter or iterator that is declared and never used gives `W2001`; it is not an
+  error. A `var` that is never reassigned gives `W2002`, and a name outside `snake_case` gives
+  `W2003`. These are the only warnings: no other quality problem is reported.
 - `print` receives a single argument and always adds a line break.
 - Input and files are those of section 8.3. It is not possible to read "until the end" of the
   standard input without stopping (`input()` fails with `E3009`), there are no directories or files that are not
@@ -2153,8 +2164,8 @@ This specification takes precedence over the draft in what is already implemente
 | Dynamic value to refined type | `Percent.from(n)`, which returns a `Result` | `Percent(n)`, which stops the program with `E4003` if the condition is not met |
 | Aliases without a condition | `type UserId = Int` | They do not exist |
 | Conversion between numbers | `Int.to_float(x)` | `to_float(x)`, `to_int(x)` |
-| Unused variables | They are an error | Not checked yet |
+| Unused variables | They are an error | A warning (`W2001`): they never stop the program |
 | Loops | `while` and `for`, without requirements | `while` with a required measure (`shrinks`) and `for` over `List[T]`; both with optional invariants (`keeps`), checked on every iteration |
-| Naming conventions | Required (`snake_case`…) | Not checked yet |
+| Naming conventions | Required (`snake_case`…) | A warning (`W2003`) for values and private functions; public interfaces keep their spelling |
 | Input | An `Input` record with `main(input)` | `args()` and `input()`, without changing the form of `main` (section 8.3) |
 | Files | No rule: the program can read them | They have to be declared with `uses` and allowed with `--allow-read` (section 8.3) |

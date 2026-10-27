@@ -233,7 +233,7 @@ def test_paths_that_can_end_without_a_return(body):
     "{\n        return 1\n    }",
 ])
 def test_paths_that_always_return(body):
-    assert check_codes(with_main(f"fn f(n: Int) gives Int {{\n    {body}\n}}", "print(f(1))")) == []
+    assert check_codes(with_main(f"fn f(n: Int) gives Int {{\n    print(n)\n    {body}\n}}", "print(f(1))")) == []
 
 
 # if / else at run time
