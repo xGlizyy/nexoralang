@@ -5,7 +5,7 @@ An experimental programming language built around explicit requirements and chec
 NEXORA is its own language, with its own syntax, type checker and interpreter. The reference
 interpreter is implemented in Python; programs are NEXORA programs, not Python translations.
 
-**Version 0.14.0, published on PyPI and npm · Early-stage, pre-1.0.** The supported language is a
+**Version 0.14.1, prepared for release · Early-stage, pre-1.0.** The supported language is a
 subset of the full design and may change incompatibly. NEXORA programs are not recommended for
 production software. The public Playground is live in production at the same interpreter version;
 that describes the hosted service, not the maturity of the language for production applications.
@@ -24,7 +24,7 @@ that describes the hosted service, not the maturity of the language for producti
   the editor.
 - **Web Playground:** [write, check and run NEXORA online](https://nexoralang.org/playground),
   with multi-file projects, an explicit entry file and a statement-by-statement debugger. The
-  production service runs NEXORA 0.14.0 in a Docker worker; network and external-process
+  production service runs the Playground interpreter in a Docker worker; network and external-process
   capabilities are unavailable to Playground programs.
 - **AI tooling:** optional context and symbol tools, a Python API and an experimental MCP server.
   NEXORA does not call AI models. The MCP server's compatibility has only been checked with the

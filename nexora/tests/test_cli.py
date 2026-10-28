@@ -1,7 +1,9 @@
+import io
 import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -77,6 +79,108 @@ def test_run_prints_the_program_output(program, capsys):
     captured = capsys.readouterr()
     assert captured.out == "Hello from NEXORA\n"
     assert captured.err == ""
+
+
+def test_run_output_budget_stops_with_a_clear_diagnostic(program, capsys):
+    path = program('fn main() {\n    print("1234567890")\n    print("never")\n}\n')
+    assert cli.main(["run", path, "--max-output", "5"]) == 3
+    captured = capsys.readouterr()
+    assert captured.out == "12345"
+    assert "output limit exceeded (5)" in captured.err
+    assert "never" not in captured.out
+
+
+def test_run_source_budget_refuses_large_input(program, capsys):
+    assert cli.main(["run", program(HELLO), "--max-source", "1"]) == 3
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "source exceeds --max-source (1 bytes)" in captured.err
+
+
+def test_run_text_budget_stops_with_runtime_diagnostic(program, capsys):
+    source = 'fn main() {\n    let a = "123456"\n    print(a + a)\n}\n'
+    assert cli.main(["run", program(source), "--max-text", "8"]) == 3
+    assert "E3006" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "option", ["--timeout", "--max-output", "--max-text", "--max-source", "--max-input", "--max-memory"],
+)
+def test_run_limits_must_be_positive(program, capsys, option):
+    assert cli.main(["run", program(HELLO), option, "0"]) == 2
+    assert f"{option} must be greater than zero" in capsys.readouterr().err
+
+
+def test_run_memory_budget_is_refused_where_rlimit_as_is_not_enforced(program, capsys):
+    if sys.platform not in ("darwin", "win32"):
+        pytest.skip("this platform enforces RLIMIT_AS")
+    assert cli.main(["run", program(HELLO), "--max-memory", "536870912"]) == 2
+    message = capsys.readouterr().err
+    assert "macOS accepts RLIMIT_AS but does not enforce it" in message or "requires POSIX RLIMIT_AS support" in message
+
+
+@pytest.mark.skipif(os.name != "nt", reason="POSIX platforms support the CLI interval timer")
+def test_run_timeout_is_refused_on_windows(program, capsys):
+    assert cli.main(["run", program(HELLO), "--timeout", "1"]) == 2
+    assert "--timeout requires a POSIX platform" in capsys.readouterr().err
+
+
+def test_run_source_limit_accepts_a_file_at_the_limit(program, capsys):
+    path = program(HELLO)
+    assert cli.main(["run", path, "--max-source", str(os.path.getsize(path))]) == 0
+    assert capsys.readouterr().out == "Hello from NEXORA\n"
+
+
+def test_run_input_budget_stops_before_reading_past_its_byte_limit(program, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"abc\n"), encoding="utf-8"))
+    source = 'fn main() {\n    print(input())\n}\n'
+    assert cli.main(["run", program(source), "--max-input", "2"]) == 3
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "input limit exceeded (2)" in captured.err
+
+
+def test_run_input_budget_counts_all_lines_and_accepts_the_exact_limit(program, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"a\nb\n"), encoding="utf-8"))
+    source = 'fn main() {\n    print(input())\n    print(input())\n}\n'
+    assert cli.main(["run", program(source), "--max-input", "4"]) == 0
+    assert capsys.readouterr().out == "a\nb\n"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="CLI wall-clock cancellation uses POSIX interval timers")
+def test_run_timeout_stops_execution_with_a_clear_diagnostic(program, capsys):
+    source = '''fn fib(n: Int) gives Int {
+    if n < 2 {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+fn main() {
+    print(fib(45))
+}
+'''
+    assert cli.main(["run", program(source), "--timeout", "0.05"]) == 3
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "time limit exceeded (0.05)" in captured.err
+
+
+@pytest.mark.skipif(os.name == "nt", reason="CLI wall-clock cancellation uses POSIX interval timers")
+def test_run_timeout_cleans_up_an_active_process(program, tmp_path, capsys):
+    executable = sys.executable.replace("\\", "\\\\")
+    marker = (tmp_path / "child-finished").as_posix()
+    child_code = f"import time; time.sleep(1); open({marker!r}, 'w').close()"
+    source = f'''uses process "{executable}"
+
+fn main() {{
+    print(Process.run("{executable}", ["-c", "{child_code}"]))
+}}
+'''
+    path = program(source)
+    assert cli.main(["run", path, "--allow-process", sys.executable, "--timeout", "0.1"]) == 3
+    assert "time limit exceeded" in capsys.readouterr().err
+    time.sleep(1.1)
+    assert not (tmp_path / "child-finished").exists()
 
 
 def test_run_missing_file(capsys):

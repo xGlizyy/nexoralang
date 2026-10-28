@@ -6,6 +6,7 @@ import argparse
 import errno
 import json
 import os
+import signal
 import sys
 from pathlib import Path
 
@@ -62,6 +63,18 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     run_parser.add_argument("file", help="path to the .nex file to run")
+    run_parser.add_argument("--timeout", type=float, metavar="SECONDS", help="stop the program after this many seconds")
+    run_parser.add_argument("--max-output", type=int, metavar="BYTES", help="maximum UTF-8 bytes the program may print")
+    run_parser.add_argument(
+        "--max-text", type=int, metavar="CHARS", help="maximum characters in a constructed Text value",
+    )
+    run_parser.add_argument("--max-source", type=int, metavar="BYTES", help="maximum source-file size")
+    run_parser.add_argument(
+        "--max-input", type=int, metavar="BYTES", help="maximum bytes the program may read from standard input",
+    )
+    run_parser.add_argument(
+        "--max-memory", type=int, metavar="BYTES", help="maximum process address space (POSIX; includes Python)",
+    )
     run_parser.add_argument(
         "--format",
         choices=("text", "json"),
@@ -398,7 +411,15 @@ def _analysis_command(path: str, output_format: str, build, render_text=None) ->
 
 def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
          allow_read: tuple[str, ...] = (), allow_write: tuple[str, ...] = (),
-         allow_network: tuple[str, ...] = (), allow_process: tuple[str, ...] = ()) -> int:
+         allow_network: tuple[str, ...] = (), allow_process: tuple[str, ...] = (),
+         timeout: float | None = None, max_output: int | None = None,
+         max_text: int | None = None, max_source: int | None = None,
+         max_memory: int | None = None, max_input: int | None = None) -> int:
+    for name, value in (("timeout", timeout), ("max-output", max_output), ("max-text", max_text),
+                        ("max-source", max_source), ("max-input", max_input), ("max-memory", max_memory)):
+        if value is not None and value <= 0:
+            print(f"error: --{name} must be greater than zero", file=sys.stderr)
+            return EXIT_USAGE
     def fail(reports, summary: str, code: int) -> int:
         # Whatever the program printed before failing is shown first.
         sys.stdout.flush()
@@ -413,30 +434,102 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
     if source is None:
         return fail(((failure, Source(path, "")),), "the file could not be read", EXIT_UNREADABLE_FILE)
 
-    analysis = analyze(source, read=_module_reader(source))
+    if max_source is not None and len(source.text.encode("utf-8")) > max_source:
+        print(f"error: {path}: source exceeds --max-source ({max_source} bytes)", file=sys.stderr)
+        return EXIT_RUNTIME_ERROR
+    if max_memory is not None:
+        if sys.platform == "darwin":
+            print("error: macOS accepts RLIMIT_AS but does not enforce it; use an OS supervisor", file=sys.stderr)
+            return EXIT_USAGE
+        try:
+            import resource
+            resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
+        except (ImportError, AttributeError, OSError, ValueError):
+            print("error: --max-memory requires POSIX RLIMIT_AS support", file=sys.stderr)
+            return EXIT_USAGE
+
+    try:
+        analysis = analyze(source, read=_module_reader(source))
+    except MemoryError:
+        if max_memory is None:
+            raise
+        print(f"error: {path}: process memory limit exceeded while checking the program", file=sys.stderr)
+        return EXIT_RUNTIME_ERROR
     if analysis.checked is None:
         errors = sum(1 for diagnostic in analysis.diagnostics if diagnostic.severity == ERROR)
         summary = f"not run because of {_plural(errors)}"
         return fail(_reports(analysis), summary, EXIT_INVALID_PROGRAM)
 
+    input_bytes = 0
+
+    def read_input() -> str:
+        nonlocal input_bytes
+        if max_input is None:
+            return sys.stdin.readline().removesuffix("\n").removesuffix("\r")
+        remaining = max_input - input_bytes
+        raw = sys.stdin.buffer.readline(remaining + 1)
+        if raw == b"":
+            raise EOFError("the standard input ended")
+        if len(raw) > remaining:
+            raise _CliLimit("input", max_input)
+        input_bytes += len(raw)
+        encoding = sys.stdin.encoding or "utf-8"
+        errors = sys.stdin.errors or "strict"
+        return raw.decode(encoding, errors).removesuffix("\n").removesuffix("\r")
+
     host = LocalHost(
         arguments=arguments,
+        read_line=read_input,
         grants=Grants(read=allow_read, write=allow_write, network=allow_network, process=allow_process),
         declarations=analysis.checked.capabilities,
         network_allowed=True,
         processes_allowed=True,
     )
+    written = 0
+    def write_output(text: str) -> None:
+        nonlocal written
+        data = text.encode("utf-8")
+        if max_output is not None and written + len(data) > max_output:
+            room = max(0, max_output - written)
+            sys.stdout.write(data[:room].decode("utf-8", errors="ignore"))
+            raise _CliLimit("output", max_output)
+        sys.stdout.write(text)
+        written += len(data)
+
+    previous_handler = None
     try:
-        run(analysis.checked, sys.stdout.write, host=host)
+        if timeout is not None:
+            if not hasattr(signal, "SIGALRM") or not hasattr(signal, "setitimer"):
+                print("error: --timeout requires a POSIX platform with interval timers", file=sys.stderr)
+                return EXIT_USAGE
+            def expire(*_):
+                raise _CliLimit("time", timeout)
+
+            previous_handler = signal.signal(signal.SIGALRM, expire)
+            signal.setitimer(signal.ITIMER_REAL, timeout)
+        run(analysis.checked, write_output, text_limit=max_text, host=host)
+    except _CliLimit as error:
+        sys.stdout.flush()
+        print(f"error: {path}: program stopped: {error.kind} limit exceeded ({error.limit})", file=sys.stderr)
+        return EXIT_RUNTIME_ERROR
     except NexoraRuntimeError as error:
         if error.diagnostic.category == CONTRACT:
             return fail(((error.diagnostic, source),), "the program stopped because a contract was broken",
                         EXIT_CONTRACT_VIOLATION)
         return fail(((error.diagnostic, source),), "the program stopped because of a runtime error",
                     EXIT_RUNTIME_ERROR)
+    finally:
+        if timeout is not None and previous_handler is not None:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous_handler)
     # Flushed here, not at interpreter exit, so that a closed pipe is handled by main().
     sys.stdout.flush()
     return EXIT_OK
+
+
+class _CliLimit(Exception):
+    def __init__(self, kind: str, limit: int | float) -> None:
+        self.kind, self.limit = kind, limit
 
 
 def _count(number: int, noun: str) -> str:
@@ -812,7 +905,9 @@ def main(argv: list[str] | None = None) -> int:
         if arguments.command == "run":
             return _run(arguments.file, arguments.format, tuple(arguments.args),
                         tuple(arguments.allow_read), tuple(arguments.allow_write),
-                        tuple(arguments.allow_network), tuple(arguments.allow_process))
+                        tuple(arguments.allow_network), tuple(arguments.allow_process),
+                        arguments.timeout, arguments.max_output, arguments.max_text, arguments.max_source,
+                        arguments.max_memory, arguments.max_input)
         if arguments.command == "inspect":
             return _analysis_command(arguments.file, "json", tooling.inspect_document)
         if arguments.command == "context":
