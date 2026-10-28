@@ -4,7 +4,7 @@ Changelog for NEXORA, with the most recent version first.
 
 All versions are prior to 1.0: the language may change incompatibly between versions. Each incompatible change is indicated here and explained in `docs/decisions/`.
 
-This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Versions 0.10.0, with `Option` and `Result`, 0.11.0, with modules and imports, and 0.12.0, with the syntax of decision 0019, are also tagged (`v0.10.0`, `v0.11.0`, `v0.12.0`) and published in both registries. Earlier ones only identify code states: they were never tagged or published.
+This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Versions 0.10.0, with `Option` and `Result`, 0.11.0, with modules and imports, 0.12.0, with the syntax of decision 0019, and 0.13.0, with network and process capabilities, are also tagged and published in both registries. Earlier ones only identify code states: they were never tagged or published.
 
 Each version groups its changes into these sections, when they contain content:
 
@@ -16,6 +16,24 @@ Each version groups its changes into these sections, when they contain content:
 | Removed | What no longer exists |
 | Documentation | Relevant documentation changes |
 | Limitations | Known restrictions worth being aware of |
+
+## 0.14.0 — Editor integrations and LSP project support
+
+### Added
+
+- Ready-to-use LSP and syntax-highlighting configurations for Neovim, Helix and Emacs, alongside
+  the existing VS Code extension.
+- LSP import resolution across the open project. Open buffers take precedence over disk contents;
+  imported declarations support hover, definition, references and rename.
+- Negotiation of UTF-8, UTF-16 and UTF-32 position encodings with LSP clients.
+
+### Fixed
+
+- LSP analysis resolves relative imports with the same module loader as `nex check` and does not
+  emit a missing-entry-point diagnostic for imported modules.
+- Source columns are converted at the LSP boundary for the position encoding selected by the client.
+- File URIs decode percent escapes once, so a literal `%2F` in a filename remains part of that
+  filename instead of becoming a path separator.
 
 ## 0.13.0 — Network and external processes
 

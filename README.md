@@ -5,7 +5,7 @@ An experimental programming language built around explicit requirements and chec
 NEXORA is its own language, with its own syntax, type checker and interpreter. The reference
 interpreter is implemented in Python; programs are NEXORA programs, not Python translations.
 
-**Current release: 0.13.0 · Early-stage, pre-1.0.** The supported language is a subset of the full
+**Release candidate: 0.14.0 · Early-stage, pre-1.0.** The supported language is a subset of the full
 design and may change incompatibly. NEXORA is not yet recommended for production software.
 
 ## What works today
@@ -17,8 +17,9 @@ design and may change incompatibly. NEXORA is not yet recommended for production
 - **Editor support:** a shared Language Server Protocol (LSP) server provides diagnostics,
   completion, hover, navigation, rename, symbols, signature help and formatting. Ready-to-use
   configurations are available for [Neovim, Helix and Emacs](editor-integrations/); the
-  [Visual Studio Code extension](vscode-nexora/) uses the same language tools. LSP import
-  resolution is not implemented yet.
+  [Visual Studio Code extension](vscode-nexora/) uses the same language tools. The LSP resolves
+  relative imports across the open project and negotiates UTF-8, UTF-16 or UTF-32 positions with
+  the editor.
 - **Web Playground:** [write, check and run NEXORA online](https://nexoralang.org/playground),
   with a statement-by-statement debugger. It runs the same interpreter in a Docker worker; network
   and external-process capabilities are unavailable to Playground programs.

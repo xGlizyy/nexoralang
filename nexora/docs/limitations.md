@@ -1,6 +1,6 @@
 # Limitations
 
-What NEXORA does **not** do in version 0.13.0, and the risks worth knowing before using it.
+What NEXORA does **not** do in version 0.14.0, and the risks worth knowing before using it.
 Nothing that appears here as "does not exist" works today, even if it is mentioned in the design
 draft, in the roadmap or in a decision that is accepted and pending implementation.
 

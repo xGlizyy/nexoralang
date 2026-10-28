@@ -24,7 +24,7 @@ what `nex check` says, with the same codes and the same texts.
 
 ## What it needs
 
-- **Python 3.11 or newer** with the package `nexora-lang` **0.13.0 or newer** installed: the
+- **Python 3.11 or newer** with the package `nexora-lang` **0.14.0 or newer** installed: the
   language server is a Python process. The extension highlights the syntax of 0.12, and the
   diagnostics are those of the installed package: with 0.11.0 they would be those of 0.11.
 
@@ -45,13 +45,13 @@ what `nex check` says, with the same codes and the same texts.
    cd vscode-nexora
    npm install
    npm run compile
-   npm run package        # leaves nexora-0.13.0.vsix
+   npm run package        # leaves nexora-0.14.0.vsix
    ```
 
 2. Install it:
 
    ```bash
-   code --install-extension vscode-nexora/nexora-0.13.0.vsix
+   code --install-extension vscode-nexora/nexora-0.14.0.vsix
    ```
 
    That path is **relative**: the command has to be run from the root of the repository, which
@@ -59,7 +59,7 @@ what `nex check` says, with the same codes and the same texts.
    path:
 
    ```bash
-   code --install-extension C:\full\path\nexora-0.13.0.vsix
+   code --install-extension C:\full\path\nexora-0.14.0.vsix
    ```
 
    Or from the editor: *Extensions* → *⋯* → *Install from VSIX…*, and choose the file.
@@ -113,7 +113,7 @@ Before publishing, a quick check that the package works (from the root of the
 repository):
 
 ```bash
-code --install-extension vscode-nexora/nexora-0.13.0.vsix
+code --install-extension vscode-nexora/nexora-0.14.0.vsix
 ```
 
 ## Commands

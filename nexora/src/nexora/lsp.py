@@ -28,7 +28,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
 from urllib.request import url2pathname
 
 from . import ast_nodes as ast
@@ -105,7 +105,9 @@ def _path_from_uri(uri: str) -> Path | None:
     parsed = urlparse(uri)
     if parsed.scheme != "file":
         return None
-    return Path(url2pathname(unquote(parsed.path))).resolve()
+    # url2pathname performs the one percent-decoding required for a file URI. Decoding first
+    # would turn a literal "%2F" in a filename into a path separator on Windows.
+    return Path(url2pathname(parsed.path)).resolve()
 
 
 def _normal_path(path: Path | str) -> str:
