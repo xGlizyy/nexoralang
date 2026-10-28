@@ -22,6 +22,43 @@ python -m nexora.lsp
 The two commands are the same server. An editor starts it as a child process; it is not meant to
 be run by hand.
 
+## Other editors
+
+Any editor with an LSP client can use the same `nexora-lsp` process. Install the Python package
+in an environment visible to the editor first:
+
+```bash
+python -m pip install nexora-lang
+```
+
+The editor must be able to find `nexora-lsp` on its `PATH`. The ready-to-use client configurations
+are in [`editor-integrations/`](../../editor-integrations/):
+
+- **Neovim 0.11 or newer** ([LSP config](https://neovim.io/doc/user/lsp)): copy the three files
+  under `neovim/` into the matching directories below your Neovim config directory (`stdpath("config")`):
+  `lsp/nexora.lua`, `ftdetect/nexora.vim` and `syntax/nexora.vim`. Add this to `init.lua`:
+  ```lua
+  vim.lsp.enable("nexora")
+  ```
+- **Helix** ([language config](https://docs.helix-editor.com/languages.html)): append
+  `helix/languages.toml` to `languages.toml` in the Helix config directory, then fetch and build
+  its Tree-sitter grammar once from a terminal:
+  ```sh
+  hx --grammar fetch
+  hx --grammar build
+  ```
+  These commands need Git and a C compiler. Restart Helix after the build. The grammar provides
+  coloring only; the NEXORA language server remains responsible for diagnostics and language features.
+- **Emacs 29 or newer** ([Eglot manual](https://www.gnu.org/software/emacs/manual/html_node/eglot/)):
+  load `emacs/nexora-eglot.el` from your Emacs config, for example with
+  `(load "/path/to/nexora-eglot.el")`. It defines a small NEXORA major mode with lexical
+  highlighting and starts Eglot for `.nex` files. Eglot is included with Emacs 29+; on older
+  Emacs versions, install Eglot separately.
+
+Each configuration associates `.nex` files with the same `nexora-lsp` command. The Neovim and
+Emacs highlighters and the Helix Tree-sitter grammar color tokens; they do not define or execute
+NEXORA. The lexer, parser, checker and interpreter in `nexora-lang` remain the language authority.
+
 ## What it offers
 
 | LSP feature | Method |
@@ -56,7 +93,8 @@ be run by hand.
   until the error is fixed. With syntax errors they work on the partial tree, and a function whose
   declaration has an error is missing.
 - **The formatter is only reachable through the server.** There is no `nex` command for it.
-- It has only been used with the VS Code extension; not with other editors.
+- The configurations and syntax highlighters have been smoke-tested with Neovim 0.12.6, Helix
+  25.07.1 and Emacs 31.1_1. Report editor-specific issues with the editor version and LSP log.
 
 ## Without an editor
 

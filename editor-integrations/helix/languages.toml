@@ -1,0 +1,19 @@
+# Add these entries to your Helix languages.toml.
+
+[language-server.nexora-lsp]
+command = "nexora-lsp"
+
+[[grammar]]
+name = "nexora"
+source = { git = "https://github.com/xGlizyy/nexoralang", rev = "main", subpath = "editor-integrations/helix/tree-sitter-nexora" }
+
+[[language]]
+name = "nexora"
+language-id = "nexora"
+scope = "source.nexora"
+injection-regex = "nexora"
+file-types = ["nex"]
+roots = [".git"]
+language-servers = ["nexora-lsp"]
+comment-tokens = "//"
+indent = { tab-width = 4, unit = "    " }

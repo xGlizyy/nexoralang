@@ -1,0 +1,52 @@
+==================
+NEXORA lexical highlighting tokens
+==================
+fn main() {
+    let count: Int = 42
+    let maybe: Option[Int] = Some(count)
+    if true and false {
+        print(Text.length("ready"))
+    }
+    // line comment
+}
+---
+
+(source_file
+  (keyword)
+  (identifier)
+  (punctuation)
+  (punctuation)
+  (punctuation)
+  (keyword)
+  (identifier)
+  (punctuation)
+  (primitive_type)
+  (operator)
+  (number)
+  (keyword)
+  (identifier)
+  (punctuation)
+  (compound_type)
+  (punctuation)
+  (primitive_type)
+  (punctuation)
+  (operator)
+  (builtin_constructor)
+  (punctuation)
+  (identifier)
+  (punctuation)
+  (keyword)
+  (boolean)
+  (keyword)
+  (boolean)
+  (punctuation)
+  (builtin_function)
+  (punctuation)
+  (builtin_function)
+  (punctuation)
+  (string)
+  (punctuation)
+  (punctuation)
+  (punctuation)
+  (comment)
+  (punctuation))
