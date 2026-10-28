@@ -117,10 +117,9 @@ first:
    relative imports across the open project and negotiates UTF-8, UTF-16 and UTF-32 positions.
    Remaining editor-specific limitations are in [LSP](lsp.md#limitations).
 
-## Original design phases
+## Under research
 
-Current implementation status of the phases in the original design document. This list records
-historical project phases; it does not expand the accepted 1.0 scope above.
+Ideas from the original design whose value or form is not decided:
 
 | Idea | Open question |
 |------|---------------|
