@@ -29,6 +29,7 @@ This process is not a sandbox by itself. It runs with the permissions of whoever
 from __future__ import annotations
 
 import json
+import posixpath
 import sys
 import time
 
@@ -104,6 +105,63 @@ def handle(request: dict) -> dict:
         raise ValueError("malformed request")
 
     started = time.perf_counter()
+    files = request.get("files")
+    if files is not None:
+        if action not in {"check", "run"} or not isinstance(files, dict) or len(files) > 32:
+            raise ValueError("malformed project")
+        if not all(isinstance(path, str) and isinstance(text, str) for path, text in files.items()):
+            raise ValueError("malformed project")
+        normalized = {}
+        for path, text in files.items():
+            safe = path.replace("\\", "/")
+            if (safe.startswith("/") or ":" in safe or any(part in {"", ".", ".."} for part in safe.split("/"))
+                    or not safe.endswith(".nex")):
+                raise ValueError("invalid project path")
+            normalized[safe] = text
+        entry = filename.replace("\\", "/")
+        if entry not in normalized:
+            raise ValueError("missing project entry")
+
+        def read_import(declaration, importing_file):
+            joined = posixpath.normpath(posixpath.join(posixpath.dirname(importing_file), declaration.path))
+            if joined.startswith("../") or joined == ".." or joined.startswith("/") or joined not in normalized:
+                from .diagnostics import Diagnostic
+                return Diagnostic("E0001", f"Module '{declaration.path}' is not part of this project",
+                                  declaration.path_span, hint="Add the imported .nex file to this project.")
+            from .diagnostics import Source
+            return joined, joined.rsplit("/", 1)[-1][:-4], Source(joined, normalized[joined])
+
+        from .diagnostics import CONTRACT, NexoraRuntimeError
+        from .interpreter import run as interpret
+        analysis = analyze(Source(entry, normalized[entry]), read=read_import)
+        reports = analysis.project.reports() if analysis.project else tuple((d, analysis.source) for d in analysis.diagnostics)
+        diagnostics = [diagnostic.to_dict(source.name) for diagnostic, source in reports]
+        if analysis.checked is None:
+            result = {"schema": api.RESULT_SCHEMA, "action": action, "status": api.INVALID,
+                      "output": "", "diagnostics": diagnostics, "message": None}
+        elif action == "check":
+            result = {"schema": api.RESULT_SCHEMA, "action": action, "status": api.SUCCESS,
+                      "output": "", "diagnostics": diagnostics, "message": None}
+        else:
+            output = api._Output(limits.get("output_bytes"))
+            try:
+                interpret(analysis.checked, output.write, text_limit=limits.get("text_chars"), host=LocalHost(files_allowed=False))
+                result = {"schema": api.RESULT_SCHEMA, "action": action, "status": api.SUCCESS,
+                          "output": output.text(), "diagnostics": [], "message": None}
+            except NexoraRuntimeError as error:
+                status = api.CONTRACT_VIOLATION if error.diagnostic.category == CONTRACT else api.RUNTIME_ERROR
+                result = {"schema": api.RESULT_SCHEMA, "action": action, "status": status,
+                          "output": output.text(), "diagnostics": [error.diagnostic.to_dict(entry)], "message": None}
+            except api._OutputLimitReached:
+                result = {"schema": api.RESULT_SCHEMA, "action": action, "status": api.OUTPUT_LIMIT,
+                          "output": output.text(), "diagnostics": [],
+                          "message": f"The program printed more than {limits.get('output_bytes')} bytes and was stopped."}
+            except MemoryError:
+                result = {"schema": api.RESULT_SCHEMA, "action": action, "status": api.MEMORY_LIMIT,
+                          "output": output.text(), "diagnostics": [], "message": api._MEMORY_MESSAGE}
+        result["duration_ms"] = round((time.perf_counter() - started) * 1000)
+        result["version"] = __version__
+        return result
     if action == "check":
         result = api.check_source(code, filename)
     elif action == "run":

@@ -122,7 +122,12 @@ for a new self-hosted deployment, validate container isolation before enabling t
 | Field | Required | Rule |
 |-------|-------------|-------|
 | `code` | Yes | Text. At most 64 KiB in UTF-8 |
-| `filename` | No | **Virtual** name: it only appears in the diagnostics. Letters, digits, `_` and `-`, ending in `.nex`, up to 64 characters. It is never used as a path and no file is opened |
+| `filename` | No | **Virtual** relative `.nex` path: it only appears in diagnostics and selects the entry file when `files` is supplied. It is never resolved against the worker filesystem |
+| `files` | No | A map of relative `.nex` paths to source text, with at most 32 files and 64 KiB total. When present, `filename` selects the entry file and must be a key in the map. Imports can read only files in this map; paths outside it are rejected. The debugger currently accepts single-file requests only |
+
+For example, a project can send `filename: "src/main.nex"` and `files` containing both
+`src/main.nex` and `src/models.nex`. Diagnostics keep the virtual path of the file where each
+issue occurred. The worker never resolves project paths against its filesystem.
 
 ### Response for a program (HTTP 200)
 
