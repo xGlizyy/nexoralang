@@ -15,6 +15,14 @@ previous one is solid.
 A file existing does not count. A feature is only "completed" if it can be run and
 there is a test that fails if it stops working.
 
+## NEXORA 1.0 scope
+
+NEXORA 1.0 targets small, single-process CLI tools and local automation written and run by trusted
+operators. Web servers and multi-user services are out of scope. The accepted [product scope and
+release criteria](decisions/0021-alcance-nexora-1-0.md) define the platform target, stable interfaces
+and evidence required for a 1.0 release. Roadmap items are not automatically 1.0 blockers unless
+that decision or an approved reference application requires them.
+
 ## Completed and verified
 
 | Item | How it is verified |
@@ -83,7 +91,7 @@ solid:
 | 5 | **Refined types** (`type Percent = Int where ...`) | **Completed in 0.3.0** over the built-in types. Refining records is missing: it is not implemented |
 | 5b | **Loop requirements**: the measure (`decreases`) and the invariants (`invariant`), with their explanation, checked on every iteration | **Completed in 0.5.0** ([decision 0010](decisions/0010-var-y-while.md)) |
 | 6 | **Evaluating whether requirements in the code help an AI agent** not to break them | Planned; see the last row of [Under research](#under-research) |
-| 7 | **Promises with an identity, and what backs each one** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)): the clauses in the header of the function, names, `trust`, and the evidence of every clause | **Phase 1 completed in 0.12.0**: the syntax, `nex migrate` and the enforcement (`nex check --evidence`). Planned: what the examples observe (`nex test --evidence`, 0.13.0), `nex impact` (0.14.0) and deciding a `needs` at the call sites with constants (later) |
+| 7 | **Promises with an identity, and what backs each one** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)): the clauses in the header of the function, names, `trust`, and the evidence of every clause | **Phase 1 completed in 0.12.0**: the syntax, `nex migrate` and the enforcement (`nex check --evidence`). Planned: what the examples observe (`nex test --evidence`, 0.13.0), `nex impact` (0.15.0) and deciding a `needs` at the call sites with constants (later) |
 
 Until step 6 gives results, the feature is a hypothesis and is not presented as a
 proven advantage.
@@ -105,8 +113,9 @@ first:
 7. **More tolerant analysis**: keeping the functions whose declaration has an error, and giving
    structure also with lexical errors. The partial tree with syntax errors already exists.
 8. ~~**Language server (LSP)** and **formatter**~~: done with the VS Code extension
-   ([decision 0017](decisions/0017-un-editor-la-extension-de-vs-code.md)). What remains, resolving
-   imports and positions in UTF-16, is in [LSP](lsp.md#limitations).
+   ([decision 0017](decisions/0017-un-editor-la-extension-de-vs-code.md)). The 0.14.0 LSP resolves
+   relative imports across the open project and negotiates UTF-8, UTF-16 and UTF-32 positions.
+   Remaining editor-specific limitations are in [LSP](lsp.md#limitations).
 
 ## Under research
 

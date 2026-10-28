@@ -59,16 +59,15 @@ def test_modules_only_import_the_standard_library_modules_on_the_list(path):
     assert imported <= allowed, imported - allowed
 
 
-def test_only_the_cli_touches_the_operating_system():
-    # Reading the source file and writing to the terminal happen in cli.py. The stages of the
-    # language (lexer, parser, checker, interpreter) never import os, pathlib or subprocess.
+def test_only_entrypoints_touch_the_operating_system():
+    # Reading files belongs to entry points, not the language stages. The LSP only reads imports
+    # relative to an open document so its analysis matches the CLI.
     for path in MODULES:
         # worker.py is the other entry point: it reads its request from standard input.
         # host.py is the only module that gives a program local files, network access and
         # subprocesses, behind an explicit declaration, a CLI grant and an environment switch.
-        # migrate_files.py is the only module that writes files, for `nex migrate --write`
-        # (decision 0019, G7); the tests below pin down what it may do and who uses it.
-        if path.name in ("cli.py", "__main__.py", "worker.py", "host.py", "migrate_files.py"):
+        # migrate_files.py is the only module that writes files, for `nex migrate --write`.
+        if path.name in ("cli.py", "__main__.py", "worker.py", "host.py", "migrate_files.py", "lsp.py"):
             continue
         names = set()
         for node in python_ast.walk(python_tree(path)):
@@ -81,6 +80,14 @@ def test_only_the_cli_touches_the_operating_system():
             # It locates the specification that ships with the project; the next test pins that down.
             forbidden -= {"pathlib"}
         assert names & forbidden == set(), path.name
+
+
+def test_the_language_server_only_reads_files_for_declared_imports():
+    tree = python_tree(PACKAGE / "lsp.py")
+    reads = [python_ast.unparse(node.func) for node in python_ast.walk(tree)
+             if isinstance(node, python_ast.Call) and isinstance(node.func, python_ast.Attribute)
+             and node.func.attr in ("read_text", "read_bytes", "write_text", "write_bytes", "unlink", "mkdir")]
+    assert reads == ["path.read_text"]
 
 
 def test_the_tooling_reads_one_fixed_file_and_nothing_else():

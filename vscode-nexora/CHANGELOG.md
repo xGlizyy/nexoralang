@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.0
+
+For NEXORA 0.14.0. The extension follows the language version. The LSP now resolves relative
+imports across the open project and negotiates UTF-8, UTF-16 or UTF-32 positions. The Neovim,
+Helix and Emacs configurations are available in the repository's `editor-integrations/` directory.
+
 ## 0.13.0
 
 For NEXORA 0.13.0. Highlights the `Net.get` and `Process.run` capability functions.

@@ -1,6 +1,6 @@
 # Limitations
 
-What NEXORA does **not** do in version 0.13.0, and the risks worth knowing before using it.
+What NEXORA does **not** do in version 0.14.0, and the risks worth knowing before using it.
 Nothing that appears here as "does not exist" works today, even if it is mentioned in the design
 draft, in the roadmap or in a decision that is accepted and pending implementation.
 
@@ -97,9 +97,8 @@ Stable since 0.3.0. Their limits, in detail, in [contracts](contracts.md#limitat
 
 - The only stable interface is the command line. The Python API (`nexora.tooling`) is
   **experimental**; the rest of the modules of `src/nexora/` are internal and may change without notice.
-- There is no debugger. The language server and the formatter exist and the VS Code extension uses
-  them, but the server does not resolve imports yet: in the editor, a file that uses `import` gets
-  `E0001` ([LSP](lsp.md#limitations)).
+- There is no local debugger protocol. The language server resolves relative imports, uses open
+  editor buffers, and negotiates UTF-16/UTF-8/UTF-32 positions ([LSP](lsp.md)).
 - With syntax errors, `nex inspect`, `nex context` and `nex symbols` return a **partial**
   structure: the statements with errors are missing and so is, entirely, any function whose declaration has
   one; and only the syntax errors are reported. With lexical errors (an unclosed text, an

@@ -1105,7 +1105,7 @@ Unchanged from revision 2, except that phase 1 had a blocking precondition, now 
 |-------|---------|---------|-------------|
 | 1 | 0.12.0 | Sections 3, 4, 8 and 9, except the move of 9.1, which does not depend on any phase; `trust` complete (5.6); `nex check --evidence` with enforcement only; the tests of 4.3 and 8.9 | This decision is accepted (2026-10-24) **and** the person responsible for the project authorizes phase 1 explicitly: the acceptance alone does not start it. The formatter condition is **met** since PR #6 (`bdc4ada`) |
 | 2 | 0.13.0 | The observed dimension and `nex test --evidence` | Phase 1 published |
-| 3 | 0.14.0 | `nex impact` | Phase 2 published |
+| 3 | 0.15.0 | `nex impact` | Phase 2 published |
 | 4 | later | Static decision at call sites (5.4), `E2032` | Phase 2, and its exact rules accepted |
 
 ## 9. Reserved words

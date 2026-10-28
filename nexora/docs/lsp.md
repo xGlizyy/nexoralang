@@ -76,18 +76,19 @@ NEXORA. The lexer, parser, checker and interpreter in `nexora-lang` remain the l
   computed once per version of the document.
 - **No `main` needed:** a file without `main` is analysed as `nex test` analyses it, so a module
   does not get `E2001`.
-- **No execution:** the server only analyses. It never runs a program nor opens other files.
+- **No execution:** the server only analyses and never runs a program. It reads files named by
+  relative imports using the same rules as the CLI.
 - **Errors in a request** are answered with a JSON-RPC error (`-32603`); the server keeps running.
+- **Imports:** resolved relative to the importing file with the same module loader as `nex check`.
+  Open editor buffers take precedence over disk contents. Imported declarations support hover,
+  definition, references and rename across the open project.
+- **Position encoding:** negotiated with the client. UTF-16 is the default; UTF-8 and UTF-32 are
+  also supported. Source columns are converted at the protocol boundary.
 
 ## Limitations
 
-- **Imports are not resolved.** The server analyses the text the editor sends, without the files
-  beside it. A file that uses `import` gets `E0001` ("This program imports modules, and they cannot
-  be read here"), and the names of the imported modules are not known. `nex check` on the file
-  does resolve them.
-- **Columns are counted in Unicode characters.** LSP counts them, by default, in UTF-16 units, and
-  the server does not negotiate the encoding. Positions are exact for text in the basic plane; on a
-  line with characters outside it (an emoji, for example), the columns after that character are off.
+- **Closed imported files** are read from disk. The server does not watch external filesystem
+  changes; save or edit an open dependent document to refresh its analysis.
 - **With a lexical error** (an unclosed text, the most common thing while typing one) there is no
   syntax tree: diagnostics still work, but *hover*, navigation and symbols have nothing to show
   until the error is fixed. With syntax errors they work on the partial tree, and a function whose
