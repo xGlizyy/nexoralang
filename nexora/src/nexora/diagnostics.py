@@ -244,6 +244,7 @@ def render(diagnostic: Diagnostic, source: Source) -> str:
 class NexoraRuntimeError(Exception):
     """A NEXORA program failed while running. Carries the diagnostic to show."""
 
-    def __init__(self, diagnostic: Diagnostic) -> None:
+    def __init__(self, diagnostic: Diagnostic, file: str | None = None) -> None:
         super().__init__(diagnostic.label)
         self.diagnostic = diagnostic
+        self.file = file
