@@ -4,7 +4,7 @@ Changelog for NEXORA, with the most recent version first.
 
 All versions are prior to 1.0: the language may change incompatibly between versions. Each incompatible change is indicated here and explained in `docs/decisions/`.
 
-This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Versions 0.10.0, with `Option` and `Result`, 0.11.0, with modules and imports, 0.12.0, with the syntax of decision 0019, and 0.13.0, with network and process capabilities, are also tagged and published in both registries. Earlier ones only identify code states: they were never tagged or published.
+This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Versions 0.10.0, with `Option` and `Result`, 0.11.0, with modules and imports, 0.12.0, with the syntax of decision 0019, 0.13.0, with network and process capabilities, and 0.14.0, with editor integrations and LSP project support, are also tagged and published in both registries. Earlier ones only identify code states: they were never tagged or published.
 
 Each version groups its changes into these sections, when they contain content:
 
@@ -18,6 +18,9 @@ Each version groups its changes into these sections, when they contain content:
 | Limitations | Known restrictions worth being aware of |
 
 ## 0.14.0 — Editor integrations and LSP project support
+
+This version is tagged (`v0.14.0`) and published on PyPI and npm. The VS Code extension is attached
+to the GitHub release as a VSIX; it is not listed on the Marketplace.
 
 ### Added
 
