@@ -59,7 +59,7 @@ offline. What there is and what there is not, precisely: [Automated tools and AI
 
 ## Status
 
-**Version 0.14.0. Early-stage project**, before 1.0: the language may change
+**Version 0.14.1, prepared for release. Early-stage project**, before 1.0: the language may change
 incompatibly and it is not suitable for production use.
 
 | Status | What it includes |
@@ -101,7 +101,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.14.0
+NEXORA 0.14.1
 ```
 
 The `nex` command is installed inside the virtual environment, not system-wide: it is only
