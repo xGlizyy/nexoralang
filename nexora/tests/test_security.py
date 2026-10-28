@@ -21,7 +21,7 @@ MODULES = sorted(PACKAGE.glob("*.py"))
 
 # Standard-library modules the language core is allowed to import, and nothing else.
 ALLOWED_IMPORTS = {
-    "__future__", "argparse", "dataclasses", "difflib", "enum", "errno", "json", "math", "os", "pathlib",
+    "__future__", "argparse", "dataclasses", "difflib", "enum", "errno", "json", "math", "os", "pathlib", "posixpath",
     "re", "sys", "typing", "collections.abc", "time", "resource", "signal", "types", "subprocess",
     "threading", "shutil", "urllib.error", "urllib.parse", "urllib.request",
 }

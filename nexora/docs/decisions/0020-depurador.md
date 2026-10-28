@@ -1,6 +1,6 @@
 # 0020 — Depuración paso a paso
 
-- **Estado:** aceptada; integración automática verificada, revisión visual del navegador pendiente.
+- **Estado:** aceptada e implementada en el Playground público; verificada en staging y producción.
 - **Fecha:** 2026-10-27.
 - **Rama de trabajo:** `feat/debugger-prototype`.
 - **Afecta:** intérprete, worker y Playground.
@@ -20,8 +20,9 @@ acceder a archivos u otras capacidades.
 Las sesiones usan JSON Lines entre el servidor y el worker. Comparten el límite de concurrencia con
 las ejecuciones normales, tienen un máximo de 10.000 sentencias inspeccionadas, 256 breakpoints,
 10 segundos por orden, 60 segundos de inactividad y cinco minutos de duración total. El servidor
-las detiene al apagarse. El Playground público sigue requiriendo que el aislamiento con Docker se
-haya validado antes de activarlo.
+las detiene al apagarse. El Playground público usa un worker Docker cuyo aislamiento se verificó en
+staging y producción. Cada nuevo despliegue propio debe validar su aislamiento antes de habilitar el
+servicio.
 
 ## Alcance inicial
 

@@ -1,6 +1,7 @@
 # NEXORA Playground
 
-The playground lets you write, check and run NEXORA code from the browser. The code
+The Playground lets you write, check and run NEXORA code from the browser, including multi-file
+projects and an explicit entry file. Its statement debugger can step through the program. The code
 is sent to the server, which hands it to the **same interpreter used by the `nex` command**, and the page
 shows what the interpreter answers. There is no simulated execution nor a second
 implementation of the language in JavaScript.
@@ -17,13 +18,18 @@ run it locally and how to deploy it on your own server.
 | Part | Status |
 |-------|--------|
 | Core interface (`nexora.api`) and worker process | Implemented and tested |
-| Statement debugger in the interpreter and Playground controls | Implemented; interpreter, worker, API and controller tests pass; browser visual review remains |
+| Multi-file projects and entry-file selection | Available in the public Playground; project requests can include up to 32 `.nex` files |
+| Statement debugger in the interpreter and Playground controls | Implemented; interpreter, worker, API and controller checks pass; browser preview reviewed |
 | Server API (`/api/playground`) | Implemented and tested |
-| Page (`web/playground.html`) | Implemented. Logic tested automatically; the drawing, checked by hand in Chrome |
+| Page (`web/playground.html`) | Implemented; browser preview reviewed locally in Edge on 28 October 2026 |
 | Limits of time, size, output, concurrency and requests | Implemented and tested |
 | Operating system memory and CPU limits | Implemented for Linux and macOS, but they are only enforced by the operating system where they exist: the CPU one on both, the memory one only on Linux (on macOS, the kernel accepts the address space limit and does not apply it). Tested on Linux (Ubuntu 24.04 on WSL 2) with `tests/test_worker.py`, which launches the worker as a process, without a container; on macOS, only the CPU one. On Windows they do not exist |
 | Container isolation (Docker) | In use on the public site: workers run with no network, a read-only filesystem, dropped capabilities, no-new-privileges, and CPU, memory and process limits |
-| Deployment on a public server | Live at [nexoralang.org/playground](https://nexoralang.org/playground); staging and production passed the release verifier |
+| Deployment on a public server | Live at [nexoralang.org/playground](https://nexoralang.org/playground), running NEXORA 0.14.0; staging and production passed the release verifier on 28 October 2026 |
+
+The hosted Playground runs in production as a constrained service; this does not change the
+early-stage status of the language itself. See [limitations](limitations.md) before using NEXORA for
+production software.
 
 **Practical conclusion:** the public Playground is live and runs the reference interpreter inside a
 Docker worker. For a new self-hosted deployment, keep it disabled until you configure and verify
@@ -97,9 +103,9 @@ it shows «Disabled» and leaves Run and Check disabled.
 The Debug button starts the checked program in a dedicated worker and pauses immediately before its
 first statement. Step executes the current statement and pauses before the next one; Continue runs
 until a breakpoint or completion; Stop ends the session. The Debugger panel shows the active source
-line, function stack, visible variables and output produced so far. Values are formatted with size
-limits. Click a line number to toggle a breakpoint; the worker caps a session at 10,000 statements
-and 256 breakpoints.
+file and line, function stack with source files, visible variables and output produced so far. Values
+are formatted with size limits. Click a line number in any project file to toggle a breakpoint; the
+worker caps a session at 10,000 statements and 256 breakpoints across the project.
 
 The worker stays alive while paused and reads control commands from its standard input. NEXORA
 programs run with `NoHost`, so a program cannot consume debugger commands as user input or access
@@ -122,7 +128,12 @@ for a new self-hosted deployment, validate container isolation before enabling t
 | Field | Required | Rule |
 |-------|-------------|-------|
 | `code` | Yes | Text. At most 64 KiB in UTF-8 |
-| `filename` | No | **Virtual** name: it only appears in the diagnostics. Letters, digits, `_` and `-`, ending in `.nex`, up to 64 characters. It is never used as a path and no file is opened |
+| `filename` | No | **Virtual** relative `.nex` path: it only appears in diagnostics and selects the entry file when `files` is supplied. It is never resolved against the worker filesystem |
+| `files` | No | A map of relative `.nex` paths to source text, with at most 32 files and 64 KiB total. When present, `filename` selects the entry file and must be a key in the map. Imports can read only files in this map; paths outside it are rejected. Debug breakpoints are grouped by file and pauses identify their source file |
+
+For example, a project can send `filename: "src/main.nex"` and `files` containing both
+`src/main.nex` and `src/models.nex`. Diagnostics keep the virtual path of the file where each
+issue occurred. The worker never resolves project paths against its filesystem.
 
 ### Response for a program (HTTP 200)
 
@@ -138,7 +149,7 @@ whether the program has errors or not.
   "diagnostics": [],
   "message": null,
   "duration_ms": 104,
-  "version": "0.12.1"
+  "version": "0.14.0"
 }
 ```
 
@@ -425,8 +436,8 @@ docker image inspect nexora-worker --format '{{.Id}} {{.Created}}'   # it exists
 - Build it before enabling the playground and build it again on every update (step 8):
   it contains its own copy of the interpreter. Each request creates a new container, so the
   next request already uses the rebuilt image.
-- To pin a version, build it also with a tag (`-t nexora-worker:0.12.1`) and write that
-  tag at the end of the command (`"nexora-worker:0.12.1"`). To go back to a previous version that
+- To pin a version, build it also with a tag (`-t nexora-worker:0.14.0`) and write that
+  tag at the end of the command (`"nexora-worker:0.14.0"`). To go back to a previous version that
   you keep, change the tag of the command and restart the service. The tag is the only thing in the
   command that can be changed.
 - If the image is not on the machine (it was not built, or it was deleted with `docker image rm` or
@@ -677,8 +688,8 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     server_tokens off;
 
-    # The largest body the server accepts is that of the playground (about 385 KiB).
-    client_max_body_size 512k;
+    # The largest project request can contain two JSON copies of a 64 KiB source (escaped).
+    client_max_body_size 1m;
 
     location /api/ {
         limit_req zone=nexora_api burst=20 nodelay;
@@ -807,7 +818,7 @@ curl -s https://tu-dominio.example/api/playground/info     # enabled: the new ve
 ```
 
 The worker image has to be rebuilt on every update of the language: it contains its own
-copy of the interpreter. If the command uses a tag (`nexora-worker:0.12.1`), build the image with
+copy of the interpreter. If the command uses a tag (`nexora-worker:0.14.0`), build the image with
 the new tag, change it in `PLAYGROUND_WORKER_COMMAND` and restart the service; see
 [Worker image](#3-worker-image).
 

@@ -15,6 +15,7 @@ class DebugFrame:
 
     function: str
     call_site: Span | None
+    file: str | None = None
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class DebugEvent:
     function: str
     call_stack: tuple[DebugFrame, ...]
     variables: tuple[tuple[str, Value], ...]
+    file: str | None = None
 
 
 class DebugStop(Exception):

@@ -60,13 +60,15 @@ offline. What there is and what there is not, precisely: [Automated tools and AI
 ## Status
 
 **Version 0.14.1, prepared for release. Early-stage project**, before 1.0: the language may change
-incompatibly and it is not suitable for production use.
+incompatibly and NEXORA programs are not suitable for production use. The public Playground is a
+production-hosted service for trying the language; that does not make the language itself
+production-ready.
 
 | Status | What it includes |
 |--------|------------------|
 | **Implemented and tested** | Static types `Int`, `Float`, `Bool`, `Text` and `Void`, with inference and annotations · immutable **lists** `List[T]`, with `List.length`, `List.get`, `List.append`, `List.concat`, `List.contains` and `for` over lists · immutable **records** (`type Point = { x: Int, y: Int }`), with nominal identity · **`Option[T]` and `Result[T, E]`** · **modules** (`import "path/file.nex"`, `pub`) · **refined types** (`type Percent = Int where ...`): constants are checked without running and the rest with `Percent(x)` when running · **arguments** (`args()`) and **standard input** (`input()`) · **files** with explicit permissions · bounded HTTPS requests (`Net.get`) and external processes (`Process.run`), both opt-in and denied in the Playground · **contracts** (`needs`, `promises`) in the header of the function, checked when running, and `trust`, which is never checked · **examples** in functions (`example`), evaluated with `nex test` · explanation of every rule in the diagnostics · immutable (`let`) and reassignable (`var`) variables, and scopes · **`while` loops** with their measure (`shrinks`) and invariants (`keeps`), checked on every iteration · **operations on texts** (`Text.length`, `Text.slice`, ordering, `Int.parse`), each function with its requirements · arithmetic, comparisons and logic · explicit conversions · functions with parameters and `return` · `if` / `else` · recursion · static analysis of names, types and return paths · commands `run`, `check`, `inspect`, `context`, `symbols` and `test` · diagnostics with code and category, as text and JSON · versioned JSON formats with JSON Schema |
 | **Experimental** | Python API `nexora.tooling` · optional MCP server (tested with the SDK client and, by hand, in Claude Code; in no other assistant) |
-| **Live, still experimental** | The [web Playground](https://nexoralang.org/playground) supports Check, Run and a statement debugger. Public runs use the same interpreter in a Docker worker with network access disabled. |
+| **Live in production, still experimental** | The [web Playground](https://nexoralang.org/playground) runs a previous interpreter release. It supports Check, Run, multi-file projects with an entry file, and a statement debugger with breakpoints, Step, Continue and Stop. Public runs use the same interpreter in a Docker worker with network access disabled. |
 | **Planned** (does not exist) | `break` and `continue`, `for` over ranges or `Text`, maps and user generics |
 | **Under research** (does not exist) | Static verification of contracts, AI features inside the language, and the evaluation of the hypothesis of the project |
 

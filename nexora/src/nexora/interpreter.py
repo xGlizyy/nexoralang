@@ -124,7 +124,8 @@ class Environment:
 class Interpreter:
     def __init__(self, checked: CheckedProgram, write: Callable[[str], object],
                  text_limit: int | None = None, host: Host | None = None,
-                 debug_observer: DebugObserver | None = None) -> None:
+                 debug_observer: DebugObserver | None = None,
+                 source_files: dict[int, str] | None = None) -> None:
         """`write` receives the text produced by `print`. `text_limit`, if given, is the longest
         Text (in characters) a program may build; a host sets it to bound memory use. `host` is
         what the program may do besides computing: its arguments, its input and the files it may
@@ -144,6 +145,8 @@ class Interpreter:
         self._write = write
         self._text_limit = text_limit
         self._debug_observer = debug_observer
+        self._source_files = source_files or {}
+        self._function_files: list[str | None] = []
         self._debug_step = 0
         # The calls in progress: (function name, where it was called from). main has no call site.
         self._stack: list[tuple[str, Span | None]] = []
@@ -214,7 +217,7 @@ class Interpreter:
         if len(notes) > _TRACE_LENGTH:
             notes = [*notes[:_TRACE_LENGTH], _MORE_LOOPS]
         diagnostic = error.diagnostic
-        return NexoraRuntimeError(replace(diagnostic, notes=(*diagnostic.notes, *notes)))
+        return NexoraRuntimeError(replace(diagnostic, notes=(*diagnostic.notes, *notes)), error.file)
 
     # Errors
 
@@ -230,7 +233,9 @@ class Interpreter:
         if len(trace) > _TRACE_LENGTH:
             hidden = len(trace) - _TRACE_LENGTH
             trace = trace[:_TRACE_LENGTH] + [f"... and {hidden} more call{'' if hidden == 1 else 's'}."]
-        return NexoraRuntimeError(Diagnostic(code, label, span, hint, (*notes, *trace)))
+        file_index = len(self._function_files) - 1 - (1 if skip_frames else 0)
+        file = self._function_files[file_index] if 0 <= file_index < len(self._function_files) else None
+        return NexoraRuntimeError(Diagnostic(code, label, span, hint, (*notes, *trace)), file)
 
     def _too_deep(self, span: Span | None) -> NexoraRuntimeError:
         return self._fail(
@@ -246,6 +251,7 @@ class Interpreter:
         if len(self._stack) >= MAX_CALL_DEPTH:
             raise self._too_deep(site)
         self._stack.append((function.name, site))
+        self._function_files.append(self._source_files.get(id(function)))
 
         parameters = Environment()
         for param, argument in zip(function.params, arguments, strict=True):
@@ -291,6 +297,7 @@ class Interpreter:
                 )
 
         self._stack.pop()
+        self._function_files.pop()
         return result
 
     @staticmethod
@@ -338,7 +345,7 @@ class Interpreter:
             site = node.span
             where = f"While checking that a value is a valid {node.callee}, at line {site.line}, column {site.column}."
             diagnostic = error.diagnostic
-            raise NexoraRuntimeError(replace(diagnostic, notes=(where, *diagnostic.notes))) from None
+            raise NexoraRuntimeError(replace(diagnostic, notes=(where, *diagnostic.notes)), error.file) from None
         if broken is None:
             return value
         raise self._fail(
@@ -363,13 +370,15 @@ class Interpreter:
         if self._debug_observer is None:
             return
         self._debug_step += 1
-        call_stack = tuple(DebugFrame(function, site) for function, site in reversed(self._stack))
+        call_stack = tuple(DebugFrame(function, site, file) for (function, site), file
+                           in zip(reversed(self._stack), reversed(self._function_files), strict=True))
         event = DebugEvent(
             step=self._debug_step,
             span=statement.span,
             function=call_stack[0].function if call_stack else "<module>",
             call_stack=call_stack,
             variables=tuple(environment.visible()),
+            file=self._function_files[-1] if self._function_files else None,
         )
         if self._debug_observer(event):
             raise DebugStop(event)
@@ -513,7 +522,7 @@ class Interpreter:
                 raise
             loops = sum(1 for note in diagnostic.notes if _LOOP_NOTE in note)
             note = where if loops < _TRACE_LENGTH else _MORE_LOOPS
-            raise NexoraRuntimeError(replace(diagnostic, notes=(*diagnostic.notes, note))) from None
+            raise NexoraRuntimeError(replace(diagnostic, notes=(*diagnostic.notes, note)), error.file) from None
         self._loops.pop()
         return result
 
@@ -948,7 +957,8 @@ def broken_rule(chain: tuple[ast.TypeDecl, ...], value: Value) -> ast.TypeDecl |
 
 
 def run(checked: CheckedProgram, write: Callable[[str], object], *, text_limit: int | None = None,
-        host: Host | None = None, debug_observer: DebugObserver | None = None) -> DebugEvent | None:
+        host: Host | None = None, debug_observer: DebugObserver | None = None,
+        source_files: dict[int, str] | None = None) -> DebugEvent | None:
     """Runs a program that passed the static checks, optionally observing each statement.
 
     `host` is what the program may do besides computing: its arguments, its input and the files
@@ -957,7 +967,7 @@ def run(checked: CheckedProgram, write: Callable[[str], object], *, text_limit: 
     returns its `DebugEvent`; otherwise it returns None.
     """
     try:
-        Interpreter(checked, write, text_limit, host, debug_observer).run()
+        Interpreter(checked, write, text_limit, host, debug_observer, source_files).run()
     except DebugStop as stopped:
         return stopped.event
     return None
