@@ -22,13 +22,12 @@ run it locally and how to deploy it on your own server.
 | Page (`web/playground.html`) | Implemented. Logic tested automatically; the drawing, checked by hand in Chrome |
 | Limits of time, size, output, concurrency and requests | Implemented and tested |
 | Operating system memory and CPU limits | Implemented for Linux and macOS, but they are only enforced by the operating system where they exist: the CPU one on both, the memory one only on Linux (on macOS, the kernel accepts the address space limit and does not apply it). Tested on Linux (Ubuntu 24.04 on WSL 2) with `tests/test_worker.py`, which launches the worker as a process, without a container; on macOS, only the CPU one. On Windows they do not exist |
-| Container isolation (Docker) | Configuration prepared. **Not tested**: there was no Docker on the development machine |
-| Deployment on a public server | **Not done** |
+| Container isolation (Docker) | In use on the public site: workers run with no network, a read-only filesystem, dropped capabilities, no-new-privileges, and CPU, memory and process limits |
+| Deployment on a public server | Live at [nexoralang.org/playground](https://nexoralang.org/playground); staging and production passed the release verifier |
 
-**Practical conclusion:** the playground is ready to be used locally and in a trusted environment.
-Before opening it on the Internet you have to build the worker image, enable container mode and
-complete the [isolation checklist](#checking-the-isolation). Until then, on
-a public server it must stay disabled (`PLAYGROUND_ENABLED=false`).
+**Practical conclusion:** the public Playground is live and runs the reference interpreter inside a
+Docker worker. For a new self-hosted deployment, keep it disabled until you configure and verify
+container isolation with the [checklist](#checking-the-isolation).
 
 ## Architecture
 
@@ -106,8 +105,8 @@ The worker stays alive while paused and reads control commands from its standard
 programs run with `NoHost`, so a program cannot consume debugger commands as user input or access
 files. Debug sessions share the worker concurrency limit, expire after 60 seconds without activity
 and after five minutes in total, and each command has a 10 second timeout. The server stops active
-sessions during shutdown. The playground remains disabled on a public server until Docker isolation
-has been validated; implementing these routes does not change that deployment requirement.
+sessions during shutdown. The public site enables the Playground only with its Docker-backed worker;
+for a new self-hosted deployment, validate container isolation before enabling these routes.
 
 ### Request
 
@@ -459,7 +458,7 @@ PLAYGROUND_WORKER_COMMAND=["docker","run","--rm","-i","--init","--pull","never",
 PLAYGROUND_TIMEOUT_MS=4000
 ```
 
-**The playground stays disabled** until the
+**For a new self-hosted deployment, keep the playground disabled** until the
 [isolation check](#checking-the-isolation) is complete. Only the exact value `true` enables it;
 `false`, an empty value or not defining the variable leave it disabled, and any other value
 (`True`, `1`…) prevents the server from starting. Do not define it in the environment of the service either
@@ -774,11 +773,11 @@ initial example.
 
 ### Checking the isolation
 
-Before announcing the playground, check each point **on the real server**. None has been
-checked yet. The rows that use the page or the API need the playground enabled: do them
-in a controlled environment, without public exposure (see step 7). Only when all of them give the expected
-result, change `PLAYGROUND_ENABLED` to `true` in `servidor/.env` of the public server and restart the
-service.
+For a new deployment, check each applicable point **on that real server** before enabling public
+access. The NEXORA public deployment has a Docker-backed worker and passed its staging and production
+release verification. That result does not replace checking the isolation settings on another host.
+The rows that use the page or API need the Playground enabled: run them in a controlled environment
+before exposing your own server.
 
 | Check | How | Expected result |
 |--------------|------|--------------------|
