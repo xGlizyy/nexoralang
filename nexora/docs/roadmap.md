@@ -15,6 +15,14 @@ previous one is solid.
 A file existing does not count. A feature is only "completed" if it can be run and
 there is a test that fails if it stops working.
 
+## NEXORA 1.0 scope
+
+NEXORA 1.0 targets small, single-process CLI tools and local automation written and run by trusted
+operators. Web servers and multi-user services are out of scope. The accepted [product scope and
+release criteria](decisions/0021-alcance-nexora-1-0.md) define the platform target, stable interfaces
+and evidence required for a 1.0 release. Roadmap items are not automatically 1.0 blockers unless
+that decision or an approved reference application requires them.
+
 ## Completed and verified
 
 | Item | How it is verified |
