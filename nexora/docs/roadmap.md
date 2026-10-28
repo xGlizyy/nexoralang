@@ -52,6 +52,7 @@ there is a test that fails if it stops working.
 | Documentation in sync with the implementation | `tests/test_docs.py` |
 | Resistance to wrong, huge or truncated inputs | `tests/test_robustness.py` |
 | Package installable locally | Checked by hand on Windows; see [testing](testing.md#packaging) |
+| **Other editor clients for the LSP** | Neovim, Helix and Emacs configs and LSP smoke-tested; Neovim/Emacs highlighting and the generated Helix grammar are checked, with token catalogs tied to the lexer and checker ([LSP](lsp.md#other-editors)) |
 
 ## In development
 

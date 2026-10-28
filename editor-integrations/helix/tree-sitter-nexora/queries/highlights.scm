@@ -1,0 +1,16 @@
+(comment) @comment
+(string) @string
+(escape_sequence) @constant.character.escape
+(invalid_escape) @error
+(number) @constant.numeric
+(boolean) @constant.builtin.boolean
+(keyword) @keyword
+(reserved_word) @error
+(primitive_type) @type.builtin
+(compound_type) @type
+(builtin_constructor) @constant
+(builtin_function) @function.builtin
+(invalid_arrow) @error
+(operator) @operator
+(punctuation) @punctuation.delimiter
+(identifier) @variable

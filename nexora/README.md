@@ -230,7 +230,7 @@ of the official SDK and, by hand, in a Claude Code session; not in other assista
 | [Structured context](docs/ai-context.md) | `nex context` and `nex symbols` |
 | [JSON protocol](docs/json-protocol.md) | Formats, versions and JSON Schema |
 | [MCP server](docs/mcp.md) | Installation, tools, configuration and security |
-| [LSP](docs/lsp.md) | The language server that the VS Code extension uses |
+| [LSP](docs/lsp.md) | The language server and setup for VS Code, Neovim, Helix and Emacs |
 
 ## Examples
 

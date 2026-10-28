@@ -29,6 +29,16 @@ python -m pytest -x                            # stop at the first failure
 python -m pytest --cov --cov-report=html       # browsable report in htmlcov/index.html
 ```
 
+The Neovim, Helix and Emacs integration catalogs are checked against the real lexer keywords,
+reserved words and checker built-ins by `tests/test_editor_integrations.py`. Run that together with
+`tests/test_lsp.py` when changing an editor client. The three editor LSP connections were also
+smoke-tested with Neovim 0.12.6, Helix 25.07.1 and Emacs 31.1_1; the Helix grammar is generated
+from `editor-integrations/helix/tree-sitter-nexora/grammar.js` and its highlight query is checked
+against the generated node catalog. Its Tree-sitter corpus case covers keywords, types, built-ins,
+strings, numbers, booleans and comments; run `tree-sitter generate` and `tree-sitter test` from
+`editor-integrations/helix/tree-sitter-nexora/` after changing the grammar (the CLI and a C compiler
+are needed).
+
 The full suite takes about three minutes. The tests need no internet connection.
 
 ## Benchmarks
