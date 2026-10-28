@@ -10,7 +10,9 @@ NEXORA is an early-stage project (before version 1.0):
 
 - The language may change incompatibly between versions.
 - **It is not suitable for production use.**
-- It has not been used by anyone outside its development, nor audited by third parties.
+- This describes programs built with NEXORA. The public Playground is a production-hosted service for
+  experimentation, with a restricted worker; its availability does not make the language production-ready.
+- It has not had an independent user evaluation or a third-party audit.
 - Its performance has not been measured or compared with any other language.
 
 ## What the language does not have
@@ -37,7 +39,7 @@ NEXORA is an early-stage project (before version 1.0):
 | Reading numbers with spaces, `+`, separators or in other bases | `Int.parse` and `Float.parse` only read one form (`"-42"`, `"2.5e3"`) |
 | Remainder operator (`%`) and powers | |
 | Mathematical functions (root, rounding, absolute value…) | They have to be written |
-| Modules and imports | Modules and imports are implemented in 0.11.0 ([decision 0018](decisions/0018-modulos-e-importaciones.md)). The playground does not support them; `nex test` only evaluates the examples of the file it is given; there are no aliases and no selective imports. |
+| Modules and imports | Modules and imports are implemented in 0.11.0 ([decision 0018](decisions/0018-modulos-e-importaciones.md)). The Playground supports relative imports among files included in a project (up to 32 files); it cannot load files from the visitor's disk or external packages. `nex test` only evaluates examples in the file it is given; there are no aliases or selective imports. |
 | Functions as values, anonymous functions, overloading, default values | |
 | Warnings | Only unused variables (`W2001`), a `var` that is never reassigned (`W2002`) and names outside `snake_case` (`W2003`). Other quality problems are not reported |
 | Block comments, multi-line texts | |
@@ -97,7 +99,8 @@ Stable since 0.3.0. Their limits, in detail, in [contracts](contracts.md#limitat
 
 - The only stable interface is the command line. The Python API (`nexora.tooling`) is
   **experimental**; the rest of the modules of `src/nexora/` are internal and may change without notice.
-- There is no local debugger protocol. The language server resolves relative imports, uses open
+- There is no debugger in the local CLI or language server. The hosted Playground has a
+  statement-by-statement debugger. The language server resolves relative imports, uses open
   editor buffers, and negotiates UTF-16/UTF-8/UTF-32 positions ([LSP](lsp.md)).
 - With syntax errors, `nex inspect`, `nex context` and `nex symbols` return a **partial**
   structure: the statements with errors are missing and so is, entirely, any function whose declaration has
