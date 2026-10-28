@@ -264,6 +264,9 @@ class Symbol:
     function: str | None          # the function it belongs to (None for a function itself)
     scope: Span | None            # the block where it is visible (None for a function: the whole file)
     references: list[Span] = field(default_factory=list)
+    # The module where each reference is written, parallel to `references`. A symbol may
+    # be declared in one module and referenced from several importing modules.
+    reference_modules: list[str | None] = field(default_factory=list)
     # The references that read the value. A reference that gives it a new value is in
     # `references` and in `assignments`, but not here.
     reads: list[Span] = field(default_factory=list)
@@ -1780,6 +1783,7 @@ class Checker:
             )
             return
         target.references.append(span)
+        target.reference_modules.append(self._module)
         target.assignments.append(span)
         if value_type == VOID:
             self._report("E2011", "This call does not produce a value to store", statement.value.span)
@@ -2098,6 +2102,7 @@ class Checker:
         found = scope.find(node.name)
         if found is not None:
             found.references.append(node.span)
+            found.reference_modules.append(self._module)
             found.reads.append(node.span)
             return found.type
         if self._key(node.name) in self._type_names:
@@ -2267,6 +2272,7 @@ class Checker:
             self._calls.append((self._key(self._function_name), key))
         if not signature.builtin:
             self._function_symbols[key].references.append(node.callee_span)
+            self._function_symbols[key].reference_modules.append(self._module)
             self._targets[id(node)] = key
 
         expected_count, count = len(signature.params), len(node.arguments)

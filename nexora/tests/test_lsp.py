@@ -171,6 +171,60 @@ def test_the_server_speaks_the_protocol():
     assert answer["serverInfo"]["name"] == "nexora-lsp"
 
 
+def test_utf16_positions_are_negotiated_and_used_for_hover_and_diagnostics():
+    server = _server('fn main() {\n    let value: Int = "😀"\n    print(value)\n}\n')
+    answer = server.initialize({"capabilities": {"general": {"positionEncodings": ["utf-16", "utf-8"]}}})
+    assert answer["capabilities"]["positionEncoding"] == "utf-16"
+    line = server.documents["file:///p.nex"].lines[1]
+    diagnostic = server.diagnostics_of(server.documents["file:///p.nex"])[0]
+    assert diagnostic["range"]["end"] == {
+        "line": 1,
+        "character": len(line.encode("utf-16-le")) // 2,
+    }
+    program = ('fn echo(prefix: Text, value: Int) gives Int { return value }\n'
+               'fn main() {\n    let value = 1\n    let result = echo("😀", value)\n    print(result)\n}\n')
+    position_server = _server(program)
+    position_line = position_server.documents["file:///p.nex"].lines[3]
+    value_character = len(position_line[:position_line.rindex("value")].encode("utf-16-le")) // 2
+    answer = position_server.hover({"textDocument": {"uri": "file:///p.nex"},
+                                    "position": _position(3, value_character)})
+    assert answer is not None and "value: Int" in answer["contents"]["value"]
+
+
+def test_utf8_position_encoding_is_supported_when_the_client_requests_it():
+    server = _server()
+    answer = server.initialize({"capabilities": {"general": {"positionEncodings": ["utf-8"]}}})
+    assert answer["capabilities"]["positionEncoding"] == "utf-8"
+
+
+def test_imports_resolve_from_the_importing_file_and_support_unsaved_buffers(tmp_path):
+    main_path = tmp_path / "main.nex"
+    math_path = tmp_path / "math.nex"
+    main_path.write_text('import "math.nex"\nfn main() {\n    let total = math.add(1, 2)\n    print(total)\n}\n', encoding="utf-8")
+    math_path.write_text("this is deliberately invalid", encoding="utf-8")
+    server = lsp.Server()
+    server.did_open({"textDocument": {"uri": main_path.as_uri(), "languageId": "nexora", "version": 1,
+                                      "text": main_path.read_text(encoding="utf-8")}})
+    server.did_open({"textDocument": {"uri": math_path.as_uri(), "languageId": "nexora", "version": 2,
+                                      "text": "pub fn add(a: Int, b: Int) gives Int { return a + b }\n"}})
+    main = server.documents[main_path.as_uri()]
+    assert server.diagnostics_of(main) == []
+    position = _position(2, main.lines[2].index("add"))
+    hover = server.hover({"textDocument": {"uri": main.uri}, "position": position})
+    assert hover is not None and "fn add(a: Int, b: Int) gives Int" in hover["contents"]["value"]
+    definition = server.definition({"textDocument": {"uri": main.uri}, "position": position})
+    assert definition == [{"uri": math_path.as_uri(),
+                           "range": {"start": {"line": 0, "character": 7},
+                                     "end": {"line": 0, "character": 10}}}]
+    references = server.references({"textDocument": {"uri": main.uri}, "position": position})
+    assert {(item["uri"], item["range"]["start"]["character"]) for item in references} == {
+        (math_path.as_uri(), 7), (main_path.as_uri(), main.lines[2].index("add")),
+    }
+    rename = server.rename({"textDocument": {"uri": main.uri}, "position": position, "newName": "sum"})
+    assert set(rename["changes"]) == {main_path.as_uri(), math_path.as_uri()}
+    assert all(edit["newText"] == "sum" for edits in rename["changes"].values() for edit in edits)
+
+
 def test_a_message_is_read_and_written_with_its_header():
     import io
 

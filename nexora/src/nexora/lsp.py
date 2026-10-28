@@ -21,10 +21,15 @@ step is a server that always works.
 from __future__ import annotations
 
 import json
+import os
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 
 from . import ast_nodes as ast
 from .checker import BUILTINS, CheckedProgram
@@ -41,31 +46,74 @@ LANGUAGE_ID = "nexora"
 _SEVERITY = {"error": 1, "warning": 2}
 
 
-def _position(line: int, column: int) -> dict[str, int]:
-    """A position of the protocol: it counts from zero."""
-    return {"line": max(0, line - 1), "character": max(0, column - 1)}
+def _to_protocol_column(line: str, codepoint_column: int, encoding: str) -> int:
+    prefix = line[:max(0, codepoint_column - 1)]
+    if encoding == "utf-16":
+        return len(prefix.encode("utf-16-le")) // 2
+    if encoding == "utf-8":
+        return len(prefix.encode("utf-8"))
+    return len(prefix)
 
 
-def _range(span) -> dict[str, dict[str, int]]:
+def _from_protocol_column(line: str, character: int, encoding: str) -> int:
+    """Convert a zero-based LSP character offset into a one-based source column."""
+    if character <= 0:
+        return 1
+    used = 0
+    for index, char in enumerate(line):
+        units = (len(char.encode("utf-16-le")) // 2 if encoding == "utf-16"
+                 else len(char.encode("utf-8")) if encoding == "utf-8" else 1)
+        if used + units > character:
+            return index + 1
+        used += units
+        if used == character:
+            return index + 2
+    return len(line) + 1
+
+
+def _position(line: int, column: int, lines: list[str], encoding: str) -> dict[str, int]:
+    """Convert a one-based source position to the negotiated LSP encoding."""
+    index = max(0, line - 1)
+    text = lines[index] if index < len(lines) else ""
+    return {"line": index, "character": _to_protocol_column(text, column, encoding)}
+
+
+def _range(span, lines: list[str], encoding: str) -> dict[str, dict[str, int]]:
     """The range of a span of the language."""
     return {
-        "start": _position(span.line, span.column),
-        "end": _position(span.end_line, span.end_column),
+        "start": _position(span.line, span.column, lines, encoding),
+        "end": _position(span.end_line, span.end_column, lines, encoding),
     }
 
 
-def _offset(position: dict[str, int], lines: list[str]) -> tuple[int, int]:
+def _offset(position: dict[str, int], lines: list[str], encoding: str) -> tuple[int, int]:
     """The line and the column of a position of the protocol, counted from one."""
     line = position.get("line", 0) + 1
-    column = position.get("character", 0) + 1
+    character = max(0, position.get("character", 0))
+    column = character + 1
     if 1 <= line <= len(lines):
-        column = min(column, len(lines[line - 1]) + 1)
+        column = _from_protocol_column(lines[line - 1], character, encoding)
     return line, column
 
 
 def _holds(span, line: int, column: int) -> bool:
     """Whether a span of the language holds that position."""
     return span.line == line and span.column <= column < span.end_column
+
+
+def _path_from_uri(uri: str) -> Path | None:
+    parsed = urlparse(uri)
+    if parsed.scheme != "file":
+        return None
+    return Path(url2pathname(unquote(parsed.path))).resolve()
+
+
+def _normal_path(path: Path | str) -> str:
+    return os.path.normcase(os.path.normpath(str(Path(path).resolve())))
+
+
+def _path_from_source_name(name: str) -> Path | None:
+    return _path_from_uri(name) if urlparse(name).scheme == "file" else Path(name).resolve()
 
 
 @dataclass
@@ -79,7 +127,7 @@ class Document:
 
     @property
     def lines(self) -> list[str]:
-        return self.text.split("\n")
+        return re.split(r"\r\n|\n|\r", self.text)
 
     @property
     def source(self) -> Source:
@@ -93,6 +141,7 @@ class Server:
     documents: dict[str, Document] = field(default_factory=dict)
     analyses: dict[str, Analysis] = field(default_factory=dict)
     initialized: bool = False
+    position_encoding: str = "utf-16"
 
     # Analysis
 
@@ -101,16 +150,61 @@ class Server:
         cached = self.analyses.get(document.uri)
         if cached is not None and cached.source.text == document.text:
             return cached
-        result = analyze(document.source, require_main=False)
+        source = document.source
+        read = None
+        entry_path = _path_from_uri(document.uri)
+        if entry_path is not None:
+            source = Source(str(entry_path), document.text)
+            read = self._module_reader()
+        result = analyze(source, require_main=False, read=read)
         self.analyses[document.uri] = result
         return result
+
+    def _module_reader(self):
+        """Read relative imports, preferring the editor's unsaved buffer contents."""
+        open_by_path = {
+            _normal_path(path): document
+            for document in self.documents.values()
+            if (path := _path_from_uri(document.uri)) is not None
+        }
+
+        def read(declaration, importing_file: str):
+            path = (Path(importing_file).parent / declaration.path).resolve()
+            key = str(path)
+            opened = open_by_path.get(_normal_path(path))
+            try:
+                if opened is not None:
+                    text = opened.text
+                else:
+                    text = path.read_text(encoding="utf-8-sig")
+            except OSError as error:
+                return Diagnostic(
+                    "E0001", f"{error.strerror or type(error).__name__}: {declaration.path}",
+                    declaration.path_span,
+                    hint="An import names a file relative to the file that has it.",
+                )
+            except UnicodeDecodeError:
+                return Diagnostic("E0002", f"{declaration.path} is not valid UTF-8", declaration.path_span)
+            return key, path.stem, Source(key, text)
+
+        return read
 
     # Diagnostics
 
     def diagnostics_of(self, document: Document) -> list[dict[str, Any]]:
         """The problems of a document, in the shape of the protocol."""
         analysis = self.analysis_of(document)
-        return [_diagnostic(diagnostic) for diagnostic in analysis.diagnostics]
+        target = _normal_path(_path_from_uri(document.uri)) if _path_from_uri(document.uri) else None
+        if analysis.project is not None:
+            reports = analysis.project.reports()
+            return [
+                _diagnostic(diagnostic, source.text, self.position_encoding)
+                for diagnostic, source in reports
+                if target is None or ((source_path := _path_from_source_name(source.name)) is not None
+                                      and _normal_path(source_path) == target)
+            ]
+        return [_diagnostic(diagnostic, document.text, self.position_encoding)
+                for diagnostic in analysis.diagnostics]
 
     # Symbols
 
@@ -123,13 +217,67 @@ class Server:
         facts = self._facts(document)
         if facts is None:
             return None
+        # Prefer declarations and references belonging to the open (entry) document.
         for symbol in facts.symbols:
-            if _holds(symbol.span, line, column):
+            if symbol.module is None and _holds(symbol.span, line, column):
                 return symbol
-            for span in symbol.references:
-                if _holds(span, line, column):
-                    return symbol
+        for symbol in facts.symbols:
+            if symbol.module is None and any(_holds(span, line, column) for span in symbol.references):
+                return symbol
+        # A call to an imported function is stored as a reference on that function's symbol.
+        for symbol in facts.symbols:
+            if symbol.module is not None and any(_holds(span, line, column) for span in symbol.references):
+                return symbol
         return None
+
+    def _module_for_name(self, document: Document, name: str | None):
+        project = self.analysis_of(document).project
+        if project is None:
+            return None
+        return (project.entry if name is None
+                else next((module for module in project.modules if module.name == name), None))
+
+    def _module_uri(self, module) -> str:
+        path = Path(module.path)
+        return next((doc.uri for doc in self.documents.values()
+                     if (doc_path := _path_from_uri(doc.uri)) is not None
+                     and _normal_path(doc_path) == _normal_path(path)), path.as_uri())
+
+    def _symbol_location(self, document: Document, symbol) -> tuple[str, list[str]]:
+        """URI and source lines for a symbol, including a declaration in an imported file."""
+        module = self._module_for_name(document, symbol.module)
+        if module is None:
+            return document.uri, document.lines
+        return self._module_uri(module), re.split(r"\r\n|\n|\r", module.source.text)
+
+    def _symbol_locations(self, document: Document, symbol) -> dict[str, list[dict[str, Any]]]:
+        """Declaration and reference ranges grouped by the file that owns each span."""
+        locations: dict[str, list[dict[str, Any]]] = {}
+
+        def add(module_name, span):
+            module = self._module_for_name(document, module_name)
+            if module is None:
+                uri, lines = document.uri, document.lines
+            else:
+                uri = self._module_uri(module)
+                lines = re.split(r"\r\n|\n|\r", module.source.text)
+            locations.setdefault(uri, []).append(_range(span, lines, self.position_encoding))
+
+        add(symbol.module, symbol.span)
+        for index, span in enumerate(symbol.references):
+            module_name = symbol.reference_modules[index] if index < len(symbol.reference_modules) else None
+            if symbol.category == "function" and symbol.module:
+                reference_module = self._module_for_name(document, module_name)
+                if reference_module is not None:
+                    candidates, _ = tokenize(reference_module.source)
+                    member = [token.span for token in candidates
+                              if token.type is TokenType.IDENT and token.lexeme == symbol.name
+                              and (token.span.line, token.span.column) >= (span.line, span.column)
+                              and (token.span.end_line, token.span.end_column) <= (span.end_line, span.end_column)]
+                    if member:
+                        span = member[-1]
+            add(module_name, span)
+        return locations
 
     def _names_in_scope(self, document: Document, line: int, column: int) -> list[str]:
         """The names a program can use at that position."""
@@ -139,7 +287,7 @@ class Server:
             return names
         for symbol in facts.symbols:
             if symbol.scope is None or symbol.category == "function":
-                names.append(symbol.name)
+                names.append(f"{symbol.module}.{symbol.name}" if symbol.module else symbol.name)
                 continue
             # A name is visible from where it was declared.
             scope = symbol.scope
@@ -151,8 +299,12 @@ class Server:
 
     def initialize(self, params: dict[str, Any]) -> dict[str, Any]:
         self.initialized = True
+        offered = params.get("capabilities", {}).get("general", {}).get("positionEncodings", [])
+        self.position_encoding = next((encoding for encoding in offered
+                                       if encoding in ("utf-16", "utf-8", "utf-32")), "utf-16")
         return {
             "capabilities": {
+                "positionEncoding": self.position_encoding,
                 "textDocumentSync": {"openClose": True, "change": 1, "save": {"includeText": True}},
                 "completionProvider": {"triggerCharacters": [".", " "]},
                 "hoverProvider": True,
@@ -178,7 +330,7 @@ class Server:
             text=item.get("text", ""),
         )
         self.documents[document.uri] = document
-        self.analyses.pop(document.uri, None)
+        self.analyses.clear()
 
     def did_change(self, params: dict[str, Any]) -> None:
         item = params.get("textDocument", {})
@@ -188,21 +340,21 @@ class Server:
             return
         text = item.get("contentChanges", [{}])[-1].get("text", document.text)
         self.documents[uri] = Document(document.uri, document.language_id, item.get("version", document.version), text)
-        self.analyses.pop(uri, None)
+        self.analyses.clear()
 
     def did_close(self, params: dict[str, Any]) -> None:
         uri = params.get("textDocument", {}).get("uri", "")
         self.documents.pop(uri, None)
-        self.analyses.pop(uri, None)
+        self.analyses.clear()
 
     def did_save(self, params: dict[str, Any]) -> None:
-        return None
+        self.analyses.clear()
 
     def completion(self, params: dict[str, Any]) -> list[dict[str, Any]]:
         document = self._document(params)
         if document is None:
             return []
-        line, column = _offset(params.get("position", {}), document.lines)
+        line, column = _offset(params.get("position", {}), document.lines, self.position_encoding)
         items: list[dict[str, Any]] = []
         for word in sorted(KEYWORDS):
             items.append({"label": word, "kind": 14, "detail": "keyword", "sortText": f"1{word}"})
@@ -228,7 +380,7 @@ class Server:
         document = self._document(params)
         if document is None:
             return None
-        line, column = _offset(params.get("position", {}), document.lines)
+        line, column = _offset(params.get("position", {}), document.lines, self.position_encoding)
         facts = self._facts(document)
         if facts is None:
             return None
@@ -255,58 +407,65 @@ class Server:
         document = self._document(params)
         if document is None:
             return []
-        line, column = _offset(params.get("position", {}), document.lines)
+        line, column = _offset(params.get("position", {}), document.lines, self.position_encoding)
         symbol = self._symbol_at(document, line, column)
         if symbol is None:
             return []
-        return [{"uri": document.uri, "range": _range(symbol.span)}]
+        uri, lines = self._symbol_location(document, symbol)
+        return [{"uri": uri, "range": _range(symbol.span, lines, self.position_encoding)}]
 
     def references(self, params: dict[str, Any]) -> list[dict[str, Any]]:
         document = self._document(params)
         if document is None:
             return []
-        line, column = _offset(params.get("position", {}), document.lines)
+        line, column = _offset(params.get("position", {}), document.lines, self.position_encoding)
         symbol = self._symbol_at(document, line, column)
         if symbol is None:
             return []
-        spans = [symbol.span, *symbol.references]
-        return [{"uri": document.uri, "range": _range(span)} for span in spans]
+        locations = self._symbol_locations(document, symbol)
+        if params.get("context", {}).get("includeDeclaration", True) is False:
+            declaration_uri, declaration_lines = self._symbol_location(document, symbol)
+            declaration_range = _range(symbol.span, declaration_lines, self.position_encoding)
+            locations[declaration_uri] = [item for item in locations.get(declaration_uri, [])
+                                          if item != declaration_range]
+        return [{"uri": uri, "range": range_}
+                for uri, ranges in locations.items() for range_ in ranges]
 
     def highlight(self, params: dict[str, Any]) -> list[dict[str, Any]]:
         document = self._document(params)
         if document is None:
             return []
-        line, column = _offset(params.get("position", {}), document.lines)
+        line, column = _offset(params.get("position", {}), document.lines, self.position_encoding)
         symbol = self._symbol_at(document, line, column)
         if symbol is None:
             return []
-        spans = [symbol.span, *symbol.references]
-        return [{"range": _range(span), "kind": 1} for span in spans]
+        return [{"range": range_, "kind": 1}
+                for range_ in self._symbol_locations(document, symbol).get(document.uri, [])]
 
     def rename(self, params: dict[str, Any]) -> dict[str, Any] | None:
         document = self._document(params)
         if document is None:
             return None
-        line, column = _offset(params.get("position", {}), document.lines)
+        line, column = _offset(params.get("position", {}), document.lines, self.position_encoding)
         symbol = self._symbol_at(document, line, column)
         if symbol is None:
             return None
         new_name = params.get("newName", "")
         if not new_name:
             return None
-        spans = [symbol.span, *symbol.references]
-        edits = [{"range": _range(span), "newText": new_name} for span in spans]
-        return {"changes": {document.uri: edits}}
+        locations = self._symbol_locations(document, symbol)
+        return {"changes": {uri: [{"range": range_, "newText": new_name} for range_ in ranges]
+                             for uri, ranges in locations.items()}}
 
     def prepare_rename(self, params: dict[str, Any]) -> dict[str, Any] | None:
         document = self._document(params)
         if document is None:
             return None
-        line, column = _offset(params.get("position", {}), document.lines)
+        line, column = _offset(params.get("position", {}), document.lines, self.position_encoding)
         symbol = self._symbol_at(document, line, column)
         if symbol is None:
             return None
-        return {"range": _range(symbol.span), "placeholder": symbol.name}
+        return {"range": _range(symbol.span, document.lines, self.position_encoding), "placeholder": symbol.name}
 
     def document_symbol(self, params: dict[str, Any]) -> list[dict[str, Any]]:
         document = self._document(params)
@@ -320,17 +479,17 @@ class Server:
             symbols.append({
                 "name": function.name,
                 "kind": 12,
-                "range": _range(function.name_span),
-                "selectionRange": _range(function.name_span),
+                "range": _range(function.name_span, document.lines, self.position_encoding),
+                "selectionRange": _range(function.name_span, document.lines, self.position_encoding),
                 "detail": _return_type_of(function),
             })
         for symbol in facts.symbols:
-            if symbol.category == "variable":
+            if symbol.category == "variable" and symbol.module is None:
                 symbols.append({
                     "name": symbol.name,
                     "kind": 13,
-                    "range": _range(symbol.span),
-                    "selectionRange": _range(symbol.span),
+                    "range": _range(symbol.span, document.lines, self.position_encoding),
+                    "selectionRange": _range(symbol.span, document.lines, self.position_encoding),
                     "detail": symbol.type or "",
                 })
         return symbols
@@ -342,7 +501,7 @@ class Server:
         facts = self._facts(document)
         if facts is None:
             return None
-        line, column = _offset(params.get("position", {}), document.lines)
+        line, column = _offset(params.get("position", {}), document.lines, self.position_encoding)
         name = _call_name_at(document, line, column)
         if name is None:
             return None
@@ -369,7 +528,7 @@ class Server:
         result = format_source(document.text, document.uri)
         if not result.ok:
             return []
-        return [{"range": _whole_range(document), "newText": result.text}]
+        return [{"range": _whole_range(document, self.position_encoding), "newText": result.text}]
 
     def range_formatting(self, params: dict[str, Any]) -> list[dict[str, Any]]:
         document = self._document(params)
@@ -385,7 +544,7 @@ class Server:
         if formatted and formatted[-1] == "":
             formatted.pop()
         return [{
-            "range": _range_of_lines(document, start, end),
+            "range": _range_of_lines(document, start, end, self.position_encoding),
             "newText": "\n".join(formatted[start - 1:end]),
         }]
 
@@ -402,10 +561,10 @@ def _version() -> str:
     return __version__
 
 
-def _diagnostic(diagnostic: Diagnostic) -> dict[str, Any]:
+def _diagnostic(diagnostic: Diagnostic, text: str, encoding: str) -> dict[str, Any]:
     """A diagnostic of the language, in the shape of the protocol."""
     result: dict[str, Any] = {
-        "range": _range(diagnostic.span),
+        "range": _range(diagnostic.span, re.split(r"\r\n|\n|\r", text), encoding),
         "severity": _SEVERITY.get(diagnostic.severity, 1),
         "code": diagnostic.code,
         "source": "nexora",
@@ -453,6 +612,14 @@ def _call_name_at(document: Document, line: int, column: int) -> str | None:
         if span.line != line or not (span.column <= column < span.end_column):
             continue
         following = tokens[index + 1] if index + 1 < len(tokens) else None
+        if (following is not None and following.type is TokenType.DOT and index + 3 < len(tokens)
+                and tokens[index + 2].type is TokenType.IDENT and tokens[index + 3].type is TokenType.LPAREN
+                and tokens[index + 3].span.line == line):
+            return f"{token.lexeme}.{tokens[index + 2].lexeme}"
+        if (index >= 2 and tokens[index - 1].type is TokenType.DOT
+                and tokens[index - 2].type is TokenType.IDENT and following is not None
+                and following.type is TokenType.LPAREN and following.span.line == line):
+            return f"{tokens[index - 2].lexeme}.{token.lexeme}"
         if following is not None and following.type is TokenType.LPAREN and following.span.line == line:
             return token.lexeme
         return None
@@ -466,20 +633,22 @@ def _type_names(facts: CheckedProgram) -> dict[str, str]:
     return names
 
 
-def _whole_range(document: Document) -> dict[str, dict[str, int]]:
+def _whole_range(document: Document, encoding: str) -> dict[str, dict[str, int]]:
     lines = document.lines
     return {
         "start": {"line": 0, "character": 0},
-        "end": {"line": max(0, len(lines) - 1), "character": len(lines[-1]) if lines else 0},
+        "end": {"line": max(0, len(lines) - 1),
+                "character": _to_protocol_column(lines[-1], len(lines[-1]) + 1, encoding) if lines else 0},
     }
 
 
-def _range_of_lines(document: Document, start_line: int, end_line: int) -> dict[str, dict[str, int]]:
+def _range_of_lines(document: Document, start_line: int, end_line: int, encoding: str) -> dict[str, dict[str, int]]:
     lines = document.lines
     last = max(0, min(len(lines), end_line) - 1)
     return {
         "start": {"line": max(0, start_line - 1), "character": 0},
-        "end": {"line": last, "character": len(lines[last]) if lines else 0},
+        "end": {"line": last,
+                "character": _to_protocol_column(lines[last], len(lines[last]) + 1, encoding) if lines else 0},
     }
 
 
@@ -582,11 +751,9 @@ def serve(reader=None, writer=None) -> int:
             continue
         if identifier is not None:
             connection.write({"jsonrpc": "2.0", "id": identifier, "result": result})
-        # The diagnostics of the documents that changed.
+        # Imports can make every open document depend on the changed buffer.
         if method in ("textDocument/didOpen", "textDocument/didChange", "textDocument/didSave"):
-            uri = params.get("textDocument", {}).get("uri", "")
-            document = server.documents.get(uri)
-            if document is not None:
+            for uri, document in server.documents.items():
                 connection.write({
                     "jsonrpc": "2.0",
                     "method": "textDocument/publishDiagnostics",
