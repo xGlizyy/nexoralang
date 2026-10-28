@@ -1,25 +1,74 @@
 # NEXORA
 
-A web-oriented programming language designed for AI-powered development.
+An experimental programming language built around explicit requirements and checkable contracts.
 
-State: There is an interpreter (version 0.12.1) that executes a subset of the language: static types, immutable (`let`) and reassignable (`var`) variables, functions with parameters and return values, `if`/`else`, recursion, `while` loops that declare why they terminate (`shrinks`) and what they maintain (`keeps`), immutable lists `List[T]` with `List.length`, `List.get`, `List.append`, `List.concat` and `List.contains`, `for` loops on lists, immutable records (`type Point = { x: Int, y: Int }`) with nominal identity, program arguments (`args()`), standard input (`input()`) and files with explicit permissions (`uses read "path"` and `--allow-read=path`), operations on text (`Text.length`, `Text.slice`, `Int.parse`) which declares its requirements, contracts (`needs`, `promises`, and `trust`, which is never checked), and refined types (`type Percent = Int where ...`), each rule with its explanation, examples in the functions (`example`) that `nex test` evaluates, and multi-file programs with `import "path/file.nex"`, one namespace per module, and `pub`. The rest of the design is not yet implemented.
+NEXORA is its own language, with its own syntax, type checker and interpreter. The reference
+interpreter is implemented in Python; programs are NEXORA programs, not Python translations.
 
-What distinguishes NEXORA: a program's requirements are written in the code itself and checked deterministically ([decision 0006](nexora/docs/decisions/0006-requisitos-verificables.md)).
+**Current release: 0.13.0 · Early-stage, pre-1.0.** The supported language is a subset of the full
+design and may change incompatibly. NEXORA is not yet recommended for production software.
 
-- [nexora/](nexora/): the core of the language. Interpreter, `nex` command, documentation ([nexora/docs/index.md](nexora/docs/index.md)), executable examples, and tests. It starts with [nexora/README.md](nexora/README.md).
+## What works today
 
-- [.github/workflows/nexora-ci.yml](.github/workflows/nexora-ci.yml): Continuous integration of the core for GitHub Actions. It runs on every change to `main`, on Linux, Windows, and macOS.
+- **Language and CLI:** static checking and interpretation, functions, lists, records, modules,
+  `Option` and `Result`, refined types, examples, and function contracts. The CLI includes `run`,
+  `check`, `test`, `inspect`, `context` and `symbols`. See the [implemented language and status](nexora/README.md).
+- **Diagnostics:** type and syntax errors explain the problem and include stable codes and hints.
+- **Editor support:** a shared Language Server Protocol (LSP) server provides diagnostics,
+  completion, hover, navigation, rename, symbols, signature help and formatting. Ready-to-use
+  configurations are available for [Neovim, Helix and Emacs](editor-integrations/); the
+  [Visual Studio Code extension](vscode-nexora/) uses the same language tools. LSP import
+  resolution is not implemented yet.
+- **Web Playground:** [write, check and run NEXORA online](https://nexoralang.org/playground),
+  with a statement-by-statement debugger. It runs the same interpreter in a Docker worker; network
+  and external-process capabilities are unavailable to Playground programs.
+- **AI tooling:** optional context and symbol tools, a Python API and an experimental MCP server.
+  NEXORA does not call AI models. The MCP server's compatibility has only been checked with the
+  official SDK client and manually in Claude Code; see [AI tooling](nexora/docs/ai-tooling.md).
 
-- [docs/fase-1-diseno.md](docs/fase-1-diseno.md): Draft of the complete design (syntax, types, functions, and rules). It describes where the language is headed, not what works today.
+The [design document](docs/fase-1-diseno.md) describes the larger language being explored. It is a
+proposal, not a promise that every feature already runs. See the current [limitations](nexora/docs/limitations.md)
+and [roadmap](nexora/docs/roadmap.md) before relying on a feature.
 
-- [ejemplos/tienda.nx](ejemplos/tienda.nx) and [ejemplos/soporte_ia.nx](ejemplos/soporte_ia.nx): Examples from the draft design. They use syntax that the interpreter doesn't yet support, so they can't be executed.
+## Install
 
-- [npm/](npm/): npm package (`nexora-lang`) that installs the `nex` command. Requires Python 3.11 or higher on the machine. Published on PyPI and npm.
+The interpreter needs Python 3.11 or newer. Install the published package from PyPI:
 
-- Website: <https://nexoralang.org>, with a guide (`/guide`) and the playground (`/playground`, disabled for now). Its server and webpage live in a separate private repository; this repository holds the language.
+```bash
+python -m pip install nexora-lang
+nex --version
+```
 
-- [vscode-nexora/](vscode-nexora/): Visual Studio Code extension for the language: highlighting, diagnostics, navigation, and formatting. Its language server and formatter are those of the core ([decision 0017](nexora/docs/decisions/0017-un-editor-la-extension-de-vs-code.md)).
+The `nexora-lang` package is also available on npm as a launcher; it still requires Python 3.11 or
+newer. Installation details and troubleshooting are in the [NEXORA guide](nexora/docs/installation.md).
 
-Tools for AI editors and agents (JSON parsing, `nex context`, `nex symbols`, Python API, and optional MCP server): [nexora/docs/ai-tooling.md](nexora/docs/ai-tooling.md). NEXORA does not call any AI models.
+## First program
+
+Save this as `hello.nex`:
+
+```nex
+fn main() {
+    print("Hello from NEXORA")
+}
+```
+
+Then run it:
+
+```bash
+nex run hello.nex
+```
+
+## Project map
+
+- [`nexora/`](nexora/): reference interpreter, CLI, language server, documentation and tests.
+- [`editor-integrations/`](editor-integrations/): configuration and syntax highlighting for Neovim,
+  Helix and Emacs.
+- [`vscode-nexora/`](vscode-nexora/): Visual Studio Code extension.
+- [`npm/`](npm/): npm launcher for the Python interpreter.
+- [`docs/fase-1-diseno.md`](docs/fase-1-diseno.md): proposed language design.
+- [`docs/roadmap.md`](nexora/docs/roadmap.md): project roadmap.
+
+The website and Playground server live in a separate private repository; the language implementation
+and its documentation are here.
 
 License: [MIT](LICENSE).
