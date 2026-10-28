@@ -105,9 +105,20 @@ def _project_analysis(code: str, filename: str, files: object = None):
                 raise ValueError("malformed project")
             safe = path.replace("\\", "/")
             parts = safe.split("/")
-            if (len(safe) > 256 or len(parts) > 8 or safe.startswith("/") or ":" in safe
-                    or any(part in {"", ".", ".."} for part in parts) or not safe.endswith(".nex")
-                    or any(len(part.removesuffix(".nex")) > 64 or not part.removesuffix(".nex").replace("_", "a").replace("-", "a").isalnum() for part in parts)):
+            invalid_segment = any(
+                len(part.removesuffix(".nex")) > 64
+                or not part.removesuffix(".nex").replace("_", "a").replace("-", "a").isalnum()
+                for part in parts
+            )
+            if (
+                len(safe) > 256
+                or len(parts) > 8
+                or safe.startswith("/")
+                or ":" in safe
+                or any(part in {"", ".", ".."} for part in parts)
+                or not safe.endswith(".nex")
+                or invalid_segment
+            ):
                 raise ValueError("invalid project path")
             normalized[safe] = text
         entry = filename.replace("\\", "/")
@@ -151,7 +162,11 @@ def handle(request: dict) -> dict:
         from .diagnostics import CONTRACT, NexoraRuntimeError
         from .interpreter import run as interpret
         analysis, source_files = _project_analysis(code, filename, files)
-        reports = analysis.project.reports() if analysis.project else tuple((d, analysis.source) for d in analysis.diagnostics)
+        reports = (
+            analysis.project.reports()
+            if analysis.project
+            else tuple((diagnostic, analysis.source) for diagnostic in analysis.diagnostics)
+        )
         diagnostics = [diagnostic.to_dict(source.name) for diagnostic, source in reports]
         if analysis.checked is None:
             result = {"schema": api.RESULT_SCHEMA, "action": action, "status": api.INVALID,
@@ -169,11 +184,16 @@ def handle(request: dict) -> dict:
             except NexoraRuntimeError as error:
                 status = api.CONTRACT_VIOLATION if error.diagnostic.category == CONTRACT else api.RUNTIME_ERROR
                 result = {"schema": api.RESULT_SCHEMA, "action": action, "status": status,
-                          "output": output.text(), "diagnostics": [error.diagnostic.to_dict(error.file or entry)], "message": None}
+                          "output": output.text(), "diagnostics": [
+                              error.diagnostic.to_dict(error.file or filename.replace("\\", "/"))
+                          ], "message": None}
             except api._OutputLimitReached:
                 result = {"schema": api.RESULT_SCHEMA, "action": action, "status": api.OUTPUT_LIMIT,
                           "output": output.text(), "diagnostics": [],
-                          "message": f"The program printed more than {limits.get('output_bytes')} bytes and was stopped."}
+                          "message": (
+                              f"The program printed more than {limits.get('output_bytes')} bytes "
+                              "and was stopped."
+                          )}
             except MemoryError:
                 result = {"schema": api.RESULT_SCHEMA, "action": action, "status": api.MEMORY_LIMIT,
                           "output": output.text(), "diagnostics": [], "message": api._MEMORY_MESSAGE}
