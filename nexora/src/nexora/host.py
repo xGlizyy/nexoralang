@@ -161,16 +161,23 @@ class LocalHost:
             reader.start()
         timed_out = False
         try:
-            process.wait(timeout=_PROCESS_TIMEOUT_SECONDS)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            _kill_process_tree(process)
-            process.wait()
-        for reader in readers:
-            reader.join(timeout=1)
-        for stream in (process.stdout, process.stderr):
-            if stream is not None:
-                stream.close()
+            try:
+                process.wait(timeout=_PROCESS_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                _kill_process_tree(process)
+                process.wait()
+        finally:
+            # A CLI deadline or Ctrl+C can interrupt wait() before its own timeout fires.
+            # Do not leave the capability's child running after its parent execution stops.
+            if process.poll() is None:
+                _kill_process_tree(process)
+                process.wait()
+            for reader in readers:
+                reader.join(timeout=1)
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
         if timed_out:
             raise OSError(f"process '{command}' exceeded {_PROCESS_TIMEOUT_SECONDS} seconds")
         if too_large.is_set():

@@ -19,9 +19,9 @@ NEXORA works offline.
 | Environment | Status |
 |-------------|--------|
 | Windows 11, Python 3.12 | **Checked**: development-mode installation in a clean environment, installation from the built package, and full test suite |
-| Windows 11, Node.js 24, npm package | **Checked**: built with `npm pack`, installed from the file and used. Version 0.14.0 is published on npm through `nexora-lang` |
+| Windows 11, Node.js, npm package | **Checked**: `npm test` passes; the 0.14.1 tarball installs locally and reports the expected version |
 | Linux (Ubuntu 24.04 on WSL 2), Python 3.12 | **Checked** on 17 October 2026: full test suite, with none skipped, with a non-root user; package built and installed from the file in a clean environment, and `nex run` used. Other distributions and Linux without WSL, not checked |
-| Linux, Node.js 24, npm package | **Checked**: built with `npm pack`, installed from the file and used with `npx nex`. Version 0.14.0 is published on npm through `nexora-lang` |
+| Linux, Node.js, npm package | **Checked**: built with `npm pack`, installed from the file and used with `npx nex` on the previous published release |
 | macOS | **Run** on `macos-latest` by the [continuous integration](testing.md#continuous-integration): test suite with Python 3.11, 3.12 and 3.13, the npm package and the server. On a local Mac, not checked |
 | Python 3.11 and 3.13 | **Run** on Linux, Windows and macOS by the continuous integration, and **checked** by hand on Linux (3.11.17 and 3.13.16): full test suite, without installing the built package |
 
@@ -77,7 +77,7 @@ nex run examples/hello.nex
 Expected result:
 
 ```text
-NEXORA 0.14.0
+NEXORA 0.14.1
 Hello from NEXORA
 ```
 
@@ -105,11 +105,11 @@ python -m pip install build
 python -m build
 ```
 
-This creates two files in `dist/`: `nexora_lang-0.14.0-py3-none-any.whl` and `nexora_lang-0.14.0.tar.gz`. The
+This creates two files in `dist/`: `nexora_lang-0.14.1-py3-none-any.whl` and `nexora_lang-0.14.1.tar.gz`. The
 first one can be installed in any environment with Python 3.11 or newer:
 
 ```bash
-python -m pip install dist/nexora_lang-0.14.0-py3-none-any.whl
+python -m pip install dist/nexora_lang-0.14.1-py3-none-any.whl
 ```
 
 The *wheel* contains only the interpreter and the `nex` command. The examples, the documentation and the
@@ -121,7 +121,7 @@ The `nex` command can be distributed in two ways. The package is called **`nexor
 because the name `nexora` already belongs to other projects on PyPI and on npm. The command is still
 `nex`.
 
-Versions through 0.14.0 are published on PyPI and npm. For development versions, build the packages
+The source tree is prepared as version 0.14.1. Until release completes, registry installs continue to resolve the previous published version. For development versions, build the packages
 locally using the instructions below and check that they install from the generated files and that the
 `nex` command works.
 
@@ -145,8 +145,8 @@ From the `npm/` directory:
 
 ```bash
 npm test                 # copies the interpreter into the package and runs the launcher tests
-npm pack                 # builds nexora-lang-0.14.0.tgz
-npm install -g ./nexora-lang-0.14.0.tgz
+npm pack                 # builds nexora-lang-0.14.1.tgz
+npm install -g ./nexora-lang-0.14.1.tgz
 nex --version
 ```
 

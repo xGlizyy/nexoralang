@@ -1,7 +1,7 @@
 # CLI reference
 
 `nex` is the command-line tool of NEXORA. This page describes version
-`nexora` 0.14.0. An automated test checks that all the commands, options and exit
+`nexora` 0.14.1. An automated test checks that all the commands, options and exit
 codes that the program accepts are documented here.
 
 `python -m nexora` is equivalent to `nex` and accepts exactly the same arguments.
@@ -9,7 +9,7 @@ codes that the program accepts are documented here.
 ## Summary
 
 ```text
-nex run <file> [--format text|json] [--allow-read PATH] [--allow-write PATH] [--allow-network ORIGIN] [--allow-process COMMAND] [-- arguments...]
+nex run <file> [--format text|json] [--timeout SECONDS] [--max-memory BYTES] [--max-source BYTES] [--max-input BYTES] [--max-output BYTES] [--max-text CHARS] [--allow-read PATH] [--allow-write PATH] [--allow-network ORIGIN] [--allow-process COMMAND] [-- arguments...]
 nex check <file> [--format text|json] [--evidence]
 nex inspect <file> [--format json]
 nex context <file> [--format text|json]
@@ -49,6 +49,43 @@ The optional MCP server has its own command, `nex-mcp`, described in [MCP server
 
 Analyzes the program and, if it has no errors, runs its `main` function.
 
+### Resource limits
+
+`nex run` accepts opt-in budgets for runtime, source-file size, standard input, printed output,
+constructed text, and process address space:
+
+```bash
+nex run program.nex --timeout 3 --max-memory 536870912 --max-source 262144 --max-input 65536 \
+  --max-output 65536 --max-text 262144
+```
+
+`--timeout` uses POSIX interval timers and is unavailable on Windows. It interrupts interpreter
+execution and ordinary blocking calls when control returns to Python; use an external supervisor
+to enforce deadlines on native commands or uninterruptible system calls. `--max-memory` uses
+`RLIMIT_AS`, includes the Python interpreter, and is enforced on Linux. macOS accepts this limit
+but does not enforce it; Windows does not provide it through Python's `resource` module.
+Output, text and source limits work across platforms. These CLI limits do not form a complete
+sandbox: they do not restrict network access or file permissions, and process cleanup for
+untrusted workloads is best handled by an OS container or job supervisor.
+
+For untrusted programs, run each invocation in a disposable OS sandbox and let the supervisor own
+the deadline and process cleanup. On Linux, a practical starting point is a container with no
+network, read-only files, a non-root user, and explicit CPU, memory and PID limits:
+
+```bash
+docker run --rm --network none --read-only --cap-drop ALL \
+  --security-opt no-new-privileges --pids-limit 32 \
+  --memory 256m --memory-swap 256m --cpus 0.5 \
+  --user 65534:65534 --tmpfs /tmp:rw,size=1m,noexec \
+  -v "$PWD:/work:ro" -w /work nexora:local run program.nex
+```
+
+Build `nexora:local` from a pinned NEXORA release or project image. Set the container runtime's
+wall-clock timeout in the surrounding job supervisor; when it expires, terminate the container
+and its process group. On Windows, use a Windows Job Object or container limits; on macOS, use a
+VM/container supervisor for memory and process cleanup. OS limits vary by platform, so verify the
+effective limits on the target host before accepting untrusted code.
+
 ```bash
 nex run examples/hello.nex
 ```
@@ -67,6 +104,12 @@ Hello from NEXORA
 |--------|--------|
 | `--format text` | Default. Errors are written as text for people |
 | `--format json` | If the program is invalid or fails, it writes a JSON document to the **standard error**. If it ends well, it writes nothing extra. The output of the program does not change |
+| `--timeout SECONDS` | Stops execution at the wall-clock deadline (POSIX only) |
+| `--max-memory BYTES` | Caps process address space with `RLIMIT_AS` (supported POSIX systems only; includes Python) |
+| `--max-source BYTES` | Refuses a source file larger than this UTF-8 byte count |
+| `--max-input BYTES` | Stops when the program reads more than this many bytes from standard input, across all `input()` calls |
+| `--max-output BYTES` | Stops after the program reaches this many printed UTF-8 bytes |
+| `--max-text CHARS` | Stops a run when it constructs a `Text` longer than this |
 | `--allow-read PATH` | Allows the program to read the files of that path. It can be repeated. A program also has to declare it with `uses read` |
 | `--allow-write PATH` | Allows the program to write the files of that path. It can be repeated. A program also has to declare it with `uses write` |
 | `--allow-network ORIGIN` | Allows HTTPS GET requests to an exact origin, such as `https://api.example.com`. It can be repeated. The program also has to declare `uses network` |
@@ -277,7 +320,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.14.0
+NEXORA 0.14.1
 ```
 
 ## `nex --help`
