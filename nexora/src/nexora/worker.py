@@ -92,6 +92,45 @@ def _apply_os_limits(limits: dict, *, debug_session: bool = False) -> list[str]:
     return applied
 
 
+def _project_analysis(code: str, filename: str, files: object = None):
+    """Analyse one source or a bounded virtual project, with per-function file ownership."""
+    if files is None:
+        analysis = analyze(Source(filename, code))
+    else:
+        if not isinstance(files, dict) or not 1 <= len(files) <= 32:
+            raise ValueError("malformed project")
+        normalized: dict[str, str] = {}
+        for path, text in files.items():
+            if not isinstance(path, str) or not isinstance(text, str):
+                raise ValueError("malformed project")
+            safe = path.replace("\\", "/")
+            parts = safe.split("/")
+            if (len(safe) > 256 or len(parts) > 8 or safe.startswith("/") or ":" in safe
+                    or any(part in {"", ".", ".."} for part in parts) or not safe.endswith(".nex")
+                    or any(len(part.removesuffix(".nex")) > 64 or not part.removesuffix(".nex").replace("_", "a").replace("-", "a").isalnum() for part in parts)):
+                raise ValueError("invalid project path")
+            normalized[safe] = text
+        entry = filename.replace("\\", "/")
+        if entry not in normalized:
+            raise ValueError("missing project entry")
+
+        def read_import(declaration, importing_file):
+            joined = posixpath.normpath(posixpath.join(posixpath.dirname(importing_file), declaration.path))
+            if joined.startswith("../") or joined == ".." or joined.startswith("/") or joined not in normalized:
+                from .diagnostics import Diagnostic
+                return Diagnostic("E0001", f"Module '{declaration.path}' is not part of this project",
+                                  declaration.path_span, hint="Add the imported .nex file to this project.")
+            return joined, joined.rsplit("/", 1)[-1][:-4], Source(joined, normalized[joined])
+
+        analysis = analyze(Source(entry, normalized[entry]), read=read_import)
+    source_files = {}
+    if analysis.project:
+        source_files = {id(function): module.source.name
+                        for module in analysis.project.modules if module.program
+                        for function in module.program.functions}
+    return analysis, source_files
+
+
 def handle(request: dict) -> dict:
     """Answers one request. Raises ValueError if the request itself is malformed."""
     action = request.get("action")
@@ -107,33 +146,11 @@ def handle(request: dict) -> dict:
     started = time.perf_counter()
     files = request.get("files")
     if files is not None:
-        if action not in {"check", "run"} or not isinstance(files, dict) or len(files) > 32:
+        if action not in {"check", "run"}:
             raise ValueError("malformed project")
-        if not all(isinstance(path, str) and isinstance(text, str) for path, text in files.items()):
-            raise ValueError("malformed project")
-        normalized = {}
-        for path, text in files.items():
-            safe = path.replace("\\", "/")
-            if (safe.startswith("/") or ":" in safe or any(part in {"", ".", ".."} for part in safe.split("/"))
-                    or not safe.endswith(".nex")):
-                raise ValueError("invalid project path")
-            normalized[safe] = text
-        entry = filename.replace("\\", "/")
-        if entry not in normalized:
-            raise ValueError("missing project entry")
-
-        def read_import(declaration, importing_file):
-            joined = posixpath.normpath(posixpath.join(posixpath.dirname(importing_file), declaration.path))
-            if joined.startswith("../") or joined == ".." or joined.startswith("/") or joined not in normalized:
-                from .diagnostics import Diagnostic
-                return Diagnostic("E0001", f"Module '{declaration.path}' is not part of this project",
-                                  declaration.path_span, hint="Add the imported .nex file to this project.")
-            from .diagnostics import Source
-            return joined, joined.rsplit("/", 1)[-1][:-4], Source(joined, normalized[joined])
-
         from .diagnostics import CONTRACT, NexoraRuntimeError
         from .interpreter import run as interpret
-        analysis = analyze(Source(entry, normalized[entry]), read=read_import)
+        analysis, source_files = _project_analysis(code, filename, files)
         reports = analysis.project.reports() if analysis.project else tuple((d, analysis.source) for d in analysis.diagnostics)
         diagnostics = [diagnostic.to_dict(source.name) for diagnostic, source in reports]
         if analysis.checked is None:
@@ -145,13 +162,14 @@ def handle(request: dict) -> dict:
         else:
             output = api._Output(limits.get("output_bytes"))
             try:
-                interpret(analysis.checked, output.write, text_limit=limits.get("text_chars"), host=LocalHost(files_allowed=False))
+                interpret(analysis.checked, output.write, text_limit=limits.get("text_chars"),
+                          host=LocalHost(files_allowed=False), source_files=source_files)
                 result = {"schema": api.RESULT_SCHEMA, "action": action, "status": api.SUCCESS,
                           "output": output.text(), "diagnostics": [], "message": None}
             except NexoraRuntimeError as error:
                 status = api.CONTRACT_VIOLATION if error.diagnostic.category == CONTRACT else api.RUNTIME_ERROR
                 result = {"schema": api.RESULT_SCHEMA, "action": action, "status": status,
-                          "output": output.text(), "diagnostics": [error.diagnostic.to_dict(entry)], "message": None}
+                          "output": output.text(), "diagnostics": [error.diagnostic.to_dict(error.file or entry)], "message": None}
             except api._OutputLimitReached:
                 result = {"schema": api.RESULT_SCHEMA, "action": action, "status": api.OUTPUT_LIMIT,
                           "output": output.text(), "diagnostics": [],
@@ -188,6 +206,7 @@ def _debug_snapshot(event: DebugEvent, output_delta: str) -> dict:
     frames = [
         {
             "function": frame.function,
+            "file": frame.file,
             "call_site": None if frame.call_site is None else {
                 "line": frame.call_site.line,
                 "column": frame.call_site.column,
@@ -208,6 +227,7 @@ def _debug_snapshot(event: DebugEvent, output_delta: str) -> dict:
         "line": event.span.line,
         "column": event.span.column,
         "function": event.function,
+        "file": event.file,
         "call_stack": frames,
         "variables": variables,
         "output": output_delta,
@@ -229,14 +249,30 @@ def _debug_session(request: dict) -> int:
     limits = request.get("limits") or {}
     if not isinstance(code, str) or not isinstance(filename, str) or not isinstance(limits, dict):
         raise ValueError("malformed debug request")
-    lines = code.count("\n") + 1
-    breakpoints = _valid_breakpoints(request.get("breakpoints", []), lines)
-    analysis = analyze(Source(filename, code))
+    files = request.get("files")
+    analysis, source_files = _project_analysis(code, filename, files)
+    line_counts = {filename: code.count("\n") + 1}
+    if isinstance(files, dict):
+        line_counts = {path.replace("\\", "/"): text.count("\n") + 1 for path, text in files.items()}
+    requested_breakpoints = request.get("breakpoints", [])
+    if isinstance(requested_breakpoints, list):
+        requested_breakpoints = {filename: requested_breakpoints}
+    if not isinstance(requested_breakpoints, dict) or len(requested_breakpoints) > 32:
+        raise ValueError("invalid breakpoints")
+    breakpoints: dict[str, set[int]] = {}
+    count = 0
+    for path, lines in requested_breakpoints.items():
+        if path not in line_counts:
+            raise ValueError("invalid breakpoints")
+        breakpoints[path] = _valid_breakpoints(lines, line_counts[path])
+        count += len(breakpoints[path])
+    if count > DEBUG_MAX_BREAKPOINTS:
+        raise ValueError("invalid breakpoints")
     if analysis.checked is None:
         _debug_line({
             "schema": DEBUG_SCHEMA,
             "state": "invalid",
-            "diagnostics": [diagnostic.to_dict(filename) for diagnostic in analysis.diagnostics],
+            "diagnostics": [diagnostic.to_dict(source.name) for diagnostic, source in analysis.project.reports()],
             "version": __version__,
         })
         return 0
@@ -261,7 +297,8 @@ def _debug_session(request: dict) -> int:
                 "version": __version__,
             })
             return True
-        if state["mode"] == "continue" and event.span.line not in breakpoints:
+        event_file = event.file or filename
+        if state["mode"] == "continue" and event.span.line not in breakpoints.get(event_file, set()):
             return False
 
         while True:
@@ -307,15 +344,17 @@ def _debug_session(request: dict) -> int:
                 })
                 return True
             if action == "set_breakpoints":
+                path = command.get("file", filename)
                 try:
-                    replacement = _valid_breakpoints(command.get("lines"), lines)
-                except ValueError:
+                    if path not in line_counts:
+                        raise ValueError("invalid file")
+                    replacement = _valid_breakpoints(command.get("lines"), line_counts[path])
+                except (ValueError, TypeError):
                     _debug_line(
                         {"schema": DEBUG_SCHEMA, "state": "command_error", "message": "Invalid breakpoint lines."}
                     )
                     continue
-                breakpoints.clear()
-                breakpoints.update(replacement)
+                breakpoints[path] = replacement
                 continue
             _debug_line({"schema": DEBUG_SCHEMA, "state": "command_error", "message": "Unknown debug command."})
 
@@ -326,13 +365,14 @@ def _debug_session(request: dict) -> int:
             text_limit=limits.get("text_chars"),
             host=NoHost(),
             debug_observer=observe,
+            source_files=source_files,
         )
     except NexoraRuntimeError as error:
         status = "contract_violation" if error.diagnostic.category == CONTRACT else "runtime_error"
         _debug_line({
             "schema": DEBUG_SCHEMA,
             "state": status,
-            "diagnostics": [error.diagnostic.to_dict(filename)],
+            "diagnostics": [error.diagnostic.to_dict(error.file or filename)],
             "output": output_delta(),
             "version": __version__,
         })

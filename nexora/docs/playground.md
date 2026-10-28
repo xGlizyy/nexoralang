@@ -97,9 +97,9 @@ it shows «Disabled» and leaves Run and Check disabled.
 The Debug button starts the checked program in a dedicated worker and pauses immediately before its
 first statement. Step executes the current statement and pauses before the next one; Continue runs
 until a breakpoint or completion; Stop ends the session. The Debugger panel shows the active source
-line, function stack, visible variables and output produced so far. Values are formatted with size
-limits. Click a line number to toggle a breakpoint; the worker caps a session at 10,000 statements
-and 256 breakpoints.
+file and line, function stack with source files, visible variables and output produced so far. Values
+are formatted with size limits. Click a line number in any project file to toggle a breakpoint; the
+worker caps a session at 10,000 statements and 256 breakpoints across the project.
 
 The worker stays alive while paused and reads control commands from its standard input. NEXORA
 programs run with `NoHost`, so a program cannot consume debugger commands as user input or access
@@ -123,7 +123,7 @@ for a new self-hosted deployment, validate container isolation before enabling t
 |-------|-------------|-------|
 | `code` | Yes | Text. At most 64 KiB in UTF-8 |
 | `filename` | No | **Virtual** relative `.nex` path: it only appears in diagnostics and selects the entry file when `files` is supplied. It is never resolved against the worker filesystem |
-| `files` | No | A map of relative `.nex` paths to source text, with at most 32 files and 64 KiB total. When present, `filename` selects the entry file and must be a key in the map. Imports can read only files in this map; paths outside it are rejected. The debugger currently accepts single-file requests only |
+| `files` | No | A map of relative `.nex` paths to source text, with at most 32 files and 64 KiB total. When present, `filename` selects the entry file and must be a key in the map. Imports can read only files in this map; paths outside it are rejected. Debug breakpoints are grouped by file and pauses identify their source file |
 
 For example, a project can send `filename: "src/main.nex"` and `files` containing both
 `src/main.nex` and `src/models.nex`. Diagnostics keep the virtual path of the file where each
@@ -682,8 +682,8 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     server_tokens off;
 
-    # The largest body the server accepts is that of the playground (about 385 KiB).
-    client_max_body_size 512k;
+    # The largest project request can contain two JSON copies of a 64 KiB source (escaped).
+    client_max_body_size 1m;
 
     location /api/ {
         limit_req zone=nexora_api burst=20 nodelay;
