@@ -75,7 +75,7 @@ fn main() {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.14.0",
+  "nexora_version": "0.14.1",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -122,7 +122,7 @@ fn main() {
 ```json
 {
   "schema": "nexora.inspect/3",
-  "nexora_version": "0.14.0",
+  "nexora_version": "0.14.1",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],

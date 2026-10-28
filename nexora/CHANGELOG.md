@@ -17,6 +17,13 @@ Each version groups its changes into these sections, when they contain content:
 | Documentation | Relevant documentation changes |
 | Limitations | Known restrictions worth being aware of |
 
+## 0.14.1 — Configurable local execution limits
+
+### Added
+
+- `nex run` accepts `--timeout`, `--max-memory`, `--max-source`, `--max-input`, `--max-output` and `--max-text` budgets. A limit stops execution with a controlled diagnostic. POSIX timeout cancellation also cleans up a running `Process.run` child.
+- The CLI reference documents platform support and the recommended OS supervisor for untrusted programs.
+
 ## 0.14.0 — Editor integrations and LSP project support
 
 This version is tagged (`v0.14.0`) and published on PyPI and npm. The VS Code extension is attached
