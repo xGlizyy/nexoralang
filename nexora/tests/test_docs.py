@@ -188,6 +188,43 @@ def test_the_documentation_has_checked_examples():
     assert {block.marker for block in CHECKED} == MARKERS
 
 
+def test_every_normative_language_section_has_an_executable_example():
+    """Stable subject areas in the spec always have a checked example anchoring their rules."""
+    spec = ROOT / "docs" / "language-spec.md"
+    lines = spec.read_text(encoding="utf-8").splitlines()
+    sections = []
+    for block in blocks_of(spec):
+        if not block.marker:
+            continue
+        section = None
+        for line in lines[:block.start]:
+            match = re.match(r"^## (\d+)\.", line)
+            if match:
+                section = int(match.group(1))
+        if section is not None:
+            sections.append(section)
+    required = set(range(2, 13))
+    assert required <= set(sections), f"sections without an executable example: {sorted(required - set(sections))}"
+
+
+def test_language_spec_is_normative_and_the_design_document_is_a_draft():
+    spec = (ROOT / "docs" / "language-spec.md").read_text(encoding="utf-8")
+    draft = (ROOT.parent / "docs" / "fase-1-diseno.md").read_text(encoding="utf-8")
+    assert "normative for the NEXORA 0.13 language" in spec
+    assert "This specification takes precedence over the draft" in spec
+    assert "Status: historical design draft" in draft
+    assert "[language specification](../nexora/docs/language-spec.md)" in draft
+
+
+def test_ebnf_capability_declarations_cover_every_host_operation():
+    spec = (ROOT / "docs" / "language-spec.md").read_text(encoding="utf-8")
+    uses = re.search(r"^uses_decl\s*=\s*(.+)$", spec, flags=re.M)
+    assert uses is not None
+    assert set(re.findall(r'"(read|write|network|process)"', uses.group(1))) == {
+        "read", "write", "network", "process",
+    }
+
+
 def test_every_marker_is_known():
     for block in CHECKED:
         assert block.marker in MARKERS, f"{block.label}: unknown marker nex:{block.marker}"

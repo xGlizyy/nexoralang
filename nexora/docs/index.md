@@ -25,7 +25,7 @@ these pages is run by the automated tests and compared against the real output o
 
 | Document | Contents |
 |----------|----------|
-| [Language specification](language-spec.md) | The formal reference: lexical grammar, EBNF grammar, types, scopes, semantics and errors |
+| [Language specification](language-spec.md) | The normative reference for language version 0.13: lexical grammar, EBNF grammar, types, scopes, semantics, permissions, Unicode and errors; executable examples |
 | [CLI reference](cli-reference.md) | Commands, options, output formats and exit codes of `nex` |
 | [Diagnostics](diagnostics.md) | How to read an error, categories and every code |
 | [Automated tools and AI](ai-tooling.md) | What NEXORA offers a tool or an agent, the Python API and what does not exist |
@@ -54,7 +54,7 @@ these pages is run by the automated tests and compared against the real output o
 | Status | What it means in this documentation |
 |--------|-------------------------------------|
 | No mark | Implemented and covered by tests |
-| **Experimental** | Implemented and tested, but it may change incompatibly (the Python API, the MCP server and the playground; no part of the language) |
+| **Experimental** | Only a feature explicitly marked Experimental has provisional rules. No feature in the language specification is currently marked Experimental |
 | **Planned** | Does not exist. It only appears in [Limitations](limitations.md) and in the [roadmap](roadmap.md) |
 
 The documentation is in English, like the words of the language and the error messages.

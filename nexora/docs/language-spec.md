@@ -2,20 +2,53 @@
 
 - **Specification version:** 0.13
 - **Reference implementation:** `nexora` 0.14.1 (this repository, directory `nexora/`)
-- **Status:** describes exactly what the interpreter of 0.13 does. The syntax of 0.12 comes from
+- **Status:** normative for the NEXORA 0.13 language. The reference implementation releases
+  0.14.0 and 0.14.1 do not change its grammar or core language semantics; 0.14.1 adds opt-in
+  resource limits to the local CLI, specified in the [CLI reference](cli-reference.md).
+  The syntax of 0.12 comes from
   [decision 0019](decisions/0019-identidad-propia-del-lenguaje.md); a program written for 0.11 is
   rewritten with `nex migrate` ([CLI reference](cli-reference.md#nex-migrate)).
 
-This document is the reference for the language: it defines the syntax and the meaning of every
-construct. If the interpreter and this document disagree, that is a bug to be fixed.
+This document is the normative reference for the language version it names. If the reference
+interpreter and this document disagree, that is a defect in the implementation or in this document;
+the mismatch must be resolved explicitly. An implementation detail must not silently override a rule
+here.
+
+## Status and conformance
+
+The specification version identifies language rules, not the version number of the Python or npm
+package. A package release can add tools or CLI options without changing the language version. A
+change to syntax or core semantics requires a new specification version and an update to the rules
+and executable examples affected by it. The project is still before 1.0, so a later specification
+version may make incompatible changes; this version remains the reference for programs that target
+0.13.
+
+The words **must**, **must not** and **may** state requirements, prohibitions and permitted choices
+for a conforming implementation. An unmarked rule in sections 2–12 describes guaranteed language
+behavior for this specification version. A rule explicitly labelled as a reference-implementation
+limit describes `nexora` 0.14.1 and is not a portable language guarantee. Section 13 and section 14
+describe absent features and planned work; planned work is not part of this version.
+
+A conforming implementation must follow the grammar, static rules, value semantics, evaluation
+order, host-capability rules and runtime outcomes specified here. It must reject programs that
+violate a static rule before executing their statements, and preserve the specified diagnostic codes,
+categories, source positions and exit behavior. It may use any internal representation, algorithm,
+runtime or implementation language. The Python modules, AST layout, parser strategy, data structures,
+performance and memory use are not language guarantees unless a rule here explicitly makes them so.
+
+Examples marked `nex:run`, `nex:fails`, `nex:valid` or another documented `nex:` marker are
+executable conformance examples: `tests/test_docs.py` runs them with the reference implementation
+and checks their expected result. Every complete NEXORA program in the Markdown documentation must
+be marked and checked. The broader feature-to-test index is in [testing](testing.md); tests check
+edge cases that do not fit in a concise normative example.
 
 How to read the status of each part:
 
 | Mark | Meaning |
 |------|---------|
 | *(no mark)* | **Implemented** and covered by tests |
-| **Experimental** | Implemented and tested, but its syntax or its rules may change. In version 0.8 no part of the language is |
-| **Planned** | Does not exist. Gathered in section 14; not part of the language |
+| **Experimental** | Only a feature explicitly labelled Experimental has provisional rules. No feature in this specification is currently labelled Experimental |
+| **Planned** | Does not exist in this version. Gathered in section 14; not part of the language |
 
 The changes since version 0.1 are in [`CHANGELOG.md`](../CHANGELOG.md) and their reasons
 in [`docs/decisions/`](decisions/README.md).
@@ -39,8 +72,10 @@ decisions:
 5. **Tools receive data, not text.** The program and its errors can be obtained as JSON
    with a versioned schema.
 
-The rules of the language are explicit and deterministic. None depends on an AI model, on the
-internet or on an external service: the same program always gives the same result.
+The language's evaluation rules are explicit and deterministic for the same program, arguments,
+standard input and results from permitted host operations. `input()`, HTTPS requests and external
+processes can observe different host state and therefore can produce different results; section 8.3
+defines what each operation may access and how it is granted. No language rule depends on an AI model.
 
 This specification does not claim that NEXORA is faster, safer or better for AI than other
 languages. There is no measurement that supports it.
@@ -135,6 +170,26 @@ other `.` is a symbol, which is only valid in a qualified call such as `Text.len
 Any character that is not part of what this section describes is an error (`E1001`); the
 analyzer never ignores an unknown character.
 
+This program demonstrates line comments, UTF-8 text and the defined escapes. The braces are literal
+because `\{` escapes them; `\n` inserts a line break in the printed value:
+
+<!-- nex:run -->
+```nex
+fn main() {
+    // Source text is UTF-8; escapes have the meanings specified above.
+    print("año")
+    print("line one\nline two")
+    print("\{not interpolation}")
+}
+```
+
+```text
+año
+line one
+line two
+{not interpolation}
+```
+
 ## 3. Grammar
 
 In EBNF notation. `NEWLINE` is one or more consecutive line endings.
@@ -147,7 +202,7 @@ type_decl  = [ "pub" ] "type" NAME "=" type "where" expression [ explanation ] e
 record_decl = [ "pub" ] "type" NAME "=" "{" record_fields "}" ;
 record_fields = record_field { "," record_field } ;
 record_field = NAME ":" type ;
-uses_decl  = "uses" ( "read" | "write" ) TEXT ;
+uses_decl  = "uses" ( "read" | "write" | "network" | "process" ) TEXT ;
 function   = [ "pub" ] "fn" NAME "(" [ params ] ")" [ "gives" type ] body ;
 body       = block                                          (* no header clauses *)
            | NEWLINE header_clause { header_clause } block ;
@@ -252,14 +307,37 @@ Notes:
   (`E2024`). The `.` is attached to both names, as in a qualified call.
 - A record does not change: `p.x = 1` is the error `E2025`. The form exists so that it can be said, not so that
   it can be done.
-- Size limits: parentheses, unary operators, blocks, `else if` chains and
-  types can be nested up to 64 levels, and an expression tree can have up to 256 levels (for
-  example, a sum of 256 terms). Exceeding them is the error `E1105`.
+- **Reference-implementation parser limit:** `nexora` 0.14.1 accepts at most 64 nested parentheses,
+  unary operators, blocks, `else if` branches or type constructors, and at most 256 levels in an
+  expression tree. It reports `E1105` when a limit is exceeded. These thresholds protect this
+  parser; another conforming implementation may use different thresholds.
 - A type is written `NAME`, `MODULE "." NAME`, or either of them with arguments in square
   brackets. In this version only `List` accepts type arguments, and exactly one; a type from
   another module accepts none, because it cannot be `List` (`E2012`). `List` without an argument is not a
   type (`E2012`); `List[]`, `List[Int, Text]`, `List[Void]`, `Option[...]`, `Result[...]`, `Foo[...]`
   and `Int[...]` are syntax errors (`E1101`). Nesting counts towards the 64-level limit.
+
+This complete program exercises the grammar for refined and record types, a public function,
+construction, field access, a call, a declaration and a statement:
+
+<!-- nex:run -->
+```nex
+type Positive = Int where value > 0, "A positive value is greater than zero"
+type Point = { x: Positive, y: Positive }
+
+pub fn square(value: Positive) gives Positive {
+    return Positive(value * value)
+}
+
+fn main() {
+    let point = Point(x: Positive(2), y: Positive(3))
+    print(square(point.x))
+}
+```
+
+```text
+4
+```
 
 ## 4. Data types
 
@@ -352,10 +430,11 @@ of the program. To keep it, a value can only come to have a refined type in two 
 | The **explicit check** `Percent(x)` | `let p = Percent(total / 2)` | When running, every time it is evaluated | `E4003`, the program stops there |
 
 A constant is a literal, optionally with `-` or `not` in front of it or in parentheses. Checking a
-constant costs as much as the conditions of the whole chain of its type; if the total for a
-program exceeds 100,000 evaluated condition nodes, the program is rejected with `E2019` instead
-of being left half checked. It is a limit of the implementation, like those of section 3, and an
-ordinary program stays far below it. Any
+constant costs as much as the conditions of the whole chain of its type. **Reference-implementation
+work limit:** if `nexora` 0.14.1 evaluates more than 100,000 condition nodes while checking constants,
+it rejects the program with `E2019` instead of leaving it half checked. Another conforming
+implementation may choose a different resource threshold. An ordinary program stays far below it.
+Any
 other value of the base (a variable, an operation, the result of a call) is not accepted where
 the refined type is expected (`E2011`): it has to be checked with `Percent(...)`. That way, every point where
 the program can stop because of a rule is written in the code.
@@ -818,6 +897,24 @@ Any combination of types that does not appear in the table is the error `E2011`.
 - **Overflow:** an `Int` result out of range is `E3002`; a `Float` result that does not
   fit is `E3003`.
 
+This example fixes precedence, integer division and short-circuit behavior. The division by zero is
+in the right operand of `and`, so it is not evaluated:
+
+<!-- nex:run -->
+```nex
+fn main() {
+    print(2 + 3 * 4)
+    print(false and (1 / 0 == 0))
+    print(-7 / 2)
+}
+```
+
+```text
+14
+false
+-3
+```
+
 ### 6.3 Conditions
 
 A condition (that of an `if` or that of a contract) has to be of type `Bool`. A number or a
@@ -948,11 +1045,10 @@ modify anything of its caller.
 
 A function can call itself, and two functions can call each other.
 
-The number of nested calls is limited to 1000 (counting `main`). Exceeding it is the runtime
-error `E3004`; the usual case is a recursion that never reaches its base case. With
-very deeply nested expressions the effective limit can be lower; the error is the same.
-To repeat something many times, use a loop (section 9.5): its iterations are not calls and do not
-count towards this limit.
+The reference implementation `nexora` 0.14.1 limits nested calls to 1000, counting `main`;
+exceeding that limit produces `E3004`. Very deeply nested expressions can lower its effective
+threshold. This is an implementation limit, not a portable language guarantee (section 10.3).
+To repeat something many times, use a loop (section 9.5): its iterations are not calls.
 
 ### 7.6 Modules and imports
 
@@ -1251,6 +1347,23 @@ The effective capability is the **intersection** of three things:
 All three have to be there. Declaring does not grant; granting does not enable an undeclared target;
 and a restricted environment has the last word. A missing declaration is `E2026`; a missing user
 grant or a host that denies the operation is `E3008`.
+
+This program is statically valid because its declarations cover the literal origin and executable.
+Running it also requires `--allow-network https://api.example.com` and `--allow-process python`;
+the example is checked, not run, so it makes no external request or process:
+
+<!-- nex:valid -->
+```nex
+uses network "https://api.example.com"
+uses process "python"
+
+fn main() {
+    let page = Net.get("https://api.example.com/status")
+    let version = Process.run("python", ["--version"])
+    print(page)
+    print(version)
+}
+```
 
 `nex check` reports a missing declaration when a literal path, URL or executable is not covered: it
 is `E2026`. This is a help, not the security. If the value is computed, the analysis cannot know it
@@ -1556,8 +1669,8 @@ Rules:
 - Every iteration opens a new scope: what is declared in the body exists only during that iteration. What
   has to survive between iterations is declared with `var` before the loop.
 - A `return` inside the body ends the function.
-- Iterations are not calls: the loop does not add a call and does not use up the limit of 1000, although
-  the calls inside the body do count.
+- Iterations are not calls: the loop does not add a call. In the reference implementation, loop
+  iterations do not use up its 1,000-call limit; calls inside the body do count.
 - There is no `break` or `continue` (they remain reserved).
 
 Every time a loop runs:
@@ -1569,9 +1682,10 @@ Every time a loop runs:
 4. The body runs and the loop goes back to step 1.
 
 So **every loop ends, or stops with a diagnostic that says why it would not**: an integer measure
-that does not go below 0 cannot decrease forever. The language specifies no execution-time
-guarantee; `nex run` can optionally stop execution with `--timeout` on POSIX platforms that support
-interval timers. The diagnostic says in which iteration it happened and with which values:
+that does not go below 0 cannot decrease forever. The language makes no wall-clock execution-time
+guarantee. The reference CLI can optionally stop `nex run` with `--timeout` on POSIX platforms that
+support interval timers; this is a tool/platform facility, not portable language semantics. The
+diagnostic says in which iteration it happened and with which values:
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -1670,11 +1784,12 @@ Rules:
   always returns, even if all its iterations contain a `return`: if the loop is the last
   statement, the function needs a `return` after it.
 - There is no `break` or `continue`: they remain reserved (`E1103`).
-- Iterations are not calls: the loop does not add a call and does not use up the limit of 1000, although
-  the calls inside the body do count.
+- Iterations are not calls: the loop does not add a call. In the reference implementation, loop
+  iterations do not use up its 1,000-call limit; calls inside the body do count.
 
 **What it does not guarantee.** That the body ends soon: a huge list takes as long as it takes. The
-playground imposes a maximum time; `nex run` does not. That the invariants are the right ones: they are
+Playground imposes a maximum time; `nex run` has no default timeout, though the reference CLI offers
+an opt-in `--timeout` on supported POSIX platforms. That the invariants are the right ones: they are
 checked on the iterations that run, they are not proven.
 
 ## 10. Errors: before running and while running
@@ -1731,7 +1846,7 @@ static analysis claims nothing about them:
 | Division by zero | `E3001` |
 | `Int` result out of range | `E3002` |
 | `Float` result out of range | `E3003` |
-| More than 1000 nested calls (endless recursion) | `E3004` |
+| Call-depth limit exceeded (the reference implementation's threshold is 1,000 calls) | `E3004` |
 | `to_int` of a value that does not fit in an `Int` | `E3005` |
 | A `Text` longer than the limit of the environment, if it sets one | `E3006` |
 | The program runs out of available memory | `E3007` |
@@ -1743,6 +1858,35 @@ static analysis claims nothing about them:
 
 The analysis does not decide whether a program ends. When it runs, an endless recursion stops with
 `E3004` and an endless loop, with `E4006`.
+
+The 1,000-call threshold is a reference-implementation limit of `nexora` 0.14.1, not a portable
+language guarantee. `E3004` identifies call-depth exhaustion in that implementation; another
+conforming implementation may choose a different threshold. More generally, the exact Python
+runtime, AST representation, parser/checker algorithms, performance and resource use are not
+specified language behavior.
+
+This example passes static analysis and stops only when the run-time division-by-zero rule is
+reached. Output written before a run-time error is retained:
+
+<!-- nex:fails exit=3 -->
+```nex
+fn main() {
+    print("before")
+    print(1 / 0)
+    print("after")
+}
+```
+
+```text
+before
+runtime error[E3001]: Division by zero
+ --> program.nex:3:15
+  |
+3 |     print(1 / 0)
+  |               ^ The right-hand side of this division is zero
+
+error: program.nex: the program stopped because of a runtime error
+```
 
 These are the **only** errors that running a program accepted by
 `nex check` can produce. When one happens, the program stops at that point: the output already written
@@ -1867,7 +2011,7 @@ do.
 | `E3001` | Division by zero | `runtime` | Division by zero |
 | `E3002` | Integer overflow | `runtime` | An `Int` result out of the 64-bit range |
 | `E3003` | Float result out of range | `runtime` | A `Float` result that is too large |
-| `E3004` | Too many nested calls | `runtime` | More than 1000 nested calls |
+| `E3004` | Too many nested calls | `runtime` | The reference implementation reports this after more than 1,000 nested calls; this threshold is not a portable language guarantee |
 | `E3005` | Conversion out of range | `runtime` | `to_int` of a `Float` that does not fit in an `Int` |
 | `E3006` | Text too long | `runtime` | A `Text` exceeds the limit set by the environment. `nex run` sets one with `--max-text`; the playground sets its own |
 | `E3007` | Out of memory | `runtime` | The program runs out of memory while it runs. No position; a Linux `--max-memory` budget can cause this diagnostic ([decision 0009](decisions/0009-memoria-agotada.md)) |
@@ -1878,7 +2022,6 @@ do.
 | `E3012` | Result is an error | `runtime` | `Result.value` is called with an `Err`: the variant does not carry the value (section 8.4) |
 | `E3013` | Result is not an error | `runtime` | `Result.error` is called with an `Ok`: the variant does not carry the error (section 8.4) |
 | `E3014` | External operation failed | `runtime` | An HTTPS request or an external process failed, exceeded its limit or produced invalid text (section 8.3) |
-| `E3015` | Resource limit exceeded | `runtime` | A configured `nex run` source, input, output or wall-clock budget was exceeded |
 | `E3015` | Resource limit exceeded | `runtime` | A configured `nex run` source, input, output or wall-clock budget was exceeded |
 | `E4001` | Precondition violated | `contract` | A `needs` condition is false in a call |
 | `E4002` | Postcondition violated | `contract` | A `promises` condition is false when a function ends |

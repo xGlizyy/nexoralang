@@ -62,7 +62,7 @@ Discipline is not trusted: **the tests fail if they get out of sync**.
 
 | If you change… | You have to update… | Watched by |
 |----------------|---------------------|------------|
-| The behaviour of the language | `docs/language-spec.md` and the corresponding guide | `tests/test_docs.py` runs every program of the documentation and compares its output |
+| The behaviour of the language | `docs/language-spec.md` and the corresponding guide, with an executable `nex:` example for each normative subject area | `tests/test_docs.py` runs every complete program in the documentation and compares its output |
 | The output of an example | The files of `tests/golden/examples/` | `tests/test_examples.py` |
 | An error code | `_REGISTRY` in `diagnostics.py`, and the tables of `docs/language-spec.md` and `docs/diagnostics.md` | `tests/test_diagnostics.py`, `tests/test_docs.py` |
 | A node of the syntax tree | `docs/inspect-schema.md` and the list in `tests/test_inspect.py` | `tests/test_inspect.py` |
@@ -139,8 +139,9 @@ its real behaviour. Do not document as existing something that is only planned.
 
 ## Modifying the specification
 
-- `docs/language-spec.md` describes **what the interpreter does today**. What is planned goes in its section
-  14 and in `docs/roadmap.md`.
+- `docs/language-spec.md` is the normative language reference, independent of internal implementation
+  choices. What is planned goes in its section 14 and in `docs/roadmap.md`; reference-interpreter
+  limits must be labelled as such.
 - A change of the specification without a change of code is only valid if it corrects a text that did not
   describe the real behaviour well.
 - The EBNF grammar has to correspond to the parser. If you add a rule to the grammar, add a

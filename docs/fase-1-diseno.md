@@ -1,6 +1,9 @@
 # NEXORA — Phase 1: Language design (v0.1)
 
-Status: design draft. There is no compiler yet; nothing that appears here has been run.
+Status: historical design draft. It predates the reference interpreter; examples and rules here are
+proposals, not descriptions of the implemented language. For current, normative rules, read the
+[language specification](../nexora/docs/language-spec.md). Where the two differ, the specification
+is authoritative.
 
 ## 1. Goal and principles
 

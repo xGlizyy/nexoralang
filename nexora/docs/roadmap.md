@@ -58,7 +58,8 @@ that decision or an approved reference application requires them.
 | Partial tree, symbols and summary when the program has syntax errors | `tests/test_tooling.py`, including the program cut at every character |
 | Reference tasks for the analysis tools | `tests/test_tooling_tasks.py` |
 | Runnable examples with recorded output | `tests/test_examples.py` |
-| **Public web Playground (NEXORA 0.14.0)** | Live at [nexoralang.org/playground](https://nexoralang.org/playground); supports Check, Run, multi-file projects, entry-file selection and statement debugging with breakpoints. Staging and production passed the release verifier; interpreter debugger coverage is in `tests/test_worker.py` |
+| **Normative language specification, version 0.13**: syntax, semantics and conformance scope; executable examples cover every normative section; the initial design document is labelled and treated as a draft | `tests/test_docs.py` |
+| **Public web Playground (NEXORA 0.14.1)** | Live at [nexoralang.org/playground](https://nexoralang.org/playground); supports Check, Run, multi-file projects, entry-file selection and statement debugging with breakpoints. Staging and production passed the release verifier; interpreter debugger coverage is in `tests/test_worker.py` |
 | Documentation in sync with the implementation | `tests/test_docs.py` |
 | Resistance to wrong, huge or truncated inputs | `tests/test_robustness.py` |
 | Package installable locally | Checked by hand on Windows; see [testing](testing.md#packaging) |
@@ -138,9 +139,9 @@ Ideas from the original design whose value or form is not decided:
 | Phase | Goal | Result |
 |-------|------|--------|
 | 1 | Core: lexer, parser, interpreter, CLI, diagnostics | Completed (version 0.1.0) |
-| 2 | Type system, functions, contracts, JSON outputs | Completed (version 0.2.0); contracts remain experimental |
+| 2 | Type system, functions, contracts, JSON outputs | Completed (version 0.2.0); the contract rules became stable in 0.3.0, and their header syntax was revised in 0.12.0 |
 | 3 | Documentation, tests and quality | Implemented; CI runs the Python suite on Python 3.11, 3.12 and 3.13 across Linux, Windows and macOS. Native Linux/macOS smoke checks remain |
-| 4 | Playground: web editor that runs with the real interpreter | Live in production at NEXORA 0.14.0; multi-file projects and statement debugger are available. Docker isolation passed the staging and production release verifier |
+| 4 | Playground: web editor that runs with the real interpreter | Live in production at NEXORA 0.14.1; multi-file projects and statement debugger are available. Docker isolation passed the staging and production release verifier |
 | 5 | Tools for agents: JSON protocol, `nex context`, `nex symbols`, Python API, MCP server | Implemented and tested locally, also the language server of the editor; no AI model has been evaluated |
 | 6 | Verifiable requirements: stable contracts, explanation of the rules and refined types | Completed (version 0.3.0). Examples (step 3) arrived in 0.4.0; steps 4 and 6 of the [main line](#main-line-verifiable-requirements) remain |
 | 7 | Repetition without recursion: `var` and loops that declare why they end and what they keep true | Completed (version 0.5.0) |
