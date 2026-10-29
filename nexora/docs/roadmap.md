@@ -45,6 +45,7 @@ that decision or an approved reference application requires them.
 | **Refined types** (`type ... where ...`): constants checked without running, `Type(x)` when running, chains of types | `tests/test_refined_types.py` |
 | **Examples in functions** (`example`), evaluated with `nex test` | `tests/test_example_clauses.py`, `tests/test_nex_test.py` |
 | Running out of memory while running as an error of the program (`E3007`) | `tests/test_out_of_memory.py` |
+| Configurable resource limits for local `nex run`: time, memory, source files (including imports), standard input, printed output and every Text value; limit diagnostics work in text and JSON, and POSIX timeouts clean up the `Process.run` process group | `tests/test_cli.py`, `tests/test_diagnostics.py`, `tests/test_docs.py` |
 | No loop keeps repeating forever: it stops with `E4006`, also in `nex test` | `tests/test_loops.py` |
 | Static analysis separate from execution | `tests/test_checker.py`, `tests/test_security.py` |
 | Interpreter | `tests/test_interpreter.py` |

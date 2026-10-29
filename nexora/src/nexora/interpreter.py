@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
 from . import ast_nodes as ast
-from .capabilities import Host, NoHost, NotAllowed
+from .capabilities import Host, NoHost, NotAllowed, TextLimitExceeded
 from .checker import BUILTINS, CheckedProgram, refinement_notes
 from .debugging import DebugEvent, DebugFrame, DebugObserver, DebugStop
 from .diagnostics import Diagnostic, NexoraRuntimeError, Span
@@ -537,7 +537,9 @@ class Interpreter:
 
     def _evaluate(self, node: ast.Expr, environment: Environment) -> Value | None:
         """Evaluates an expression. Only a call to a Void function yields None."""
-        if isinstance(node, (ast.IntLiteral, ast.FloatLiteral, ast.TextLiteral, ast.BoolLiteral)):
+        if isinstance(node, ast.TextLiteral):
+            return self._bounded_text(node.value, node.span)
+        if isinstance(node, (ast.IntLiteral, ast.FloatLiteral, ast.BoolLiteral)):
             return node.value
         if isinstance(node, ast.ListLiteral):
             return tuple(self._evaluate(element, environment) for element in node.elements)
@@ -637,14 +639,18 @@ class Interpreter:
             return result
         if isinstance(result, int):
             return self._int(result, node.span)
-        if self._text_limit is not None and len(result) > self._text_limit:
+        return self._bounded_text(result, node.span)
+
+    def _bounded_text(self, value: str, span: Span) -> str:
+        """Checks every Text value at the point it enters or is built by the interpreter."""
+        if self._text_limit is not None and len(value) > self._text_limit:
             raise self._fail(
                 "E3006",
-                f"The result of this operation is longer than {self._text_limit} characters",
-                node.span,
-                hint="This environment limits the length of a Text value.",
+                f"This Text is longer than the environment limit of {self._text_limit} characters",
+                span,
+                hint="Use a smaller Text value or increase the environment's text limit.",
             )
-        return result
+        return value
 
     def _int(self, value: int, span: Span) -> int:
         if not INT_MIN <= value <= INT_MAX:
@@ -696,7 +702,7 @@ class Interpreter:
 
         # Built-in functions.
         if node.callee == "args":
-            return tuple(self._host.arguments())
+            return tuple(self._bounded_text(value, node.span) for value in self._host.arguments())
         if node.callee == "input":
             return self._read_line(node)
         value = arguments[0]
@@ -704,7 +710,7 @@ class Interpreter:
             self._write(format_value(value) + "\n")
             return None
         if node.callee == "read_file":
-            return self._read_file(node, value)
+            return self._bounded_text(self._read_file(node, value), node.span)
         if node.callee == "write_file":
             self._write_file(node, value, arguments[1])
             return None
@@ -713,7 +719,7 @@ class Interpreter:
         if node.callee == "Process.run":
             return self._run_process(node, value, arguments[1])
         if node.callee == "to_text":
-            return format_value(value)
+            return self._bounded_text(format_value(value), node.span)
         if node.callee == "to_float":
             return float(value)
         if node.callee == "to_int":
@@ -772,13 +778,20 @@ class Interpreter:
     def _read_line(self, node: ast.Call) -> str:
         """`input()`: one line of the standard input, without its terminator."""
         try:
-            return self._host.read_line()
+            return self._bounded_text(self._host.read_line(), node.span)
         except EOFError:
             raise self._fail(
                 "E3009",
                 "There is no more input to read",
                 node.span,
                 hint="The standard input ended. Check it before reading again.",
+            ) from None
+        except TextLimitExceeded as error:
+            raise self._fail(
+                "E3006",
+                f"This Text is longer than the environment limit of {error.limit} characters",
+                node.span,
+                hint="Use a smaller Text value or increase the environment's text limit.",
             ) from None
 
     def _read_file(self, node: ast.Call, path: str) -> str:
@@ -799,6 +812,13 @@ class Interpreter:
                 f"The file '{path}' is not UTF-8 text",
                 node.arguments[0].span,
                 hint="NEXORA reads text files: the file has to be saved as UTF-8.",
+            ) from None
+        except TextLimitExceeded as error:
+            raise self._fail(
+                "E3006",
+                f"This Text is longer than the environment limit of {error.limit} characters",
+                node.arguments[0].span,
+                hint="Use a smaller Text value or increase the environment's text limit.",
             ) from None
         except OSError as error:
             reason = error.strerror or type(error).__name__
@@ -840,13 +860,7 @@ class Interpreter:
             ) from None
         except OSError as error:
             raise self._fail("E3014", str(error), node.arguments[0].span) from None
-        if self._text_limit is not None and len(result) > self._text_limit:
-            raise self._fail(
-                "E3006", f"The network response is longer than {self._text_limit} characters",
-                node.arguments[0].span,
-                hint="This environment limits the length of a Text value.",
-            )
-        return result
+        return self._bounded_text(result, node.arguments[0].span)
 
     def _run_process(self, node: ast.Call, command: str, arguments: tuple[str, ...]) -> str:
         """`Process.run(command, arguments)`: starts one explicitly allowed executable."""
@@ -860,13 +874,7 @@ class Interpreter:
             ) from None
         except OSError as error:
             raise self._fail("E3014", str(error), node.arguments[0].span) from None
-        if self._text_limit is not None and len(result) > self._text_limit:
-            raise self._fail(
-                "E3006", f"The process output is longer than {self._text_limit} characters",
-                node.arguments[0].span,
-                hint="This environment limits the length of a Text value.",
-            )
-        return result
+        return self._bounded_text(result, node.arguments[0].span)
 
     def _check_requirements(self, node: ast.Call, arguments: list[Value]) -> None:
         """Checks the `needs` of a function of a type, in the order they are written, and stops

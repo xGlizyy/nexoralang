@@ -19,6 +19,13 @@ PROCESS = "process"
 CAPABILITIES = (READ, WRITE, NETWORK, PROCESS)
 
 
+class TextLimitExceeded(Exception):
+    """A host operation tried to return a Text longer than the run's configured budget."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+
+
 @dataclass(frozen=True)
 class Capabilities:
     """The scopes a program declared, by capability.

@@ -21,8 +21,14 @@ Each version groups its changes into these sections, when they contain content:
 
 ### Added
 
-- `nex run` accepts `--timeout`, `--max-memory`, `--max-source`, `--max-input`, `--max-output` and `--max-text` budgets. A limit stops execution with a controlled diagnostic. POSIX timeout cancellation also cleans up a running `Process.run` child.
-- The CLI reference documents platform support and the recommended OS supervisor for untrusted programs.
+- `nex run` accepts `--timeout`, `--max-memory`, `--max-source`, `--max-input`, `--max-output` and
+  `--max-text` budgets. Source limits cover the entry file and imports; the text budget covers
+  values from literals, arguments, input, files, external results and language operations. Limit
+  failures use runtime diagnostics in text and JSON.
+- `Process.run` cleans up remaining descendants in its POSIX process group when the command returns
+  or is interrupted. `--timeout` is supported on POSIX interval-timer systems and `--max-memory` on
+  Linux; the CLI reference documents the recommended OS supervisor for full process-tree and
+  resource isolation.
 
 ## 0.14.0 — Editor integrations and LSP project support
 

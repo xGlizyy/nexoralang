@@ -21,7 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
-from .capabilities import NETWORK, READ, WRITE, Capabilities, Grants, NotAllowed, is_inside
+from .capabilities import NETWORK, READ, WRITE, Capabilities, Grants, NotAllowed, TextLimitExceeded, is_inside
 
 _NETWORK_TIMEOUT_SECONDS = 5
 _NETWORK_MAX_BYTES = 1_048_576
@@ -57,7 +57,7 @@ class LocalHost:
     def __init__(self, *, arguments: tuple[str, ...] = (),
                  read_line: Callable[[], str] | None = None,
                  grants: Grants = NO_GRANTS, declarations: Capabilities = NO_CAPABILITIES,
-                 files_allowed: bool = True, network_allowed: bool = False,
+                 files_allowed: bool = True, network_allowed: bool = False, max_text: int | None = None,
                  processes_allowed: bool = False) -> None:
         self._arguments = arguments
         self._read_line = read_line if read_line is not None else read_standard_input
@@ -65,6 +65,7 @@ class LocalHost:
         self._declarations = declarations
         self._files_allowed = files_allowed
         self._network_allowed = network_allowed
+        self._max_text = max_text
         self._processes_allowed = processes_allowed
 
     def arguments(self) -> tuple[str, ...]:
@@ -77,7 +78,19 @@ class LocalHost:
 
     def read_file(self, path: str) -> str:
         """The contents of a file the program is allowed to read."""
-        return Path(self._allowed(path, READ)).read_text(encoding="utf-8")
+        target = Path(self._allowed(path, READ))
+        if self._max_text is None:
+            return target.read_text(encoding="utf-8")
+
+        parts = []
+        characters = 0
+        with target.open("r", encoding="utf-8", newline=None) as source_file:
+            while chunk := source_file.read(min(8192, self._max_text - characters + 1)):
+                characters += len(chunk)
+                if characters > self._max_text:
+                    raise TextLimitExceeded(self._max_text)
+                parts.append(chunk)
+        return "".join(parts)
 
     def write_file(self, path: str, text: str) -> None:
         """Writes a file the program is allowed to write."""
@@ -168,10 +181,10 @@ class LocalHost:
                 _kill_process_tree(process)
                 process.wait()
         finally:
-            # A CLI deadline or Ctrl+C can interrupt wait() before its own timeout fires.
-            # Do not leave the capability's child running after its parent execution stops.
+            # `Process.run` owns this process group. Stop any descendants it left behind even
+            # when the command itself exited successfully; also reap it if the CLI interrupted wait.
+            _kill_process_tree(process)
             if process.poll() is None:
-                _kill_process_tree(process)
                 process.wait()
             for reader in readers:
                 reader.join(timeout=1)

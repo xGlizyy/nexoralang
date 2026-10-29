@@ -5,13 +5,14 @@ from __future__ import annotations
 import argparse
 import errno
 import json
+import math
 import os
 import signal
 import sys
 from pathlib import Path
 
 from . import api, migrate, migrate_files, tooling
-from .capabilities import Capabilities, Grants
+from .capabilities import Capabilities, Grants, TextLimitExceeded
 from .diagnostics import CONTRACT, ERROR, MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Source, render
 from .host import LocalHost
 from .interpreter import run
@@ -73,7 +74,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--max-input", type=int, metavar="BYTES", help="maximum bytes the program may read from standard input",
     )
     run_parser.add_argument(
-        "--max-memory", type=int, metavar="BYTES", help="maximum process address space (POSIX; includes Python)",
+        "--max-memory", type=int, metavar="BYTES", help="maximum process address space (Linux; includes Python)",
     )
     run_parser.add_argument(
         "--format",
@@ -230,9 +231,15 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _load(path: str) -> tuple[Source | None, Diagnostic | None]:
+def _load(path: str, *, max_bytes: int | None = None) -> tuple[Source | None, Diagnostic | None]:
     try:
-        data = Path(path).read_bytes()
+        if max_bytes is None:
+            data = Path(path).read_bytes()
+        else:
+            with Path(path).open("rb") as source_file:
+                data = source_file.read(max_bytes + 1)
+            if len(data) > max_bytes:
+                raise _CliLimit("source", max_bytes, path)
     except OSError as error:
         reason = error.strerror or type(error).__name__
         return None, Diagnostic("E0001", f"{reason}: {path}")
@@ -263,7 +270,7 @@ def _read_bytes(path: Path) -> bytes:
 
 
 def _read_module(declaration, path: Path, key: str, shown: str, source=Source, diagnostic=Diagnostic,
-                 read_bytes=_read_bytes):
+                 read_bytes=_read_bytes, max_bytes: int | None = None):
     """Reads the module an import names (decision 0018, 1).
 
     This is the one place where the analysis touches the file system: the stages of the
@@ -273,7 +280,15 @@ def _read_module(declaration, path: Path, key: str, shown: str, source=Source, d
     its own `read_bytes`, so that every file it reads goes through `migrate_files.Files` (8.9.2).
     """
     try:
-        data = read_bytes(path)
+        if max_bytes is None:
+            data = read_bytes(path)
+        else:
+            with path.open("rb") as source_file:
+                data = source_file.read(max_bytes + 1)
+            if len(data) > max_bytes:
+                raise _CliLimit("source", max_bytes, shown)
+    except _CliLimit:
+        raise
     except OSError as error:
         return diagnostic(
             "E0001", f"{error.strerror or type(error).__name__}: {shown}", declaration.path_span,
@@ -288,7 +303,8 @@ def _read_module(declaration, path: Path, key: str, shown: str, source=Source, d
     return key, path.stem, source(shown, text)
 
 
-def _module_reader(entry: Source, source=Source, diagnostic=Diagnostic, read_bytes=_read_bytes):
+def _module_reader(entry: Source, source=Source, diagnostic=Diagnostic, read_bytes=_read_bytes,
+                   max_source: int | None = None):
     """The `Reader` a command analyses with: a file is read once, however many import it.
 
     The answer is remembered with the path it was resolved to, so two imports that name
@@ -313,7 +329,9 @@ def _module_reader(entry: Source, source=Source, diagnostic=Diagnostic, read_byt
         key = str(path)
         if key not in read_once:
             shown[key] = _shown_path(declaration, shown.get(importing_file, importing_file))
-            read_once[key] = _read_module(declaration, path, key, shown[key], source, diagnostic, read_bytes)
+            read_once[key] = _read_module(
+                declaration, path, key, shown[key], source, diagnostic, read_bytes, max_source,
+            )
         return read_once[key]
 
     return read
@@ -417,9 +435,27 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
          max_memory: int | None = None, max_input: int | None = None) -> int:
     for name, value in (("timeout", timeout), ("max-output", max_output), ("max-text", max_text),
                         ("max-source", max_source), ("max-input", max_input), ("max-memory", max_memory)):
-        if value is not None and value <= 0:
+        if value is not None and (value <= 0 or (name == "timeout" and not math.isfinite(value))):
             print(f"error: --{name} must be greater than zero", file=sys.stderr)
             return EXIT_USAGE
+
+    if timeout is not None and (not hasattr(signal, "SIGALRM") or not hasattr(signal, "setitimer")):
+        print("error: --timeout requires a POSIX platform with interval timers", file=sys.stderr)
+        return EXIT_USAGE
+    if max_memory is not None and not sys.platform.startswith("linux"):
+        print("error: --max-memory is enforced only on Linux; use an OS supervisor on this platform",
+              file=sys.stderr)
+        return EXIT_USAGE
+
+    def limit_failure(error: _CliLimit, source: Source) -> int:
+        name = "--max-source" if error.kind == "source" else error.kind
+        diagnostic = Diagnostic("E3015", f"{name} limit exceeded ({error.limit})")
+        source = Source(error.path, "") if error.path is not None else source
+        if output_format == "json":
+            _print_json(_document(path, ((diagnostic, source),)), sys.stderr)
+        else:
+            print(render(diagnostic, source), file=sys.stderr)
+        return EXIT_RUNTIME_ERROR
     def fail(reports, summary: str, code: int) -> int:
         # Whatever the program printed before failing is shown first.
         sys.stdout.flush()
@@ -430,17 +466,15 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
             print(f"error: {path}: {summary}", file=sys.stderr)
         return code
 
-    source, failure = _load(path)
+    try:
+        source, failure = _load(path, max_bytes=max_source)
+    except _CliLimit as error:
+        return limit_failure(error, Source(path, ""))
     if source is None:
         return fail(((failure, Source(path, "")),), "the file could not be read", EXIT_UNREADABLE_FILE)
 
-    if max_source is not None and len(source.text.encode("utf-8")) > max_source:
-        print(f"error: {path}: source exceeds --max-source ({max_source} bytes)", file=sys.stderr)
-        return EXIT_RUNTIME_ERROR
+    source_reader = _module_reader(source, max_source=max_source)
     if max_memory is not None:
-        if sys.platform == "darwin":
-            print("error: macOS accepts RLIMIT_AS but does not enforce it; use an OS supervisor", file=sys.stderr)
-            return EXIT_USAGE
         try:
             import resource
             resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
@@ -449,12 +483,17 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
             return EXIT_USAGE
 
     try:
-        analysis = analyze(source, read=_module_reader(source))
+        analysis = analyze(source, read=source_reader)
+    except _CliLimit as error:
+        return limit_failure(error, source)
     except MemoryError:
         if max_memory is None:
             raise
-        print(f"error: {path}: process memory limit exceeded while checking the program", file=sys.stderr)
-        return EXIT_RUNTIME_ERROR
+        diagnostic = Diagnostic(
+            "E3007", "Process memory limit exceeded while checking this program",
+            hint="Increase --max-memory or reduce the size of the source project.",
+        )
+        return fail(((diagnostic, source),), "the process memory limit was exceeded", EXIT_RUNTIME_ERROR)
     if analysis.checked is None:
         errors = sum(1 for diagnostic in analysis.diagnostics if diagnostic.severity == ERROR)
         summary = f"not run because of {_plural(errors)}"
@@ -464,18 +503,34 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
 
     def read_input() -> str:
         nonlocal input_bytes
-        if max_input is None:
+        if max_input is None and max_text is None:
             return sys.stdin.readline().removesuffix("\n").removesuffix("\r")
-        remaining = max_input - input_bytes
-        raw = sys.stdin.buffer.readline(remaining + 1)
+        if max_input is None:
+            raw_text = sys.stdin.readline(max_text + 2)
+            if raw_text == "":
+                raise EOFError("the standard input ended")
+            text = raw_text.removesuffix("\n").removesuffix("\r")
+            if len(text) > max_text:
+                raise TextLimitExceeded(max_text)
+            return text
+        remaining = max_input - input_bytes if max_input is not None else None
+        read_size = remaining + 1 if remaining is not None else None
+        if max_text is not None:
+            text_read_size = 4 * (max_text + 1) + 1
+            read_size = text_read_size if read_size is None else min(read_size, text_read_size)
+        raw = sys.stdin.buffer.readline(read_size)
         if raw == b"":
             raise EOFError("the standard input ended")
-        if len(raw) > remaining:
+        if remaining is not None and len(raw) > remaining:
             raise _CliLimit("input", max_input)
-        input_bytes += len(raw)
+        if max_input is not None:
+            input_bytes += len(raw)
         encoding = sys.stdin.encoding or "utf-8"
         errors = sys.stdin.errors or "strict"
-        return raw.decode(encoding, errors).removesuffix("\n").removesuffix("\r")
+        text = raw.decode(encoding, errors).removesuffix("\n").removesuffix("\r")
+        if max_text is not None and len(text) > max_text:
+            raise TextLimitExceeded(max_text)
+        return text
 
     host = LocalHost(
         arguments=arguments,
@@ -483,25 +538,30 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
         grants=Grants(read=allow_read, write=allow_write, network=allow_network, process=allow_process),
         declarations=analysis.checked.capabilities,
         network_allowed=True,
+        max_text=max_text,
         processes_allowed=True,
     )
     written = 0
     def write_output(text: str) -> None:
         nonlocal written
-        data = text.encode("utf-8")
-        if max_output is not None and written + len(data) > max_output:
-            room = max(0, max_output - written)
-            sys.stdout.write(data[:room].decode("utf-8", errors="ignore"))
-            raise _CliLimit("output", max_output)
-        sys.stdout.write(text)
-        written += len(data)
+        if max_output is None:
+            sys.stdout.write(text)
+            return
+        for start in range(0, len(text), 4096):
+            chunk = text[start:start + 4096]
+            data = chunk.encode("utf-8")
+            room = max_output - written
+            if len(data) > room:
+                prefix = data[:room].decode("utf-8", errors="ignore")
+                sys.stdout.write(prefix)
+                written += len(prefix.encode("utf-8"))
+                raise _CliLimit("output", max_output)
+            sys.stdout.write(chunk)
+            written += len(data)
 
     previous_handler = None
     try:
         if timeout is not None:
-            if not hasattr(signal, "SIGALRM") or not hasattr(signal, "setitimer"):
-                print("error: --timeout requires a POSIX platform with interval timers", file=sys.stderr)
-                return EXIT_USAGE
             def expire(*_):
                 raise _CliLimit("time", timeout)
 
@@ -510,8 +570,7 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
         run(analysis.checked, write_output, text_limit=max_text, host=host)
     except _CliLimit as error:
         sys.stdout.flush()
-        print(f"error: {path}: program stopped: {error.kind} limit exceeded ({error.limit})", file=sys.stderr)
-        return EXIT_RUNTIME_ERROR
+        return limit_failure(error, source)
     except NexoraRuntimeError as error:
         if error.diagnostic.category == CONTRACT:
             return fail(((error.diagnostic, source),), "the program stopped because a contract was broken",
@@ -528,8 +587,8 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
 
 
 class _CliLimit(Exception):
-    def __init__(self, kind: str, limit: int | float) -> None:
-        self.kind, self.limit = kind, limit
+    def __init__(self, kind: str, limit: int | float, path: str | None = None) -> None:
+        self.kind, self.limit, self.path = kind, limit, path
 
 
 def _count(number: int, noun: str) -> str:
