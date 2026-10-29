@@ -38,8 +38,10 @@ After an intended change in the output, rewrite the expected blocks and review t
     NEXORA_UPDATE_DOCS=1 python -m pytest tests/test_docs.py
 """
 
+import ast
 import os
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -223,6 +225,88 @@ def test_ebnf_capability_declarations_cover_every_host_operation():
     assert set(re.findall(r'"(read|write|network|process)"', uses.group(1))) == {
         "read", "write", "network", "process",
     }
+
+
+def test_every_normative_clause_has_an_executable_example_and_focused_tests():
+    """The feature inventory stays complete as numbered specification clauses evolve."""
+    spec = ROOT / "docs" / "language-spec.md"
+    testing = ROOT / "docs" / "testing.md"
+    spec_text = spec.read_text(encoding="utf-8")
+    testing_text = testing.read_text(encoding="utf-8")
+    expected_clauses = set(re.findall(r"^#{3,4} (\d+(?:\.\d+)+) ", spec_text, flags=re.M)) | {"3"}
+
+    table = testing_text.split("## Feature-by-feature specification coverage", 1)[1].split("\n## ", 1)[0]
+    rows = {}
+    for line in table.splitlines():
+        match = re.match(r"^\| \[(\d+(?:\.\d+)*) [^]]+\]\(language-spec\.md#([^)]+)\) \| (.+) \| (.+) \|$", line)
+        if match:
+            clause, anchor, examples_cell, tests_cell = match.groups()
+            assert clause not in rows, f"duplicate conformance row for section {clause}"
+            rows[clause] = (anchor, examples_cell, tests_cell)
+
+    assert set(rows) == expected_clauses, (
+        f"conformance inventory mismatch: missing {sorted(expected_clauses - set(rows))}; "
+        f"unknown {sorted(set(rows) - expected_clauses)}"
+    )
+
+    examples_source = (ROOT / "tests" / "test_examples.py").read_text(encoding="utf-8")
+    examples_module = ast.parse(examples_source)
+    expected_examples = next(
+        ast.literal_eval(node.value)
+        for node in examples_module.body
+        if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "EXPECTED" for target in node.targets)
+    )
+
+    for clause, (anchor, examples_cell, tests_cell) in rows.items():
+        heading = next(
+            text for text in spec_text.splitlines()
+            if re.match(rf"^#{{2,4}} {re.escape(clause)}(?: |\.)", text)
+        )
+        slug_source = re.sub(r"^#+\s+", "", heading).replace("`", "").replace("*", "").lower()
+        slug_source = "".join(char for char in slug_source if unicodedata.category(char)[0] not in "PS")
+        expected_anchor = re.sub(r"\s+", "-", slug_source).strip("-")
+        assert anchor == expected_anchor, f"section {clause}: stale link anchor #{anchor}, expected #{expected_anchor}"
+
+        example_links = LINK.findall(examples_cell)
+        test_links = LINK.findall(tests_cell)
+        assert example_links, f"section {clause}: no executable-example link"
+        assert test_links, f"section {clause}: no focused-test link"
+        saw_executable = False
+        for target in example_links:
+            path, _, anchor = target.partition("#")
+            if path == "language-spec.md":
+                assert anchor, f"section {clause}: missing example anchor"
+                spec_lines = spec_text.splitlines()
+                heading_index = next(
+                    (index for index, text in enumerate(spec_lines)
+                     if re.match(rf"^#{{2,4}} {re.escape(clause)}(?: |\.)", text)),
+                    None,
+                )
+                assert heading_index is not None, f"section {clause}: linked example has no matching heading"
+                heading_level = len(re.match(r"^(#+)", spec_lines[heading_index]).group(1))
+                next_heading = next(
+                    (index for index in range(heading_index + 1, len(spec_lines))
+                     if (match := re.match(r"^(#+) ", spec_lines[index]))
+                     and len(match.group(1)) <= heading_level),
+                    len(spec_lines),
+                )
+                assert any("<!-- nex:" in text for text in spec_lines[heading_index + 1:next_heading]), (
+                    f"section {clause}: linked specification example is not executable"
+                )
+                saw_executable = True
+            else:
+                example_path = (testing.parent / path).resolve()
+                assert example_path.is_file(), f"section {clause}: example file does not exist: {path}"
+                relative = example_path.relative_to(ROOT / "examples").as_posix()
+                assert relative in expected_examples, f"section {clause}: {relative} is not run by test_examples.py"
+                saw_executable = True
+        assert saw_executable, f"section {clause}: no executable example"
+
+        for target in test_links:
+            test_path = (testing.parent / target.split("#", 1)[0]).resolve()
+            assert test_path.is_file() and test_path.parent == ROOT / "tests", (
+                f"section {clause}: focused test does not exist: {target}"
+            )
 
 
 def test_every_marker_is_known():

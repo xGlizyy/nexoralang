@@ -41,6 +41,72 @@ are needed).
 
 The full suite takes about three minutes. The tests need no internet connection.
 
+## Feature-by-feature specification coverage
+
+The [language specification](language-spec.md) is normative for language version 0.13. This table
+maps every numbered normative clause in sections 2–12 to an executable NEXORA program and focused
+tests. Add or update a row whenever a clause or stable feature changes. The coverage test in
+`tests/test_docs.py` requires an exact row for every numbered clause, verifies that every example
+file exists and is included in the golden-run suite, and verifies that every focused test file exists.
+
+Every linked example in `examples/` is run by [`test_examples.py`](../tests/test_examples.py), which
+checks `nex run`, `nex check`, output and exit status against recorded golden files. Links to marked
+examples inside the specification are run by [`test_docs.py`](../tests/test_docs.py). Focused tests
+exercise edge cases; host operations use controlled fixtures where a portable example cannot make a
+real request or start a platform-specific process.
+
+| Normative clause | Executable example | Focused tests |
+|------------------|--------------------|---------------|
+| [2.1 Files](language-spec.md#21-files) | [`texts.nex`](../examples/texts.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_lexer.py`](../tests/test_lexer.py) |
+| [2.2 Spaces, lines and comments](language-spec.md#22-spaces-lines-and-comments) | [`variables.nex`](../examples/variables.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_lexer.py`](../tests/test_lexer.py), [`test_parser.py`](../tests/test_parser.py) |
+| [2.3 Names](language-spec.md#23-names) | [`variables.nex`](../examples/variables.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_checker.py`](../tests/test_checker.py), [`test_lexer.py`](../tests/test_lexer.py) |
+| [2.4 Keywords and reserved words](language-spec.md#24-keywords-and-reserved-words) | [`name_errors.nex`](../examples/invalid/name_errors.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_syntax_012.py`](../tests/test_syntax_012.py) |
+| [2.5 Literals](language-spec.md#25-literals) | [`arithmetic.nex`](../examples/arithmetic.nex), [`texts.nex`](../examples/texts.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_lexer.py`](../tests/test_lexer.py) |
+| [2.6 Symbols](language-spec.md#26-symbols) | [`arithmetic.nex`](../examples/arithmetic.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_lexer.py`](../tests/test_lexer.py), [`test_parser.py`](../tests/test_parser.py) |
+| [3 Grammar](language-spec.md#3-grammar) | [`functions.nex`](../examples/functions.nex), [`main.nex`](../examples/modules/main.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_parser.py`](../tests/test_parser.py) |
+| [4.1 The type system is static](language-spec.md#41-the-type-system-is-static) | [`types.nex`](../examples/types.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_types.py`](../tests/test_types.py) |
+| [4.2 Compatibility](language-spec.md#42-compatibility) | [`type_errors.nex`](../examples/invalid/type_errors.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_types.py`](../tests/test_types.py) |
+| [4.3 Conversions](language-spec.md#43-conversions) | [`types.nex`](../examples/types.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_types.py`](../tests/test_types.py), [`test_text_operations.py`](../tests/test_text_operations.py) |
+| [4.4 Refined types](language-spec.md#44-refined-types) | [`refined_types.nex`](../examples/refined_types.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_refined_types.py`](../tests/test_refined_types.py) |
+| [4.5 Lists](language-spec.md#45-lists) | [`lists.nex`](../examples/lists.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_type_lists.py`](../tests/test_type_lists.py), [`test_type_lists_functions.py`](../tests/test_type_lists_functions.py), [`test_type_lists_values.py`](../tests/test_type_lists_values.py) |
+| [4.5.1 Literals and inference](language-spec.md#451-literals-and-inference) | [`lists.nex`](../examples/lists.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_type_lists_syntax.py`](../tests/test_type_lists_syntax.py) |
+| [4.5.2 Immutability, equality and printing](language-spec.md#452-immutability-equality-and-printing) | [`lists.nex`](../examples/lists.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_type_lists_values.py`](../tests/test_type_lists_values.py) |
+| [4.6 Records](language-spec.md#46-records) | [`records.nex`](../examples/records.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_records_types.py`](../tests/test_records_types.py), [`test_records_values.py`](../tests/test_records_values.py) |
+| [4.7 Option and Result](language-spec.md#47-option-and-result) | [`option_result.nex`](../examples/option_result.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_option_result.py`](../tests/test_option_result.py) |
+| [5.1 Declaration](language-spec.md#51-declaration) | [`variables.nex`](../examples/variables.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_checker.py`](../tests/test_checker.py) |
+| [5.2 Scopes and name resolution](language-spec.md#52-scopes-and-name-resolution) | [`functions.nex`](../examples/functions.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_checker.py`](../tests/test_checker.py), [`test_functions.py`](../tests/test_functions.py) |
+| [5.3 Variables that change: `var` and assignment](language-spec.md#53-variables-that-change-var-and-assignment) | [`variables.nex`](../examples/variables.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_interpreter.py`](../tests/test_interpreter.py) |
+| [6.1 Precedence](language-spec.md#61-precedence) | [`arithmetic.nex`](../examples/arithmetic.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_parser.py`](../tests/test_parser.py) |
+| [6.2 Semantics](language-spec.md#62-semantics) | [`arithmetic.nex`](../examples/arithmetic.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_interpreter.py`](../tests/test_interpreter.py) |
+| [6.3 Conditions](language-spec.md#63-conditions) | [`arithmetic.nex`](../examples/arithmetic.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_checker.py`](../tests/test_checker.py), [`test_interpreter.py`](../tests/test_interpreter.py) |
+| [6.4 Expressions as statements](language-spec.md#64-expressions-as-statements) | [`functions.nex`](../examples/functions.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_parser.py`](../tests/test_parser.py) |
+| [7.1 Declaration](language-spec.md#71-declaration) | [`functions.nex`](../examples/functions.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_functions.py`](../tests/test_functions.py) |
+| [7.2 The `main` function](language-spec.md#72-the-main-function) | [`hello.nex`](../examples/hello.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_cli.py`](../tests/test_cli.py) |
+| [7.3 `return` and return paths](language-spec.md#73-return-and-return-paths) | [`functions.nex`](../examples/functions.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_functions.py`](../tests/test_functions.py) |
+| [7.4 Calls](language-spec.md#74-calls) | [`functions.nex`](../examples/functions.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_functions.py`](../tests/test_functions.py) |
+| [7.5 Recursion](language-spec.md#75-recursion) | [`functions.nex`](../examples/functions.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_functions.py`](../tests/test_functions.py), [`test_interpreter.py`](../tests/test_interpreter.py) |
+| [7.6 Modules and imports](language-spec.md#76-modules-and-imports) | [`main.nex`](../examples/modules/main.nex), [`models.nex`](../examples/modules/models.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_modules.py`](../tests/test_modules.py), [`test_modules_syntax.py`](../tests/test_modules_syntax.py) |
+| [8.1 Functions of a type](language-spec.md#81-functions-of-a-type-textlength-intparse) | [`texts.nex`](../examples/texts.nex), [`types.nex`](../examples/types.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_text_operations.py`](../tests/test_text_operations.py), [`test_types.py`](../tests/test_types.py) |
+| [8.2 `List` functions](language-spec.md#82-list-functions) | [`lists.nex`](../examples/lists.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_type_lists_functions.py`](../tests/test_type_lists_functions.py) |
+| [8.3 Input, arguments and host capabilities](language-spec.md#83-input-arguments-and-host-capabilities) | [`console.nex`](../examples/console.nex), [`files.nex`](../examples/files.nex), [checked capability example](language-spec.md#83-input-arguments-and-host-capabilities) | [`test_examples.py`](../tests/test_examples.py), [`test_input_arguments.py`](../tests/test_input_arguments.py), [`test_input_stdin.py`](../tests/test_input_stdin.py), [`test_permissions_files.py`](../tests/test_permissions_files.py), [`test_permissions_static.py`](../tests/test_permissions_static.py), [`test_network_process.py`](../tests/test_network_process.py) |
+| [8.4 The functions of `Option` and `Result`](language-spec.md#84-the-functions-of-option-and-result) | [`option_result.nex`](../examples/option_result.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_option_result.py`](../tests/test_option_result.py) |
+| [9.1 Rules](language-spec.md#91-rules) | [`contracts.nex`](../examples/contracts.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_contracts.py`](../tests/test_contracts.py) |
+| [9.2 What is checked and when](language-spec.md#92-what-is-checked-and-when) | [`contracts.nex`](../examples/contracts.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_contracts.py`](../tests/test_contracts.py) |
+| [9.3 Guarantees it does **not** give](language-spec.md#93-guarantees-it-does-not-give) | [`contract_violation.nex`](../examples/failing/contract_violation.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_contracts.py`](../tests/test_contracts.py) |
+| [9.4 Examples (`example`)](language-spec.md#94-examples-example) | [`checked_examples.nex`](../examples/checked_examples.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_example_clauses.py`](../tests/test_example_clauses.py) |
+| [9.5 Loops: `while`, `keeps` and `shrinks`](language-spec.md#95-loops-while-keeps-and-shrinks) | [`loops.nex`](../examples/loops.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_loops.py`](../tests/test_loops.py) |
+| [9.6 `for` loops over lists](language-spec.md#96-for-loops-over-lists) | [`loops.nex`](../examples/loops.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_for.py`](../tests/test_for.py) |
+| [10.1 Stages](language-spec.md#101-stages) | [`syntax_error.nex`](../examples/invalid/syntax_error.nex), [`runtime_error.nex`](../examples/failing/runtime_error.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_cli.py`](../tests/test_cli.py) |
+| [10.2 What is detected before running](language-spec.md#102-what-is-detected-before-running) | [`type_errors.nex`](../examples/invalid/type_errors.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_checker.py`](../tests/test_checker.py) |
+| [10.3 What can only be detected when running](language-spec.md#103-what-can-only-be-detected-when-running) | [`runtime_error.nex`](../examples/failing/runtime_error.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_interpreter.py`](../tests/test_interpreter.py) |
+| [11.1 Text format](language-spec.md#111-text-format) | [`runtime_error.nex`](../examples/failing/runtime_error.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_diagnostics.py`](../tests/test_diagnostics.py) |
+| [11.2 Categories](language-spec.md#112-categories) | [`syntax_error.nex`](../examples/invalid/syntax_error.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_diagnostics.py`](../tests/test_diagnostics.py) |
+| [11.3 Diagnostic codes](language-spec.md#113-diagnostic-codes) | [`type_errors.nex`](../examples/invalid/type_errors.nex), [`runtime_error.nex`](../examples/failing/runtime_error.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_diagnostics.py`](../tests/test_diagnostics.py) |
+| [11.4 JSON format](language-spec.md#114-json-format) | [checked `check --format json` example](language-spec.md#114-json-format) | [`test_docs.py`](../tests/test_docs.py), [`test_cli.py`](../tests/test_cli.py) |
+| [11.5 Exit codes of `nex`](language-spec.md#115-exit-codes-of-nex) | [`runtime_error.nex`](../examples/failing/runtime_error.nex), [`contract_violation.nex`](../examples/failing/contract_violation.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_cli.py`](../tests/test_cli.py) |
+| [12.1 Valid programs](language-spec.md#121-valid-programs) | [`hello.nex`](../examples/hello.nex), [`main.nex`](../examples/modules/main.nex) | [`test_examples.py`](../tests/test_examples.py) |
+| [12.2 Invalid programs](language-spec.md#122-invalid-programs) | [`syntax_error.nex`](../examples/invalid/syntax_error.nex), [`type_errors.nex`](../examples/invalid/type_errors.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_parser.py`](../tests/test_parser.py), [`test_checker.py`](../tests/test_checker.py) |
+
 ## Benchmarks
 
 `benchmarks/benchmark_interpreter.py` runs three small NEXORA programs: recursive `fib(20)`, a
