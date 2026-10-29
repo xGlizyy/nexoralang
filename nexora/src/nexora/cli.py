@@ -15,6 +15,7 @@ from pathlib import Path
 
 from . import api, migrate, migrate_files, tooling
 from .capabilities import Capabilities, Grants, TextLimitExceeded
+from .debugging import DebugEvent, format_debug_value
 from .diagnostics import CONTRACT, ERROR, MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Source, render
 from .host import LocalHost
 from .interpreter import run
@@ -50,7 +51,7 @@ exit codes:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nex",
-        description="NEXORA: run, check and analyse programs written in the NEXORA language.",
+        description="NEXORA: run, debug, check and analyse programs written in the NEXORA language.",
         epilog=_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -107,6 +108,44 @@ def _build_parser() -> argparse.ArgumentParser:
         "args", nargs="*",
         help="the arguments of the program, written after '--'",
     )
+
+    debug_parser = commands.add_parser(
+        "debug",
+        help="step through a .nex file in a local terminal",
+        description=(
+            "Check a NEXORA program and run it under the statement debugger. The debugger pauses "
+            "before each statement and can show the live variables and call stack. Debug commands "
+            "are read from the terminal; the program keeps standard input for input()."
+        ),
+    )
+    debug_parser.add_argument("file", help="path to the .nex file to debug")
+    debug_parser.add_argument("--breakpoint", action="append", default=[], type=int, metavar="LINE",
+                              help="stop at this line in the entry file when continuing (can be repeated)")
+    debug_parser.add_argument("--max-steps", type=int, default=10_000, metavar="COUNT",
+                              help="maximum statements inspected (default: 10000)")
+    debug_parser.add_argument("--timeout", type=float, metavar="SECONDS",
+                              help="limit active program execution time; time at the prompt is excluded")
+    debug_parser.add_argument("--max-output", type=int, metavar="BYTES",
+                              help="maximum UTF-8 bytes the program may print")
+    debug_parser.add_argument("--max-text", type=int, metavar="CHARS",
+                              help="maximum characters in a constructed Text value")
+    debug_parser.add_argument("--max-source", type=int, metavar="BYTES",
+                              help="maximum size of each source file, including imported modules")
+    debug_parser.add_argument("--max-input", type=int, metavar="BYTES",
+                              help="maximum bytes the program may read from standard input")
+    debug_parser.add_argument("--max-memory", type=int, metavar="BYTES",
+                              help="maximum process address space (Linux; includes Python)")
+    debug_parser.add_argument("--allow-read", action="append", default=[], metavar="PATH",
+                              help="allow the program to read files under this path (repeatable)")
+    debug_parser.add_argument("--allow-write", action="append", default=[], metavar="PATH",
+                              help="allow the program to write files under this path (repeatable)")
+    debug_parser.add_argument("--allow-network", action="append", default=[], metavar="ORIGIN",
+                              help="allow HTTPS access to this origin (repeatable)")
+    debug_parser.add_argument("--allow-process", action="append", default=[], metavar="COMMAND",
+                              help="allow this executable to run (repeatable)")
+    debug_parser.add_argument("--format", choices=("text", "json"), default="text",
+                              help="how to report program errors (default: text)")
+    debug_parser.add_argument("args", nargs="*", help="program arguments, written after '--'")
 
     check_parser = commands.add_parser(
         "check",
@@ -458,6 +497,7 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
         else:
             print(render(diagnostic, source), file=sys.stderr)
         return EXIT_RUNTIME_ERROR
+
     def fail(reports, summary: str, code: int) -> int:
         # Whatever the program printed before failing is shown first.
         sys.stdout.flush()
@@ -586,6 +626,385 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
     # Flushed here, not at interpreter exit, so that a closed pipe is handled by main().
     sys.stdout.flush()
     return EXIT_OK
+
+
+_DEBUG_MAX_BREAKPOINTS = 256
+_DEBUG_DEFAULT_MAX_STEPS = 10_000
+
+
+def _open_debug_console():
+    """Open the controlling terminal so debug commands do not consume program input."""
+    return open("CONIN$" if os.name == "nt" else "/dev/tty", encoding="utf-8", errors="replace")
+
+
+def _debug(path: str, output_format: str, arguments: tuple[str, ...] = (),
+           breakpoints: tuple[int, ...] = (), max_steps: int = _DEBUG_DEFAULT_MAX_STEPS,
+           allow_read: tuple[str, ...] = (), allow_write: tuple[str, ...] = (),
+           allow_network: tuple[str, ...] = (), allow_process: tuple[str, ...] = (),
+           timeout: float | None = None, max_output: int | None = None,
+           max_text: int | None = None, max_source: int | None = None,
+           max_memory: int | None = None, max_input: int | None = None,
+           console=None) -> int:
+    """Run the checked program with an interactive, statement-level observer."""
+    for name, value in (("timeout", timeout), ("max-output", max_output), ("max-text", max_text),
+                        ("max-source", max_source), ("max-input", max_input), ("max-memory", max_memory),
+                        ("max-steps", max_steps)):
+        if value is not None and (value <= 0 or (name == "timeout" and not math.isfinite(value))):
+            print(f"error: --{name} must be greater than zero", file=sys.stderr)
+            return EXIT_USAGE
+    if timeout is not None and (not hasattr(signal, "SIGALRM") or not hasattr(signal, "setitimer")):
+        print("error: --timeout requires a POSIX platform with interval timers", file=sys.stderr)
+        return EXIT_USAGE
+    if max_memory is not None and not sys.platform.startswith("linux"):
+        print("error: --max-memory is enforced only on Linux; use an OS supervisor on this platform",
+              file=sys.stderr)
+        return EXIT_USAGE
+
+    close_console = console is None
+
+    def limit_failure(error: _CliLimit, source: Source) -> int:
+        name = "--max-source" if error.kind == "source" else error.kind
+        diagnostic = Diagnostic("E3015", f"{name} limit exceeded ({error.limit})")
+        source = Source(error.path, "") if error.path is not None else source
+        if output_format == "json":
+            _print_json(_document(path, ((diagnostic, source),)), sys.stderr)
+        else:
+            print(render(diagnostic, source), file=sys.stderr)
+        return EXIT_RUNTIME_ERROR
+
+    def fail(reports, summary: str, code: int) -> int:
+        sys.stdout.flush()
+        if output_format == "json":
+            _print_json(_document(path, reports), sys.stderr)
+        else:
+            _write_reports(reports)
+            print(f"error: {path}: {summary}", file=sys.stderr)
+        return code
+
+    try:
+        try:
+            source, failure = _load(path, max_bytes=max_source)
+        except _CliLimit as error:
+            return limit_failure(error, Source(path, ""))
+        if source is None:
+            reports = ((failure, Source(path, "")),)
+            if output_format == "json":
+                _print_json(_document(path, reports), sys.stderr)
+            else:
+                _write_reports(reports)
+                print(f"error: {path}: the file could not be read", file=sys.stderr)
+            return EXIT_UNREADABLE_FILE
+
+        if max_memory is not None:
+            try:
+                import resource
+                resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
+            except (ImportError, AttributeError, OSError, ValueError):
+                print("error: --max-memory requires POSIX RLIMIT_AS support", file=sys.stderr)
+                return EXIT_USAGE
+
+        try:
+            analysis = analyze(source, read=_module_reader(source, max_source=max_source))
+        except _CliLimit as error:
+            return limit_failure(error, source)
+        except MemoryError:
+            if max_memory is None:
+                raise
+            diagnostic = Diagnostic(
+                "E3007", "Process memory limit exceeded while checking this program",
+                hint="Increase --max-memory or reduce the size of the source project.",
+            )
+            reports = ((diagnostic, source),)
+            if output_format == "json":
+                _print_json(_document(path, reports), sys.stderr)
+            else:
+                _write_reports(reports)
+                print(f"error: {path}: the process memory limit was exceeded", file=sys.stderr)
+            return EXIT_RUNTIME_ERROR
+
+        if analysis.checked is None:
+            reports = _reports(analysis)
+            errors = sum(1 for diagnostic, _ in reports if diagnostic.severity == ERROR)
+            if output_format == "json":
+                _print_json(_document(path, reports), sys.stderr)
+            else:
+                _write_reports(reports)
+                print(f"error: {path}: not run because of {_plural(errors)}", file=sys.stderr)
+            return EXIT_INVALID_PROGRAM
+
+        project_sources = {
+            module.source.name: module.source
+            for module in analysis.project.modules
+        } if analysis.project else {source.name: source}
+        source_by_key = {name.replace("\\", "/"): item for name, item in project_sources.items()}
+        function_files = {
+            id(function): module.source.name
+            for module in analysis.project.modules if module.program
+            for function in module.program.functions
+        } if analysis.project else {}
+
+        entry_key = source.name.replace("\\", "/")
+        initial = set(breakpoints)
+        if len(initial) > _DEBUG_MAX_BREAKPOINTS:
+            print(f"error: at most {_DEBUG_MAX_BREAKPOINTS} breakpoints are allowed", file=sys.stderr)
+            return EXIT_USAGE
+        if any(line < 1 or line > len(source._lines) for line in initial):
+            print("error: --breakpoint must name a line in the source file", file=sys.stderr)
+            return EXIT_USAGE
+        active_breakpoints = {entry_key: initial} if initial else {}
+
+        input_bytes = 0
+
+        def read_input() -> str:
+            nonlocal input_bytes
+            if max_input is None and max_text is None:
+                line = sys.stdin.readline()
+                if line == "":
+                    raise EOFError("the standard input ended")
+                return line.removesuffix("\n").removesuffix("\r")
+            remaining = max_input - input_bytes if max_input is not None else None
+            read_size = remaining + 1 if remaining is not None else None
+            if max_text is not None:
+                text_read_size = 4 * (max_text + 1) + 1
+                read_size = text_read_size if read_size is None else min(read_size, text_read_size)
+            raw = sys.stdin.buffer.readline(read_size)
+            if raw == b"":
+                raise EOFError("the standard input ended")
+            if remaining is not None and len(raw) > remaining:
+                raise _CliLimit("input", max_input)
+            if max_input is not None:
+                input_bytes += len(raw)
+            encoding = sys.stdin.encoding or "utf-8"
+            text = raw.decode(encoding, sys.stdin.errors or "strict").removesuffix("\n").removesuffix("\r")
+            if max_text is not None and len(text) > max_text:
+                raise TextLimitExceeded(max_text)
+            return text
+
+        host = LocalHost(
+            arguments=arguments,
+            read_line=read_input,
+            grants=Grants(read=allow_read, write=allow_write, network=allow_network, process=allow_process),
+            declarations=analysis.checked.capabilities,
+            network_allowed=True,
+            max_text=max_text,
+            processes_allowed=True,
+        )
+        written = 0
+
+        def write_output(text: str) -> None:
+            nonlocal written
+            if max_output is None:
+                sys.stdout.write(text)
+                sys.stdout.flush()
+                return
+            for start in range(0, len(text), 4096):
+                chunk = text[start:start + 4096]
+                data = chunk.encode("utf-8")
+                room = max_output - written
+                if len(data) > room:
+                    prefix = data[:room].decode("utf-8", errors="ignore")
+                    sys.stdout.write(prefix)
+                    sys.stdout.flush()
+                    written += len(prefix.encode("utf-8"))
+                    raise _CliLimit("output", max_output)
+                sys.stdout.write(chunk)
+                sys.stdout.flush()
+                written += len(data)
+
+        if console is None:
+            try:
+                console = _open_debug_console()
+            except OSError:
+                print("error: nex debug needs a controlling terminal for its commands", file=sys.stderr)
+                return EXIT_USAGE
+
+        timer_remaining = [timeout]
+        timer_active = [False]
+
+        def pause_timer() -> None:
+            if timeout is not None and timer_active[0]:
+                remaining, _ = signal.getitimer(signal.ITIMER_REAL)
+                timer_remaining[0] = remaining
+                signal.setitimer(signal.ITIMER_REAL, 0)
+                timer_active[0] = False
+
+        def resume_timer() -> None:
+            if timeout is None:
+                return
+            remaining = timer_remaining[0]
+            if remaining is None or remaining <= 0:
+                raise _CliLimit("time", timeout)
+            signal.setitimer(signal.ITIMER_REAL, remaining)
+            timer_active[0] = True
+
+        mode = ["step"]
+        stop_reason = [None]
+
+        def show_event(event: DebugEvent) -> None:
+            filename = (event.file or source.name).replace("\\", "/")
+            current_source = source_by_key.get(filename)
+            line_text = current_source.line_text(event.span.line) if current_source else ""
+            print(f"\nPaused at {filename}:{event.span.line}:{event.span.column} in {event.function}",
+                  file=sys.stderr)
+            if line_text:
+                print(f"  > {event.span.line}: {line_text}", file=sys.stderr)
+            print("Call stack:", file=sys.stderr)
+            for index, frame in enumerate(event.call_stack):
+                frame_file = (frame.file or source.name).replace("\\", "/")
+                frame_line = event.span.line if index == 0 or frame.call_site is None else frame.call_site.line
+                print(f"  #{index} {frame.function} at {frame_file}:{frame_line}", file=sys.stderr)
+            print("Variables:", file=sys.stderr)
+            if event.variables:
+                for name, value in event.variables:
+                    print(f"  {name} = {format_debug_value(value)}", file=sys.stderr)
+            else:
+                print("  (none)", file=sys.stderr)
+            points = sorted(active_breakpoints.get(filename, ()))
+            print(f"Breakpoints in {filename}: {', '.join(map(str, points)) or '(none)'}", file=sys.stderr)
+
+        def breakpoint_target(argument: str, current_file: str) -> tuple[str, int] | None:
+            if ":" in argument:
+                filename, number = argument.rsplit(":", 1)
+                key = filename.replace("\\", "/")
+            else:
+                key, number = current_file, argument
+            try:
+                line = int(number)
+            except ValueError:
+                return None
+            if key not in source_by_key or not 1 <= line <= len(source_by_key[key]._lines):
+                return None
+            return key, line
+
+        def observe(event: DebugEvent) -> bool:
+            if event.step > max_steps:
+                stop_reason[0] = "limit"
+                print(f"\nStopped: reached --max-steps ({max_steps}).", file=sys.stderr)
+                return True
+            current_file = (event.file or source.name).replace("\\", "/")
+            if mode[0] == "continue" and event.span.line not in active_breakpoints.get(current_file, set()):
+                return False
+
+            pause_timer()
+            show_event(event)
+            while True:
+                print("debug> ", end="", file=sys.stderr, flush=True)
+                command_line = console.readline()
+                if command_line == "":
+                    stop_reason[0] = "stopped"
+                    print("\nDebugger input closed; stopping the program.", file=sys.stderr)
+                    return True
+                stripped = command_line.strip()
+                if not stripped:
+                    mode[0] = "step"
+                    resume_timer()
+                    return False
+                parts = stripped.split(None, 1)
+                command = parts[0].lower()
+                argument = parts[1].strip() if len(parts) == 2 else ""
+                if command in {"s", "step"} and not argument:
+                    mode[0] = "step"
+                    resume_timer()
+                    return False
+                if command in {"c", "continue"} and not argument:
+                    mode[0] = "continue"
+                    resume_timer()
+                    return False
+                if command in {"q", "quit"} and not argument:
+                    stop_reason[0] = "stopped"
+                    print("Program stopped by the debugger.", file=sys.stderr)
+                    return True
+                if command in {"b", "break"} and argument:
+                    target = breakpoint_target(argument, current_file)
+                    if target is None:
+                        print("Usage: break [FILE:]LINE; the file and line must exist in this program.",
+                              file=sys.stderr)
+                        continue
+                    key, line = target
+                    all_points = sum(len(points) for points in active_breakpoints.values())
+                    points = active_breakpoints.setdefault(key, set())
+                    if line not in points and all_points >= _DEBUG_MAX_BREAKPOINTS:
+                        print(f"At most {_DEBUG_MAX_BREAKPOINTS} breakpoints are allowed.", file=sys.stderr)
+                        continue
+                    points.add(line)
+                    print(f"Breakpoint set at {key}:{line}.", file=sys.stderr)
+                    continue
+                if command in {"d", "delete"} and argument:
+                    target = breakpoint_target(argument, current_file)
+                    if target is None:
+                        print("Usage: delete [FILE:]LINE", file=sys.stderr)
+                        continue
+                    key, line = target
+                    active_breakpoints.get(key, set()).discard(line)
+                    print(f"Breakpoint cleared at {key}:{line}.", file=sys.stderr)
+                    continue
+                if command in {"b", "break", "breakpoints"} and not argument:
+                    any_points = False
+                    for filename, points in active_breakpoints.items():
+                        for line in sorted(points):
+                            print(f"  {filename}:{line}", file=sys.stderr)
+                            any_points = True
+                    if not any_points:
+                        print("No breakpoints set.", file=sys.stderr)
+                    continue
+                if command in {"h", "help", "?"} and not argument:
+                    print("Commands: step (s), continue (c), break [FILE:]LINE (b), "
+                          "delete [FILE:]LINE (d), breakpoints, quit (q).", file=sys.stderr)
+                    continue
+                print("Unknown command. Type 'help' for the debugger commands.", file=sys.stderr)
+
+        previous_handler = None
+        try:
+            if timeout is not None:
+                def expire(*_):
+                    raise _CliLimit("time", timeout)
+
+                previous_handler = signal.signal(signal.SIGALRM, expire)
+                resume_timer()
+            stopped = run(
+                analysis.checked,
+                write_output,
+                text_limit=max_text,
+                host=host,
+                debug_observer=observe,
+                source_files=function_files,
+            )
+        except _CliLimit as error:
+            sys.stdout.flush()
+            return limit_failure(error, source)
+        except NexoraRuntimeError as error:
+            error_source = source_by_key.get((error.file or source.name).replace("\\", "/"), source)
+            if error.diagnostic.category == CONTRACT:
+                return fail(((error.diagnostic, error_source),), "the program stopped because a contract was broken",
+                            EXIT_CONTRACT_VIOLATION)
+            return fail(((error.diagnostic, error_source),), "the program stopped because of a runtime error",
+                        EXIT_RUNTIME_ERROR)
+        except MemoryError:
+            if max_memory is None:
+                raise
+            diagnostic = Diagnostic("E3007", "Process memory limit exceeded while running the program")
+            reports = ((diagnostic, source),)
+            if output_format == "json":
+                _print_json(_document(path, reports), sys.stderr)
+            else:
+                _write_reports(reports)
+                print(f"error: {path}: the process memory limit was exceeded", file=sys.stderr)
+            return EXIT_RUNTIME_ERROR
+        finally:
+            if timeout is not None and previous_handler is not None:
+                signal.setitimer(signal.ITIMER_REAL, 0)
+                signal.signal(signal.SIGALRM, previous_handler)
+
+        sys.stdout.flush()
+        if stopped is not None and stop_reason[0] == "limit":
+            return EXIT_RUNTIME_ERROR
+        if stopped is not None:
+            return EXIT_OK
+        print("\nProgram completed.", file=sys.stderr)
+        return EXIT_OK
+    finally:
+        if close_console and console is not None:
+            console.close()
 
 
 class _CliLimit(Exception):
@@ -954,7 +1373,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     cli_argv = list(sys.argv[1:] if argv is None else argv)
     program_args: list[str] | None = None
-    if cli_argv and cli_argv[0] == "run" and "--" in cli_argv:
+    if cli_argv and cli_argv[0] in {"run", "debug"} and "--" in cli_argv:
         separator = cli_argv.index("--")
         # A separator after the file introduces program arguments. Before the file,
         # argparse needs it to accept a filename that starts with a dash.
@@ -985,6 +1404,13 @@ def main(argv: list[str] | None = None) -> int:
                         tuple(arguments.allow_network), tuple(arguments.allow_process),
                         arguments.timeout, arguments.max_output, arguments.max_text, arguments.max_source,
                         arguments.max_memory, arguments.max_input)
+        if arguments.command == "debug":
+            return _debug(arguments.file, arguments.format, tuple(arguments.args),
+                          tuple(arguments.breakpoint), arguments.max_steps,
+                          tuple(arguments.allow_read), tuple(arguments.allow_write),
+                          tuple(arguments.allow_network), tuple(arguments.allow_process),
+                          arguments.timeout, arguments.max_output, arguments.max_text, arguments.max_source,
+                          arguments.max_memory, arguments.max_input)
         if arguments.command == "inspect":
             return _analysis_command(arguments.file, "json", tooling.inspect_document)
         if arguments.command == "context":

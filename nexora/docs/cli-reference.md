@@ -10,6 +10,7 @@ codes that the program accepts are documented here.
 
 ```text
 nex run <file> [--format text|json] [--timeout SECONDS] [--max-memory BYTES] [--max-source BYTES] [--max-input BYTES] [--max-output BYTES] [--max-text CHARS] [--allow-read PATH] [--allow-write PATH] [--allow-network ORIGIN] [--allow-process COMMAND] [-- arguments...]
+nex debug <file> [--breakpoint LINE] [--max-steps COUNT] [--timeout SECONDS] [--max-memory BYTES] [--max-source BYTES] [--max-input BYTES] [--max-output BYTES] [--max-text CHARS] [--allow-read PATH] [--allow-write PATH] [--allow-network ORIGIN] [--allow-process COMMAND] [-- arguments...]
 nex check <file> [--format text|json] [--evidence]
 nex inspect <file> [--format json]
 nex context <file> [--format text|json]
@@ -23,6 +24,7 @@ nex --help
 | Command | Analyzes | Runs the program | Writes |
 |---------|----------|------------------|--------|
 | `nex run` | Yes | Yes, if there are no static errors | The output of the program |
+| `nex debug` | Yes | Yes, under the local statement debugger | Program output on standard output; debugger state on standard error |
 | `nex check` | Yes | **No** | The result of the analysis |
 | `nex inspect` | Yes | **No** | The syntax tree as JSON |
 | `nex context` | Yes | **No** | A summary of the program |
@@ -31,7 +33,7 @@ nex --help
 | `nex migrate` | Yes, with the front ends of 0.11 and of 0.12 | **No** | The migrated text; with `--write`, the files of the program |
 
 All the commands use the same lexer, the same parser and the same static
-checker. What `nex check` accepts is exactly what `nex run` runs.
+checker. What `nex check` accepts is exactly what `nex run` and `nex debug` run.
 
 The optional MCP server has its own command, `nex-mcp`, described in [MCP server](mcp.md).
 
@@ -44,6 +46,39 @@ The optional MCP server has its own command, `nex-mcp`, described in [MCP server
 - **An argument is never interpreted as code.** There is no option to pass NEXORA code
   on the command line: the code is always read from a file.
 - If the file name starts with `-`, separate it with `--`: `nex run -- -odd.nex`.
+
+## `nex debug`
+
+Runs the checked program in the local statement debugger. It pauses before the first statement,
+then shows the current source location, call stack, visible variables and bounded variable values.
+The example application at [`docs/examples/local-debugger.nex`](examples/local-debugger.nex) can
+be started with a breakpoint in `add_tip`:
+
+```console
+nex debug docs/examples/local-debugger.nex --breakpoint 3
+```
+
+At the first pause, enter `continue`; execution stops at line 3. The debugger reads commands from
+the controlling terminal, leaving standard input available to the program's `input()` calls. If
+there is no controlling terminal, it reports a usage error.
+
+| Command | Effect |
+|---------|--------|
+| `step` or `s` | Execute the current statement and pause before the next one. Calls and loops are stepped into. |
+| `continue` or `c` | Resume until a breakpoint or program completion. |
+| `break LINE` or `b LINE` | Add a breakpoint in the current file. `break FILE:LINE` targets an imported file. |
+| `delete LINE` or `d LINE` | Remove a breakpoint. `delete FILE:LINE` targets an imported file. |
+| `breakpoints` | List all breakpoints. |
+| `quit` or `q` | Stop the program. |
+
+`--breakpoint LINE` adds an initial breakpoint in the entry file; the interactive `break FILE:LINE`
+command can add one in any imported file. The session inspects at most 10,000 statements and allows
+at most 256 breakpoints. `--max-steps`
+changes the statement limit. `--timeout` counts program execution time and excludes time spent at
+the debugger prompt. The other source, input, output, text and memory limits work as they do for
+`nex run`. Capabilities are still denied unless both declared by the program and explicitly
+granted with the corresponding `--allow-*` option. DAP and language-server debugger integration
+are outside the 1.0 scope ([decision 0022](decisions/0022-depurador-local.md)).
 
 ## `nex run`
 

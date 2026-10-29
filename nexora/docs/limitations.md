@@ -107,8 +107,9 @@ Stable since 0.3.0. Their limits, in detail, in [contracts](contracts.md#limitat
 
 - The only stable interface is the command line. The Python API (`nexora.tooling`) is
   **experimental**; the rest of the modules of `src/nexora/` are internal and may change without notice.
-- There is no debugger in the local CLI or language server. The hosted Playground has a
-  statement-by-statement debugger. The language server resolves relative imports, uses open
+- The local CLI provides statement debugging with `nex debug`; DAP and language-server debugger
+  integration are not included. The hosted Playground also has a statement-by-statement debugger.
+  The language server resolves relative imports, uses open
   editor buffers, and negotiates UTF-16/UTF-8/UTF-32 positions ([LSP](lsp.md)).
 - With syntax errors, `nex inspect`, `nex context` and `nex symbols` return a **partial**
   structure: the statements with errors are missing and so is, entirely, any function whose declaration has

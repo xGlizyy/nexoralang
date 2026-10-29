@@ -1,0 +1,11 @@
+// A tiny app for trying `nex debug` locally.
+fn add_tip(subtotal: Int) gives Int {
+    let tip = subtotal / 10
+    return subtotal + tip
+}
+
+fn main() {
+    let subtotal = 50
+    let total = add_tip(subtotal)
+    print(total)
+}

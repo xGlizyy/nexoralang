@@ -132,8 +132,9 @@ hover, definition/references, rename, symbols, signature help and formatting. In
 must resolve, and positions must follow negotiated LSP encoding (including UTF-16 clients).
 
 The Neovim, Helix and Emacs configurations may be documented as community-supported/best-effort
-integrations, with tested client versions listed. A local debugger protocol is not included in 1.0;
-the step debugger in the hosted Playground is a separate feature.
+integrations, with tested client versions listed. The local statement debugger is available as
+`nex debug` in the CLI. DAP and debugger integration through the language server are not included
+in 1.0. The hosted Playground also retains its statement debugger.
 
 ### Experimental interfaces
 

@@ -67,6 +67,7 @@ production-ready.
 | Status | What it includes |
 |--------|------------------|
 | **Implemented and tested** | Static types `Int`, `Float`, `Bool`, `Text` and `Void`, with inference and annotations · immutable **lists** `List[T]`, with `List.length`, `List.get`, `List.append`, `List.concat`, `List.contains` and `for` over lists · immutable **records** (`type Point = { x: Int, y: Int }`), with nominal identity · **`Option[T]` and `Result[T, E]`** · **modules** (`import "path/file.nex"`, `pub`) · **refined types** (`type Percent = Int where ...`): constants are checked without running and the rest with `Percent(x)` when running · **arguments** (`args()`) and **standard input** (`input()`) · **files** with explicit permissions · bounded HTTPS requests (`Net.get`) and external processes (`Process.run`), both opt-in and denied in the Playground · **contracts** (`needs`, `promises`) in the header of the function, checked when running, and `trust`, which is never checked · **examples** in functions (`example`), evaluated with `nex test` · explanation of every rule in the diagnostics · immutable (`let`) and reassignable (`var`) variables, and scopes · **`while` loops** with their measure (`shrinks`) and invariants (`keeps`), checked on every iteration · **operations on texts** (`Text.length`, `Text.slice`, ordering, `Int.parse`), each function with its requirements · arithmetic, comparisons and logic · explicit conversions · functions with parameters and `return` · `if` / `else` · recursion · static analysis of names, types and return paths · commands `run`, `check`, `inspect`, `context`, `symbols` and `test` · diagnostics with code and category, as text and JSON · versioned JSON formats with JSON Schema |
+| **Implemented for the next CLI release** | Local statement debugger `nex debug`, with stepping, breakpoints, live variables and a call stack. It is documented in [the CLI reference](docs/cli-reference.md#nex-debug), with a runnable [reference app](docs/examples/local-debugger.nex) and [scope decision](docs/decisions/0022-depurador-local.md). It is not included in the published 0.14.1 package yet. |
 | **Experimental** | Python API `nexora.tooling` · optional MCP server (tested with the SDK client and, by hand, in Claude Code; in no other assistant) |
 | **Live in production, still experimental** | The [web Playground](https://nexoralang.org/playground) runs a previous interpreter release. It supports Check, Run, multi-file projects with an entry file, and a statement debugger with breakpoints, Step, Continue and Stop. Public runs use the same interpreter in a Docker worker with network access disabled. |
 | **Planned** (does not exist) | `break` and `continue`, `for` over ranges or `Text`, maps and user generics |
@@ -266,6 +267,7 @@ What they cover and how to read them: [Testing](docs/testing.md).
 |-|-|
 | [Index](docs/index.md) | All the pages |
 | [Getting started](docs/getting-started.md) | Tutorial |
+| [Application deployment](docs/deployment.md) | Version-pinned installs and external configuration for Windows, macOS, Linux and containers |
 | [Types](docs/types.md) · [Functions](docs/functions.md) · [Contracts](docs/contracts.md) | Language guides |
 | [Specification](docs/language-spec.md) | Formal reference: grammar, types, semantics |
 | [CLI](docs/cli-reference.md) · [Diagnostics](docs/diagnostics.md) | Reference of the tool and of the errors |
@@ -273,8 +275,8 @@ What they cover and how to read them: [Testing](docs/testing.md).
 | [Limitations](docs/limitations.md) · [Roadmap](docs/roadmap.md) | What is missing |
 | [Changes](CHANGELOG.md) · [Decisions](docs/decisions/README.md) | History and reasons |
 
-All the example programs of the documentation run in the tests, and the output
-shown is compared with the real one.
+The language examples embedded in the tutorial are run by the tests, and their output is compared
+with the interpreter. The standalone deployment template has its own clean-install instructions.
 
 ## Contributing
 
