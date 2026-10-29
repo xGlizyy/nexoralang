@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import argparse
 import errno
+import io
 import json
 import math
 import os
 import signal
 import sys
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from . import api, migrate, migrate_files, tooling
@@ -951,8 +953,23 @@ def main(argv: list[str] | None = None) -> int:
     _use_utf8()
     parser = _build_parser()
     cli_argv = list(sys.argv[1:] if argv is None else argv)
+    program_args: list[str] | None = None
+    if cli_argv and cli_argv[0] == "run" and "--" in cli_argv:
+        separator = cli_argv.index("--")
+        # A separator after the file introduces program arguments. Before the file,
+        # argparse needs it to accept a filename that starts with a dash.
+        try:
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                parser.parse_args(cli_argv[:separator])
+        except SystemExit:
+            pass
+        else:
+            program_args = cli_argv[separator + 1:]
+            cli_argv = cli_argv[:separator]
     try:
         arguments = parser.parse_args(cli_argv)
+        if program_args is not None:
+            arguments.args = program_args
     except SystemExit as exit_request:
         # argparse exits by itself for --help, --version (0) and for usage errors (2).
         return exit_request.code if isinstance(exit_request.code, int) else EXIT_USAGE
