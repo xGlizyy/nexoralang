@@ -563,7 +563,7 @@ let words: List[Text] = ["a", "b"]
 - A refined element can be widened to its base when a list is built with an expected type:
   `let xs: List[Int] = [Percent(10), 20]`.
 
-#### Literals and inference
+#### 4.5.1 Literals and inference
 
 `[a, b, c]` and `[]` are expressions. Without an expected type, the **first element** sets the type of
 the rest; all of them have to be acceptable as that type. With an expected type `List[T]`, all the
@@ -596,7 +596,7 @@ All the elements of a list have the same type. `Int` and `Text`, for example, do
 let mixed = [1, "a"]                    // Expected Int, found Text
 ```
 
-#### Immutability, equality and printing
+#### 4.5.2 Immutability, equality and printing
 
 A list does not change. A `var` variable can come to point to another list, but the previous list
 keeps its elements. `List.append` and `List.concat` build new lists (section 8.2).
