@@ -272,7 +272,7 @@ fn main() {{
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX process groups are used for child cleanup")
-def test_process_run_cleans_up_descendants_after_command_returns(program, tmp_path):
+def test_process_run_cleans_up_descendants_after_command_returns(program, tmp_path, capsys):
     executable = sys.executable.replace("\\", "\\\\")
     marker = (tmp_path / "child-finished").as_posix()
     child_code = f"import time; time.sleep(1); open({marker!r}, 'w').close()"
@@ -280,10 +280,11 @@ def test_process_run_cleans_up_descendants_after_command_returns(program, tmp_pa
     source = f'''uses process "{executable}"
 
 fn main() {{
-    Process.run("{executable}", ["-c", {json.dumps(parent_code)}])
+    print(Process.run("{executable}", ["-c", {json.dumps(parent_code)}]))
 }}
 '''
     assert cli.main(["run", program(source), "--allow-process", sys.executable]) == 0
+    assert capsys.readouterr().out == "\n"
     time.sleep(1.1)
     assert not (tmp_path / "child-finished").exists()
 
