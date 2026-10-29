@@ -59,7 +59,7 @@ offline. What there is and what there is not, precisely: [Automated tools and AI
 
 ## Status
 
-**Version 0.14.1, prepared for release. Early-stage project**, before 1.0: the language may change
+**Version 0.14.1. Early-stage project**, before 1.0: the language may change
 incompatibly and NEXORA programs are not suitable for production use. The public Playground is a
 production-hosted service for trying the language; that does not make the language itself
 production-ready.

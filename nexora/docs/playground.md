@@ -25,7 +25,7 @@ run it locally and how to deploy it on your own server.
 | Limits of time, size, output, concurrency and requests | Implemented and tested |
 | Operating system memory and CPU limits | Implemented for Linux and macOS, but they are only enforced by the operating system where they exist: the CPU one on both, the memory one only on Linux (on macOS, the kernel accepts the address space limit and does not apply it). Tested on Linux (Ubuntu 24.04 on WSL 2) with `tests/test_worker.py`, which launches the worker as a process, without a container; on macOS, only the CPU one. On Windows they do not exist |
 | Container isolation (Docker) | In use on the public site: workers run with no network, a read-only filesystem, dropped capabilities, no-new-privileges, and CPU, memory and process limits |
-| Deployment on a public server | Live at [nexoralang.org/playground](https://nexoralang.org/playground), running NEXORA 0.14.0; staging and production passed the release verifier on 28 October 2026 |
+| Deployment on a public server | Live at [nexoralang.org/playground](https://nexoralang.org/playground), running NEXORA 0.14.1; staging and production passed the release verifier on 29 October 2026 |
 
 The hosted Playground runs in production as a constrained service; this does not change the
 early-stage status of the language itself. See [limitations](limitations.md) before using NEXORA for
@@ -149,7 +149,7 @@ whether the program has errors or not.
   "diagnostics": [],
   "message": null,
   "duration_ms": 104,
-  "version": "0.14.0"
+  "version": "0.14.1"
 }
 ```
 
@@ -230,7 +230,7 @@ the server.
 | Programs at once | 4 | `PLAYGROUND_MAX_CONCURRENT` | The following ones wait in the queue |
 | Waiting requests | 8 | `PLAYGROUND_MAX_QUEUE` | HTTP 503 `busy` |
 | Requests per client | 30 per minute | `PLAYGROUND_RATE_LIMIT`, `PLAYGROUND_RATE_WINDOW_MS` | HTTP 429 |
-| Nested calls | 1000 | (of the language) | Runtime error `E3004` |
+| Nested calls | 1000 | (reference interpreter limit) | Runtime error `E3004` |
 
 Time is measured from when the worker starts, so it includes the start of Python (in the order of
 a tenth of a second) or of the container (slower: measure it on your server and adjust the limit).
