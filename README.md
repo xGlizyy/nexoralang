@@ -5,7 +5,7 @@ An experimental programming language built around explicit requirements and chec
 NEXORA is its own language, with its own syntax, type checker and interpreter. The reference
 interpreter is implemented in Python; programs are NEXORA programs, not Python translations.
 
-**Version 0.14.1, prepared for release · Early-stage, pre-1.0.** The supported language is a
+**Version 0.14.1 · Early-stage, pre-1.0.** The supported language is a
 subset of the full design and may change incompatibly. NEXORA programs are not recommended for
 production software. The public Playground is live in production; that describes the hosted service,
 not the maturity of the language for production applications.

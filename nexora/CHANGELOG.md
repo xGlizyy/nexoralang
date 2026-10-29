@@ -4,7 +4,7 @@ Changelog for NEXORA, with the most recent version first.
 
 All versions are prior to 1.0: the language may change incompatibly between versions. Each incompatible change is indicated here and explained in `docs/decisions/`.
 
-This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Versions 0.10.0, with `Option` and `Result`, 0.11.0, with modules and imports, 0.12.0, with the syntax of decision 0019, 0.13.0, with network and process capabilities, and 0.14.0, with editor integrations and LSP project support, are also tagged and published in both registries. Earlier ones only identify code states: they were never tagged or published.
+This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Versions 0.10.0, with `Option` and `Result`, 0.11.0, with modules and imports, 0.12.0, with the syntax of decision 0019, 0.13.0, with network and process capabilities, 0.14.0, with editor integrations and LSP project support, and 0.14.1, with local execution limits, are also tagged and published in both registries. Earlier ones only identify code states: they were never tagged or published.
 
 Each version groups its changes into these sections, when they contain content:
 
@@ -19,6 +19,9 @@ Each version groups its changes into these sections, when they contain content:
 
 ## 0.14.1 — Configurable local execution limits
 
+This version is tagged (`v0.14.1`) and published on PyPI and npm. The VS Code extension is unchanged;
+its compatible 0.14.0 VSIX remains attached to the 0.14.0 GitHub release and is not listed on the Marketplace.
+
 ### Added
 
 - `nex run` accepts `--timeout`, `--max-memory`, `--max-source`, `--max-input`, `--max-output` and
@@ -29,6 +32,11 @@ Each version groups its changes into these sections, when they contain content:
   or is interrupted. `--timeout` is supported on POSIX interval-timer systems and `--max-memory` on
   Linux; the CLI reference documents the recommended OS supervisor for full process-tree and
   resource isolation.
+
+### Fixed
+
+- `nex run` distinguishes a `--` before a dash-leading filename from the separator after the file
+  that introduces program arguments.
 
 ## 0.14.0 — Editor integrations and LSP project support
 

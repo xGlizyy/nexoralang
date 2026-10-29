@@ -121,9 +121,9 @@ The `nex` command can be distributed in two ways. The package is called **`nexor
 because the name `nexora` already belongs to other projects on PyPI and on npm. The command is still
 `nex`.
 
-The source tree is prepared as version 0.14.1. Until release completes, registry installs continue to resolve the previous published version. For development versions, build the packages
-locally using the instructions below and check that they install from the generated files and that the
-`nex` command works.
+Version 0.14.1 is published on PyPI and npm. For development versions, build the packages locally
+using the instructions below and check that they install from the generated files and that the `nex`
+command works.
 
 | | pip | npm |
 |-|-----|-----|
@@ -170,7 +170,14 @@ The credentials are entered when running those commands; they are not stored in 
 0.9.0, 0.10.0 and 0.11.0 were published this way, with the test suite and the continuous integration
 green. 0.12.0 too, from the files built in a clean copy of the tag `v0.12.0`: the same files that were
 installed and tried before, checked by their SHA-256 before and after the upload. 0.12.1 too, from a
-clean copy of the tag `v0.12.1`, with its files checked by their SHA-256 before the upload.
+clean copy of the tag `v0.12.1`, with its files checked by their SHA-256 before the upload. Version
+0.14.1 was built, checked and installed before upload; its SHA-256 sums are attached to the GitHub
+release.
+
+npm may scan a package after accepting a publish before making the version available. Wait for
+`npm view nexora-lang version` to show the new version instead of retrying the same version; a repeated
+publish can return `E409` for a version already being processed. See [npm's publish-time scanning
+notice](https://github.blog/changelog/2026-07-28-npm-publish-time-malware-scanning-and-dual-use-metadata/).
 
 ## Common problems
 
