@@ -309,6 +309,43 @@ def test_every_normative_clause_has_an_executable_example_and_focused_tests():
             )
 
 
+@pytest.mark.parametrize(
+    ("clause", "example_paths"),
+    [
+        ("8.1", ("texts.nex", "types.nex")),
+        ("8.2", ("lists.nex",)),
+        ("8.4", ("option_result.nex",)),
+    ],
+)
+def test_every_documented_builtin_has_an_executable_use(clause, example_paths):
+    """The normative built-in tables stay aligned with the runnable program examples."""
+    spec_lines = (ROOT / "docs" / "language-spec.md").read_text(encoding="utf-8").splitlines()
+    heading_index = next(
+        index for index, text in enumerate(spec_lines)
+        if re.match(rf"^### {re.escape(clause)} ", text)
+    )
+    next_heading = next(
+        (index for index in range(heading_index + 1, len(spec_lines))
+         if re.match(r"^### ", spec_lines[index])),
+        len(spec_lines),
+    )
+    section = spec_lines[heading_index:next_heading]
+    names = {
+        cell.strip("`").split("(", 1)[0]
+        for line in section
+        if line.startswith("|")
+        for cell in (line.split("|", 2)[1].strip(),)
+        if cell.startswith("`")
+    }
+    assert names, f"section {clause}: no built-in table entries found"
+    example_source = "\n".join(
+        (ROOT / "examples" / path).read_text(encoding="utf-8")
+        for path in example_paths
+    )
+    missing = sorted(name for name in names if name not in example_source)
+    assert not missing, f"section {clause}: built-ins without a runnable example: {missing}"
+
+
 def test_every_marker_is_known():
     for block in CHECKED:
         assert block.marker in MARKERS, f"{block.label}: unknown marker nex:{block.marker}"
