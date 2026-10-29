@@ -48,7 +48,14 @@ jobs:
       # The equivalence tests with 0.11.0 (T1-T4) are left out here on purpose, and run once in the
       # job "equivalence" below. Coverage does not change: they only run nex in subprocesses.
       - name: Tests with coverage
+        if: matrix.os != 'macos-latest' || matrix.python != '3.11'
         run: python -m pytest --cov -m "not equivalence"
+
+      # This runner has stalled without identifying the current test. Keep verbose progress and
+      # periodic thread dumps here so a slow or blocked test is actionable in the Actions log.
+      - name: Tests with coverage (macOS 3.11 diagnostics)
+        if: matrix.os == 'macos-latest' && matrix.python == '3.11'
+        run: python -m pytest -vv --cov -m "not equivalence" -o faulthandler_timeout=120
 
       - name: The installed command works
         run: |
