@@ -950,8 +950,16 @@ def main(argv: list[str] | None = None) -> int:
     """Entry point of `nex`. Returns the process exit code."""
     _use_utf8()
     parser = _build_parser()
+    cli_argv = list(sys.argv[1:] if argv is None else argv)
+    program_args: list[str] | None = None
+    if cli_argv and cli_argv[0] == "run" and "--" in cli_argv:
+        separator = cli_argv.index("--")
+        program_args = cli_argv[separator + 1:]
+        cli_argv = cli_argv[:separator]
     try:
-        arguments = parser.parse_args(argv)
+        arguments = parser.parse_args(cli_argv)
+        if program_args is not None:
+            arguments.args = program_args
     except SystemExit as exit_request:
         # argparse exits by itself for --help, --version (0) and for usage errors (2).
         return exit_request.code if isinstance(exit_request.code, int) else EXIT_USAGE
