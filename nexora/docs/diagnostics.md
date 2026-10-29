@@ -153,7 +153,7 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E3003` | Float result out of range | A `Float` result is too large | Review the operation |
 | `E3004` | Too many nested calls | More than 1000 nested calls, or the stack ran out before | It is usually a recursion that does not reach its base case |
 | `E3005` | Conversion out of range | `to_int` of a `Float` that does not fit in an `Int` | Check the value before converting |
-| `E3006` | Text too long | A text built with `+` exceeds the limit of the environment where it runs. It only happens where a limit is set, as in the playground | Build shorter texts |
+| `E3006` | Text too long | A Text value exceeds the limit of the environment where it runs. It only happens where a limit is set, such as `nex run --max-text` or the Playground | Build shorter texts |
 | `E3007` | Out of memory | The program needed more memory than was available while it ran. It points at no position; the notes show the chain of calls | Reduce the size of the values the program creates, above all those that grow on every call |
 | `E3008` | Permission denied | The program tries to use a file, network origin or process that is not declared, granted or enabled by the environment | Declare the capability, use the matching `--allow-*` option and run in an enabled host |
 | `E3009` | No more input | `input()` was called when the standard input had already ended | Check that there is more input before reading, or end the program |
@@ -162,6 +162,8 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E3012` | Result is an error | `Result.value` was called with an `Err`: the variant does not carry the value | Check first with `Result.is_err(...)`, or use `Result.value_or(x, fallback)` |
 | `E3013` | Result is not an error | `Result.error` was called with an `Ok`: the variant does not carry the error | Check first with `Result.is_ok(...)` |
 | `E3014` | External operation failed | An HTTPS request or external process failed, exceeded its limit or produced invalid text | Check the URL or command and its output; the limits are described in section 8.3 of the specification |
+| `E3015` | Resource limit exceeded | A configured `nex run` source, input, output or wall-clock budget was exceeded | Increase the matching `--max-*` or `--timeout` budget, or reduce the program's use |
+| `E3015` | Resource limit exceeded | A configured `nex run` source, input, output or wall-clock budget was exceeded | Increase the matching `--max-*` or `--timeout` budget, or reduce the program's use |
 
 ### Contract
 

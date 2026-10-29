@@ -72,14 +72,17 @@ tests** (`tests/test_security.py`, `tests/test_robustness.py`):
 - **A process explicitly allowed by `--allow-process` runs with the user's operating-system
   permissions.** It can access files, the network and other resources available to that user; command
   and argument choices are not a sandbox boundary. Do not grant this permission to untrusted code.
-  On Windows, a timeout stops the direct process but may not stop child processes it started.
+  The CLI timeout is available on POSIX interval-timer platforms; on Windows, use a Job Object or
+  container to enforce a deadline and stop the full process tree. On POSIX, `Process.run` cleans up
+  its process group when the command returns or is interrupted. A descendant that deliberately
+  leaves that group still requires an OS supervisor.
 - **An explicitly allowed network origin is not isolated from local services.** Only HTTPS requests to
   the declared origin are made, but if that origin resolves to a private address, the CLI does not
   block it. Only grant network access to programs you trust.
-- **There is no limit on running time.** A program can take a long time.
-- **There is no memory limit.** A program can build very large texts by concatenation.
-  The limit of 1000 nested calls bounds recursion, not memory use.
-- **There is no limit on the size of the input file**, nor on the size of the output.
+- **Resource limits are opt-in.** `nex run` provides `--timeout` on POSIX interval-timer platforms,
+  `--max-memory` on Linux, and limits for source files, standard input, printed output and Text
+  values. `--timeout` and `--max-memory` are not enforced on every operating system. The limits do
+  not cover `nex test`, analysis time, file writes, network use, or all OS resources.
 - **The tests with random inputs are limited.** They go through a few thousand cases generated with
   a fixed seed. They are not an exhaustive search and do not replace an audit.
 - **No external audit has been done**, nor any security analysis with specialized
@@ -88,9 +91,10 @@ tests** (`tests/test_security.py`, `tests/test_robustness.py`):
   sequences. If you show the output of an untrusted program in a terminal, keep it in mind.
 
 Consequently: running an unknown NEXORA program should not be able to read your files or
-run other programs, but **it can use CPU and memory without limit**. If you need to run
-untrusted code, do it inside an isolation provided by the operating system
-(a container, a virtual machine, system resource limits).
+run other programs unless you explicitly grant those capabilities, but it can still use resources
+outside the limits you selected. For untrusted code, use OS isolation such as a restricted
+container, VM, or job object, and let that supervisor enforce a wall-clock deadline, memory, CPU,
+process-count, file-system and network limits.
 
 ## Supply chain
 

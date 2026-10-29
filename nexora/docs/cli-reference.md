@@ -59,14 +59,19 @@ nex run program.nex --timeout 3 --max-memory 536870912 --max-source 262144 --max
   --max-output 65536 --max-text 262144
 ```
 
-`--timeout` uses POSIX interval timers and is unavailable on Windows. It interrupts interpreter
-execution and ordinary blocking calls when control returns to Python; use an external supervisor
-to enforce deadlines on native commands or uninterruptible system calls. `--max-memory` uses
-`RLIMIT_AS`, includes the Python interpreter, and is enforced on Linux. macOS accepts this limit
-but does not enforce it; Windows does not provide it through Python's `resource` module.
-Output, text and source limits work across platforms. These CLI limits do not form a complete
-sandbox: they do not restrict network access or file permissions, and process cleanup for
-untrusted workloads is best handled by an OS container or job supervisor.
+`--timeout` uses POSIX interval timers and is unavailable on Windows. It covers program execution
+after source analysis, and interrupts Python execution when control returns to Python; it cannot
+enforce deadlines inside native commands or uninterruptible system calls. On POSIX, `Process.run`
+owns a process group and cleans up its descendants when the command returns or is interrupted.
+`--max-memory` uses Linux `RLIMIT_AS`, includes the Python interpreter, and is refused on other
+platforms because they do not enforce this limit reliably. Source size is bounded per file,
+including every imported module. Input is counted in UTF-8 bytes across all `input()` calls,
+printed output in UTF-8 bytes, and `--max-text` applies to every Text value from literals,
+command-line arguments, input, files, network/process results and language operations. Limit
+failures use the `E3015` runtime diagnostic and are reported as text or JSON according to
+`--format`; `--max-text` uses `E3006`, and memory exhaustion uses `E3007`. These CLI limits do not
+form a complete sandbox: they do not restrict file writes, network access, CPU scheduling, or
+descendants that deliberately leave a process group.
 
 For untrusted programs, run each invocation in a disposable OS sandbox and let the supervisor own
 the deadline and process cleanup. On Linux, a practical starting point is a container with no
@@ -104,12 +109,12 @@ Hello from NEXORA
 |--------|--------|
 | `--format text` | Default. Errors are written as text for people |
 | `--format json` | If the program is invalid or fails, it writes a JSON document to the **standard error**. If it ends well, it writes nothing extra. The output of the program does not change |
-| `--timeout SECONDS` | Stops execution at the wall-clock deadline (POSIX only) |
-| `--max-memory BYTES` | Caps process address space with `RLIMIT_AS` (supported POSIX systems only; includes Python) |
-| `--max-source BYTES` | Refuses a source file larger than this UTF-8 byte count |
+| `--timeout SECONDS` | Stops program execution at the wall-clock deadline after analysis (POSIX interval timers only) |
+| `--max-memory BYTES` | Caps process address space with Linux `RLIMIT_AS` (includes Python; refused elsewhere) |
+| `--max-source BYTES` | Refuses an entry or imported source file larger than this UTF-8 byte count |
 | `--max-input BYTES` | Stops when the program reads more than this many bytes from standard input, across all `input()` calls |
 | `--max-output BYTES` | Stops after the program reaches this many printed UTF-8 bytes |
-| `--max-text CHARS` | Stops a run when it constructs a `Text` longer than this |
+| `--max-text CHARS` | Stops a run when any `Text` value is longer than this |
 | `--allow-read PATH` | Allows the program to read the files of that path. It can be repeated. A program also has to declare it with `uses read` |
 | `--allow-write PATH` | Allows the program to write the files of that path. It can be repeated. A program also has to declare it with `uses write` |
 | `--allow-network ORIGIN` | Allows HTTPS GET requests to an exact origin, such as `https://api.example.com`. It can be repeated. The program also has to declare `uses network` |

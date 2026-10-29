@@ -90,11 +90,33 @@ def test_run_output_budget_stops_with_a_clear_diagnostic(program, capsys):
     assert "never" not in captured.out
 
 
+def test_run_output_budget_does_not_split_a_utf8_character(program, capsys):
+    path = program('fn main() { print("éé") }\n')
+    assert cli.main(["run", path, "--max-output", "3"]) == 3
+    captured = capsys.readouterr()
+    assert captured.out == "é"
+    assert "output limit exceeded (3)" in captured.err
+
+
+def test_run_json_reports_a_resource_limit_as_a_diagnostic(program, capsys):
+    path = program('fn main() { print("abcdef") }\n')
+    assert cli.main(["run", path, "--max-output", "2", "--format", "json"]) == 3
+    captured = capsys.readouterr()
+    assert captured.out == "ab"
+    document = json.loads(captured.err)
+    assert document["schema"] == "nexora.diagnostics/1"
+    (diagnostic,) = document["diagnostics"]
+    assert (diagnostic["category"], diagnostic["code"], diagnostic["label"]) == (
+        "runtime", "E3015", "output limit exceeded (2)",
+    )
+
+
 def test_run_source_budget_refuses_large_input(program, capsys):
     assert cli.main(["run", program(HELLO), "--max-source", "1"]) == 3
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "source exceeds --max-source (1 bytes)" in captured.err
+    assert "runtime error[E3015]: Resource limit exceeded" in captured.err
+    assert "--max-source limit exceeded (1)" in captured.err
 
 
 def test_run_text_budget_stops_with_runtime_diagnostic(program, capsys):
@@ -111,12 +133,18 @@ def test_run_limits_must_be_positive(program, capsys, option):
     assert f"{option} must be greater than zero" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("value", ["nan", "inf"])
+def test_run_timeout_must_be_finite(program, capsys, value):
+    assert cli.main(["run", program(HELLO), "--timeout", value]) == 2
+    assert "--timeout must be greater than zero" in capsys.readouterr().err
+
+
 def test_run_memory_budget_is_refused_where_rlimit_as_is_not_enforced(program, capsys):
     if sys.platform not in ("darwin", "win32"):
         pytest.skip("this platform enforces RLIMIT_AS")
     assert cli.main(["run", program(HELLO), "--max-memory", "536870912"]) == 2
     message = capsys.readouterr().err
-    assert "macOS accepts RLIMIT_AS but does not enforce it" in message or "requires POSIX RLIMIT_AS support" in message
+    assert "--max-memory is enforced only on Linux" in message
 
 
 @pytest.mark.skipif(os.name != "nt", reason="POSIX platforms support the CLI interval timer")
@@ -129,6 +157,65 @@ def test_run_source_limit_accepts_a_file_at_the_limit(program, capsys):
     path = program(HELLO)
     assert cli.main(["run", path, "--max-source", str(os.path.getsize(path))]) == 0
     assert capsys.readouterr().out == "Hello from NEXORA\n"
+
+
+def test_run_source_limit_applies_to_imported_modules(program, tmp_path, capsys):
+    path = program('import "large.nex"\nfn main() { print(large.value()) }\n')
+    module = tmp_path / "large.nex"
+    module.write_text("// " + ("x" * 100) + "\npub fn value() gives Int { return 1 }\n", encoding="utf-8")
+    assert cli.main(["run", path, "--max-source", "80"]) == 3
+    message = capsys.readouterr().err
+    assert "runtime error[E3015]: Resource limit exceeded" in message
+    assert "--max-source limit exceeded (80)" in message
+    assert "large.nex" in message
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="RLIMIT_AS is enforced on Linux")
+def test_run_memory_limit_becomes_a_runtime_diagnostic(program):
+    source = '''fn main() {
+    var text = "x"
+    var count = 1
+    while count < 30
+        shrinks 30 - count, "The text doubles each turn"
+    {
+        text = text + text
+        count = count + 1
+    }
+    print("done")
+}
+'''
+    result = nex("run", program(source), "--max-memory", "268435456", "--format", "json")
+    assert result.returncode == 3
+    document = json.loads(result.stderr)
+    (diagnostic,) = document["diagnostics"]
+    assert diagnostic["code"] == "E3007"
+    assert "memory" in diagnostic["label"].lower()
+
+
+@pytest.mark.parametrize(
+    "source, arguments, input_text",
+    [
+        ('fn main() { print("abc") }\n', [], ""),
+        ('fn main() { print(input()) }\n', [], "x" * 100_000),
+        ('fn main() { print(List.get(args(), 0)) }\n', ["abc"], ""),
+    ],
+    ids=["literal", "bounded-input", "argument"],
+)
+def test_run_text_limit_applies_to_literals_input_and_arguments(
+    program, monkeypatch, capsys, source, arguments, input_text,
+):
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(input_text.encode()), encoding="utf-8"))
+    assert cli.main(["run", program(source), "--max-text", "2", "--", *arguments]) == 3
+    assert "E3006" in capsys.readouterr().err
+
+
+def test_run_text_limit_bounds_file_reads(program, tmp_path, capsys):
+    data_path = tmp_path / "data.txt"
+    data_path.write_text("x" * 100_000, encoding="utf-8")
+    declared_path = str(data_path).replace("\\", "\\\\")
+    path = program(f'uses read "{declared_path}"\nfn main() {{ print(read_file("{declared_path}")) }}\n')
+    assert cli.main(["run", path, "--max-text", "8", "--allow-read", str(data_path)]) == 3
+    assert "E3006" in capsys.readouterr().err
 
 
 def test_run_input_budget_stops_before_reading_past_its_byte_limit(program, monkeypatch, capsys):
@@ -170,15 +257,34 @@ def test_run_timeout_cleans_up_an_active_process(program, tmp_path, capsys):
     executable = sys.executable.replace("\\", "\\\\")
     marker = (tmp_path / "child-finished").as_posix()
     child_code = f"import time; time.sleep(1); open({marker!r}, 'w').close()"
+    parent_code = f"import subprocess,sys; subprocess.Popen([sys.executable, '-c', {child_code!r}]).wait()"
     source = f'''uses process "{executable}"
 
 fn main() {{
-    print(Process.run("{executable}", ["-c", "{child_code}"]))
+    print(Process.run("{executable}", ["-c", {json.dumps(parent_code)}]))
 }}
 '''
     path = program(source)
     assert cli.main(["run", path, "--allow-process", sys.executable, "--timeout", "0.1"]) == 3
     assert "time limit exceeded" in capsys.readouterr().err
+    time.sleep(1.1)
+    assert not (tmp_path / "child-finished").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process groups are used for child cleanup")
+def test_process_run_cleans_up_descendants_after_command_returns(program, tmp_path, capsys):
+    executable = sys.executable.replace("\\", "\\\\")
+    marker = (tmp_path / "child-finished").as_posix()
+    child_code = f"import time; time.sleep(1); open({marker!r}, 'w').close()"
+    parent_code = f"import subprocess,sys; subprocess.Popen([sys.executable, '-c', {child_code!r}])"
+    source = f'''uses process "{executable}"
+
+fn main() {{
+    print(Process.run("{executable}", ["-c", {json.dumps(parent_code)}]))
+}}
+'''
+    assert cli.main(["run", program(source), "--allow-process", sys.executable]) == 0
+    assert capsys.readouterr().out == "\n"
     time.sleep(1.1)
     assert not (tmp_path / "child-finished").exists()
 

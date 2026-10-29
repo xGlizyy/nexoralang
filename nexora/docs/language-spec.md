@@ -1569,8 +1569,9 @@ Every time a loop runs:
 4. The body runs and the loop goes back to step 1.
 
 So **every loop ends, or stops with a diagnostic that says why it would not**: an integer measure
-that does not go below 0 cannot decrease forever. There are no time limits: the same program
-always gives the same result. The diagnostic says in which iteration it happened and with which values:
+that does not go below 0 cannot decrease forever. The language specifies no execution-time
+guarantee; `nex run` can optionally stop execution with `--timeout` on POSIX platforms that support
+interval timers. The diagnostic says in which iteration it happened and with which values:
 
 <!-- nex:fails exit=5 -->
 ```nex
@@ -1868,8 +1869,8 @@ do.
 | `E3003` | Float result out of range | `runtime` | A `Float` result that is too large |
 | `E3004` | Too many nested calls | `runtime` | More than 1000 nested calls |
 | `E3005` | Conversion out of range | `runtime` | `to_int` of a `Float` that does not fit in an `Int` |
-| `E3006` | Text too long | `runtime` | A `Text` built with `+` exceeds the limit set by the environment. `nex run` sets none; the playground does |
-| `E3007` | Out of memory | `runtime` | The program runs out of memory while it runs. No position ([decision 0009](decisions/0009-memoria-agotada.md)) |
+| `E3006` | Text too long | `runtime` | A `Text` exceeds the limit set by the environment. `nex run` sets one with `--max-text`; the playground sets its own |
+| `E3007` | Out of memory | `runtime` | The program runs out of memory while it runs. No position; a Linux `--max-memory` budget can cause this diagnostic ([decision 0009](decisions/0009-memoria-agotada.md)) |
 | `E3008` | Permission denied | `runtime` | The program tries to use a file, network origin or process that is not declared, granted or enabled by the host (section 8.3) |
 | `E3009` | No more input | `runtime` | `input()` is called when the standard input has already ended (section 8.3) |
 | `E3010` | File error | `runtime` | The file could be used, but it could not be read or written: it does not exist, it is not UTF-8 text, or the operating system prevented it |
@@ -1877,6 +1878,8 @@ do.
 | `E3012` | Result is an error | `runtime` | `Result.value` is called with an `Err`: the variant does not carry the value (section 8.4) |
 | `E3013` | Result is not an error | `runtime` | `Result.error` is called with an `Ok`: the variant does not carry the error (section 8.4) |
 | `E3014` | External operation failed | `runtime` | An HTTPS request or an external process failed, exceeded its limit or produced invalid text (section 8.3) |
+| `E3015` | Resource limit exceeded | `runtime` | A configured `nex run` source, input, output or wall-clock budget was exceeded |
+| `E3015` | Resource limit exceeded | `runtime` | A configured `nex run` source, input, output or wall-clock budget was exceeded |
 | `E4001` | Precondition violated | `contract` | A `needs` condition is false in a call |
 | `E4002` | Postcondition violated | `contract` | A `promises` condition is false when a function ends |
 | `E4003` | Refinement violated | `contract` | A value checked with `Type(x)` does not meet the condition of the refined type |

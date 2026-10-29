@@ -61,14 +61,22 @@ not yet a general-purpose replacement for established languages.
 | Range of `Int` | 64-bit signed | Runtime error `E3002` |
 | Smallest integer literal | `-9223372036854775807` | `-9223372036854775808` can only be obtained by computing it: `-9223372036854775807 - 1` |
 
-There is no time or memory limit: a program can take long or use memory without the
-interpreter stopping it. No program keeps repeating something forever: an endless
+`nex run` has opt-in resource limits; without them a program can take long or use memory without
+the interpreter stopping it. `--timeout` is supported on POSIX systems with interval timers, and
+`--max-memory` is enforced on Linux with `RLIMIT_AS` (the budget includes Python itself). The
+source-size, standard-input, printed-output and text-value limits work on all supported platforms.
+Source-size applies to the entry file and every imported source file. The text limit checks each
+Text value as the program reads, receives or builds it. These are local CLI safeguards, not a
+sandbox or a complete resource boundary; use an OS supervisor for untrusted programs or platforms
+where the requested limit is unavailable. `nex test` has no time or memory budget per example.
+
+No program keeps repeating something forever: an endless
 recursion stops with `E3004` and an endless loop, with `E4006` (its measure stops decreasing). But a
 program that ends can take a long time: a branching recursion (`fib(40)`) or a loop
-with a huge initial measure. It can be interrupted with Ctrl+C. `nex test` has no time limits
-per example either. If Python runs out of memory while the program runs, the program
-ends with the error `E3007`; but on Linux the system can kill the process first, without any
-message ([decision 0009](decisions/0009-memoria-agotada.md)).
+with a huge initial measure. Without `--timeout`, it can be interrupted with Ctrl+C. If Python
+runs out of memory while the program runs, the program ends with the error `E3007`; the operating
+system can still terminate the process before Python can report it
+([decision 0009](decisions/0009-memoria-agotada.md)).
 
 ## Performance
 
@@ -128,8 +136,10 @@ with the local user's permissions. Even with these checks:
 
 - **NEXORA is not a sandbox.** It runs inside a normal Python process,
   with the permissions of whoever launches it.
-- **There are no time or memory limits** when using `nex`. A malicious program can make
-  the process use resources.
+- **Resource limits are opt-in and platform-dependent** when using `nex run`. `--timeout` uses
+  POSIX interval timers; `--max-memory` uses Linux `RLIMIT_AS` and includes the Python process.
+  Other per-run limits do not make NEXORA a sandbox or restrict file, network, CPU, or child-process
+  access. Use a container, VM, or OS job supervisor for untrusted programs.
 - The [playground](playground.md) runs in a restricted Docker container with `--network none` and
   has been verified on the production VPS. This is an operational check, not an adversarial escape
   audit. The worker denies file, network and process capabilities regardless of program declarations.
