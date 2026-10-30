@@ -5,6 +5,8 @@ interpret text written for people or deduce anything with regular expressions.
 
 This page defines the formats, their versions and the rules they follow. Every format also has
 a **JSON Schema** in [`schemas/`](schemas/), and the tests validate the real output with it.
+**Stability: stable per schema version.** A published schema identifier keeps its meaning;
+breaking changes require a new version ([stability policy](interface-stability.md)).
 
 ## Formats
 

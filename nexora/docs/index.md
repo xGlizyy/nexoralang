@@ -32,6 +32,7 @@ these pages is run by the automated tests and compared against the real output o
 | [Automated tools and AI](ai-tooling.md) | What NEXORA offers a tool or an agent, the Python API and what does not exist |
 | [Structured context](ai-context.md) | `nex context` and `nex symbols`: a summary and the symbols of a program, without running it |
 | [JSON protocol](json-protocol.md) | Every JSON format, its versions, its rules and its JSON Schemas |
+| [Public interfaces and stability](interface-stability.md) | The compatibility promise for the CLI, diagnostics, JSON, LSP, MCP and Python APIs |
 | [MCP server](mcp.md) | Optional server for compatible AI assistants: installation, tools and security |
 | [LSP](lsp.md) | VS Code, Neovim, Helix and Emacs integration through `nexora-lsp` |
 | [`nex inspect` schema](inspect-schema.md) | Every node and field of the syntax tree in JSON |

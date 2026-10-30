@@ -9,6 +9,9 @@ deterministically, with the same checker that `nex check` uses.
 
 ## Status
 
+**Stability: experimental.** Tool names, arguments, and behavior may change before 1.0
+([stability policy](interface-stability.md)).
+
 | | |
 |-|-|
 | Implemented | Yes: `src/nexora/mcp_server.py` |

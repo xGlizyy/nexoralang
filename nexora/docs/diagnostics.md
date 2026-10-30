@@ -2,6 +2,8 @@
 
 A diagnostic is the way NEXORA reports a problem. All of them have the same structure,
 a code that does not change and a category that says what kind of problem it is.
+**Stability: stable for machine-readable fields** (`code`, `category`, severity, and source positions).
+Human-readable wording may change ([stability policy](interface-stability.md)).
 
 ## Anatomy of a diagnostic
 
