@@ -82,6 +82,12 @@ whether the rest is feasible at all: either the limit is raised in a controlled 
 interpreter is written so that its recursion depth does not grow with the program it runs. The
 choice is a stage 1 design question, to be answered with a measurement.
 
+Stage 1 has an explicit stop condition. The depth measurement writes a small recursive NEXORA
+program shaped like a parser and evaluator and records the largest nesting it can process. If the
+result cannot handle the deepest program in the corpus and neither raising the limit nor bounding
+the recursion is acceptable under the compatibility policy, the plan stops there and the maintainer
+reopens this decision, with the alternatives of section 4.1 on the table.
+
 Nothing outside section 3 is added "for the interpreter". A feature that the self-hosted code does
 not use is not part of this stage.
 
@@ -110,6 +116,15 @@ Python: a bytecode virtual machine or a code generator written in some other lan
 generator that emits a self-contained executable. This is a separate decision, because it
 reintroduces the question of which language is underneath. It is taken once stages 2 and 3 give
 real measurements.
+
+## 4.1 Alternatives considered
+
+| Alternative | Why it was not chosen |
+|-------------|-----------------------|
+| A native runtime written in another language (for example Rust) that replaces the Python interpreter first | It removes Python sooner and runs faster, and it does not depend on new language features. The maintainer ruled it out because the goal is for the implementation to be written in NEXORA itself, not in a different host language. Its cost is that it keeps a second language in the project permanently. It stays available as an option for stage 4. |
+| Keep the Python interpreter and stop | Cheapest, and the 1.0 scope of [0021](0021-alcance-nexora-1-0.md) does not require anything else. Ruled out by the maintainer's goal of not depending on Python. |
+| Compile NEXORA to JavaScript or WebAssembly | Listed as under research in the roadmap. It moves execution to another platform instead of removing the dependency on a host language, and it is a larger design. |
+| Write the whole toolchain, including the command line and the language server, in NEXORA at once | Those parts need file system, process and protocol features the language does not have, and they are not part of the interpreter's contract. They are deferred. |
 
 ## 5. Equivalence criteria
 
