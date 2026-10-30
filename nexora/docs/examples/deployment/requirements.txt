@@ -1,1 +1,1 @@
-nexora-lang==0.14.1
+nexora-lang==0.15.0

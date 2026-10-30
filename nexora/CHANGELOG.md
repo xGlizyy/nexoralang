@@ -19,11 +19,22 @@ Each version groups its changes into these sections, when they contain content:
 
 ## Unreleased
 
+No changes yet.
+
+## 0.15.0 — Local CLI debugger and deployment guide
+
+Prepared from the merged main branch. This release adds a local CLI debugger and a reproducible
+deployment guide; it does not change the language grammar or core language semantics.
+
 ### Added
 
-- Documented the local CLI debugger scope and added a runnable debugger reference program.
-- Added a reproducible application deployment guide and reference app with exact Python and NEXORA
-  pins, per-platform launchers, external configuration and a Linux container recipe.
+- `nex debug` steps through checked programs, supports breakpoints, and shows bounded local
+  variables and the call stack. The debugger has explicit step and breakpoint limits and uses the
+  same file, network, process and execution limits as `nex run`.
+- A reproducible application deployment guide and reference app with exact Python and NEXORA pins,
+  per-platform launchers, external configuration and a Linux container recipe.
+- A decision documenting the debugger's scope as the local reference interface; DAP and editor
+  debugger integration remain out of scope.
 
 ## 0.14.1 — Configurable local execution limits
 
