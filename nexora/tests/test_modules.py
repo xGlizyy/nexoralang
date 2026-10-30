@@ -134,6 +134,34 @@ def test_public_module_enum_constructor_and_match_are_qualified():
     assert "".join(output) == "1\n"
 
 
+def test_a_record_of_a_module_can_use_another_type_of_the_same_module():
+    # The field types of an imported record are written relative to its own module: `Token` inside
+    # `lexer` is `lexer.Token`, even though the program that runs does not declare it.
+    texts = {
+        "main.nex": """\
+import "lexer.nex"
+fn main() {
+    let result = lexer.make()
+    print(List.length(result.tokens))
+    print(result.first.kind)
+}
+""",
+        "lexer.nex": """\
+pub type Token = { kind: Text }
+pub type Result = { tokens: List[Token], first: Token }
+pub fn make() gives Result {
+    return Result(tokens: [Token(kind: "x")], first: Token(kind: "x"))
+}
+""",
+    }
+    analysis = load(texts, "main.nex")
+    assert analysis.ok, [(diagnostic.code, diagnostic.label) for diagnostic in analysis.diagnostics]
+    output = []
+    from nexora.interpreter import run
+    run(analysis.checked, output.append)
+    assert "".join(output).splitlines() == ["1", "x"]
+
+
 def test_the_names_of_a_module_are_visible_without_pub_in_the_file_that_runs(files, capsys):
     # Nothing of the entry file is marked with `pub`: the file that runs is its own module,
     # and what it declares is its own (decision 0018, 3).
