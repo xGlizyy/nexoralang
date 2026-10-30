@@ -48,20 +48,15 @@ jobs:
 
       # The equivalence tests with 0.11.0 (T1-T4) are left out here on purpose, and run once in the
       # job "equivalence" below. Coverage does not change: they only run nex in subprocesses.
+      # The two tests that use the POSIX wall-clock alarm (SIGALRM) can interrupt coverage.py while it
+      # holds its collector lock and hang the runner, so they run separately below without tracing.
+      # faulthandler_timeout dumps the threads if any other test stops making progress.
       - name: Tests with coverage
-        if: (matrix.os != 'macos-latest' || matrix.python != '3.11') && (matrix.os != 'ubuntu-latest' || matrix.python != '3.13')
-        run: python -m pytest --cov -m "not equivalence"
+        run: python -m pytest -v --cov -m "not equivalence" -k "not test_run_timeout_stops_execution_with_a_clear_diagnostic and not test_run_timeout_cleans_up_an_active_process" -o faulthandler_timeout=120
 
-      # Keep the newest Linux/Python combination actionable if a test stops making progress.
-      - name: Tests with coverage (Ubuntu 3.13 diagnostics)
-        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13'
-        run: python -m pytest -v --cov -m "not equivalence" -o faulthandler_timeout=120
-
-      # This runner has stalled without identifying the current test. Keep verbose progress and
-      # periodic thread dumps here so a slow or blocked test is actionable in the Actions log.
-      - name: Tests with coverage (macOS 3.11 diagnostics)
-        if: matrix.os == 'macos-latest' && matrix.python == '3.11'
-        run: python -m pytest -vv --cov -m "not equivalence" -o faulthandler_timeout=120
+      - name: POSIX timeout tests without coverage
+        if: matrix.os != 'windows-latest'
+        run: python -m pytest -v tests/test_cli.py::test_run_timeout_stops_execution_with_a_clear_diagnostic tests/test_cli.py::test_run_timeout_cleans_up_an_active_process -o faulthandler_timeout=120
 
       - name: The installed command works
         run: |
