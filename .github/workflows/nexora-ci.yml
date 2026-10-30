@@ -24,6 +24,7 @@ jobs:
   checks:
     name: Python ${{ matrix.python }} · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -48,8 +49,13 @@ jobs:
       # The equivalence tests with 0.11.0 (T1-T4) are left out here on purpose, and run once in the
       # job "equivalence" below. Coverage does not change: they only run nex in subprocesses.
       - name: Tests with coverage
-        if: matrix.os != 'macos-latest' || matrix.python != '3.11'
+        if: (matrix.os != 'macos-latest' || matrix.python != '3.11') && (matrix.os != 'ubuntu-latest' || matrix.python != '3.13')
         run: python -m pytest --cov -m "not equivalence"
+
+      # Keep the newest Linux/Python combination actionable if a test stops making progress.
+      - name: Tests with coverage (Ubuntu 3.13 diagnostics)
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13'
+        run: python -m pytest -v --cov -m "not equivalence" -o faulthandler_timeout=120
 
       # This runner has stalled without identifying the current test. Keep verbose progress and
       # periodic thread dumps here so a slow or blocked test is actionable in the Actions log.
