@@ -1,0 +1,12 @@
+fn main() {
+    let x = (1 +
+        2
+    let y = foo(
+        1,
+        2
+    )
+    return (
+}
+fn other() {
+    print((1
+}

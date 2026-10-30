@@ -1,0 +1,12 @@
+fn main() {
+
+
+    requires x
+    ensures y
+    invariant z
+    decreases w
+    break
+    assert
+    test try const continue ai tool
+    a->b => c == d != e <= f >= g < h > i
+}

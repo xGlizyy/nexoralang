@@ -1,0 +1,22 @@
+// Stage 1 measurement (decision 0024): how deep can plain recursion go, and what does it cost?
+type Expr = enum { Num(value: Int), Add(left: Expr, right: Expr), Neg(inner: Expr) }
+
+fn build(depth: Int) gives Expr {
+    if depth == 0 {
+        return Expr.Num(1)
+    }
+    return Expr.Neg(Expr.Add(build(depth - 1), Expr.Num(1)))
+}
+
+fn eval_expr(expr: Expr) gives Int {
+    return match expr {
+        Expr.Num(value) => value
+        Expr.Add(left, right) => eval_expr(left) + eval_expr(right)
+        Expr.Neg(inner) => 0 - eval_expr(inner)
+    }
+}
+
+fn main() {
+    let depth = Int.parse(List.get(args(), 0))
+    print(eval_expr(build(depth)))
+}

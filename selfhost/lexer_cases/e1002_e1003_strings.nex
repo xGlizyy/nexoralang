@@ -1,0 +1,4 @@
+fn main() {
+    print("never closed)
+    print("a\qb")
+    print("tail\

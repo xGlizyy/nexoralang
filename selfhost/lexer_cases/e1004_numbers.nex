@@ -1,0 +1,16 @@
+fn main() {
+    let a = 12abc
+    let b = 1__0
+    let c = 1_
+    let d = 007
+    let e = 99999999999999999999
+    let f = 9223372036854775807
+    let g = 1.5_0
+    let h = 1._5
+    let i = 3.14abc
+    let j = 1_000.000_1
+    let k = 1e5
+    let l = 0.5
+    let m = 00.5
+    let n = 1.
+}

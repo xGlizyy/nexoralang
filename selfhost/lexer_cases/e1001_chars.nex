@@ -1,0 +1,7 @@
+fn main() {
+    let x = @
+    let y = 1;
+    let z = 'a'
+    let w = a & b | c
+    let v = !x
+}

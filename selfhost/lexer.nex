@@ -1,0 +1,425 @@
+// The NEXORA lexer, written in NEXORA (decision 0024, stage 2).
+//
+// It follows nexora/src/nexora/lexer.py branch by branch and in the same order, so that the two can
+// be compared token by token. Token kinds are the same texts as the values of TokenType.
+//
+// Known gaps, each one a missing language feature rather than a lexer decision:
+//   * A character that is not printable ASCII is always shown quoted in E1001. Python shows
+//     U+XXXX for the non-printable ones, which needs a code point function.
+//   * The hint "Names use the letters a-z..." for a non-ASCII letter needs a letter test.
+//   * There is no escape for a carriage return, so it cannot be written in a program: a file with
+//     CRLF line endings is not read like the Python lexer reads it. It needs a \r escape or a
+//     function that builds a character from its code point.
+
+uses read "."
+
+type Token = {
+    kind: Text, lexeme: Text, value: Text,
+    line: Int, column: Int, end_line: Int, end_column: Int
+}
+
+type Diagnostic = {
+    code: Text, label: Text, hint: Text,
+    line: Int, column: Int, end_line: Int, end_column: Int
+}
+
+type LexResult = { tokens: List[Token], diagnostics: List[Diagnostic] }
+
+// The most lexical errors reported for one file (MAX_DIAGNOSTICS in diagnostics.py).
+fn max_diagnostics() gives Int {
+    return 100
+}
+
+// The character at a position, or the empty text outside the file.
+fn char_at(text: Text, index: Int) gives Text {
+    if index >= 0 and index < Text.length(text) {
+        return Text.slice(text, index, index + 1)
+    }
+    return ""
+}
+
+fn is_digit(c: Text) gives Bool {
+    return c >= "0" and c <= "9"
+}
+
+fn is_name_start(c: Text) gives Bool {
+    return (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or c == "_"
+}
+
+fn is_name_part(c: Text) gives Bool {
+    return is_name_start(c) or is_digit(c)
+}
+
+fn keywords() gives List[Text] {
+    return (
+    [
+        "fn", "let", "return", "if", "else", "true", "false", "and", "or", "not", "needs", "gives",
+        "promises", "trust", "type", "enum", "match", "where", "example", "var", "while", "for", "in",
+        "keeps", "shrinks", "uses", "import", "pub"
+    ]
+    )
+}
+
+// Keywords that can only start a statement or a declaration, never appear inside parentheses.
+fn statement_keywords() gives List[Text] {
+    return (
+    [
+        "fn", "let", "var", "return", "if", "else", "while", "for", "needs", "gives", "promises", "trust",
+        "example", "keeps", "shrinks", "type", "where", "uses", "match", "requires", "ensures",
+        "invariant", "decreases"
+    ]
+    )
+}
+
+fn old_clause_words() gives List[Text] {
+    return ["requires", "ensures", "invariant", "decreases"]
+}
+
+fn reserved_words() gives List[Text] {
+    return ["assert", "break", "const", "continue", "test", "try"]
+}
+
+fn word_kind(word: Text) gives Text {
+    if List.contains(keywords(), word) {
+        return word
+    }
+    if List.contains(old_clause_words(), word) {
+        return "word of 0.11"
+    }
+    if List.contains(reserved_words(), word) {
+        return "reserved word"
+    }
+    return "name"
+}
+
+fn is_single(c: Text) gives Bool {
+    return c != "" and Text.contains("()[]\{},:.=+*<>", c)
+}
+
+fn is_double(pair: Text) gives Bool {
+    return List.contains(["=>", "->", "==", "!=", "<=", ">="], pair)
+}
+
+fn is_escape(c: Text) gives Bool {
+    return c != "" and Text.contains("nt\"\\\{", c)
+}
+
+fn decode_escape(c: Text) gives Text {
+    if c == "n" {
+        return "\n"
+    }
+    if c == "t" {
+        return "\t"
+    }
+    return c
+}
+
+fn hint_for(c: Text) gives Text {
+    if c == ";" {
+        return "Statements end at the end of the line; remove the ';'."
+    }
+    if c == "'" {
+        return "Text is written with double quotes: \"text\"."
+    }
+    if c == "!" {
+        return "Negation is written 'not', and 'different from' is written '!='."
+    }
+    if c == "&" or c == "|" {
+        return "The logical operators are the words 'and', 'or' and 'not'."
+    }
+    return ""
+}
+
+fn make_token(kind: Text, lexeme: Text, value: Text, line: Int, column: Int, end_column: Int) gives Token {
+    return Token(
+        kind: kind, lexeme: lexeme, value: value,
+        line: line, column: column, end_line: line, end_column: end_column
+    )
+}
+
+fn make_diagnostic(code: Text, label: Text, hint: Text, line: Int, column: Int, end_column: Int) gives Diagnostic {
+    return Diagnostic(
+        code: code, label: label, hint: hint,
+        line: line, column: column, end_line: line, end_column: end_column
+    )
+}
+
+// The digits of a number literal with its '_' separators removed.
+fn without_underscores(text: Text) gives Text {
+    var result = ""
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = char_at(text, i)
+        if c != "_" {
+            result = result + c
+        }
+        i = i + 1
+    }
+    return result
+}
+
+fn tokenize(text: Text) gives LexResult {
+    let n = Text.length(text)
+    var pos = 0
+    var line = 1
+    var column = 1
+    // Line breaks inside parentheses do not end a statement.
+    var paren_depth = 0
+    // The most recent line break skipped inside parentheses, valid only while no token has been
+    // added since: `skipped_at` is how many tokens there were when it was skipped.
+    var skipped_line = 0
+    var skipped_column = 0
+    var skipped_at = 0
+    var tokens: List[Token] = []
+    var diagnostics: List[Diagnostic] = []
+
+    while pos < n and List.length(diagnostics) < max_diagnostics()
+        shrinks n - pos
+    {
+        let c = char_at(text, pos)
+        let next = char_at(text, pos + 1)
+
+        if c == " " or c == "\t" {
+            pos = pos + 1
+            column = column + 1
+        } else if c == "\n" {
+            let at_line = line
+            let at_column = column
+            pos = pos + 1
+            line = line + 1
+            column = 1
+            // A run of blank lines is a single statement separator.
+            if paren_depth > 0 {
+                skipped_line = at_line
+                skipped_column = at_column
+                skipped_at = List.length(tokens)
+            } else if List.length(tokens) > 0 {
+                let previous = List.get(tokens, List.length(tokens) - 1)
+                if previous.kind != "end of line" {
+                    tokens = List.append(tokens, make_token("end of line", "", "", at_line, at_column, at_column + 1))
+                }
+            }
+        } else if c == "/" and next == "/" {
+            while pos < n and char_at(text, pos) != "\n"
+                shrinks n - pos
+            {
+                pos = pos + 1
+                column = column + 1
+            }
+        } else if is_digit(c) {
+            let start = pos
+            let start_column = column
+            while pos < n and (is_digit(char_at(text, pos)) or char_at(text, pos) == "_")
+                shrinks n - pos
+            {
+                pos = pos + 1
+                column = column + 1
+            }
+            let integer_end = pos
+            let is_float = char_at(text, pos) == "." and is_digit(char_at(text, pos + 1))
+            if is_float {
+                pos = pos + 1
+                column = column + 1
+                while pos < n and (is_digit(char_at(text, pos)) or char_at(text, pos) == "_")
+                    shrinks n - pos
+                {
+                    pos = pos + 1
+                    column = column + 1
+                }
+            }
+            let fraction_end = pos
+            // Letters glued to a number ("12abc") belong to the same broken literal.
+            let glued = is_name_start(char_at(text, pos))
+            while pos < n and is_name_part(char_at(text, pos))
+                shrinks n - pos
+            {
+                pos = pos + 1
+                column = column + 1
+            }
+            let lexeme = Text.slice(text, start, pos)
+            let integer_part = Text.slice(text, start, integer_end)
+            var kind = "integer"
+            if is_float {
+                kind = "float"
+            }
+            var value = "0"
+            if is_float {
+                value = "0.0"
+            }
+            if glued {
+                diagnostics = List.append(diagnostics, make_diagnostic(
+                    "E1004", "A number cannot be followed directly by letters", "", line, start_column, column
+                ))
+            } else {
+                var fraction_part = ""
+                if is_float {
+                    fraction_part = Text.slice(text, integer_end + 1, fraction_end)
+                }
+                let bad_underscore = (
+                    Text.contains(lexeme, "__")
+                    or Text.starts_with(integer_part, "_") or Text.ends_with(integer_part, "_")
+                    or (is_float and (Text.starts_with(fraction_part, "_") or Text.ends_with(fraction_part, "_")))
+                )
+                if bad_underscore {
+                    diagnostics = List.append(diagnostics, make_diagnostic(
+                        "E1004", "'_' may only appear between two digits", "", line, start_column, column
+                    ))
+                } else if Text.length(integer_part) > 1 and Text.starts_with(integer_part, "0") {
+                    diagnostics = List.append(diagnostics, make_diagnostic(
+                        "E1004", "A number cannot start with extra zeros", "", line, start_column, column
+                    ))
+                } else {
+                    let digits = without_underscores(lexeme)
+                    if is_float {
+                        if not Float.can_parse(digits) {
+                            diagnostics = List.append(diagnostics, make_diagnostic(
+                                "E1004", "This number is too large for a Float", "", line, start_column, column
+                            ))
+                        }
+                        value = digits
+                    } else {
+                        if Int.can_parse(digits) {
+                            value = digits
+                        } else {
+                            diagnostics = List.append(diagnostics, make_diagnostic(
+                                "E1004",
+                                "This number is too large for an Int (the maximum is 9223372036854775807)",
+                                "", line, start_column, column
+                            ))
+                        }
+                    }
+                }
+            }
+            tokens = List.append(tokens, make_token(kind, lexeme, value, line, start_column, column))
+        } else if c == "\"" {
+            let start = pos
+            let start_column = column
+            pos = pos + 1
+            column = column + 1
+            var decoded = ""
+            var closed = false
+            while pos < n and not closed and char_at(text, pos) != "\n"
+                shrinks n - pos
+            {
+                let ch = char_at(text, pos)
+                if ch == "\"" {
+                    pos = pos + 1
+                    column = column + 1
+                    closed = true
+                } else if ch == "\\" {
+                    let escape = char_at(text, pos + 1)
+                    if is_escape(escape) {
+                        decoded = decoded + decode_escape(escape)
+                        pos = pos + 2
+                        column = column + 2
+                    } else {
+                        var length = 2
+                        if escape == "" or escape == "\n" {
+                            length = 1
+                        }
+                        diagnostics = List.append(diagnostics, make_diagnostic(
+                            "E1003", "Unknown escape sequence",
+                            "The valid escapes are \\n, \\t, \\\", \\\\ and \\\{.",
+                            line, column, column + length
+                        ))
+                        pos = pos + length
+                        column = column + length
+                    }
+                } else {
+                    if ch == "\{" {
+                        diagnostics = List.append(diagnostics, make_diagnostic(
+                            "E1005",
+                            "'\{' is reserved for string interpolation, which is not implemented yet",
+                            "Write \\\{ to include a literal '\{' in the string.",
+                            line, column, column + 1
+                        ))
+                    }
+                    decoded = decoded + ch
+                    pos = pos + 1
+                    column = column + 1
+                }
+            }
+            if not closed {
+                diagnostics = List.append(diagnostics, make_diagnostic(
+                    "E1002", "This string is never closed",
+                    "Add a closing \" before the end of the line. A string cannot span several lines.",
+                    line, start_column, column
+                ))
+            }
+            tokens = List.append(tokens, make_token("text", Text.slice(text, start, pos), decoded, line, start_column, column))
+        } else if is_name_start(c) {
+            let start = pos
+            let start_column = column
+            while pos < n and is_name_part(char_at(text, pos))
+                shrinks n - pos
+            {
+                pos = pos + 1
+                column = column + 1
+            }
+            let word = Text.slice(text, start, pos)
+            if List.contains(statement_keywords(), word) {
+                // These cannot appear inside parentheses either: a ')' is missing.
+                if paren_depth > 0 and skipped_line > 0 and skipped_at == List.length(tokens) {
+                    tokens = List.append(tokens, make_token("end of line", "", "", skipped_line, skipped_column, skipped_column + 1))
+                }
+                paren_depth = 0
+            }
+            tokens = List.append(tokens, make_token(word_kind(word), word, "", line, start_column, column))
+        } else if is_double(c + next) {
+            tokens = List.append(tokens, make_token(c + next, c + next, "", line, column, column + 2))
+            pos = pos + 2
+            column = column + 2
+        } else if c == "-" or c == "/" {
+            tokens = List.append(tokens, make_token(c, c, "", line, column, column + 1))
+            pos = pos + 1
+            column = column + 1
+        } else if is_single(c) {
+            if c == "(" {
+                paren_depth = paren_depth + 1
+            } else if c == ")" {
+                if paren_depth > 0 {
+                    paren_depth = paren_depth - 1
+                }
+            } else if c == "\{" or c == "}" {
+                // Braces never appear inside parentheses, so one of them means a ')' is missing.
+                if paren_depth > 0 and skipped_line > 0 and skipped_at == List.length(tokens) {
+                    tokens = List.append(tokens, make_token("end of line", "", "", skipped_line, skipped_column, skipped_column + 1))
+                }
+                paren_depth = 0
+            }
+            tokens = List.append(tokens, make_token(c, c, "", line, column, column + 1))
+            pos = pos + 1
+            column = column + 1
+        } else {
+            diagnostics = List.append(diagnostics, make_diagnostic(
+                "E1001", "'" + c + "' is not part of NEXORA syntax", hint_for(c), line, column, column + 1
+            ))
+            pos = pos + 1
+            column = column + 1
+        }
+    }
+    tokens = List.append(tokens, make_token("end of file", "", "", line, column, column))
+    return LexResult(tokens: tokens, diagnostics: diagnostics)
+}
+
+// Prints every token and every error in one line each, the format the comparison with the Python
+// lexer reads (selfhost/compare_lexer.py).
+fn main() {
+    let result = tokenize(read_file(List.get(args(), 0)))
+    for token in result.tokens {
+        print(
+            "T|" + token.kind + "|" + token.lexeme + "|" + token.value + "|"
+            + to_text(token.line) + ":" + to_text(token.column) + "-"
+            + to_text(token.end_line) + ":" + to_text(token.end_column)
+        )
+    }
+    for diagnostic in result.diagnostics {
+        print(
+            "D|" + diagnostic.code + "|" + diagnostic.label + "|" + diagnostic.hint + "|"
+            + to_text(diagnostic.line) + ":" + to_text(diagnostic.column) + "-"
+            + to_text(diagnostic.end_line) + ":" + to_text(diagnostic.end_column)
+        )
+    }
+}

@@ -1,0 +1,5 @@
+fn main() {
+    print("año ñandú")
+    let ñ = 1
+    let € = 2
+}

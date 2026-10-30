@@ -1,0 +1,6 @@
+fn main() {
+    print("brace { inside")
+    print("ok \{ escaped")
+    print("tab	here
+\"q\" \\")
+}
