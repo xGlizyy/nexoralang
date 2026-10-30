@@ -203,7 +203,7 @@ Include the version (`nex --version`), the operating system, the smallest `.nex`
 reproduces the problem, what you expected and what happened. If the message starts with
 `internal error:`, run again with the environment variable `NEXORA_DEBUG=1` and attach the traceback.
 
-Security problems are reported as [`SECURITY.md`](SECURITY.md) says, not in a public
+Security problems are reported as the repository's [`SECURITY.md`](../SECURITY.md) says, not in a public
 issue.
 
 ## Conduct

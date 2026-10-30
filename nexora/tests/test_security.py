@@ -1,7 +1,7 @@
 """What a NEXORA program is able to do, and what the implementation relies on.
 
 These tests check concrete, limited properties. They do not show that NEXORA is safe to run on
-untrusted code in general; SECURITY.md describes what is and is not covered.
+untrusted code in general; the repository-level SECURITY.md describes what is and is not covered.
 """
 
 import ast as python_ast

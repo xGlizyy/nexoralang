@@ -49,7 +49,7 @@ these pages is run by the automated tests and compared against the real output o
 | [Limitations](limitations.md) | What does not exist and the known risks |
 | [Changelog](../CHANGELOG.md) | What changed in each version |
 | [Contributing](../CONTRIBUTING.md) | Development environment and checks before proposing a change |
-| [Security](../SECURITY.md) | The real scope of the protections and how to report a problem |
+| [Security](../../SECURITY.md) | Supported releases, response targets, the real scope of protections and how to report a problem |
 
 ## Status of each part
 

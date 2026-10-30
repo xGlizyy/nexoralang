@@ -288,7 +288,7 @@ are handled in its [issue tracker](https://github.com/xGlizyy/nexoralang/issues)
 
 - [How to contribute](CONTRIBUTING.md): development environment, how to add a feature and which
   checks must pass.
-- [Security](SECURITY.md): what the project protects, what it does not, and how to report a problem.
+- [Security](../SECURITY.md): supported releases, vulnerability reporting and response targets, and what the project does and does not protect.
 - [Code of conduct](CODE_OF_CONDUCT.md).
 
 ## Licence

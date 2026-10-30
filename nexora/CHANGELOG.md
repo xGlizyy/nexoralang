@@ -19,7 +19,9 @@ Each version groups its changes into these sections, when they contain content:
 
 ## Unreleased
 
-No changes yet.
+### Documentation
+
+- Publish the supported release policy, private vulnerability reporting process and response targets in the repository-level `SECURITY.md`.
 
 ## 0.15.0 — Local CLI debugger and deployment guide
 
