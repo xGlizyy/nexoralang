@@ -1,0 +1,98 @@
+#records Point Line
+#types Shape
+1
+1.5
+"text"
+"a \n b"
+true
+false
+name
+-1
+- - 1
+not true
+not not x
+1 + 2
+1 + 2 * 3
+(1 + 2) * 3
+a - b - c
+a / b * c
+a or b and c
+a and b or c
+a == b
+a < b and b < c
+a < b < c
+a == b == c
+a != b
+a <= b
+a >= b
+1 +
++ 1
+f()
+f(1)
+f(1, 2, 3)
+f(g(1), h(2, 3))
+f(1,)
+f(
+Text.length("abc")
+Text.slice(s, 0, 2)
+Int.parse(Text.slice(s, 0, 2))
+Shape.Circle(2.0)
+Shape.Circle(radius: 2.0)
+models.Point(x: 1, y: 2)
+models.Shape.Circle(1.0)
+a.b.c(1)
+a.b.c.d.e(1)
+a.b
+a.b.c
+p.x + q.y
+p . x
+p .x
+p. x
+Text . length(s)
+Text.length (s)
+Text.
+Text.length
+Point(x: 1, y: 2)
+Point(y: 2, x: 1)
+Point(x: f(1), y: Point(x: 1, y: 2))
+Point(x: 1,)
+Point(x 1)
+Point(1, 2)
+Point(
+Point()
+[]
+[1]
+[1, 2, 3]
+[[1], [2, 3]]
+[f(1), a + b]
+[1,]
+[1 2]
+[1
+(1
+(1))
+()
+(((((1)))))
+f(1
+f(1 2)
+break
+continue
+x = 1
+1 2
+a.
+a.b.
+.5
+if
+]
+)
+Text.length(s).x
+f(1).x
+-f(1)
+not f(x) and g(y)
+a + b * c - d / e
+((a))
+[(1)]
+f((1 + 2) * 3)
+Option.value(x)
+Result.value_or(r, 0)
+List.append(xs, 1)
+Text.contains(a, "x") and not Text.contains(b, "y")

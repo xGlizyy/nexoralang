@@ -7,7 +7,7 @@ runs it for now; it is the bootstrap, not the goal.
 | Part | File | State |
 |------|------|-------|
 | Lexer | [`lexer.nex`](lexer.nex) | Done. Same tokens and lexical errors as `lexer.py` on every program of the repository and on the cases in [`lexer_cases/`](lexer_cases/), with the gaps below |
-| Parser | | Not started |
+| Parser | [`parser.nex`](parser.nex) | In progress. Expressions (everything except `match`) match `Parser._expression()` in tree and error on [`parser_cases/`](parser_cases/); statements, declarations, `match` and recovery are next |
 | Checker | | Not started |
 | Interpreter | | Not started |
 
@@ -20,6 +20,15 @@ PYTHONPATH=nexora/src python selfhost/compare_lexer.py FILE.nex [FILE.nex ...]
 Both lexers run on the same text, and tokens (kind, lexeme, span, decoded text literals) and
 lexical errors (code, message, hint, span) are compared. A difference is a bug in the self-hosted
 code unless it is listed under "Language gaps".
+
+For the parser:
+
+```bash
+PYTHONPATH=nexora/src python selfhost/compare_parser.py selfhost/parser_cases/*.txt
+```
+
+Each line of a cases file is an expression; both parsers read it and the tree (as JSON) or the first
+syntax error is compared.
 
 ## Stage 1 measurement: call depth
 
@@ -61,6 +70,13 @@ is added to the language except what the self-hosted code needs.
 | A line break continues an expression only inside `( )`, not inside `[ ]` | Long list literals do not fit on several lines | Wrap the list in parentheses |
 | A field can only be read from a name, not from a call result | `List.get(tokens, i).kind` is rejected | Bind the call to a `let` first |
 | `uses read` needs a literal path | Reading a file named by an argument needs `uses read "."` and `--allow-read .` | Declare the working directory |
+
+Found while writing the parser, and fixed in the checker (not a language change): a record of an
+imported module whose field type was another type of the same module was rejected with `E2012`
+(`'Token' is not a type`), because the field types of every module's records were resolved with the
+prefix of the module being checked. They are now resolved relative to the module that declares the
+record (`tests/test_modules.py`). A genuine error inside an imported record is still reported
+under the importing file's name, with the position of the imported one.
 
 None of these blocks the lexer. The first two are the first candidates for stage 1 of the plan,
 together with maps and `%`, which the lexer did not need.
