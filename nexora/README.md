@@ -74,7 +74,8 @@ production-ready.
 | **Planned** (does not exist) | `break` and `continue`, `for` over ranges or `Text`, maps and user generics |
 | **Under research** (does not exist) | Static verification of contracts, AI features inside the language, and the evaluation of the hypothesis of the project |
 
-Interface commitments: [public interfaces and stability](docs/interface-stability.md).
+Interface commitments: [public interfaces and stability](docs/interface-stability.md). The release,
+migration and deprecation rules are in the [compatibility and versioning policy](docs/compatibility.md).
 
 Detail: [roadmap](docs/roadmap.md) and [limitations](docs/limitations.md).
 
