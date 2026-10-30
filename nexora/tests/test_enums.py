@@ -123,4 +123,4 @@ def test_variant_payload_constructor_and_nested_unreachable_arm():
         "    return match value { None => 0 Some(_) => 1 Some(true) => 2 }\n"
         "}\nfn main() {}"
     )
-    assert "E2034" in check_codes(nested_unreachable)\n
+    assert "E2034" in check_codes(nested_unreachable)

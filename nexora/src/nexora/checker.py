@@ -1037,19 +1037,19 @@ class Checker:
                 seen_variants[variant.name] = variant.name_span
                 fields: list[tuple[str, str]] = []
                 seen_fields: set[str] = set()
-                for field in variant.fields:
-                    if field.name in seen_fields:
-                        self._report("E2016", f"The field '{field.name}' is declared more than once in "
-                                     f"'{key}.{variant.name}'", field.name_span)
+                for enum_field in variant.fields:
+                    if enum_field.name in seen_fields:
+                        self._report("E2016", f"The field '{enum_field.name}' is declared more than once in "
+                                     f"'{key}.{variant.name}'", enum_field.name_span)
                         broken = True
                         continue
-                    seen_fields.add(field.name)
-                    kind = self._value_type(field.type, f"The field '{field.name}' of '{key}.{variant.name}'",
+                    seen_fields.add(enum_field.name)
+                    kind = self._value_type(enum_field.type, f"The field '{enum_field.name}' of '{key}.{variant.name}'",
                                             declared_records=True)
                     if kind is None:
                         broken = True
                     else:
-                        fields.append((field.name, kind))
+                        fields.append((enum_field.name, kind))
                 variants.append(EnumVariantType(variant.name, tuple(fields), variant))
             if variants and not broken:
                 identity = identities[key]
@@ -2122,7 +2122,9 @@ class Checker:
             return result
         return self._call(node, scope, expected)
 
-    def _variant_pattern_info(self, pattern: ast.VariantPattern, expected: str) -> tuple[str, tuple[tuple[str, str], ...]] | None:
+    def _variant_pattern_info(
+        self, pattern: ast.VariantPattern, expected: str
+    ) -> tuple[str, tuple[tuple[str, str], ...]] | None:
         """Resolve a variant pattern against the scrutinee's closed type."""
         model = self._current_type_model(expected)
         enum_name = expected

@@ -385,9 +385,10 @@ class Parser:
 
     def _enum_declaration(self, keyword: Token, name: Token, public: bool) -> ast.EnumDecl:
         """`type Direction = enum { North, South }`: a closed, nominal set of variants."""
-        enum_keyword = self._advance()
+        self._advance()
         opening = self._expect(TokenType.LBRACE, "'{' after 'enum'",
-                               hint=f"Write the variants of {name.lexeme}: type {name.lexeme} = enum {{ North, South }}")
+                               hint=(f"Write the variants of {name.lexeme}: "
+                                     f"type {name.lexeme} = enum {{ North, South }}"))
         self._enter(opening)
         variants: list[ast.EnumVariantDecl] = []
         self._skip_newlines()
