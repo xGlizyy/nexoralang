@@ -13,17 +13,17 @@
 
 uses read "."
 
-type Token = {
+pub type Token = {
     kind: Text, lexeme: Text, value: Text,
     line: Int, column: Int, end_line: Int, end_column: Int
 }
 
-type Diagnostic = {
+pub type Diagnostic = {
     code: Text, label: Text, hint: Text,
     line: Int, column: Int, end_line: Int, end_column: Int
 }
 
-type LexResult = { tokens: List[Token], diagnostics: List[Diagnostic] }
+pub type LexResult = { tokens: List[Token], diagnostics: List[Diagnostic] }
 
 // The most lexical errors reported for one file (MAX_DIAGNOSTICS in diagnostics.py).
 fn max_diagnostics() gives Int {
@@ -160,7 +160,7 @@ fn without_underscores(text: Text) gives Text {
     return result
 }
 
-fn tokenize(text: Text) gives LexResult {
+pub fn tokenize(text: Text) gives LexResult {
     let n = Text.length(text)
     var pos = 0
     var line = 1
