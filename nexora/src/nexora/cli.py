@@ -634,7 +634,9 @@ _DEBUG_DEFAULT_MAX_STEPS = 10_000
 
 def _open_debug_console():
     """Open the controlling terminal so debug commands do not consume program input."""
-    return open("CONIN$" if os.name == "nt" else "/dev/tty", encoding="utf-8", errors="replace")
+    return Path("CONIN$" if os.name == "nt" else "/dev/tty").open(
+        encoding="utf-8", errors="replace",
+    )
 
 
 def _debug(path: str, output_format: str, arguments: tuple[str, ...] = (),
