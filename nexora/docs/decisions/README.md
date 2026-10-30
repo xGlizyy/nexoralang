@@ -33,6 +33,7 @@ whose rules it replaces say so at the top.
 | [0022](0022-depurador-local.md) | Local statement debugger through `nex debug`; DAP and language-server integration remain out of scope | Accepted | No |
 | [0021](0021-alcance-nexora-1-0.md) | NEXORA 1.0 scope: CLI and local automation, support target, compatibility policy and release gates | Accepted | No |
 | [0023](0023-despliegue-aplicaciones.md) | Exact runtime pins and external configuration for deployed applications | Accepted | No |
+| [0024](0024-interprete-autoalojado.md) | A self-hosted interpreter written in NEXORA, in stages; leaving Python is a later decision | Proposed | No |
 
 ## Possible incompatible changes in the future
 
