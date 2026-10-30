@@ -475,6 +475,10 @@ def _projected_012(node):
         node["examples"] = [item for item in header if item["kind"] == "Example"]
     if node.get("kind") in ("Contract", "LoopClause") and node.get("name") is None:
         node.pop("name", None)
+    # Enums are new in 0.14. A program without any has the same tree as in 0.11 once the empty list
+    # is dropped; a program that declares one keeps the key, so that the trees differ.
+    if node.get("kind") == "Program" and node.get("enums") == []:
+        node.pop("enums")
     return node
 
 
