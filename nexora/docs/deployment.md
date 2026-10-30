@@ -15,7 +15,7 @@ The npm package is a convenient launcher for people who already use npm, but it 
 separately installed Python. It does not bundle Python or install operating-system runtimes. For
 deployed applications, installing the Python package directly avoids an extra launcher layer.
 
-The reference application uses Python **3.13.18** and NEXORA **0.14.1**. The commands use uv to
+The reference application uses Python **3.13.18** and NEXORA **0.15.0**. The commands use uv to
 provision that exact Python patch consistently on Windows, macOS and Linux; uv downloads managed
 CPython distributions and the Python version is recorded in `.python-version`. Install uv using
 its [official installation instructions](https://docs.astral.sh/uv/getting-started/installation/).

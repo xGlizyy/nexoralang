@@ -121,7 +121,7 @@ fn main() {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.14.1",
+  "nexora_version": "0.15.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
