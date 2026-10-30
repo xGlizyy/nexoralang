@@ -110,9 +110,11 @@ def test_debugger_rejects_non_positive_or_non_finite_limits(program, capsys, opt
 
 
 def test_debugger_rejects_platform_specific_limits_on_unsupported_platform(program, monkeypatch, capsys):
-    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.delattr(cli.signal, "SIGALRM", raising=False)
+    monkeypatch.delattr(cli.signal, "setitimer", raising=False)
     assert debug(program, timeout=1) == cli.EXIT_USAGE
     assert "--timeout requires a POSIX platform" in capsys.readouterr().err
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
     assert debug(program, max_memory=1024) == cli.EXIT_USAGE
     assert "--max-memory is enforced only on Linux" in capsys.readouterr().err
 
