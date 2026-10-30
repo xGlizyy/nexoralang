@@ -1,0 +1,6 @@
+uses read "config/app.conf"
+
+fn main() {
+    let greeting = read_file("config/app.conf")
+    print(greeting)
+}

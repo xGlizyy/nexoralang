@@ -9,6 +9,7 @@ these pages is run by the automated tests and compared against the real output o
 | If you want to… | Read |
 |-----------------|------|
 | Install NEXORA | [Installation](installation.md) |
+| Deploy an application | [Application deployment](deployment.md) |
 | Write and run your first program | [Getting started](getting-started.md) |
 | Read complete programs | [`examples/`](../examples/README.md) |
 | Know what it **cannot** do yet | [Limitations](limitations.md) |

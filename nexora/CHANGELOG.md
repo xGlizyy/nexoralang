@@ -17,6 +17,14 @@ Each version groups its changes into these sections, when they contain content:
 | Documentation | Relevant documentation changes |
 | Limitations | Known restrictions worth being aware of |
 
+## Unreleased
+
+### Added
+
+- Documented the local CLI debugger scope and added a runnable debugger reference program.
+- Added a reproducible application deployment guide and reference app with exact Python and NEXORA
+  pins, per-platform launchers, external configuration and a Linux container recipe.
+
 ## 0.14.1 — Configurable local execution limits
 
 This version is tagged (`v0.14.1`) and published on PyPI and npm. The VS Code extension is unchanged;

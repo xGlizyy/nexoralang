@@ -1,6 +1,6 @@
 # 0020 — Depuración paso a paso
 
-- **Estado:** aceptada e implementada en el Playground público; verificada en staging y producción.
+- **Estado:** aceptada e implementada en el Playground público, verificada en staging y producción; el alcance local se amplía en la decisión 0022.
 - **Fecha:** 2026-10-27.
 - **Rama de trabajo:** `feat/debugger-prototype`.
 - **Afecta:** intérprete, worker y Playground.
@@ -26,8 +26,9 @@ servicio.
 
 ## Alcance inicial
 
-El depurador está integrado en el Playground. No se añade todavía un comando local `nex debug`,
-paso por expresión, paso por encima, breakpoints condicionales ni edición de variables.
+El alcance inicial fue el Playground. La decisión 0022 amplía ese alcance con `nex debug` local.
+No se incluyen paso por expresión, paso por encima, breakpoints condicionales ni edición de
+variables.
 
 ## Criterios de aceptación
 

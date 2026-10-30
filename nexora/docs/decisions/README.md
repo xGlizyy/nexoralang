@@ -30,7 +30,9 @@ whose rules it replaces say so at the top.
 | [0018](0018-modulos-e-importaciones.md) | Modules and imports: `import "path/file.nex"`, one namespace per file, privacy with `pub` and circular imports forbidden | Accepted | No |
 | [0019](0019-identidad-propia-del-lenguaje.md) | An identity of its own: promises in the header (`needs`, `promises`, `gives`), named promises, evidence per promise, `trust`, `nex migrate` and `nex impact` | Accepted. Phase 1 published in 0.12.0; phases 2 to 4 not started | Yes |
 | [0020](0020-red-y-procesos-externos.md) | HTTPS requests and external processes behind explicit capabilities, limited to the local CLI | Accepted | No |
+| [0022](0022-depurador-local.md) | Local statement debugger through `nex debug`; DAP and language-server integration remain out of scope | Accepted | No |
 | [0021](0021-alcance-nexora-1-0.md) | NEXORA 1.0 scope: CLI and local automation, support target, compatibility policy and release gates | Accepted | No |
+| [0023](0023-despliegue-aplicaciones.md) | Exact runtime pins and external configuration for deployed applications | Accepted | No |
 
 ## Possible incompatible changes in the future
 

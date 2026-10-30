@@ -22,10 +22,11 @@ from helpers import check_codes, codes, in_main, lex, run_failure, run_text, wit
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 VALID_EXAMPLES = sorted(EXAMPLES.glob("*.nex"))
+FUZZ_EXECUTION_STEPS = 1_000
 
 
 def survives(text: str) -> None:
-    """Runs every stage on `text`. Fails if anything but a NEXORA diagnostic comes out."""
+    """Runs every stage on `text`, bounding execution of accepted fuzz mutations."""
     source = Source("fuzz.nex", text)
     analysis = analyze(source)
     for diagnostic in analysis.diagnostics:
@@ -36,7 +37,11 @@ def survives(text: str) -> None:
         ast.to_dict(analysis.program, analysis.types)
     if analysis.checked is not None:
         try:
-            run(analysis.checked, lambda text: None)
+            # A deletion can leave a statically valid loop whose measure starts at a huge value.
+            # Fuzzing checks that interpretation remains controlled, not that such a program runs
+            # to completion; stop after a fixed number of statements so a CI runner cannot hang.
+            run(analysis.checked, lambda text: None,
+                debug_observer=lambda event: event.step >= FUZZ_EXECUTION_STEPS)
         except NexoraRuntimeError as error:
             assert error.diagnostic.category in ("runtime", "contract")
             render(error.diagnostic, source)
@@ -106,6 +111,17 @@ def test_regression_contract_field_does_not_overwrite_the_node_kind():
 
 
 # Size and depth
+
+def test_fuzz_execution_stops_after_its_statement_budget():
+    survives('''fn main() {
+    var index = 0
+    while index < 9223372036854775807
+        shrinks 9223372036854775807 - index
+    {
+        index = index + 1
+    }
+}
+''')
 
 def test_large_program():
     lines = 20_000
