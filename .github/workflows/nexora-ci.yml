@@ -53,9 +53,15 @@ jobs:
         run: python -m pytest --cov -m "not equivalence"
 
       # Keep the newest Linux/Python combination actionable if a test stops making progress.
+      # The POSIX alarm test can interrupt coverage.py while it holds its collector lock. Run that
+      # one test separately below so its behavior is still checked without tracing.
       - name: Tests with coverage (Ubuntu 3.13 diagnostics)
         if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13'
-        run: python -m pytest -v --cov -m "not equivalence" -o faulthandler_timeout=120
+        run: python -m pytest -v --cov -m "not equivalence" -k "not test_run_timeout_stops_execution_with_a_clear_diagnostic" -o faulthandler_timeout=120
+
+      - name: POSIX timeout test without coverage (Ubuntu 3.13)
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13'
+        run: python -m pytest -v tests/test_cli.py::test_run_timeout_stops_execution_with_a_clear_diagnostic
 
       # This runner has stalled without identifying the current test. Keep verbose progress and
       # periodic thread dumps here so a slow or blocked test is actionable in the Actions log.
