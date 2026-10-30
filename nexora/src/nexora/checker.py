@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import difflib
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields
 
 from . import ast_nodes as ast
@@ -578,6 +579,21 @@ class Checker:
             return name
         return self.prefix + name
 
+    @contextmanager
+    def _as_module_of(self, key: str):
+        """Resolves names the way the module that declares `key` does.
+
+        The tables of records hold the records of every module, but the type of a field is written
+        relative to the module that declares the record: `Token` inside `lexer` is `lexer.Token`,
+        whichever module is being checked."""
+        module = key.rpartition(".")[0]
+        previous = self.prefix
+        self.prefix = f"{module}." if module else ""
+        try:
+            yield
+        finally:
+            self.prefix = previous
+
     @property
     def _module(self) -> str | None:
         """The module the names being declared belong to, or None for the file that runs."""
@@ -960,8 +976,9 @@ class Checker:
                     broken = True
                     continue
                 seen.add(declared_field.name)
-                kind = self._value_type(declared_field.type, f"The field '{declared_field.name}' of '{name}'",
-                                        declared_records=True)
+                with self._as_module_of(name):
+                    kind = self._value_type(declared_field.type, f"The field '{declared_field.name}' of '{name}'",
+                                            declared_records=True)
                 if kind is None:
                     broken = True
                     continue
@@ -986,7 +1003,7 @@ class Checker:
                 if name in invalid:
                     continue
                 for _, reference in fields:
-                    if any(dependency in invalid for dependency in self._record_dependencies(reference)):
+                    if any(dependency in invalid for dependency in self._record_dependencies(reference, name)):
                         invalid.add(name)
                         changed = True
                         break
@@ -1055,17 +1072,20 @@ class Checker:
                 identity = identities[key]
                 self._enums[key] = EnumType(key, declaration, tuple(variants), identity)
 
-    def _record_dependencies(self, reference: ast.TypeRef) -> list[str]:
+    def _record_dependencies(self, reference: ast.TypeRef, owner: str) -> list[str]:
         """The record types a type reference depends on, looking inside `List[...]` too.
 
         The reference is read, not its text: a field of type `List[List[Point]]`
-        depends on `Point` just as one of type `Point` does.
+        depends on `Point` just as one of type `Point` does. `owner` is the record whose field it
+        is: an unqualified name belongs to the module that declares the owner.
         """
         found: list[str] = []
-        if self._key(reference.name) in self._record_names:
-            found.append(self._key(reference.name))
+        with self._as_module_of(owner):
+            key = self._type_key(reference)
+        if key in self._record_names:
+            found.append(key)
         for argument in reference.arguments:
-            found.extend(self._record_dependencies(argument))
+            found.extend(self._record_dependencies(argument, owner))
         return found
 
     def _find_record_cycles(self, field_refs: dict[str, tuple[tuple[str, ast.TypeRef], ...]]) -> None:
@@ -1091,7 +1111,7 @@ class Checker:
                 return
             visiting.append(name)
             for _, reference in field_refs.get(name, ()):
-                for dependency in self._record_dependencies(reference):
+                for dependency in self._record_dependencies(reference, name):
                     walk(dependency)
             visiting.pop()
             done.add(name)
@@ -1109,7 +1129,7 @@ class Checker:
                 return
             done.add(name)
             for _, reference in self._record_refs.get(name, ()):
-                for dependency in self._record_dependencies(reference):
+                for dependency in self._record_dependencies(reference, name):
                     build(dependency)
             ordered.append(name)
 
