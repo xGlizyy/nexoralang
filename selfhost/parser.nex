@@ -35,14 +35,14 @@ type Problem = {
 
 type Parser = {
     tokens: List[lexer.Token], pos: Int, nesting: Int,
-    type_names: List[Text], record_names: List[Text]
+    type_names: List[Text], record_names: List[Text], diagnostics: List[Problem]
 }
 
 // What a parsing function returns. `depth` is the depth of the expression tree (1 for a leaf),
 // `op` the operator when the node is a Binary, and `span` where the node, or the token consumed,
-// is.
+// is. For a type, `name` is the name written and `op` the type as it is written.
 type Step = {
-    ok: Bool, node: Node, parser: Parser, depth: Int, span: Span, op: Text, problem: Problem
+    ok: Bool, node: Node, parser: Parser, depth: Int, span: Span, op: Text, name: Text, problem: Problem
 }
 
 // Limits that keep any accepted program well inside the call depth.
@@ -121,14 +121,14 @@ fn check(p: Parser, kind: Text) gives Bool {
 fn with_pos(p: Parser, pos: Int) gives Parser {
     return Parser(
         tokens: p.tokens, pos: pos, nesting: p.nesting,
-        type_names: p.type_names, record_names: p.record_names
+        type_names: p.type_names, record_names: p.record_names, diagnostics: p.diagnostics
     )
 }
 
 fn with_nesting(p: Parser, nesting: Int) gives Parser {
     return Parser(
         tokens: p.tokens, pos: p.pos, nesting: nesting,
-        type_names: p.type_names, record_names: p.record_names
+        type_names: p.type_names, record_names: p.record_names, diagnostics: p.diagnostics
     )
 }
 
@@ -174,17 +174,132 @@ fn no_problem() gives Problem {
 }
 
 fn ok_step(node: Node, p: Parser, depth: Int, span: Span, op: Text) gives Step {
-    return Step(ok: true, node: node, parser: p, depth: depth, span: span, op: op, problem: no_problem())
+    return Step(ok: true, node: node, parser: p, depth: depth, span: span, op: op, name: "", problem: no_problem())
 }
 
 fn fail_at(p: Parser, code: Text, label: Text, hint: Text, notes: List[Text], span: Span) gives Step {
     return Step(
-        ok: false, node: Node.Null(), parser: p, depth: 0, span: span, op: "",
+        ok: false, node: Node.Null(), parser: p, depth: 0, span: span, op: "", name: "",
         problem: Problem(
             code: code, label: label, hint: hint, notes: notes,
             line: span.line, column: span.column, end_line: span.end_line, end_column: span.end_column
         )
     )
+}
+
+// The most syntax errors kept before the parse is abandoned (MAX_DIAGNOSTICS in diagnostics.py).
+fn max_diagnostics() gives Int {
+    return 100
+}
+
+// Keeps a syntax error and goes on (Parser._record).
+fn record(p: Parser, problem: Problem) gives Parser {
+    return Parser(
+        tokens: p.tokens, pos: p.pos, nesting: p.nesting, type_names: p.type_names,
+        record_names: p.record_names, diagnostics: List.append(p.diagnostics, problem)
+    )
+}
+
+fn too_many(p: Parser) gives Bool {
+    return List.length(p.diagnostics) >= max_diagnostics()
+}
+
+// What `_TooManyErrors` is in Python: a failure that every caller returns unchanged, all the way up.
+fn abandon(p: Parser) gives Step {
+    return fail_at(p, "TOO_MANY", "", "", [], no_span())
+}
+
+fn is_abandon(step: Step) gives Bool {
+    return step.problem.code == "TOO_MANY"
+}
+
+// Keeps the error of a failed Step and resumes. Nothing is kept once the limit is reached.
+fn recorded(failed: Step) gives Step {
+    if is_abandon(failed) {
+        return failed
+    }
+    let kept = record(failed.parser, failed.problem)
+    if too_many(kept) {
+        return abandon(kept)
+    }
+    return ok_step(Node.Null(), kept, 1, failed.span, "")
+}
+
+// Keeps an error that does not stop the statement (Parser._record on a fresh error).
+fn recorded_at(p: Parser, code: Text, label: Text, hint: Text, notes: List[Text], span: Span) gives Step {
+    return recorded(fail_at(p, code, label, hint, notes, span))
+}
+
+fn skip_newlines(p: Parser) gives Parser {
+    var current = p
+    while check(current, "end of line")
+        shrinks List.length(current.tokens) - current.pos
+    {
+        current = advance(current)
+    }
+    return current
+}
+
+// The kind of the next token that is not a line break.
+fn significant_kind(p: Parser) gives Text {
+    var index = p.pos
+    let count = List.length(p.tokens)
+    while index < count and kind_at_index(p.tokens, index) == "end of line"
+        shrinks count - index
+    {
+        index = index + 1
+    }
+    if index >= count {
+        return "end of file"
+    }
+    return kind_at_index(p.tokens, index)
+}
+
+fn starts_line(p: Parser) gives Bool {
+    if p.pos == 0 {
+        return true
+    }
+    let before = kind_at_index(p.tokens, p.pos - 1)
+    return before == "end of line" or before == "}"
+}
+
+// Skips to the next `fn` or `type` that starts a line, where a new declaration can begin.
+fn synchronize_to_function(p: Parser) gives Parser {
+    var current = p
+    while not check(current, "end of file")
+        shrinks List.length(current.tokens) - current.pos
+    {
+        let kind = kind_at(current, 0)
+        if (kind == "fn" or kind == "type") and starts_line(current) {
+            return current
+        }
+        current = advance(current)
+    }
+    return current
+}
+
+// Skips the rest of a broken statement: up to the end of its line, or to the `}` that closes the
+// enclosing block. Blocks opened in between are skipped whole.
+fn synchronize_statement(p: Parser) gives Parser {
+    var depth = 0
+    var current = p
+    while not check(current, "end of file")
+        shrinks List.length(current.tokens) - current.pos
+    {
+        let kind = kind_at(current, 0)
+        if kind == "\{" {
+            depth = depth + 1
+        } else if kind == "}" {
+            if depth == 0 {
+                return current
+            }
+            depth = depth - 1
+        } else if kind == "end of line" and depth == 0 {
+            return skip_newlines(current)
+        }
+        current = advance(current)
+    }
+    return current
 }
 
 // An error at the token the parser is looking at.
@@ -393,7 +508,7 @@ fn parse_primary(p: Parser) gives Step {
     let after = advance(p)
 
     if t.kind == "match" {
-        return fail(p, "X9999", "match expressions are not parsed yet", "", [])
+        return parse_match_expression(p)
     }
     if t.kind == "integer" {
         return ok_step(obj("IntLiteral", ["span", "value"], [place(here), Node.Whole(Int.parse(t.value))]), after, 1, here, "")
@@ -743,6 +858,1786 @@ fn parse_call(p: Parser, callee: lexer.Token, name: Text, name_span: Span, quali
     return built(node, leave(closing.parser), deepest, span, "")
 }
 
+// Types
+
+fn type_node(span: Span, name: Text, arguments: List[Node], qualifier: Text) gives Node {
+    return obj(
+        "TypeRef", ["span", "name", "arguments", "qualifier"],
+        [place(span), Node.Str(name), Node.Items(arguments), optional_text(qualifier)]
+    )
+}
+
+fn type_step(node: Node, p: Parser, span: Span, name: Text, written: Text) gives Step {
+    return Step(
+        ok: true, node: node, parser: p, depth: 1, span: span, op: written, name: name, problem: no_problem()
+    )
+}
+
+// How many type arguments a built-in type takes; 0 for a type that takes none.
+fn type_argument_count(name: Text) gives Int {
+    if name == "List" or name == "Option" {
+        return 1
+    }
+    if name == "Result" {
+        return 2
+    }
+    return 0
+}
+
+// `Name`, or `List[Type]`, `Option[Type]` or `Result[Type, Type]` with nested arguments. A type of
+// another module has its module in front: `models.Point`.
+fn parse_type(p: Parser, expected: Text, hint: Text) gives Step {
+    let first = expect(p, "name", expected, hint, [])
+    if not first.ok {
+        return first
+    }
+    let name_token = peek_at(p, 0)
+    var current = first.parser
+    var name = name_token
+    var qualifier = ""
+    var start = token_span(name_token)
+    if check(current, ".") {
+        let dot = peek_at(current, 0)
+        let after_dot = advance(current)
+        let qualified = peek_at(after_dot, 0)
+        let named = expect_name(after_dot, "the name of the type after the module's name", "")
+        if not named.ok {
+            return named
+        }
+        if not (touches(token_span(name_token), token_span(dot)) and touches(token_span(dot), token_span(qualified))) {
+            return fail_at(
+                named.parser, "E1101",
+                "Write '" + name_token.lexeme + "." + qualified.lexeme + "' without spaces around the '.'",
+                "", [], join_spans(token_span(name_token), token_span(qualified))
+            )
+        }
+        qualifier = name_token.lexeme
+        name = qualified
+        start = join_spans(start, token_span(qualified))
+        current = named.parser
+    }
+    var written = name.lexeme
+    if qualifier != "" {
+        written = qualifier + "." + name.lexeme
+    }
+    if not check(current, "[") {
+        return type_step(type_node(start, name.lexeme, [], qualifier), current, start, name.lexeme, written)
+    }
+    let opening = peek_at(current, 0)
+    let entered = enter(advance(current), opening)
+    if not entered.ok {
+        return entered
+    }
+    current = entered.parser
+    var arguments: List[Node] = []
+    var argument_names: List[Text] = []
+    var argument_spans: List[Span] = []
+    var argument_sources: List[Text] = []
+    if not check(current, "]") {
+        let first_argument = parse_type(current, "a type argument", "")
+        if not first_argument.ok {
+            return first_argument
+        }
+        arguments = List.append(arguments, first_argument.node)
+        argument_names = List.append(argument_names, first_argument.name)
+        argument_spans = List.append(argument_spans, first_argument.span)
+        argument_sources = List.append(argument_sources, first_argument.op)
+        current = first_argument.parser
+        while check(current, ",")
+            shrinks List.length(current.tokens) - current.pos
+        {
+            let next_argument = parse_type(advance(current), "a type argument", "")
+            if not next_argument.ok {
+                return next_argument
+            }
+            arguments = List.append(arguments, next_argument.node)
+            argument_names = List.append(argument_names, next_argument.name)
+            argument_spans = List.append(argument_spans, next_argument.span)
+            argument_sources = List.append(argument_sources, next_argument.op)
+            current = next_argument.parser
+        }
+    }
+    let closing = expect(current, "]", "']' to close the type arguments", "", [opened_bracket_at(opening)])
+    if not closing.ok {
+        return closing
+    }
+    current = leave(closing.parser)
+    let span = join_spans(start, closing.span)
+    let arity = type_argument_count(name.lexeme)
+    if arity == 0 {
+        return fail_at(
+            current, "E1101", "'" + name.lexeme + "' cannot take type arguments",
+            "Only 'List', 'Option' and 'Result' take type arguments: List[Int], Option[Text], Result[Int, Text].",
+            [], span
+        )
+    }
+    let count = List.length(arguments)
+    if count == 0 {
+        return fail_at(
+            current, "E1101", "'" + name.lexeme + "' needs a type argument: write " + name.lexeme + "[Int]",
+            "A type with arguments always states them.", [], span
+        )
+    }
+    if count != arity {
+        var arity_word = "one"
+        var plural = ""
+        if arity == 2 {
+            arity_word = "two"
+            plural = "s"
+        }
+        var verb = "were"
+        if count == 1 {
+            verb = "was"
+        }
+        var ending = "]"
+        if arity == 2 {
+            ending = ", Text]"
+        }
+        return fail_at(
+            current, "E1101",
+            "'" + name.lexeme + "' takes exactly " + arity_word + " type argument" + plural + ", but "
+            + to_text(count) + " " + verb + " given",
+            "Write " + name.lexeme + "[Int" + ending, [], span
+        )
+    }
+    var index = 0
+    while index < count
+        shrinks count - index
+    {
+        if List.get(argument_names, index) == "Void" {
+            return fail_at(
+                current, "E1101", "Void cannot be an argument of '" + name.lexeme + "'",
+                "Void means 'no value'. Use a type that has values, such as Int or Text.", [],
+                List.get(argument_spans, index)
+            )
+        }
+        index = index + 1
+    }
+    return type_step(
+        type_node(span, name.lexeme, arguments, qualifier), current, span, name.lexeme,
+        written + "[" + join_texts(argument_sources, ", ") + "]"
+    )
+}
+
+// Patterns
+
+fn literal_pattern(value: Node, span: Span) gives Node {
+    return obj("LiteralPattern", ["span", "value"], [place(span), value])
+}
+
+fn parse_pattern(p: Parser) gives Step {
+    let t = peek_at(p, 0)
+    let here = token_span(t)
+    let after = advance(p)
+    if t.kind == "integer" {
+        return ok_step(literal_pattern(Node.Whole(Int.parse(t.value)), here), after, 1, here, "")
+    }
+    if t.kind == "float" {
+        return ok_step(literal_pattern(Node.Real(t.value), here), after, 1, here, "")
+    }
+    if t.kind == "text" {
+        return ok_step(literal_pattern(Node.Str(t.value), here), after, 1, here, "")
+    }
+    if t.kind == "true" or t.kind == "false" {
+        return ok_step(literal_pattern(Node.Flag(t.kind == "true"), here), after, 1, here, "")
+    }
+    if t.kind != "name" {
+        return fail(p, "E1101", "Expected a pattern, found " + describe(t), "", [])
+    }
+    if t.lexeme == "_" {
+        return ok_step(obj("WildcardPattern", ["span"], [place(here)]), after, 1, here, "")
+    }
+    var current = after
+    var segments: List[lexer.Token] = [t]
+    var dots: List[lexer.Token] = []
+    while check(current, ".")
+        shrinks List.length(current.tokens) - current.pos
+    {
+        dots = List.append(dots, peek_at(current, 0))
+        let after_dot = advance(current)
+        let segment = peek_at(after_dot, 0)
+        let named = expect_name(after_dot, "a type or variant name after '.'", "")
+        if not named.ok {
+            return named
+        }
+        segments = List.append(segments, segment)
+        current = named.parser
+    }
+    let count = List.length(segments)
+    let last = List.get(segments, count - 1)
+    var spaced = false
+    var position = 0
+    while position < List.length(dots)
+        shrinks List.length(dots) - position
+    {
+        let separator = List.get(dots, position)
+        let before = List.get(segments, position)
+        let following = List.get(segments, position + 1)
+        if not (touches(token_span(before), token_span(separator)) and touches(token_span(separator), token_span(following))) {
+            spaced = true
+        }
+        position = position + 1
+    }
+    if spaced {
+        return fail_at(
+            current, "E1101", "Write a variant pattern without spaces around '.'", "", [],
+            join_spans(here, token_span(last))
+        )
+    }
+    var qualifier = ""
+    var name = t
+    if count > 1 {
+        name = last
+        var part = 0
+        while part < count - 1
+            shrinks count - part
+        {
+            let segment = List.get(segments, part)
+            if part > 0 {
+                qualifier = qualifier + "."
+            }
+            qualifier = qualifier + segment.lexeme
+            part = part + 1
+        }
+    }
+    if check(current, "(") {
+        let entered = enter(advance(current), t)
+        if not entered.ok {
+            return entered
+        }
+        current = entered.parser
+        var arguments: List[Node] = []
+        if not check(current, ")") {
+            let first = parse_pattern(current)
+            if not first.ok {
+                return first
+            }
+            arguments = List.append(arguments, first.node)
+            current = first.parser
+            while check(current, ",")
+                shrinks List.length(current.tokens) - current.pos
+            {
+                let next = parse_pattern(advance(current))
+                if not next.ok {
+                    return next
+                }
+                arguments = List.append(arguments, next.node)
+                current = next.parser
+            }
+        }
+        let closing = expect(current, ")", "')' after the variant pattern", "", [])
+        if not closing.ok {
+            return closing
+        }
+        let span = join_spans(here, closing.span)
+        let node = obj(
+            "VariantPattern", ["span", "name", "name_span", "arguments", "qualifier"],
+            [place(span), Node.Str(name.lexeme), place(token_span(name)), Node.Items(arguments), optional_text(qualifier)]
+        )
+        return ok_step(node, leave(closing.parser), 1, span, "")
+    }
+    if qualifier != "" or starts_with_capital(name.lexeme) {
+        let span = join_spans(here, token_span(name))
+        let node = obj(
+            "VariantPattern", ["span", "name", "name_span", "arguments", "qualifier"],
+            [place(span), Node.Str(name.lexeme), place(token_span(name)), Node.Items([]), optional_text(qualifier)]
+        )
+        return ok_step(node, current, 1, span, "")
+    }
+    return ok_step(
+        obj("BindingPattern", ["span", "name", "name_span"], [place(here), Node.Str(t.lexeme), place(here)]),
+        current, 1, here, ""
+    )
+}
+
+// Match
+
+fn parse_match_body(p: Parser) gives Step {
+    if check(p, "\{") {
+        return parse_block(p, "the body of a match arm")
+    }
+    return parse_expression(p, 1)
+}
+
+fn parse_match_expression(p: Parser) gives Step {
+    let keyword = peek_at(p, 0)
+    let entered = enter(advance(p), keyword)
+    if not entered.ok {
+        return entered
+    }
+    let value = parse_expression(entered.parser, 1)
+    if not value.ok {
+        return value
+    }
+    let opening_token = peek_at(value.parser, 0)
+    let opening = expect(value.parser, "\{", "'\{' before the match arms", "", [])
+    if not opening.ok {
+        return opening
+    }
+    let second = enter(opening.parser, opening_token)
+    if not second.ok {
+        return second
+    }
+    var current = skip_newlines(second.parser)
+    if check(current, "}") {
+        return fail_at(current, "E1101", "A match needs at least one arm", "", [], token_span(opening_token))
+    }
+    var arms: List[Node] = []
+    var deepest = value.depth
+    var more = true
+    while more
+        shrinks List.length(current.tokens) - current.pos
+    {
+        let pattern = parse_pattern(current)
+        if not pattern.ok {
+            return pattern
+        }
+        let arrow = expect(pattern.parser, "=>", "'=>' after the pattern", "", [])
+        if not arrow.ok {
+            return arrow
+        }
+        let is_block = check(arrow.parser, "\{")
+        let body = parse_match_body(arrow.parser)
+        if not body.ok {
+            return body
+        }
+        if not is_block and body.depth > deepest {
+            deepest = body.depth
+        }
+        let arm_span = join_spans(pattern.span, body.span)
+        arms = List.append(arms, obj(
+            "MatchArm", ["span", "pattern", "body"], [place(arm_span), pattern.node, body.node]
+        ))
+        current = skip_newlines(body.parser)
+        if check(current, "}") {
+            more = false
+        } else {
+            if check(current, ",") {
+                current = advance(current)
+            }
+            current = skip_newlines(current)
+            if check(current, "}") {
+                more = false
+            }
+        }
+    }
+    let closing = expect(current, "}", "'}' to close the match", "", [])
+    if not closing.ok {
+        return closing
+    }
+    let span = join_spans(token_span(keyword), closing.span)
+    let node = obj("MatchExpr", ["span", "value", "arms"], [place(span), value.node, Node.Items(arms)])
+    return built(node, with_nesting(closing.parser, closing.parser.nesting - 2), deepest, span, "")
+}
+
+// Clauses
+
+fn lower_text(text: Text) gives Text {
+    let upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    let lower = "abcdefghijklmnopqrstuvwxyz"
+    var result = ""
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        var mapped = c
+        var j = 0
+        while j < 26
+            shrinks 26 - j
+        {
+            if c == Text.slice(upper, j, j + 1) {
+                mapped = Text.slice(lower, j, j + 1)
+            }
+            j = j + 1
+        }
+        result = result + mapped
+        i = i + 1
+    }
+    return result
+}
+
+fn is_statement_end(kind: Text) gives Bool {
+    return kind == "end of line" or kind == "}" or kind == "end of file"
+}
+
+// The optional `name:` of a clause. The Step holds the name as Str, or Null when there is none, and
+// the span of the Step is empty.
+fn parse_clause_name(p: Parser, keyword: lexer.Token) gives Step {
+    if kind_at(p, 1) != ":" {
+        return ok_step(Node.Null(), p, 1, no_span(), "")
+    }
+    let t = peek_at(p, 0)
+    if List.contains(name_keywords(), t.kind) or t.kind == "reserved word" {
+        return fail(p, "E1101", "A clause cannot be named '" + t.lexeme + "': it is a keyword", "", [])
+    }
+    if t.kind != "name" {
+        return ok_step(Node.Null(), p, 1, no_span(), "")
+    }
+    if t.lexeme != lower_text(t.lexeme) {
+        return fail_at(
+            advance(p), "E1101", "The name of a clause is written in lowercase, not '" + t.lexeme + "'",
+            "Write: " + keyword.lexeme + " " + lower_text(t.lexeme) + ": ...", [], token_span(t)
+        )
+    }
+    return ok_step(Node.Str(t.lexeme), advance(advance(p)), 1, no_span(), "")
+}
+
+fn parse_condition_after(p: Parser, keyword: lexer.Token, what: Text) gives Step {
+    if is_statement_end(kind_at(p, 0)) {
+        return fail(
+            p, "E1101", "Expected " + what + " after '" + keyword.lexeme + "', found " + describe(peek_at(p, 0)),
+            "", []
+        )
+    }
+    return parse_expression(p, 1)
+}
+
+fn is_blank(text: Text) gives Bool {
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c != " " and c != "\t" and c != "\n" {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// The optional `, "explanation"` after a condition. The Step holds the text as Str, or Null, and its
+// span is where the clause ends.
+fn parse_explanation(p: Parser, clause: Text, end: Span) gives Step {
+    if not check(p, ",") {
+        return ok_step(Node.Null(), p, 1, end, "")
+    }
+    let after_comma = advance(p)
+    let t = peek_at(after_comma, 0)
+    if t.kind != "text" {
+        return fail(
+            after_comma, "E1101",
+            "Expected a text after ',' explaining the rule of '" + clause + "', found " + describe(t),
+            "The explanation is a text literal: " + clause + " ..., \"Why this rule exists\"", []
+        )
+    }
+    let after_text = advance(after_comma)
+    if is_blank(t.value) {
+        return fail_at(
+            after_text, "E1101", "The explanation of '" + clause + "' is empty",
+            "Write why the rule exists, or remove the ',' and the text.", [], token_span(t)
+        )
+    }
+    if Text.contains(t.value, "\n") {
+        return fail_at(
+            after_text, "E1101", "An explanation is a single line: it cannot contain '\\n'",
+            "Say it in one sentence.", [], token_span(t)
+        )
+    }
+    return ok_step(Node.Str(t.value), after_text, 1, token_span(t), "")
+}
+
+// `needs`, `promises` or `trust`, with an optional name, a condition and an explanation (required for
+// `trust`); or an `example`, which has no name. The keyword is already read.
+fn parse_contract_clause(p: Parser, keyword: lexer.Token) gives Step {
+    let here = token_span(keyword)
+    if keyword.kind == "example" {
+        if check(p, "name") and kind_at(p, 1) == ":" {
+            return fail(
+                p, "E1101", "An example has no name", "Write the call and what it gives: example f(1) == 2", []
+            )
+        }
+        let condition = parse_condition_after(p, keyword, "a condition")
+        if not condition.ok {
+            return condition
+        }
+        let message = parse_explanation(condition.parser, keyword.lexeme, condition.span)
+        if not message.ok {
+            return message
+        }
+        let span = join_spans(here, message.span)
+        return ok_step(
+            obj("Example", ["span", "condition", "message"], [place(span), condition.node, message.node]),
+            message.parser, 1, span, ""
+        )
+    }
+    let name = parse_clause_name(p, keyword)
+    if not name.ok {
+        return name
+    }
+    let condition = parse_condition_after(name.parser, keyword, "a condition")
+    if not condition.ok {
+        return condition
+    }
+    if keyword.kind == "trust" and not check(condition.parser, ",") {
+        return fail_at(
+            condition.parser, "E1101", "A 'trust' says why its condition can be trusted",
+            "Add the reason after a comma: trust plausible: x < 150, \"Why it holds\"", [],
+            join_spans(here, condition.span)
+        )
+    }
+    let message = parse_explanation(condition.parser, keyword.lexeme, condition.span)
+    if not message.ok {
+        return message
+    }
+    let span = join_spans(here, message.span)
+    return ok_step(
+        obj(
+            "Contract", ["span", "clause", "name", "condition", "message"],
+            [place(span), Node.Str(keyword.lexeme), name.node, condition.node, message.node]
+        ),
+        message.parser, 1, span, ""
+    )
+}
+
+// `keeps` or `shrinks`, with an optional name, a condition or a measure and an explanation.
+fn parse_loop_clause(p: Parser, keyword: lexer.Token) gives Step {
+    let name = parse_clause_name(p, keyword)
+    if not name.ok {
+        return name
+    }
+    var what = "an Int measure"
+    if keyword.kind == "keeps" {
+        what = "a condition"
+    }
+    let condition = parse_condition_after(name.parser, keyword, what)
+    if not condition.ok {
+        return condition
+    }
+    let message = parse_explanation(condition.parser, keyword.lexeme, condition.span)
+    if not message.ok {
+        return message
+    }
+    let span = join_spans(token_span(keyword), message.span)
+    return ok_step(
+        obj(
+            "LoopClause", ["span", "clause", "name", "condition", "message"],
+            [place(span), Node.Str(keyword.lexeme), name.node, condition.node, message.node]
+        ),
+        message.parser, 1, span, ""
+    )
+}
+
+fn parse_clause(p: Parser, keyword: lexer.Token, is_loop: Bool) gives Step {
+    if is_loop {
+        return parse_loop_clause(p, keyword)
+    }
+    return parse_contract_clause(p, keyword)
+}
+
+fn is_header_keyword(kind: Text, is_loop: Bool) gives Bool {
+    if kind == "word of 0.11" {
+        return true
+    }
+    if is_loop {
+        return kind == "keeps" or kind == "shrinks"
+    }
+    return kind == "needs" or kind == "promises" or kind == "trust" or kind == "example"
+}
+
+// The clauses between the head of a function or a loop and its `{`. Without clauses, the `{` goes on
+// the line of the head. With clauses, the head ends its line, every clause takes its own lines and
+// the `{` goes alone after the last one. The Step holds the clauses as Items.
+fn parse_header(p: Parser, body: Text, head: Text, is_loop: Bool, level: Int) gives Step {
+    if not check(p, "end of line") {
+        return ok_step(Node.Items([]), p, 1, no_span(), "")
+    }
+    var current = skip_newlines(p)
+    if check(current, "\{") {
+        let handled = recorded_at(
+            current, "E1101", "Without header clauses, '\{' goes on the line of " + head,
+            "Write the '\{' that starts " + body + " at the end of the line of " + head + ".", [],
+            token_span(peek_at(current, 0))
+        )
+        if not handled.ok {
+            return handled
+        }
+        return ok_step(Node.Items([]), handled.parser, 1, no_span(), "")
+    }
+    var items: List[Node] = []
+    while is_header_keyword(kind_at(current, 0), is_loop)
+        shrinks List.length(current.tokens) - current.pos
+    {
+        let keyword = peek_at(current, 0)
+        let work = advance(current)
+        if keyword.kind == "word of 0.11" {
+            let handled = recorded(old_clause_error(work, keyword))
+            if not handled.ok {
+                return handled
+            }
+            current = synchronize_statement(with_nesting(handled.parser, level))
+        } else {
+            let clause = parse_clause(work, keyword, is_loop)
+            if clause.ok {
+                items = List.append(items, clause.node)
+                if check(clause.parser, "\{") {
+                    let handled = recorded_at(
+                        clause.parser, "E1101",
+                        "The '\{' that starts " + body + " goes alone on the line after the last clause",
+                        "End the clause with its line, and write the '\{' on the next one.", [],
+                        token_span(peek_at(clause.parser, 0))
+                    )
+                    if not handled.ok {
+                        return handled
+                    }
+                    return ok_step(Node.Items(items), handled.parser, 1, no_span(), "")
+                }
+                let ended = end_of_statement(clause.parser)
+                if ended.ok {
+                    current = ended.parser
+                } else {
+                    let handled = recorded(ended)
+                    if not handled.ok {
+                        return handled
+                    }
+                    current = synchronize_statement(with_nesting(handled.parser, level))
+                }
+            } else {
+                let handled = recorded(clause)
+                if not handled.ok {
+                    return handled
+                }
+                current = synchronize_statement(with_nesting(handled.parser, level))
+            }
+        }
+    }
+    return ok_step(Node.Items(items), current, 1, no_span(), "")
+}
+
+// Blocks and statements
+
+fn end_of_statement(p: Parser) gives Step {
+    if check(p, "end of line") {
+        return ok_step(Node.Null(), skip_newlines(p), 1, no_span(), "")
+    }
+    if not check(p, "}") and not check(p, "end of file") {
+        return fail(
+            p, "E1101", "Expected the end of the line after this statement, found " + describe(peek_at(p, 0)),
+            "Write one statement per line.", []
+        )
+    }
+    return ok_step(Node.Null(), p, 1, no_span(), "")
+}
+
+fn parse_block(p: Parser, what: Text) gives Step {
+    let opening_token = peek_at(p, 0)
+    let opening = expect(p, "\{", "'\{' to start " + what, "", [])
+    if not opening.ok {
+        return opening
+    }
+    let entered = enter(opening.parser, opening_token)
+    if not entered.ok {
+        return entered
+    }
+    let level = entered.parser.nesting
+    return parse_block_rest(skip_newlines(entered.parser), opening_token, level)
+}
+
+// The statements of a block and its closing brace; the opening brace is already read.
+fn parse_block_rest(p: Parser, opening: lexer.Token, level: Int) gives Step {
+    var current = p
+    var statements: List[Node] = []
+    while not check(current, "}") and not check(current, "end of file")
+        shrinks List.length(current.tokens) - current.pos
+    {
+        let statement = parse_statement(current)
+        if statement.ok {
+            statements = List.append(statements, statement.node)
+            let ended = end_of_statement(statement.parser)
+            if ended.ok {
+                current = ended.parser
+            } else {
+                let handled = recorded(ended)
+                if not handled.ok {
+                    return handled
+                }
+                current = synchronize_statement(with_nesting(handled.parser, level))
+            }
+        } else {
+            let handled = recorded(statement)
+            if not handled.ok {
+                return handled
+            }
+            current = synchronize_statement(with_nesting(handled.parser, level))
+        }
+    }
+    if check(current, "end of file") {
+        // The block is kept with the statements read so far, so that tools can still see the part of
+        // the program that was written.
+        let here = token_span(peek_at(current, 0))
+        let handled = recorded_at(
+            current, "E1102", "Expected '}' before the end of the file", "",
+            [
+                "The block opened at line " + to_text(opening.line) + ", column " + to_text(opening.column)
+                + " is never closed."
+            ],
+            here
+        )
+        if not handled.ok {
+            return handled
+        }
+        let span = join_spans(token_span(opening), here)
+        return ok_step(
+            obj("Block", ["span", "statements"], [place(span), Node.Items(statements)]),
+            leave(handled.parser), 1, span, ""
+        )
+    }
+    let closing = peek_at(current, 0)
+    let span = join_spans(token_span(opening), token_span(closing))
+    return ok_step(
+        obj("Block", ["span", "statements"], [place(span), Node.Items(statements)]),
+        leave(advance(current)), 1, span, ""
+    )
+}
+
+fn reserved_hint(word: Text) gives Text {
+    if word == "break" {
+        return "There is no 'break': a loop ends when its condition is false or its list is exhausted, or with 'return'."
+    }
+    if word == "continue" {
+        return "There is no 'continue': put the rest of the turn inside an 'if'."
+    }
+    return ""
+}
+
+fn parse_statement(p: Parser) gives Step {
+    let t = peek_at(p, 0)
+    let kind = t.kind
+    if kind == "let" or kind == "var" {
+        return parse_let(p)
+    }
+    if kind == "return" {
+        return parse_return(p)
+    }
+    if kind == "if" {
+        return parse_if(p)
+    }
+    if kind == "while" {
+        return parse_while(p)
+    }
+    if kind == "for" {
+        return parse_for(p)
+    }
+    if kind == "\{" {
+        return parse_block(p, "a block")
+    }
+    if kind == "name" and kind_at(p, 1) == "=" {
+        let value = parse_expression(advance(advance(p)), 1)
+        if not value.ok {
+            return value
+        }
+        let span = join_spans(token_span(t), value.span)
+        return ok_step(
+            obj(
+                "Assign", ["span", "name", "name_span", "value"],
+                [place(span), Node.Str(t.lexeme), place(token_span(t)), value.node]
+            ),
+            value.parser, 1, span, ""
+        )
+    }
+    if kind == "name" and kind_at(p, 1) == "." and assigns_a_field(p) {
+        return parse_field_assignment(p, t)
+    }
+    if kind == "needs" or kind == "promises" or kind == "trust" or kind == "example" {
+        return fail(
+            p, "E1106", "'" + t.lexeme + "' goes between the signature and the body",
+            "Move this clause to the header of the function: after its signature, before its '\{'.", []
+        )
+    }
+    if kind == "keeps" or kind == "shrinks" {
+        return fail(
+            p, "E1106", "'" + t.lexeme + "' goes between the head of the loop and its body",
+            "Move this clause to the header of the loop: after its condition, before its '\{'.", []
+        )
+    }
+    if kind == "word of 0.11" {
+        return old_clause_error(p, t)
+    }
+    if kind == "else" {
+        return fail(
+            p, "E1101", "This 'else' does not follow an 'if'",
+            "'else' goes on the same line as the '}' that closes the 'if' block: } else \{", []
+        )
+    }
+    if kind == "reserved word" {
+        return fail(
+            p, "E1103",
+            "'" + t.lexeme + "' is reserved for a future version of NEXORA and is not implemented yet",
+            reserved_hint(t.lexeme), []
+        )
+    }
+    if kind == "fn" {
+        return fail(p, "E1101", "A function cannot be declared inside another function", "", [])
+    }
+    if kind == "type" {
+        return fail(
+            p, "E1101", "A type cannot be declared inside a function",
+            "Declare it at the top level of the file, outside any function.", []
+        )
+    }
+    if kind == "uses" {
+        return fail(
+            p, "E1101", "A capability cannot be declared inside a function",
+            "Declare it at the top level of the file, outside any function.", []
+        )
+    }
+    if kind == "where" {
+        return fail(
+            p, "E1101", "'where' can only follow the base type in a type declaration",
+            "type Percent = Int where value >= 0 and value <= 100", []
+        )
+    }
+    let expression = parse_expression(p, 1)
+    if not expression.ok {
+        return expression
+    }
+    return ok_step(
+        obj("ExprStatement", ["span", "expression"], [place(expression.span), expression.node]),
+        expression.parser, 1, expression.span, ""
+    )
+}
+
+// Whether the statement at the current position assigns to a field: `p.x = 1` assigns, `p.x` only
+// reads.
+fn assigns_a_field(p: Parser) gives Bool {
+    var index = 1
+    while kind_at(p, index) == "." and kind_at(p, index + 1) == "name"
+        shrinks List.length(p.tokens) + 2 - index
+    {
+        index = index + 2
+    }
+    return kind_at(p, index) == "="
+}
+
+// `p.x = value`: giving a new value to a field of a record. A record is immutable, so this is always
+// an error; the checker says so.
+fn parse_field_assignment(p: Parser, root: lexer.Token) gives Step {
+    var current = advance(p)
+    var current_root = root
+    var names: List[Text] = []
+    var spans: List[Span] = []
+    while check(current, ".")
+        shrinks List.length(current.tokens) - current.pos
+    {
+        let dot = peek_at(current, 0)
+        let after_dot = advance(current)
+        let name = peek_at(after_dot, 0)
+        if name.kind != "name" {
+            return fail_at(
+                after_dot, "E1101", "Expected the name of a field after '" + current_root.lexeme + ".'",
+                "", [], token_span(dot)
+            )
+        }
+        if not (touches(token_span(current_root), token_span(dot)) and touches(token_span(dot), token_span(name))) {
+            return fail_at(
+                after_dot, "E1101",
+                "Write '" + current_root.lexeme + "." + name.lexeme + "' without spaces around the '.'",
+                "", [], join_spans(token_span(current_root), token_span(name))
+            )
+        }
+        names = List.append(names, name.lexeme)
+        spans = List.append(spans, token_span(name))
+        current = advance(after_dot)
+        current_root = name
+    }
+    let count = List.length(names)
+    let last_name = List.get(names, count - 1)
+    let last_span = List.get(spans, count - 1)
+    var span = token_span(root)
+    var target = obj("Name", ["span", "name"], [place(span), Node.Str(root.lexeme)])
+    var index = 0
+    while index < count - 1
+        shrinks count - index
+    {
+        span = join_spans(span, List.get(spans, index))
+        target = obj(
+            "FieldAccess", ["span", "target", "name", "name_span"],
+            [place(span), target, Node.Str(List.get(names, index)), place(List.get(spans, index))]
+        )
+        index = index + 1
+    }
+    let equals = expect(current, "=", "'=' and the new value of the field '" + last_name + "'", "", [])
+    if not equals.ok {
+        return equals
+    }
+    let value = parse_expression(equals.parser, 1)
+    if not value.ok {
+        return value
+    }
+    let whole = join_spans(token_span(root), value.span)
+    return ok_step(
+        obj(
+            "FieldAssign", ["span", "target", "name", "name_span", "value"],
+            [place(whole), target, Node.Str(last_name), place(last_span), value.node]
+        ),
+        value.parser, 1, whole, ""
+    )
+}
+
+// `let` and `var` share one form; only `var` can be assigned again later.
+fn parse_let(p: Parser) gives Step {
+    let keyword = peek_at(p, 0)
+    let name_token = peek_at(advance(p), 0)
+    let name = expect_name(advance(p), "a variable name after '" + keyword.lexeme + "'", "")
+    if not name.ok {
+        return name
+    }
+    var current = name.parser
+    var declared = Node.Null()
+    if check(current, ":") {
+        let declared_type = parse_type(advance(current), "a type for '" + name_token.lexeme + "' after ':'", "")
+        if not declared_type.ok {
+            return declared_type
+        }
+        declared = declared_type.node
+        current = declared_type.parser
+    }
+    let equals = expect(
+        current, "=", "'=' and a value for '" + name_token.lexeme + "'",
+        "A variable must be given a value when it is declared.", []
+    )
+    if not equals.ok {
+        return equals
+    }
+    let value = parse_expression(equals.parser, 1)
+    if not value.ok {
+        return value
+    }
+    var node_kind = "Let"
+    if keyword.kind == "var" {
+        node_kind = "Var"
+    }
+    let span = join_spans(token_span(keyword), value.span)
+    return ok_step(
+        obj(
+            node_kind, ["span", "name", "name_span", "declared_type", "value"],
+            [place(span), Node.Str(name_token.lexeme), place(token_span(name_token)), declared, value.node]
+        ),
+        value.parser, 1, span, ""
+    )
+}
+
+fn parse_return(p: Parser) gives Step {
+    let keyword = peek_at(p, 0)
+    let after = advance(p)
+    if is_statement_end(kind_at(after, 0)) {
+        return ok_step(
+            obj("Return", ["span", "value"], [place(token_span(keyword)), Node.Null()]),
+            after, 1, token_span(keyword), ""
+        )
+    }
+    let value = parse_expression(after, 1)
+    if not value.ok {
+        return value
+    }
+    let span = join_spans(token_span(keyword), value.span)
+    return ok_step(
+        obj("Return", ["span", "value"], [place(span), value.node]), value.parser, 1, span, ""
+    )
+}
+
+// The `else` of an `if`: a block, another `if`, or nothing. The Step holds the branch (or Null) and
+// its span; `ended` is the span of whatever ends the statement.
+fn parse_else(p: Parser, then_span: Span) gives Step {
+    if not check(p, "else") {
+        return ok_step(Node.Null(), p, 1, then_span, "")
+    }
+    let after_else = advance(p)
+    if check(after_else, "if") {
+        return parse_if(after_else)
+    }
+    return parse_block(after_else, "the body of 'else'")
+}
+
+fn parse_if(p: Parser) gives Step {
+    let keyword = peek_at(p, 0)
+    let entered = enter(advance(p), keyword)
+    if not entered.ok {
+        return entered
+    }
+    let current = entered.parser
+    if check(current, "let") {
+        let pattern = parse_pattern(advance(current))
+        if not pattern.ok {
+            return pattern
+        }
+        let equals = expect(pattern.parser, "=", "'=' between the pattern and the value in 'if let'", "", [])
+        if not equals.ok {
+            return equals
+        }
+        let value = parse_expression(equals.parser, 1)
+        if not value.ok {
+            return value
+        }
+        let then_block = parse_block(value.parser, "the body of 'if let'")
+        if not then_block.ok {
+            return then_block
+        }
+        let else_branch = parse_else(then_block.parser, then_block.span)
+        if not else_branch.ok {
+            return else_branch
+        }
+        let span = join_spans(token_span(keyword), else_branch.span)
+        return ok_step(
+            obj(
+                "IfLet", ["span", "pattern", "value", "then_block", "else_branch"],
+                [place(span), pattern.node, value.node, then_block.node, else_branch.node]
+            ),
+            leave(else_branch.parser), 1, span, ""
+        )
+    }
+    if check(current, "\{") {
+        return fail(current, "E1101", "Expected a condition after 'if', found '\{'", "", [])
+    }
+    let condition = parse_expression(current, 1)
+    if not condition.ok {
+        return condition
+    }
+    let then_block = parse_block(condition.parser, "the body of 'if'")
+    if not then_block.ok {
+        return then_block
+    }
+    let else_branch = parse_else(then_block.parser, then_block.span)
+    if not else_branch.ok {
+        return else_branch
+    }
+    let span = join_spans(token_span(keyword), else_branch.span)
+    return ok_step(
+        obj(
+            "If", ["span", "condition", "then_block", "else_branch"],
+            [place(span), condition.node, then_block.node, else_branch.node]
+        ),
+        leave(else_branch.parser), 1, span, ""
+    )
+}
+
+// The `{` and the statements of the body of a loop.
+fn parse_loop_body(p: Parser, loop: Text) gives Step {
+    let opening_token = peek_at(p, 0)
+    let opening = expect(p, "\{", "'\{' to start the body of " + loop, "", [])
+    if not opening.ok {
+        return opening
+    }
+    let entered = enter(opening.parser, opening_token)
+    if not entered.ok {
+        return entered
+    }
+    let level = entered.parser.nesting
+    return parse_block_rest(skip_newlines(entered.parser), opening_token, level)
+}
+
+// `while condition`, its header clauses and its body. The checker asks for exactly one `shrinks`.
+fn parse_while(p: Parser) gives Step {
+    let keyword = peek_at(p, 0)
+    let entered = enter(advance(p), keyword)
+    if not entered.ok {
+        return entered
+    }
+    if check(entered.parser, "\{") {
+        return fail(entered.parser, "E1101", "Expected a condition after 'while', found '\{'", "", [])
+    }
+    let condition = parse_expression(entered.parser, 1)
+    if not condition.ok {
+        return condition
+    }
+    let clauses = parse_header(condition.parser, "the body of 'while'", "the loop", true, condition.parser.nesting)
+    if not clauses.ok {
+        return clauses
+    }
+    let body = parse_loop_body(clauses.parser, "'while'")
+    if not body.ok {
+        return body
+    }
+    let span = join_spans(token_span(keyword), body.span)
+    return ok_step(
+        obj(
+            "While", ["span", "condition", "clauses", "body"],
+            [place(span), condition.node, clauses.node, body.node]
+        ),
+        leave(body.parser), 1, span, ""
+    )
+}
+
+// `for name in iterable`, its header clauses and its body.
+fn parse_for(p: Parser) gives Step {
+    let keyword = peek_at(p, 0)
+    let entered = enter(advance(p), keyword)
+    if not entered.ok {
+        return entered
+    }
+    let name_token = peek_at(entered.parser, 0)
+    let name = expect_name(entered.parser, "a name for the iterator after 'for'", "")
+    if not name.ok {
+        return name
+    }
+    let in_word = expect(
+        name.parser, "in", "'in' after the iterator name '" + name_token.lexeme + "'",
+        "Write for x in xs \{ ... }.", []
+    )
+    if not in_word.ok {
+        return in_word
+    }
+    if check(in_word.parser, "\{") {
+        return fail(
+            in_word.parser, "E1101", "Expected a list after '" + name_token.lexeme + " in', found '\{'",
+            "Write the list the loop walks over, for example 'for x in xs'.", []
+        )
+    }
+    let iterable = parse_expression(in_word.parser, 1)
+    if not iterable.ok {
+        return iterable
+    }
+    let clauses = parse_header(iterable.parser, "the body of 'for'", "the loop", true, iterable.parser.nesting)
+    if not clauses.ok {
+        return clauses
+    }
+    let body = parse_loop_body(clauses.parser, "'for'")
+    if not body.ok {
+        return body
+    }
+    let span = join_spans(token_span(keyword), body.span)
+    return ok_step(
+        obj(
+            "For", ["span", "name", "name_span", "iterable", "clauses", "body"],
+            [place(span), Node.Str(name_token.lexeme), place(token_span(name_token)), iterable.node, clauses.node, body.node]
+        ),
+        leave(body.parser), 1, span, ""
+    )
+}
+
+// Declarations
+
+fn parse_param(p: Parser) gives Step {
+    let name_token = peek_at(p, 0)
+    let name = expect_name(p, "a parameter name", "")
+    if not name.ok {
+        return name
+    }
+    let colon = expect(
+        name.parser, ":", "':' and a type for the parameter '" + name_token.lexeme + "'",
+        "Every parameter states its type: " + name_token.lexeme + ": Int", []
+    )
+    if not colon.ok {
+        return colon
+    }
+    let param_type = parse_type(colon.parser, "a type for the parameter '" + name_token.lexeme + "'", "")
+    if not param_type.ok {
+        return param_type
+    }
+    let span = join_spans(token_span(name_token), param_type.span)
+    return ok_step(
+        obj(
+            "Param", ["span", "name", "name_span", "type"],
+            [place(span), Node.Str(name_token.lexeme), place(token_span(name_token)), param_type.node]
+        ),
+        param_type.parser, 1, span, ""
+    )
+}
+
+// E1108: `-> Type` after the parameters. The type is read anyway, so the rest of the function can
+// still be checked. The Step holds the type, or Null for `-> Void`.
+fn parse_old_arrow(p: Parser) gives Step {
+    let arrow = peek_at(p, 0)
+    let return_type = parse_type(advance(p), "a type after '->'", "")
+    if not return_type.ok {
+        return return_type
+    }
+    let written = return_type.op
+    var label = "Write 'gives " + written + "' instead of '-> " + written + "'"
+    if written == "Void" {
+        label = "Remove '-> Void': a function that gives nothing has no 'gives'"
+    }
+    let handled = recorded_at(
+        return_type.parser, "E1108", label,
+        "'nex migrate' rewrites a program written for 0.11 in the syntax of 0.12.", [],
+        join_spans(token_span(arrow), return_type.span)
+    )
+    if not handled.ok {
+        return handled
+    }
+    if written == "Void" {
+        return ok_step(Node.Null(), handled.parser, 1, return_type.span, "")
+    }
+    return ok_step(return_type.node, handled.parser, 1, return_type.span, "")
+}
+
+fn parse_function(p: Parser, public: Bool) gives Step {
+    let keyword_token = peek_at(p, 0)
+    let keyword = expect(p, "fn", "'fn'", "", [])
+    if not keyword.ok {
+        return keyword
+    }
+    let name_token = peek_at(keyword.parser, 0)
+    let name = expect_name(keyword.parser, "a function name after 'fn'", "")
+    if not name.ok {
+        return name
+    }
+    var hint = ""
+    if check(name.parser, ".") {
+        hint = "Only the language defines functions of a type, such as Text.length. Choose a name without '.'."
+    }
+    let opening_token = peek_at(name.parser, 0)
+    let opening = expect(
+        name.parser, "(", "'(' after the function name '" + name_token.lexeme + "'", hint, []
+    )
+    if not opening.ok {
+        return opening
+    }
+    var current = opening.parser
+    var params: List[Node] = []
+    if not check(current, ")") {
+        let first = parse_param(current)
+        if not first.ok {
+            return first
+        }
+        params = List.append(params, first.node)
+        current = first.parser
+        while check(current, ",")
+            shrinks List.length(current.tokens) - current.pos
+        {
+            let next = parse_param(advance(current))
+            if not next.ok {
+                return next
+            }
+            params = List.append(params, next.node)
+            current = next.parser
+        }
+    }
+    let closing = expect(current, ")", "')' to close the parameter list", "", [opened_at(opening_token)])
+    if not closing.ok {
+        return closing
+    }
+    current = closing.parser
+    var return_type = Node.Null()
+    if check(current, "gives") {
+        let given = parse_type(
+            advance(current), "a type after 'gives'", "A function that gives nothing has no 'gives'."
+        )
+        if not given.ok {
+            return given
+        }
+        return_type = given.node
+        current = given.parser
+    } else if check(current, "->") {
+        let old = parse_old_arrow(current)
+        if not old.ok {
+            return old
+        }
+        return_type = old.node
+        current = old.parser
+    }
+    let header = parse_header(
+        current, "the body of '" + name_token.lexeme + "'", "the signature", false, current.nesting
+    )
+    if not header.ok {
+        return header
+    }
+    let brace_token = peek_at(header.parser, 0)
+    let brace = expect(header.parser, "\{", "'\{' to start the body of '" + name_token.lexeme + "'", "", [])
+    if not brace.ok {
+        return brace
+    }
+    let entered = enter(brace.parser, brace_token)
+    if not entered.ok {
+        return entered
+    }
+    let level = entered.parser.nesting
+    let body = parse_block_rest(skip_newlines(entered.parser), brace_token, level)
+    if not body.ok {
+        return body
+    }
+    let span = join_spans(token_span(keyword_token), body.span)
+    return ok_step(
+        obj(
+            "Function",
+            ["span", "name", "name_span", "params", "return_type", "header", "body", "public"],
+            [
+                place(span), Node.Str(name_token.lexeme), place(token_span(name_token)), Node.Items(params),
+                return_type, header.node, body.node, Node.Flag(public)
+            ]
+        ),
+        body.parser, 1, span, "function"
+    )
+}
+
+fn field_decl(name_token: lexer.Token, field_type: Step) gives Node {
+    return obj(
+        "FieldDecl", ["span", "name", "name_span", "type"],
+        [
+            place(join_spans(token_span(name_token), field_type.span)), Node.Str(name_token.lexeme),
+            place(token_span(name_token)), field_type.node
+        ]
+    )
+}
+
+// `type Direction = enum { North, South }`: a closed, nominal set of variants. The parser is on `enum`.
+fn parse_enum_declaration(p: Parser, keyword: lexer.Token, name_token: lexer.Token, public: Bool) gives Step {
+    let after_enum = advance(p)
+    let opening_token = peek_at(after_enum, 0)
+    let n = name_token.lexeme
+    let opening = expect(
+        after_enum, "\{", "'\{' after 'enum'",
+        "Write the variants of " + n + ": type " + n + " = enum \{ North, South }", []
+    )
+    if not opening.ok {
+        return opening
+    }
+    let entered = enter(opening.parser, opening_token)
+    if not entered.ok {
+        return entered
+    }
+    var current = skip_newlines(entered.parser)
+    if check(current, "}") {
+        return fail_at(
+            current, "E1101", "The enum '" + n + "' needs at least one variant", "", [], token_span(opening_token)
+        )
+    }
+    var variants: List[Node] = []
+    var more = true
+    while more
+        shrinks List.length(current.tokens) - current.pos
+    {
+        let variant_token = peek_at(current, 0)
+        let variant = expect_name(current, "a variant name", "Variant names start with a capital letter.")
+        if not variant.ok {
+            return variant
+        }
+        if not starts_with_capital(variant_token.lexeme) {
+            return fail_at(
+                variant.parser, "E1101",
+                "The variant name '" + variant_token.lexeme + "' must start with a capital letter", "", [],
+                token_span(variant_token)
+            )
+        }
+        var fields: List[Node] = []
+        var end = token_span(variant_token)
+        var inner = variant.parser
+        if check(inner, "(") {
+            let entered_variant = enter(advance(inner), variant_token)
+            if not entered_variant.ok {
+                return entered_variant
+            }
+            inner = entered_variant.parser
+            if not check(inner, ")") {
+                var more_fields = true
+                while more_fields
+                    shrinks List.length(inner.tokens) - inner.pos
+                {
+                    let field_token = peek_at(inner, 0)
+                    let field = expect_name(inner, "a payload field name", "")
+                    if not field.ok {
+                        return field
+                    }
+                    let colon = expect(field.parser, ":", "':' and the type of '" + field_token.lexeme + "'", "", [])
+                    if not colon.ok {
+                        return colon
+                    }
+                    let field_type = parse_type(colon.parser, "the type of '" + field_token.lexeme + "'", "")
+                    if not field_type.ok {
+                        return field_type
+                    }
+                    fields = List.append(fields, field_decl(field_token, field_type))
+                    inner = field_type.parser
+                    if check(inner, ",") {
+                        inner = advance(inner)
+                    } else {
+                        more_fields = false
+                    }
+                }
+            }
+            let closing_paren = expect(inner, ")", "')' after the variant payload", "", [])
+            if not closing_paren.ok {
+                return closing_paren
+            }
+            inner = leave(closing_paren.parser)
+            end = closing_paren.span
+        }
+        variants = List.append(variants, obj(
+            "EnumVariantDecl", ["span", "name", "name_span", "fields"],
+            [
+                place(join_spans(token_span(variant_token), end)), Node.Str(variant_token.lexeme),
+                place(token_span(variant_token)), Node.Items(fields)
+            ]
+        ))
+        current = skip_newlines(inner)
+        if check(current, ",") {
+            current = skip_newlines(advance(current))
+            if check(current, "}") {
+                return fail(current, "E1101", "An enum variant cannot be left out after ','", "", [])
+            }
+        } else {
+            more = false
+        }
+    }
+    let closing = expect(current, "}", "'}' to close the enum", "", [])
+    if not closing.ok {
+        return closing
+    }
+    let ended = end_of_statement(leave(closing.parser))
+    if not ended.ok {
+        return ended
+    }
+    let span = join_spans(token_span(keyword), closing.span)
+    return ok_step(
+        obj(
+            "EnumDecl", ["span", "name", "name_span", "variants", "public"],
+            [place(span), Node.Str(n), place(token_span(name_token)), Node.Items(variants), Node.Flag(public)]
+        ),
+        ended.parser, 1, span, "enum"
+    )
+}
+
+// `type Point = { x: Int, y: Int }`: a record type. The `{` goes on the same line as the `=`. Inside
+// the braces a line break is allowed between fields. A record has at least one field, and no field
+// is left out after a comma.
+fn parse_record_declaration(p: Parser, keyword: lexer.Token, name_token: lexer.Token, public: Bool) gives Step {
+    let n = name_token.lexeme
+    if kind_at(p, 0) != "\{" {
+        return fail(
+            p, "E1101", "The '\{' of the record '" + n + "' must be on the same line as the '='",
+            "Write it as: type " + n + " = \{ x: Int }", []
+        )
+    }
+    let opening_token = peek_at(p, 0)
+    let entered = enter(advance(p), opening_token)
+    if not entered.ok {
+        return entered
+    }
+    var current = skip_newlines(entered.parser)
+    if check(current, "}") {
+        return fail_at(
+            current, "E1101", "The record '" + n + "' needs at least one field",
+            "Write the fields of " + n + ": type " + n + " = \{ x: Int }", [], token_span(opening_token)
+        )
+    }
+    var fields: List[Node] = []
+    var more = true
+    while more
+        shrinks List.length(current.tokens) - current.pos
+    {
+        let field_token = peek_at(current, 0)
+        let field = expect_name(current, "a field name", "Write a field as: " + n + "(x: 1)")
+        if not field.ok {
+            return field
+        }
+        let colon = expect(
+            field.parser, ":", "':' and the type of the field '" + field_token.lexeme + "'",
+            "Write a field as: " + field_token.lexeme + ": Int", []
+        )
+        if not colon.ok {
+            return colon
+        }
+        let field_type = parse_type(colon.parser, "the type of the field '" + field_token.lexeme + "'", "")
+        if not field_type.ok {
+            return field_type
+        }
+        fields = List.append(fields, field_decl(field_token, field_type))
+        current = skip_newlines(field_type.parser)
+        if check(current, ",") {
+            current = skip_newlines(advance(current))
+            if check(current, "}") {
+                return fail(
+                    current, "E1101", "A field cannot be left out after ','",
+                    "Write the fields of " + n + ": type " + n + " = \{ x: Int, y: Int }", []
+                )
+            }
+        } else {
+            more = false
+        }
+    }
+    let closing = expect(
+        current, "}", "'}' to close the record declaration", "", [opened_at(opening_token)]
+    )
+    if not closing.ok {
+        return closing
+    }
+    let span = join_spans(token_span(keyword), closing.span)
+    return ok_step(
+        obj(
+            "RecordDecl", ["span", "name", "name_span", "fields", "public"],
+            [place(span), Node.Str(n), place(token_span(name_token)), Node.Items(fields), Node.Flag(public)]
+        ),
+        leave(closing.parser), 1, span, "record"
+    )
+}
+
+// `type Name = Base where condition`, with an optional `, "explanation"`. A record or an enum is
+// declared the same way, with its fields or variants, and is told apart by what follows the `=`.
+fn parse_type_declaration(p: Parser, public: Bool) gives Step {
+    let keyword = peek_at(p, 0)
+    let name_token = peek_at(advance(p), 0)
+    let n = name_token.lexeme
+    let name = expect_name(advance(p), "a type name after 'type'", "")
+    if not name.ok {
+        return name
+    }
+    let equals = expect(
+        name.parser, "=", "'=' after the type name '" + n + "'",
+        "A refined type is written: type " + n + " = Int where value > 0", []
+    )
+    if not equals.ok {
+        return equals
+    }
+    if check(equals.parser, "enum") {
+        return parse_enum_declaration(equals.parser, keyword, name_token, public)
+    }
+    if significant_kind(equals.parser) == "\{" {
+        return parse_record_declaration(equals.parser, keyword, name_token, public)
+    }
+    let base = parse_type(equals.parser, "the type that '" + n + "' refines, after '='", "")
+    if not base.ok {
+        return base
+    }
+    let where_word = expect(
+        base.parser, "where", "'where' and the condition that the values of '" + n + "' satisfy",
+        "A type without a condition would only be another name for the same type, and NEXORA does not have "
+        + "those. Write the rule: type " + n + " = " + base.name + " where ...", []
+    )
+    if not where_word.ok {
+        return where_word
+    }
+    if is_statement_end(kind_at(where_word.parser, 0)) {
+        return fail(
+            where_word.parser, "E1101",
+            "Expected a condition after 'where', found " + describe(peek_at(where_word.parser, 0)), "", []
+        )
+    }
+    let condition = parse_expression(where_word.parser, 1)
+    if not condition.ok {
+        return condition
+    }
+    let message = parse_explanation(condition.parser, "where", condition.span)
+    if not message.ok {
+        return message
+    }
+    let ended = end_of_statement(message.parser)
+    if not ended.ok {
+        return ended
+    }
+    let span = join_spans(token_span(keyword), message.span)
+    return ok_step(
+        obj(
+            "TypeDecl", ["span", "name", "name_span", "base", "condition", "message", "public"],
+            [
+                place(span), Node.Str(n), place(token_span(name_token)), base.node, condition.node,
+                message.node, Node.Flag(public)
+            ]
+        ),
+        ended.parser, 1, span, "type"
+    )
+}
+
+// `uses read "path"`: the capability a program declares that it needs. The path is a text literal: a
+// capability is written down, not computed, so that it can be read, reviewed and checked.
+fn parse_uses_declaration(p: Parser) gives Step {
+    let keyword = peek_at(p, 0)
+    let after = advance(p)
+    let capability = peek_at(after, 0)
+    let known = ["read", "write", "network", "process"]
+    if capability.kind != "name" or not List.contains(known, capability.lexeme) {
+        return fail_at(
+            after, "E1101",
+            "Expected 'read', 'write', 'network' or 'process' after 'uses', found " + describe(capability),
+            "A program declares what it needs with: uses read \"datos/entradas.txt\", "
+            + "uses network \"https://example.com\" or uses process \"python\"",
+            [], token_span(capability)
+        )
+    }
+    let after_capability = advance(after)
+    let path = peek_at(after_capability, 0)
+    if path.kind != "text" {
+        return fail_at(
+            after_capability, "E1101", "Expected the scope of the capability after 'uses " + capability.lexeme + "'",
+            "Write its scope as text, for example: uses network \"https://example.com\"", [], token_span(path)
+        )
+    }
+    let after_path = advance(after_capability)
+    if path.value == "" {
+        return fail_at(
+            after_path, "E1101", "The scope of a capability cannot be empty",
+            "Write a non-empty path, HTTPS origin or executable name after the capability", [], token_span(path)
+        )
+    }
+    let span = join_spans(token_span(keyword), token_span(path))
+    return ok_step(
+        obj(
+            "UsesDecl", ["span", "capability", "path", "path_span"],
+            [place(span), Node.Str(capability.lexeme), Node.Str(path.value), place(token_span(path))]
+        ),
+        after_path, 1, span, "uses"
+    )
+}
+
+// `import "path/file.nex"`: the module the program imports. The path is a text literal, with the
+// extension of the file, and it is relative to the file that imports it.
+fn parse_import_declaration(p: Parser) gives Step {
+    let keyword = peek_at(p, 0)
+    let after = advance(p)
+    let path = peek_at(after, 0)
+    if path.kind != "text" {
+        return fail_at(
+            after, "E1101", "Expected the path of the module after 'import', found " + describe(path),
+            "Write the path as a text: import \"app/models.nex\"", [], token_span(path)
+        )
+    }
+    let after_path = advance(after)
+    if path.value == "" {
+        return fail_at(
+            after_path, "E1101", "The path of a module cannot be empty",
+            "Write the path of the file: import \"app/models.nex\"", [], token_span(path)
+        )
+    }
+    if not Text.ends_with(path.value, ".nex") {
+        return fail_at(
+            after_path, "E1101", "The path of a module has to end in '.nex', but it is '" + path.value + "'",
+            "Write the file with its extension: import \"app/models.nex\"", [], token_span(path)
+        )
+    }
+    let span = join_spans(token_span(keyword), token_span(path))
+    return ok_step(
+        obj("ImportDecl", ["span", "path", "path_span"], [place(span), Node.Str(path.value), place(token_span(path))]),
+        after_path, 1, span, "import"
+    )
+}
+
+fn top_level_error(p: Parser) gives Step {
+    if check(p, "}") {
+        return fail(p, "E1101", "This '}' does not close any block", "", [])
+    }
+    return fail(
+        p, "E1101", "Expected a function declaration, found " + describe(peek_at(p, 0)),
+        "At the top level there are only functions, types and capabilities. All other code goes inside a "
+        + "function: fn main() \{ ... }", []
+    )
+}
+
+// One top-level declaration. `others` is how many declarations that are not imports came before: the
+// imports of a program come first. The `op` of the Step says which list the node belongs to.
+fn parse_declaration(p: Parser, others: Int) gives Step {
+    var current = p
+    var public = false
+    if check(current, "pub") {
+        // `pub` marks a declaration as usable from another module. It has to be followed by one.
+        current = advance(current)
+        public = true
+        if not (check(current, "fn") or check(current, "type")) {
+            return fail(
+                current, "E1101", "Expected 'fn' or 'type' after 'pub', found " + describe(peek_at(current, 0)),
+                "Only a function or a type can be public: pub fn add(a: Int) gives Int \{ }", []
+            )
+        }
+    }
+    if check(current, "import") {
+        if others > 0 {
+            return fail(
+                current, "E1101", "The imports of a program come before its other declarations",
+                "Move the import to the top of the file, with the other imports.", []
+            )
+        }
+        return parse_import_declaration(current)
+    }
+    if check(current, "type") {
+        return parse_type_declaration(current, public)
+    }
+    if check(current, "uses") {
+        return parse_uses_declaration(current)
+    }
+    if check(current, "fn") {
+        return parse_function(current, public)
+    }
+    return top_level_error(current)
+}
+
+type Names = { types: List[Text], records: List[Text] }
+
+// The type names the program declares, and the ones that declare a record. The parser needs both before
+// it reads the program. The scan is lexical.
+fn declared_type_names(tokens: List[lexer.Token]) gives Names {
+    var types = ["Int", "Float", "Bool", "Text", "Void", "List", "Option", "Result"]
+    var records: List[Text] = []
+    let count = List.length(tokens)
+    var index = 0
+    while index < count - 1
+        shrinks count - index
+    {
+        if kind_at_index(tokens, index) == "type" and kind_at_index(tokens, index + 1) == "name" {
+            let declared = List.get(tokens, index + 1)
+            types = List.append(types, declared.lexeme)
+            if index + 3 < count and kind_at_index(tokens, index + 2) == "=" and kind_at_index(tokens, index + 3) == "\{" {
+                records = List.append(records, declared.lexeme)
+            }
+            index = index + 2
+        }
+        index = index + 1
+    }
+    return Names(types: types, records: records)
+}
+
+type Outcome = { program: Node, diagnostics: List[Problem] }
+
+// The program and the syntax errors found. When the list is not empty the program is partial: it holds
+// the functions and statements that parsed, without the statements that have an error and without the
+// functions whose declaration has one. It is for tools; it is never run.
+fn parse_program(tokens: List[lexer.Token]) gives Outcome {
+    let names = declared_type_names(tokens)
+    var current = Parser(
+        tokens: tokens, pos: 0, nesting: 0, type_names: names.types, record_names: names.records,
+        diagnostics: []
+    )
+    var types: List[Node] = []
+    var functions: List[Node] = []
+    var records: List[Node] = []
+    var use_decls: List[Node] = []
+    var imports: List[Node] = []
+    var enums: List[Node] = []
+    var others = 0
+    var stopped = false
+    current = skip_newlines(current)
+    while not stopped and not check(current, "end of file")
+        shrinks List.length(current.tokens) - current.pos
+    {
+        let declaration = parse_declaration(current, others)
+        if declaration.ok {
+            if declaration.op == "import" {
+                imports = List.append(imports, declaration.node)
+            } else {
+                others = others + 1
+                if declaration.op == "type" {
+                    types = List.append(types, declaration.node)
+                } else if declaration.op == "record" {
+                    records = List.append(records, declaration.node)
+                } else if declaration.op == "enum" {
+                    enums = List.append(enums, declaration.node)
+                } else if declaration.op == "uses" {
+                    use_decls = List.append(use_decls, declaration.node)
+                } else {
+                    functions = List.append(functions, declaration.node)
+                }
+            }
+            current = skip_newlines(declaration.parser)
+        } else {
+            let handled = recorded(declaration)
+            if not handled.ok {
+                stopped = true
+                current = handled.parser
+            } else {
+                current = skip_newlines(synchronize_to_function(with_nesting(handled.parser, 0)))
+            }
+        }
+    }
+    let start = token_span(List.get(tokens, 0))
+    let end = token_span(peek_at(current, 0))
+    let program = obj(
+        "Program", ["span", "types", "functions", "records", "uses", "imports", "enums"],
+        [
+            place(join_spans(start, end)), Node.Items(types), Node.Items(functions), Node.Items(records),
+            Node.Items(use_decls), Node.Items(imports), Node.Items(enums)
+        ]
+    )
+    return Outcome(program: program, diagnostics: current.diagnostics)
+}
+
 // JSON
 
 fn quote(text: Text) gives Text {
@@ -876,8 +2771,8 @@ fn span_text(line: Int, column: Int, end_line: Int, end_column: Int) gives Text 
     return to_text(line) + ":" + to_text(column) + "-" + to_text(end_line) + ":" + to_text(end_column)
 }
 
-fn main() {
-    let lines = split_lines(read_file(List.get(args(), 0)))
+fn run_expressions(path: Text) {
+    let lines = split_lines(read_file(path))
     var type_names = ["Int", "Float", "Bool", "Text", "Void", "List", "Option", "Result"]
     var record_names: List[Text] = []
     var number = 0
@@ -894,7 +2789,7 @@ fn main() {
             if List.length(lexed.diagnostics) > 0 {
                 print(to_text(number) + "|SKIP")
             } else {
-                let start = Parser(tokens: lexed.tokens, pos: 0, nesting: 0, type_names: type_names, record_names: record_names)
+                let start = Parser(tokens: lexed.tokens, pos: 0, nesting: 0, type_names: type_names, record_names: record_names, diagnostics: [])
                 let result = parse_expression(start, 1)
                 if result.ok {
                     if check(result.parser, "end of file") {
@@ -912,5 +2807,45 @@ fn main() {
                 }
             }
         }
+    }
+}
+
+fn print_problem(prefix: Text, problem: Problem) {
+    print(
+        prefix + "|" + problem.code + "|" + problem.label + "|" + problem.hint + "|"
+        + join_texts(problem.notes, "~~") + "|"
+        + span_text(problem.line, problem.column, problem.end_line, problem.end_column)
+    )
+}
+
+// Parses whole programs: every argument after the first is a file. Prints, for each file, `FILE|path`
+// and then the tree and the syntax errors (or SKIP when the file has lexical errors).
+fn run_programs() {
+    let files = args()
+    var i = 1
+    while i < List.length(files)
+        shrinks List.length(files) - i
+    {
+        let path = List.get(files, i)
+        print("FILE|" + path)
+        let lexed = lexer.tokenize(read_file(path))
+        if List.length(lexed.diagnostics) > 0 {
+            print("SKIP")
+        } else {
+            let outcome = parse_program(lexed.tokens)
+            print("PROGRAM|" + to_json(outcome.program))
+            for problem in outcome.diagnostics {
+                print_problem("D", problem)
+            }
+        }
+        i = i + 1
+    }
+}
+
+fn main() {
+    if List.get(args(), 0) == "--program" {
+        run_programs()
+    } else {
+        run_expressions(List.get(args(), 0))
     }
 }

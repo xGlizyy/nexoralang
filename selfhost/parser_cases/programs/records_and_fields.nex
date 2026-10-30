@@ -1,0 +1,19 @@
+type Point = { x: Int, y: Int }
+type Line = { from: Point, to: Point }
+
+fn main() {
+    let p = Point(x: 1, y: 2)
+    p.x = 3
+    p.x.y = 4
+    line.from.x = 5
+    p. x = 6
+    let q = Point(x: 1,)
+    let r = Point(1)
+    let s = Point(x: 1
+    print(p.x)
+    print(p.)
+    let t = models.Point(x: 1)
+    let u = a.b.C(1)
+    let v = a.b.c.d(1)
+    let w = a.B.c(1)
+}

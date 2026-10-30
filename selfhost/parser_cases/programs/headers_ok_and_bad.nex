@@ -1,0 +1,40 @@
+fn add(a: Int, b: Int) gives Int
+    needs a > 0, "a is positive"
+    promises sum: result == a + b
+    trust ok: a < 100, "small enough"
+    example add(1, 2) == 3, "one plus two"
+{
+    return a + b
+}
+
+fn bad_trust(a: Int) gives Int
+    trust a > 0
+{
+    return a
+}
+
+fn bad_name(a: Int) gives Int
+    needs Upper: a > 0
+    needs while: a > 0
+    example foo: add(1, 2) == 3
+{
+    return a
+}
+
+fn brace_after_clause(a: Int) gives Int
+    needs a > 0 {
+    return a
+}
+
+fn no_clause_brace(a: Int) gives Int
+{
+    return a
+}
+
+fn empty_message(a: Int) gives Int
+    needs a > 0, ""
+    needs a > 1, "   "
+    needs a > 2, 5
+{
+    return a
+}

@@ -1,0 +1,7 @@
+fn main() {
+    needs 1 > 0
+    keeps 1 > 0
+    example f() == 1
+    promises true
+    trust true, "x"
+}

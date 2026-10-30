@@ -7,7 +7,7 @@ runs it for now; it is the bootstrap, not the goal.
 | Part | File | State |
 |------|------|-------|
 | Lexer | [`lexer.nex`](lexer.nex) | Done. Same tokens and lexical errors as `lexer.py` on every program of the repository and on the cases in [`lexer_cases/`](lexer_cases/), with the gaps below |
-| Parser | [`parser.nex`](parser.nex) | In progress. Expressions (everything except `match`) match `Parser._expression()` in tree and error on [`parser_cases/`](parser_cases/); statements, declarations, `match` and recovery are next |
+| Parser | [`parser.nex`](parser.nex) | Done. Same tree and same syntax errors as `parser.py` on every program of the repository and on the cases in [`parser_cases/`](parser_cases/), including error recovery, the limit of 100 errors and the nesting and depth limits |
 | Checker | | Not started |
 | Interpreter | | Not started |
 
@@ -28,7 +28,15 @@ PYTHONPATH=nexora/src python selfhost/compare_parser.py selfhost/parser_cases/*.
 ```
 
 Each line of a cases file is an expression; both parsers read it and the tree (as JSON) or the first
-syntax error is compared.
+syntax error is compared. For whole programs, including the syntax errors a program can have:
+
+```bash
+PYTHONPATH=nexora/src python selfhost/compare_programs.py FILE.nex [FILE.nex ...]
+```
+
+`parser_cases/programs/` holds malformed programs that exercise recovery, headers, declarations, the
+old 0.11 syntax and the size limits. A file with lexical errors is skipped: the lexer is checked on
+its own.
 
 ## Stage 1 measurement: call depth
 
@@ -77,6 +85,11 @@ imported module whose field type was another type of the same module was rejecte
 prefix of the module being checked. They are now resolved relative to the module that declares the
 record (`tests/test_modules.py`). A genuine error inside an imported record is still reported
 under the importing file's name, with the position of the imported one.
+
+Differences the parser still has with `parser.py`, both from missing text functions: the explanation
+of a clause counts as empty only if it is made of spaces, tabs and line breaks (Python's `strip()`
+knows every Unicode space), and the lowercase check of a clause name is ASCII only, which is all a
+name can be.
 
 None of these blocks the lexer. The first two are the first candidates for stage 1 of the plan,
 together with maps and `%`, which the lexer did not need.

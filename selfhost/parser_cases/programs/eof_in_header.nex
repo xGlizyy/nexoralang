@@ -1,0 +1,2 @@
+fn main() gives Int
+    needs 1 > 0

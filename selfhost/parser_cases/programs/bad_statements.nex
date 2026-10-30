@@ -1,0 +1,17 @@
+fn main() {
+    let = 1
+    var y 2
+    let z: = 3
+    return 1 2
+    print(
+    break
+    continue
+    else {
+    }
+    fn inner() {
+    }
+    type T = Int where value > 0
+    uses read "x"
+    where
+    print(4)
+}
