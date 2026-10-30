@@ -350,6 +350,8 @@ class CheckedProgram:
     # in another module (decision 0018, 5): the interpreter looks them up with this,
     # never with the text.
     targets: dict[int, str] = field(default_factory=dict)
+    # The closed enum declarations and their resolved variant payloads.
+    enums: dict[str, EnumType] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -372,6 +374,21 @@ class RecordType:
             if field_name == name:
                 return kind
         return None
+
+
+@dataclass(frozen=True)
+class EnumVariantType:
+    name: str
+    fields: tuple[tuple[str, str], ...]
+    declaration: ast.EnumVariantDecl
+
+
+@dataclass(frozen=True)
+class EnumType:
+    name: str
+    declaration: ast.EnumDecl
+    variants: tuple[EnumVariantType, ...]
+    identity: type_model.RecordIdentity
 
 
 def binary_result(operator: str, left: str, right: str) -> str | None:
@@ -515,6 +532,8 @@ class Checker:
         # The record types the program declares, and the ones that are valid.
         self._record_names: dict[str, ast.RecordDecl] = {}
         self._records: dict[str, RecordType] = {}
+        self._enum_names: dict[str, ast.EnumDecl] = {}
+        self._enums: dict[str, EnumType] = {}
         # The capabilities the program declares that it needs (decision 0015, 2).
         self._capabilities = Capabilities()
         # The fields of each record, by name, once their types are resolved.
@@ -662,6 +681,7 @@ class Checker:
         checked = CheckedProgram(
             program, declared, self._types, tuple(self._symbols), tuple(self._calls), dict(self._refined),
             dict(self._records), self._capabilities, dict(self._targets),
+            dict(self._enums),
         )
         return checked, self._diagnostics
 
@@ -669,7 +689,7 @@ class Checker:
         # Types first: any signature or annotation may name one, wherever it is declared. Their
         # conditions are checked before the signatures, so that a type whose condition is wrong is
         # already unusable when a signature names it: its error is reported once, not at every use.
-        self._declare_names(program.types, program.records)
+        self._declare_names(program.types, program.records, program.enums)
         self._declare_types(program.types)
         self._declare_uses(program.uses)
         self._function_names.update(self._key(function.name) for function in program.functions)
@@ -677,6 +697,7 @@ class Checker:
             self._type_condition(declaration)
         # The records come after the conditions of the refined types, for the same reason:
         # a type whose condition is wrong is already unusable when another type names it.
+        self._declare_enums(program.enums)
         self._declare_records(program.records)
         own_signatures: list[tuple[ast.Function, Signature]] = []
 
@@ -692,7 +713,7 @@ class Checker:
                     function.name_span,
                     hint="Choose a different name for this function.",
                 )
-            elif key in self._type_names or key in self._record_names:
+            elif key in self._type_names or key in self._record_names or key in self._enum_names:
                 hint = (f"{function.name}(x) already means: build one: {function.name}(field: value)"
                         if key in self._record_names
                         else f"{function.name}(x) already means: check that x is a valid {function.name}.")
@@ -727,7 +748,8 @@ class Checker:
 
     # Refined types
 
-    def _declare_names(self, refined: tuple[ast.TypeDecl, ...], records: tuple[ast.RecordDecl, ...]) -> None:
+    def _declare_names(self, refined: tuple[ast.TypeDecl, ...], records: tuple[ast.RecordDecl, ...],
+                       enums: tuple[ast.EnumDecl, ...]) -> None:
         """Registers the name of every type the program declares, in the order they appear.
 
         A name belongs to one type: it cannot be declared twice, whatever the kind of the
@@ -736,10 +758,13 @@ class Checker:
         declarations = [(declaration.span.line, declaration.span.column, declaration) for declaration in refined]
         declarations += [(declaration.span.line, declaration.span.column, declaration)
                          for declaration in records]
+        declarations += [(declaration.span.line, declaration.span.column, declaration)
+                         for declaration in enums]
         declarations.sort(key=lambda item: (item[0], item[1]))
         for _, _, declaration in declarations:
             name, span = declaration.name, declaration.name_span
             record = isinstance(declaration, ast.RecordDecl)
+            enum = isinstance(declaration, ast.EnumDecl)
             key = self._key(name)
             if name in KNOWN_TYPES or (record and name == type_model.LIST.name):
                 self._report("E2016", f"'{name}' is a built-in type and cannot be declared again", span,
@@ -755,8 +780,16 @@ class Checker:
                 first = self._record_names[key].name_span
                 self._report("E2016", f"The type '{name}' is declared more than once", span,
                              notes=(f"It was first declared at line {first.line}, column {first.column}.",))
+            elif key in self._enum_names:
+                first = self._enum_names[key].name_span
+                self._report("E2016", f"The type '{name}' is declared more than once", span,
+                             notes=(f"It was first declared at line {first.line}, column {first.column}.",))
             elif record:
                 self._record_names[key] = declaration
+                if declaration.public:
+                    self._public.add(key)
+            elif enum:
+                self._enum_names[key] = declaration
                 if declaration.public:
                     self._public.add(key)
             else:
@@ -976,6 +1009,51 @@ class Checker:
                 model_fields.append((field_name, model))
             nominal = self._type_adapter.register_record(name, tuple(model_fields), identity)
             self._records[name] = RecordType(name, declaration, field_types[name], identity, nominal)
+
+    def _declare_enums(self, declarations: tuple[ast.EnumDecl, ...]) -> None:
+        """Resolve every closed enum and its variant payload types."""
+        identities: dict[str, type_model.RecordIdentity] = {}
+        for declaration in declarations:
+            key = self._key(declaration.name)
+            if key in self._enum_names:
+                identity = type_model.RecordIdentity(_next_identity())
+                identities[key] = identity
+                self._type_adapter.register_enum(key, identity)
+        for declaration in declarations:
+            key = self._key(declaration.name)
+            if key not in self._enum_names:
+                continue
+            variants: list[EnumVariantType] = []
+            seen_variants: dict[str, Span] = {}
+            broken = False
+            for variant in declaration.variants:
+                if variant.name in seen_variants:
+                    first = seen_variants[variant.name]
+                    self._report("E2016", f"The variant '{variant.name}' is declared more than once in '{key}'",
+                                 variant.name_span,
+                                 notes=(f"It was first declared at line {first.line}, column {first.column}.",))
+                    broken = True
+                    continue
+                seen_variants[variant.name] = variant.name_span
+                fields: list[tuple[str, str]] = []
+                seen_fields: set[str] = set()
+                for enum_field in variant.fields:
+                    if enum_field.name in seen_fields:
+                        self._report("E2016", f"The field '{enum_field.name}' is declared more than once in "
+                                     f"'{key}.{variant.name}'", enum_field.name_span)
+                        broken = True
+                        continue
+                    seen_fields.add(enum_field.name)
+                    kind = self._value_type(enum_field.type, f"The field '{enum_field.name}' of '{key}.{variant.name}'",
+                                            declared_records=True)
+                    if kind is None:
+                        broken = True
+                    else:
+                        fields.append((enum_field.name, kind))
+                variants.append(EnumVariantType(variant.name, tuple(fields), variant))
+            if variants and not broken:
+                identity = identities[key]
+                self._enums[key] = EnumType(key, declaration, tuple(variants), identity)
 
     def _record_dependencies(self, reference: ast.TypeRef) -> list[str]:
         """The record types a type reference depends on, looking inside `List[...]` too.
@@ -1350,7 +1428,15 @@ class Checker:
             if key in self._records or declared_records:
                 return key
             return None
-        candidates = [*KNOWN_TYPES, *self._visible(self._type_names), *self._visible(self._record_names)]
+        if key in self._enum_names:
+            if not self._is_public(key):
+                self._private(key, reference.span)
+                return None
+            if key in self._enums or declared_records:
+                return key
+            return None
+        candidates = [*KNOWN_TYPES, *self._visible(self._type_names), *self._visible(self._record_names),
+                      *self._visible(self._enum_names)]
         written = key
         close = difflib.get_close_matches(written, candidates, n=1, cutoff=0.5)
         if reference.name == "String":
@@ -1691,6 +1777,8 @@ class Checker:
             return True
         elif isinstance(statement, ast.If):
             return self._if(statement, scope)
+        elif isinstance(statement, ast.IfLet):
+            return self._if_let(statement, scope)
         elif isinstance(statement, ast.Block):
             return self._block(statement, _Scope(scope))
         elif isinstance(statement, ast.While):
@@ -1705,6 +1793,8 @@ class Checker:
             expression = statement.expression
             found = self._expression(expression, scope)
             if found is None:
+                pass
+            elif isinstance(expression, ast.MatchExpr) and found == VOID:
                 pass
             elif not isinstance(expression, ast.Call):
                 self._report(
@@ -1897,12 +1987,28 @@ class Checker:
         else:
             self._expect_type(expected, found, statement.value, (f"'{name}' is declared to return {expected}.",))
 
-    def _if(self, statement: ast.If, scope: _Scope) -> bool:
+    def _if(self, statement: ast.If | ast.IfLet, scope: _Scope) -> bool:
+        if isinstance(statement, ast.IfLet):
+            return self._if_let(statement, scope)
         self._condition(statement.condition, scope, "'if'")
         then_returns = self._block(statement.then_block, _Scope(scope))
         if statement.else_branch is None:
             return False
-        if isinstance(statement.else_branch, ast.If):
+        if isinstance(statement.else_branch, (ast.If, ast.IfLet)):
+            else_returns = self._if(statement.else_branch, scope)
+        else:
+            else_returns = self._block(statement.else_branch, _Scope(scope))
+        return then_returns and else_returns
+
+    def _if_let(self, statement: ast.IfLet, scope: _Scope) -> bool:
+        value_type = self._expression(statement.value, scope)
+        then_scope = _Scope(scope)
+        if value_type is not None:
+            self._check_pattern(statement.pattern, value_type, then_scope)
+        then_returns = self._block(statement.then_block, then_scope)
+        if statement.else_branch is None:
+            return False
+        if isinstance(statement.else_branch, (ast.If, ast.IfLet)):
             else_returns = self._if(statement.else_branch, scope)
         else:
             else_returns = self._block(statement.else_branch, _Scope(scope))
@@ -1975,6 +2081,8 @@ class Checker:
             return BOOL
         if isinstance(node, ast.ListLiteral):
             return self._list_literal(node, scope, expected)
+        if isinstance(node, ast.MatchExpr):
+            return self._match_expression(node, scope, expected)
         if isinstance(node, ast.Group):
             return self._expression(node.expression, scope, expected)
         if isinstance(node, ast.RecordConstruction):
@@ -2013,6 +2121,233 @@ class Checker:
                 )
             return result
         return self._call(node, scope, expected)
+
+    def _variant_pattern_info(
+        self, pattern: ast.VariantPattern, expected: str
+    ) -> tuple[str, tuple[tuple[str, str], ...]] | None:
+        """Resolve a variant pattern against the scrutinee's closed type."""
+        model = self._current_type_model(expected)
+        enum_name = expected
+        variants: dict[str, tuple[tuple[str, str], ...]] = {}
+        if isinstance(model, type_model.Application) and model.constructor.identity == type_model.OPTION.identity:
+            enum_name = "Option"
+            variants = {"None": (), "Some": (("value", type_model.display(model.arguments[0])),)}
+        elif isinstance(model, type_model.Application) and model.constructor.identity == type_model.RESULT.identity:
+            enum_name = "Result"
+            variants = {"Ok": (("value", type_model.display(model.arguments[0])),),
+                        "Err": (("error", type_model.display(model.arguments[1])),)}
+        elif expected in self._enums:
+            variants = {variant.name: variant.fields for variant in self._enums[expected].variants}
+        else:
+            self._report("E2033", f"A variant pattern cannot match a value of type {expected}", pattern.span,
+                         hint="Match a value whose type is an enum, Option, or Result.")
+            return None
+
+        if pattern.qualifier is not None:
+            written_enum = self._key(pattern.qualifier)
+            if written_enum != enum_name:
+                self._report("E2033", f"'{pattern.qualifier}.{pattern.name}' is not a variant of {expected}",
+                             pattern.span)
+                return None
+        fields = variants.get(pattern.name)
+        if fields is None:
+            self._report("E2033", f"'{pattern.name}' is not a variant of {expected}", pattern.name_span,
+                         hint=f"The variants are: {', '.join(variants)}.")
+            return None
+        if len(pattern.arguments) != len(fields):
+            self._report("E2033", f"'{pattern.name}' takes {len(fields)} pattern argument(s), "
+                         f"but {len(pattern.arguments)} were given", pattern.span)
+            return None
+        key = f"{enum_name}.{pattern.name}"
+        self._targets[id(pattern)] = key
+        return key, fields
+
+    def _check_pattern(self, pattern: ast.Pattern, expected: str, scope: _Scope) -> str | None:
+        """Type-check a pattern and bind its names in the arm's fresh scope."""
+        if isinstance(pattern, ast.WildcardPattern):
+            return None
+        if isinstance(pattern, ast.BindingPattern):
+            if self._name_is_free(pattern.name, pattern.name_span, scope):
+                self._declare(scope, pattern.name, "pattern variable", expected, pattern.name_span)
+            return None
+        if isinstance(pattern, ast.LiteralPattern):
+            found = BOOL if isinstance(pattern.value, bool) else INT if isinstance(pattern.value, int) \
+                else FLOAT if isinstance(pattern.value, float) else TEXT
+            if not self._accepts(expected, found):
+                self._report("E2011", f"Expected {expected}, found {found}", pattern.span)
+            return None
+        resolved = self._variant_pattern_info(pattern, expected)
+        if resolved is None:
+            return None
+        _, fields = resolved
+        for child, (_, field_type) in zip(pattern.arguments, fields, strict=True):
+            self._check_pattern(child, field_type, scope)
+        return self._targets.get(id(pattern))
+
+    @staticmethod
+    def _catchall_pattern(pattern: ast.Pattern | None) -> bool:
+        return pattern is None or isinstance(pattern, (ast.WildcardPattern, ast.BindingPattern))
+
+    def _finite_constructors(self, kind: str) -> list[tuple[str, str, tuple[tuple[str, str], ...]]]:
+        """Finite constructors of a type. Open domains deliberately return no constructors."""
+        model = self._current_type_model(kind)
+        root = type_model.root(model) if model is not None else None
+        if root is not None and type_model.equal(root, type_model.BOOL):
+            return [("Bool.true", "true", ()), ("Bool.false", "false", ())]
+        if isinstance(model, type_model.Application) and model.constructor.identity == type_model.OPTION.identity:
+            return [("Option.None", "None", ()),
+                    ("Option.Some", "Some", (("value", type_model.display(model.arguments[0])),))]
+        if isinstance(model, type_model.Application) and model.constructor.identity == type_model.RESULT.identity:
+            return [("Result.Ok", "Ok", (("value", type_model.display(model.arguments[0])),)),
+                    ("Result.Err", "Err", (("error", type_model.display(model.arguments[1])),))]
+        enum = self._enums.get(kind)
+        if enum is not None:
+            return [(f"{kind}.{variant.name}", variant.name, variant.fields) for variant in enum.variants]
+        return []
+
+    @staticmethod
+    def _pattern_key(pattern: ast.Pattern, kind: str) -> str | None:
+        if isinstance(pattern, ast.VariantPattern):
+            return None
+        if isinstance(pattern, ast.LiteralPattern):
+            if isinstance(pattern.value, bool):
+                return f"Bool.{str(pattern.value).lower()}"
+            return f"{kind}::{pattern.value!r}"
+        return None
+
+    def _pattern_constructor(self, pattern: ast.Pattern | None, kind: str):
+        if pattern is None:
+            return None
+        constructors = self._finite_constructors(kind)
+        if isinstance(pattern, ast.VariantPattern):
+            key = self._targets.get(id(pattern))
+            return next((item for item in constructors if item[0] == key), None)
+        key = self._pattern_key(pattern, kind)
+        return next((item for item in constructors if item[0] == key), None)
+
+    def _specialize_patterns(self, matrix, key: str, arity: int, kind: str):
+        rows = []
+        for row in matrix:
+            head, *tail = row
+            if self._catchall_pattern(head):
+                rows.append([None] * arity + tail)
+                continue
+            constructor = self._pattern_constructor(head, kind)
+            if constructor is not None and constructor[0] == key:
+                arguments = list(head.arguments) if isinstance(head, ast.VariantPattern) else []
+                rows.append(arguments + tail)
+        return rows
+
+    def _is_exhaustive(self, matrix, kinds: list[str]) -> bool:
+        if not kinds:
+            return bool(matrix)
+        kind, *tail_kinds = kinds
+        constructors = self._finite_constructors(kind)
+        if constructors:
+            present = {constructor[0] for row in matrix
+                       if (constructor := self._pattern_constructor(row[0], kind)) is not None}
+            finite_keys = {constructor[0] for constructor in constructors}
+            if finite_keys.issubset(present):
+                for key, _, fields in constructors:
+                    specialized = self._specialize_patterns(matrix, key, len(fields), kind)
+                    if not self._is_exhaustive(specialized, [field for _, field in fields] + tail_kinds):
+                        return False
+                return True
+        defaults = [row[1:] for row in matrix if self._catchall_pattern(row[0])]
+        return self._is_exhaustive(defaults, tail_kinds)
+
+    def _useful_pattern(self, matrix, vector: list[ast.Pattern | None], kinds: list[str]) -> bool:
+        if not kinds:
+            return not matrix
+        kind, *tail_kinds = kinds
+        pattern, *tail = vector
+        if self._catchall_pattern(pattern):
+            constructors = self._finite_constructors(kind)
+            present = {constructor[0] for row in matrix
+                       if (constructor := self._pattern_constructor(row[0], kind)) is not None}
+            finite_keys = {constructor[0] for constructor in constructors}
+            if constructors and finite_keys.issubset(present):
+                for key, _, fields in constructors:
+                    specialized = self._specialize_patterns(matrix, key, len(fields), kind)
+                    if self._useful_pattern(specialized, [None] * len(fields) + tail,
+                                            [field for _, field in fields] + tail_kinds):
+                        return True
+                return False
+            defaults = [row[1:] for row in matrix if self._catchall_pattern(row[0])]
+            return self._useful_pattern(defaults, tail, tail_kinds)
+
+        constructor = self._pattern_constructor(pattern, kind)
+        if constructor is not None:
+            key, _, fields = constructor
+            arguments = list(pattern.arguments) if isinstance(pattern, ast.VariantPattern) else []
+            specialized = self._specialize_patterns(matrix, key, len(fields), kind)
+            return self._useful_pattern(specialized, arguments + tail, [field for _, field in fields] + tail_kinds)
+
+        # Literal patterns over open types are useful unless that exact literal or a wildcard was
+        # already covered. They never make an infinite domain exhaustive.
+        literal_key = self._pattern_key(pattern, kind)
+        specialized = []
+        for row in matrix:
+            head, *rest = row
+            if self._catchall_pattern(head) or self._pattern_key(head, kind) == literal_key:
+                specialized.append(rest)
+        return self._useful_pattern(specialized, tail, tail_kinds)
+
+    def _missing_pattern(self, matrix, kinds: list[str]) -> list[str] | None:
+        if not kinds:
+            return [] if not matrix else None
+        kind, *tail_kinds = kinds
+        constructors = self._finite_constructors(kind)
+        if constructors:
+            for key, display, fields in constructors:
+                specialized = self._specialize_patterns(matrix, key, len(fields), kind)
+                witness = self._missing_pattern(specialized, [field for _, field in fields] + tail_kinds)
+                if witness is not None:
+                    args = witness[:len(fields)]
+                    head = display if not args else f"{display}({', '.join(args)})"
+                    return [head, *witness[len(fields):]]
+            return None
+        defaults = [row[1:] for row in matrix if self._catchall_pattern(row[0])]
+        witness = self._missing_pattern(defaults, tail_kinds)
+        return None if witness is None else ["_", *witness]
+
+    def _match_expression(self, node: ast.MatchExpr, scope: _Scope, expected: str | None) -> str | None:
+        scrutinee = self._expression(node.value, scope)
+        if scrutinee is None:
+            for arm in node.arms:
+                self._check_pattern(arm.pattern, "<unknown>", _Scope(scope))
+            return None
+
+        matrix = []
+        result_type = expected
+        failed = False
+        for arm in node.arms:
+            arm_scope = _Scope(scope)
+            self._check_pattern(arm.pattern, scrutinee, arm_scope)
+            if not self._useful_pattern(matrix, [arm.pattern], [scrutinee]):
+                self._report("E2034", "This arm can never be reached", arm.pattern.span)
+            matrix.append([arm.pattern])
+
+            if isinstance(arm.body, ast.Block):
+                self._block(arm.body, arm_scope)
+                found = VOID
+            else:
+                found = self._expression(arm.body, arm_scope, expected if result_type is None else result_type)
+            if found is None:
+                failed = True
+                continue
+            if result_type is None:
+                result_type = found
+            elif not self._accepts(result_type, found):
+                self._report("E2011", f"Expected {result_type}, found {found}", arm.body.span,
+                             notes=("Every arm of a match expression must produce the same type.",))
+                failed = True
+
+        if not self._is_exhaustive(matrix, [scrutinee]):
+            witness = self._missing_pattern(matrix, [scrutinee]) or ["_"]
+            self._report("E2032", f"This match does not cover: {', '.join(witness)}", node.span,
+                         hint="Add an arm for the missing pattern, or a final '_' arm.")
+        return None if failed else result_type
 
     def _list_item(self, expected: str | None) -> str | None:
         """The element type an expected list type fixes, or None if it fixes none."""
@@ -2105,12 +2440,12 @@ class Checker:
             found.reference_modules.append(self._module)
             found.reads.append(node.span)
             return found.type
-        if self._key(node.name) in self._type_names:
+        if self._key(node.name) in self._type_names or self._key(node.name) in self._enum_names:
             self._report(
                 "E2011",
                 f"'{node.name}' is a type, not a value",
                 node.span,
-                hint=f"To check a value against it, call it: {node.name}(x)",
+                hint=f"To check a refined value use {node.name}(x); to build an enum use {node.name}.Variant(...).",
             )
         elif self._key(node.name) in self._record_names:
             self._report(
@@ -2222,9 +2557,13 @@ class Checker:
         ]
 
     def _call(self, node: ast.Call, scope: _Scope, expected: str | None = None) -> str | None:
+        if node.qualifier is not None:
+            enum_key = node.callee.rsplit(".", 1)[0] if node.callee.count(".") > 1 else self._key(node.qualifier)
+            if enum_key in self._enum_names:
+                return self._enum_construction(node, enum_key, scope)
         key = self._key(node.callee)
         if (node.qualifier is not None and node.callee not in BUILTINS
-                and key not in self._signatures and key not in self._type_names):
+                and key not in self._signatures and key not in self._type_names and key not in self._enum_names):
             # `Name.function(...)`: the name is not a function, nor a type the module
             # declares, so it can only be a function of a type (decision 0011, 9).
             self._unknown_qualified_call(node, scope)
@@ -2304,6 +2643,31 @@ class Checker:
                 self._expect_type(expected, found, argument,
                                   (f"This is the argument for '{param_name}' in: {signature.describe()}",))
         return signature.return_type
+
+    def _enum_construction(self, node: ast.Call, enum_name: str, scope: _Scope) -> str | None:
+        enum = self._enums.get(enum_name)
+        if enum is None:
+            return None
+        variant_name = node.callee.rsplit(".", 1)[-1]
+        variant = next((candidate for candidate in enum.variants if candidate.name == variant_name), None)
+        if variant is None:
+            self._report("E2035", f"'{variant_name}' is not a variant of {enum_name}", node.callee_span,
+                         hint=f"The variants are: {', '.join(item.name for item in enum.variants)}.")
+            return None
+        if not self._is_public(enum_name):
+            self._private(enum_name, node.callee_span)
+            return None
+        if len(node.arguments) != len(variant.fields):
+            self._report("E2035", f"'{enum_name}.{variant_name}' takes {len(variant.fields)} argument(s), "
+                         f"but {len(node.arguments)} were given", node.span)
+        for index, argument in enumerate(node.arguments):
+            kind = variant.fields[index][1] if index < len(variant.fields) else None
+            found = self._expression(argument, scope, kind)
+            if found is not None and kind is not None:
+                self._expect_type(kind, found, argument,
+                                  (f"This is the payload for '{enum_name}.{variant_name}'.",))
+        self._targets[id(node)] = f"{enum_name}.{variant_name}"
+        return enum_name
 
     def _parametric_call(self, node: ast.Call, argument_types: list[str | None],
                          signature: Signature, expected_result: str | None = None) -> str | None:
@@ -2445,7 +2809,8 @@ class Checker:
                 notes = (f"The functions of {qualifier}: {', '.join(functions)}.",)
             else:
                 notes = (f"{qualifier} has no functions yet.",)
-        elif self._key(qualifier) in self._type_names or self._key(qualifier) in self._record_names:
+        elif (self._key(qualifier) in self._type_names or self._key(qualifier) in self._record_names
+              or self._key(qualifier) in self._enum_names):
             label = f"'{qualifier}' has no functions of its own"
             base = self._root(qualifier)
             if TYPE_FUNCTIONS.get(base):
@@ -2467,7 +2832,7 @@ class Checker:
             close = difflib.get_close_matches(
                 qualifier,
                 [*KNOWN_TYPES, type_model.LIST.name, *self._visible(self._type_names),
-                 *self._visible(self._record_names)],
+                 *self._visible(self._record_names), *self._visible(self._enum_names)],
                 n=1,
             )
             hint = f"Did you mean '{close[0]}'?" if close else None

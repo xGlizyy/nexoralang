@@ -12,10 +12,11 @@
   checked), [0011](0011-operaciones-sobre-textos.md) (functions that belong to a type) and
   [0014](0014-registros-nominales-inmutables.md) (nominal records). **It modifies
   none.**
-- **Related to [0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md):**
+- **Related to [0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) and [0024](0024-enumeraciones-y-match-exhaustivo.md):**
   it accepts its `Option` and `Result` part (C.2.4) **within the scope the language has today**, which
-  is that of 0013: there are no user enums and no `match`, so these two types are implemented as
-  built-in types with inspection functions. 0012 remains a proposal for the rest.
+  was that of 0013: these two types were implemented as built-in types with inspection functions.
+  Decision 0024 adds exhaustive matching for them and accepts closed user enums; the original scope
+  statement below records the historical decision and is superseded on that point.
 - **Implementation:** 0.10.0. The code is in `values.py` (the runtime representation),
   `types.py` (the `Option` and `Result` constructors of the model), `type_adapter.py` and `parser.py`
   (the text of the types), `checker.py` (the signatures and the inference), `prelude.py` (the pure

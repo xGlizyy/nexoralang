@@ -36,6 +36,7 @@ _SINGLE = {
 }
 # Two-character operators, tried before the single-character ones.
 _DOUBLE = {
+    "=>": TokenType.FAT_ARROW,
     "->": TokenType.ARROW,
     "==": TokenType.EQUAL_EQUAL,
     "!=": TokenType.NOT_EQUAL,

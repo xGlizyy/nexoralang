@@ -75,7 +75,7 @@
       "patterns": [
         {
           "name": "keyword.control.nexora",
-          "match": "\\b(fn|let|var|return|if|else|while|for|in|needs|gives|promises|trust|example|keeps|shrinks|uses|type|where)\\b"
+          "match": "\\b(fn|let|var|return|if|else|while|for|in|needs|gives|promises|trust|example|keeps|shrinks|uses|type|enum|match|where)\\b"
         },
         {
           "name": "keyword.other.nexora",
@@ -95,7 +95,7 @@
       "patterns": [
         {
           "name": "invalid.deprecated.reserved.nexora",
-          "match": "\\b(assert|break|const|continue|enum|match|test|try|requires|ensures|invariant|decreases)\\b"
+          "match": "\\b(assert|break|const|continue|test|try|requires|ensures|invariant|decreases)\\b"
         }
       ]
     },

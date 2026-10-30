@@ -9,6 +9,13 @@ fn main() {
     }
     // line comment
 }
+type State = enum { Ready, Busy(reason: Text) }
+fn state_label(state: State) gives Text {
+    return match state {
+        State.Ready => "ready"
+        State.Busy(reason) => reason
+    }
+}
 ---
 
 (source_file
@@ -49,4 +56,44 @@ fn main() {
   (punctuation)
   (punctuation)
   (comment)
+  (punctuation)
+  (keyword)
+  (identifier)
+  (operator)
+  (keyword)
+  (punctuation)
+  (identifier)
+  (punctuation)
+  (identifier)
+  (punctuation)
+  (identifier)
+  (punctuation)
+  (identifier)
+  (punctuation)
+  (primitive_type)
+  (punctuation)
+  (punctuation)
+  (keyword)
+  (identifier)
+  (punctuation)
+  (identifier)
+  (punctuation)
+  (identifier)
+  (punctuation)
+  (keyword)
+  (identifier)
+  (punctuation)
+  (identifier)
+  (punctuation)
+  (keyword)
+  (operator)
+  (string)
+  (identifier)
+  (punctuation)
+  (identifier)
+  (punctuation)
+  (punctuation)
+  (operator)
+  (identifier)
+  (punctuation)
   (punctuation))

@@ -33,6 +33,7 @@ They pass `nex check` and `nex run` ends with code `0`.
 | [`lists.nex`](lists.nex) | Immutable lists `List[T]`: length, access by index with its requirement, new lists with `List.append` and `List.concat`, `List.contains`, and a `for` that goes through the list with its `keeps` |
 | [`records.nex`](records.nex) | Immutable nominal records: declaration, construction with named fields in any order, reading fields and access chains, equality by value, a record inside another one and a list of records |
 | [`option_result.nex`](option_result.nex) | `Option[T]` and `Result[T, E]`: `Some`, `None`, `Ok` and `Err`, the functions that recognize the variant, reading the value with and without a default, and equality between variants |
+| [`enums.nex`](enums.nex) | Closed enums, `match`, `if let` and exhaustive matching of nested `Option[Bool]` cases |
 | [`console.nex`](console.nex) | A console program: the arguments it was run with and the standard input, with `args()` and `input()` |
 | [`files.nex`](files.nex) | Reading and writing a file, with the capability that the program declares (`uses`) and the permission that has to be granted (`--allow-read`, `--allow-write`) |
 | [`modules/main.nex`](modules/main.nex) | Modules: a file that imports another one (`import "models.nex"`), and how its names are used from the program: qualified (`models.Point`, `models.area(p)`), with `pub` for what the module makes visible |

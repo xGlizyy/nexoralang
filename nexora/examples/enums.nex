@@ -1,0 +1,27 @@
+// Closed enums, if let and exhaustiveness over a nested Option payload.
+type Signal = enum { Red, Green, Alert(reason: Text) }
+
+fn describe(signal: Signal) gives Text {
+    return match signal {
+        Signal.Red => "stop"
+        Signal.Green => "go"
+        Signal.Alert(reason) => "alert: " + reason
+    }
+}
+
+fn flag_value(value: Option[Bool]) gives Int {
+    return match value {
+        None => 0
+        Some(true) => 1
+        Some(false) => 2
+    }
+}
+
+fn main() {
+    let signal = Signal.Alert("crossing")
+    if let Signal.Alert(reason) = signal {
+        print(reason)
+    }
+    print(describe(Signal.Green()))
+    print(flag_value(Some(false)))
+}

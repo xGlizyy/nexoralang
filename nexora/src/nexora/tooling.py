@@ -169,7 +169,9 @@ def _symbol_entries(facts: CheckedProgram, files: dict[str, str], entry_file: st
     for symbol in facts.symbols:
         entry = {
             "name": symbol.name,
-            "category": symbol.category,
+            # Pattern bindings are variables in the public symbols protocol. The
+            # checker keeps the more specific internal category for diagnostics.
+            "category": "variable" if symbol.category == "pattern variable" else symbol.category,
             "type": symbol.type,
             "function": symbol.function,
             "declaration": _span(symbol.span),
@@ -281,6 +283,8 @@ _FEATURES = (
     ("contracts", lambda node, types: isinstance(node, ast.Contract)),
     ("refined_types", lambda node, types: isinstance(node, ast.TypeDecl)),
     ("records", lambda node, types: isinstance(node, ast.RecordDecl)),
+    ("enumerations", lambda node, types: isinstance(node, ast.EnumDecl)),
+    ("pattern_matching", lambda node, types: isinstance(node, (ast.MatchExpr, ast.IfLet))),
     ("examples", lambda node, types: isinstance(node, ast.Example)),
     ("mutable_variables", lambda node, types: isinstance(node, ast.Var)),
     ("loops", lambda node, types: isinstance(node, (ast.While, ast.For))),

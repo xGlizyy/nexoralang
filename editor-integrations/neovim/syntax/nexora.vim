@@ -4,13 +4,14 @@ endif
 
 syntax case match
 
-syntax keyword nexoraKeyword fn let var return if else while for in needs gives promises trust example keeps shrinks uses type where import pub
+syntax keyword nexoraKeyword fn let var return if else while for in needs gives promises trust example keeps shrinks uses type enum match where import pub
 syntax keyword nexoraOperator and or not
 syntax keyword nexoraBoolean true false
 syntax keyword nexoraType Int Float Bool Text Void List Option Result
 syntax keyword nexoraConstructor Some None Ok Err
 syntax keyword nexoraBuiltin print to_text to_float to_int args input read_file write_file
-syntax keyword nexoraReserved assert break const continue enum match test try requires ensures invariant decreases
+syntax keyword nexoraReserved assert break const continue test try requires ensures invariant decreases
+syntax match nexoraOperator "=>"
 
 syntax match nexoraBuiltin "\<\(Text\|Int\|Float\|List\|Option\|Result\|Net\|Process\)\.[a-z_][A-Za-z0-9_]*\>"
 syntax match nexoraFunction "\<[A-Z][A-Za-z0-9_]*\>\ze\s*("

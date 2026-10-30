@@ -212,7 +212,7 @@ def test_every_normative_language_section_has_an_executable_example():
 def test_language_spec_is_normative_and_the_design_document_is_a_draft():
     spec = (ROOT / "docs" / "language-spec.md").read_text(encoding="utf-8")
     draft = (ROOT.parent / "docs" / "fase-1-diseno.md").read_text(encoding="utf-8")
-    assert "normative for the NEXORA 0.13 language" in spec
+    assert "normative for the NEXORA 0.14 language" in spec
     assert "This specification takes precedence over the draft" in spec
     assert "Status: historical design draft" in draft
     assert "[language specification](../nexora/docs/language-spec.md)" in draft

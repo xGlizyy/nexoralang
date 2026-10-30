@@ -36,6 +36,7 @@ EXPECTED = {
     "lists.nex": (0, 0),
     "records.nex": (0, 0),
     "option_result.nex": (0, 0),
+    "enums.nex": (0, 0),
     "console.nex": (0, 0),
     "files.nex": (0, 0),
     "modules/main.nex": (0, 0),

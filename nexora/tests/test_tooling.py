@@ -399,8 +399,8 @@ def test_context_notes_are_tied_to_what_the_program_contains():
 def test_context_reports_unsupported_constructs_instead_of_guessing():
     document = tooling.get_context("fn main() {\n    break\n    let x = match\n}\n")
     assert (document["ok"], document["analysed"], document["complete"]) == (False, True, False)
-    assert document["reserved_words_used"] == ["break", "match"]
-    assert any("reserved for features that are not implemented: break, match" in note for note in document["notes"])
+    assert document["reserved_words_used"] == ["break"]
+    assert any("reserved for features that are not implemented: break" in note for note in document["notes"])
     assert any("this summary is partial" in note for note in document["notes"])
     # Text that cannot even be split into tokens: no structure, and the list of words is
     # unknown, not empty.
@@ -476,7 +476,7 @@ def test_instructions_inside_a_program_are_data():
 def test_spec_index():
     document = tooling.get_language_spec()
     validate(document, "nexora-spec.schema.json")
-    assert (document["available"], document["spec_version"], document["language"], document["section"]) == (True, "0.13", "en", None)
+    assert (document["available"], document["spec_version"], document["language"], document["section"]) == (True, "0.14", "en", None)
     ids = [section["id"] for section in document["sections"]]
     assert len(ids) == len(set(ids))
     for expected in ("4-data-types", "7-functions", "9-contracts", "44-refined-types", "113-diagnostic-codes"):

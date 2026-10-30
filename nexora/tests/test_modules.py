@@ -110,6 +110,30 @@ def test_a_program_runs_with_the_modules_it_imports(files, capsys):
     assert capsys.readouterr().out == ENTRY_OUTPUT
 
 
+def test_public_module_enum_constructor_and_match_are_qualified():
+    texts = {
+        "main.nex": (
+            'import "models.nex"\n'
+            'fn main() {\n'
+            '    let state: models.State = models.State.Ready()\n'
+            '    print(match state { models.State.Ready => 1 models.State.Busy => 0 })\n'
+            '}\n'
+        ),
+        "models.nex": (
+            'pub type State = enum { Ready, Busy }\n'
+            'pub fn next(state: State) gives State {\n'
+            '    return match state { Ready => State.Busy() Busy => State.Ready() }\n'
+            '}\n'
+        ),
+    }
+    analysis = load(texts, "main.nex")
+    assert analysis.ok, [(diagnostic.code, diagnostic.label) for diagnostic in analysis.diagnostics]
+    output = []
+    from nexora.interpreter import run
+    run(analysis.checked, output.append)
+    assert "".join(output) == "1\n"
+
+
 def test_the_names_of_a_module_are_visible_without_pub_in_the_file_that_runs(files, capsys):
     # Nothing of the entry file is marked with `pub`: the file that runs is its own module,
     # and what it declares is its own (decision 0018, 3).

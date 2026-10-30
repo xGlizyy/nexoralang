@@ -335,6 +335,10 @@ def _normal_011(tree):
         if not isinstance(node, dict):
             return node
         node = {key: normal(value) for key, value in node.items()}
+        # The current AST adds enums as an appended Program field. An empty field has no
+        # corresponding meaning in the frozen 0.11 tree, so it is omitted for equivalence.
+        if node.get("kind") == "Program" and not node.get("enums"):
+            node.pop("enums", None)
         kind = node.get("kind")
         if kind == "Function":
             returned = node["return_type"]
@@ -358,6 +362,10 @@ def _normal_012(tree):
         if not isinstance(node, dict):
             return node
         node = {key: normal(value) for key, value in node.items()}
+        # The current AST adds enums as an appended Program field. An empty field has no
+        # corresponding meaning in the frozen 0.11 tree, so it is omitted for equivalence.
+        if node.get("kind") == "Program" and not node.get("enums"):
+            node.pop("enums", None)
         kind = node.get("kind")
         if kind == "Function":
             # 8.4.1: the header is projected onto the two lists of the 0.11 tree.

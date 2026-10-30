@@ -21,7 +21,7 @@ whose rules it replaces say so at the top.
 | [0009](0009-memoria-agotada.md) | A program that runs out of memory while running: diagnostic `E3007` | Accepted | Yes |
 | [0010](0010-var-y-while.md) | Reassignable variables (`var`) and loops with requirements (`while`, `invariant`, `decreases`) | Accepted (`keeps` and `shrinks`, in the header, since 0019 in 0.12) | Yes |
 | [0011](0011-operaciones-sobre-textos.md) | Operations on texts: functions associated with a type (`Text.length`, `Int.parse`) that declare their requirements | Accepted (the requirements are called `needs` since 0019 in 0.12) | No |
-| [0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) | Type model, records, patterns, enumerations, `Option`/`Result`, lists, `for`, input, modules and verifiable evidence | Proposed (not accepted; 0013 accepts only D01, D08 and D09 within the implemented scope) | No |
+| [0012](0012-modelo-de-tipos-patrones-iteracion-y-verificabilidad.md) | Type model, records, patterns, enumerations, `Option`/`Result`, lists, `for`, input, modules and verifiable evidence | Proposal; implemented portions are accepted by 0013 and 0024 | No |
 | [0013](0013-listas-y-for.md) | `List[T]` lists, `for` over lists and the type model that supports them: accepts D01, D08 and D09 within the implemented scope | Accepted (`keeps` in a `for` since 0019 in 0.12) | No |
 | [0014](0014-registros-nominales-inmutables.md) | Immutable nominal records: `type X = { ... }` declaration, construction with named fields, field access and nominal identity by declaration | Accepted | No |
 | [0015](0015-entrada-argumentos-archivos-y-permisos.md) | Input, arguments, files and permissions: `args()`, `input()`, `read_file()`, `write_file()`, `uses` declarations and permissions granted by whoever runs the program | Accepted | No |
@@ -33,6 +33,7 @@ whose rules it replaces say so at the top.
 | [0022](0022-depurador-local.md) | Local statement debugger through `nex debug`; DAP and language-server integration remain out of scope | Accepted | No |
 | [0021](0021-alcance-nexora-1-0.md) | NEXORA 1.0 scope: CLI and local automation, support target, compatibility policy and release gates | Accepted | No |
 | [0023](0023-despliegue-aplicaciones.md) | Exact runtime pins and external configuration for deployed applications | Accepted | No |
+| [0024](0024-enumeraciones-y-match-exhaustivo.md) | Closed enums, `match`, `if let` and recursive static exhaustiveness for enums, `Option`, `Result` and `Bool` | Accepted; implemented in the 0.16.0 development line | No |
 
 ## Possible incompatible changes in the future
 

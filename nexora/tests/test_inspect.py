@@ -31,10 +31,12 @@ PROGRAM = (
 # Every node kind and its fields, in order. This is the contract of schema version 3:
 # removing or renaming anything here requires a new schema version.
 EXPECTED_FIELDS = {
-    "Program": ["kind", "span", "types", "functions", "records", "uses", "imports"],
+    "Program": ["kind", "span", "types", "functions", "records", "uses", "imports", "enums"],
     "ImportDecl": ["kind", "span", "path", "path_span"],
     "TypeDecl": ["kind", "span", "name", "name_span", "base", "condition", "message", "public"],
     "RecordDecl": ["kind", "span", "name", "name_span", "fields", "public"],
+    "EnumDecl": ["kind", "span", "name", "name_span", "variants", "public"],
+    "EnumVariantDecl": ["kind", "span", "name", "name_span", "fields"],
     "FieldDecl": ["kind", "span", "name", "name_span", "type"],
     "UsesDecl": ["kind", "span", "capability", "path", "path_span"],
     "Function": ["kind", "span", "name", "name_span", "params", "return_type", "header", "body", "public"],
@@ -48,6 +50,7 @@ EXPECTED_FIELDS = {
     "FieldAssign": ["kind", "span", "target", "name", "name_span", "value"],
     "Return": ["kind", "span", "value"],
     "If": ["kind", "span", "condition", "then_block", "else_branch"],
+    "IfLet": ["kind", "span", "pattern", "value", "then_block", "else_branch"],
     "ExprStatement": ["kind", "span", "expression"],
     "IntLiteral": ["kind", "span", "value", "type"],
     "FloatLiteral": ["kind", "span", "value", "type"],
@@ -62,6 +65,12 @@ EXPECTED_FIELDS = {
     "RecordConstruction": ["kind", "span", "name", "name_span", "fields", "qualifier", "type"],
     "FieldInitializer": ["kind", "span", "name", "name_span", "value"],
     "FieldAccess": ["kind", "span", "target", "name", "name_span", "type"],
+    "WildcardPattern": ["kind", "span"],
+    "BindingPattern": ["kind", "span", "name", "name_span"],
+    "VariantPattern": ["kind", "span", "name", "name_span", "arguments", "qualifier"],
+    "LiteralPattern": ["kind", "span", "value"],
+    "MatchArm": ["kind", "span", "pattern", "body"],
+    "MatchExpr": ["kind", "span", "value", "arms", "type"],
 }
 
 
@@ -130,6 +139,16 @@ def test_every_node_has_exactly_the_documented_fields():
     )
     uses = 'uses read "datos/entradas.txt"\n'
     imports = 'import "app/models.nex"\n'
+    enums = (
+        "type Status = enum { Ready, Failed(message: Text) }\n"
+        "fn status_text(status: Status) gives Text {\n"
+        "    return match status { Status.Ready => \"ready\" Status.Failed(message) => message }\n"
+        "}\n"
+        "fn option_value(value: Option[Bool]) gives Bool {\n"
+        "    if let Some(flag) = value { return flag } else { return false }\n"
+        "}\n"
+        "fn flag_value(value: Bool) gives Int { return match value { true => 1 _ => 0 } }\n"
+    )
     extra = (
         'fn extra(n: Small) gives Int\n'
         '    example extra(1) == 2, "One more"\n'
@@ -138,7 +157,7 @@ def test_every_node_has_exactly_the_documented_fields():
         '    return (n) + 1\n'
         '}\n'
     )
-    for node in walk(inspect(imports + refined + records + uses + PROGRAM + "\n" + extra)):
+    for node in walk(inspect(imports + refined + records + enums + uses + PROGRAM + "\n" + extra)):
         seen.setdefault(node["kind"], list(node))
     assert_fields(seen)
     assert set(seen) == set(EXPECTED_FIELDS) - {"Assign", "FieldAssign"}

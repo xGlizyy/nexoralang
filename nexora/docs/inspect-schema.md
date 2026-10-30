@@ -91,10 +91,12 @@ The fields of each node always appear, in the order given. An optional field wit
 
 | `kind` | Fields | Meaning |
 |--------|--------|---------|
-| `Program` | `types`: list of `TypeDecl` · `functions`: list of `Function` · `records`: list of `RecordDecl` · `uses`: list of `UsesDecl` · `imports`: list of `ImportDecl` | The whole file, with the types and the functions in the order in which they appear. `records`, `uses` and `imports` go at the end |
+| `Program` | `types`: list of `TypeDecl` · `functions`: list of `Function` · `records`: list of `RecordDecl` · `uses`: list of `UsesDecl` · `imports`: list of `ImportDecl` · `enums`: list of `EnumDecl` | The whole file, with declarations in source order. New declaration lists are appended |
 | `ImportDecl` | `path`: text · `path_span`: position | The declaration `import "app/models.nex"`, which can only appear at the beginning of the file ([decision 0018](decisions/0018-modulos-e-importaciones.md)) |
 | `TypeDecl` | `name`: text · `name_span`: position · `base`: `TypeRef` · `condition`: expression · `message`: text or `null` · `public`: `true` or `false` | A refined type. `message` is the explanation written after the comma; `public` is `true` when the declaration carries `pub` |
 | `RecordDecl` | `name`: text · `name_span`: position · `fields`: list of `FieldDecl` · `public`: `true` or `false` | A record: `type Point = { x: Int, y: Int }`. `public` is `true` when the declaration carries `pub` |
+| `EnumDecl` | `name`: text · `name_span`: position · `variants`: list of `EnumVariantDecl` · `public`: `true` or `false` | A closed enum declaration, optionally public |
+| `EnumVariantDecl` | `name`: text · `name_span`: position · `fields`: list of `FieldDecl` | One enum variant and its named payload fields |
 | `FieldDecl` | `name`: text · `name_span`: position · `type`: `TypeRef` | A field of a record |
 | `UsesDecl` | `capability`: `"read"` or `"write"` · `path`: text · `path_span`: position | The capability that the program declares it needs ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
 | `Function` | `name`: text · `name_span`: position · `params`: list of `Param` · `return_type`: `TypeRef` or `null` · `header`: list of `Contract` and `Example`, in the order of the code · `body`: `Block` · `public`: `true` or `false` | A function. `return_type` is the type after `gives`, and `null` when the function has no `gives`: it gives nothing. `header` holds the clauses between the signature and the body. `public` is `true` when the declaration carries `pub` |
@@ -113,6 +115,7 @@ The fields of each node always appear, in the order given. An optional field wit
 | `Var` | The same as `Let` | Declaration of a variable that can change its value (`var`). It is a node different from `Let` so that a tool that does not know it notices, instead of taking it for immutable |
 | `Return` | `value`: expression or `null` | `return`, with or without a value |
 | `If` | `condition`: expression · `then_block`: `Block` · `else_branch`: `Block`, `If` or `null` | Conditional. `else_branch` is another `If` in an `else if` |
+| `IfLet` | `pattern`: pattern · `value`: expression · `then_block`: `Block` · `else_branch`: `Block`, `If`, `IfLet` or `null` | Conditional that binds a matching value only in its `then_block` |
 | `While` | `condition`: expression · `clauses`: list of `LoopClause`, in the order of the code · `body`: `Block` | A loop. `body` contains the statements, without the clauses |
 | `For` | `name`: text · `name_span`: position · `iterable`: expression · `clauses`: list of `LoopClause`, in the order of the code · `body`: `Block` | A `for` over a `List[T]`. The iterator and its position go first; `body` contains the statements, without the clauses |
 | `ExprStatement` | `expression`: expression | A call used as a statement |
@@ -143,6 +146,12 @@ nothing has type `"Void"`.
 | `RecordConstruction` | `name`: text · `name_span`: position · `fields`: list of `FieldInitializer` · `qualifier`: text or `null` | The construction of a record: `Point(x: 1, y: 2)`. The fields go in the order in which they are written, which does not have to be that of the declaration. `qualifier` is the module of a record from another file, `null` otherwise |
 | `FieldInitializer` | `name`: text · `name_span`: position · `value`: expression | The value given to a field in a construction |
 | `FieldAccess` | `target`: expression · `name`: text · `name_span`: position | Reading a field: `p.x`. `target` is the value it is read from |
+| `MatchExpr` | `value`: expression · `arms`: list of `MatchArm` · `type`: expression type | An exhaustive match expression |
+| `MatchArm` | `pattern`: pattern · `body`: expression or `Block` | One case and its expression result or block |
+| `WildcardPattern` | *(no other fields)* | `_`, which matches any remaining value |
+| `BindingPattern` | `name`: text · `name_span`: position | A name that binds the matched value for this arm |
+| `VariantPattern` | `name`: text · `name_span`: position · `arguments`: list of patterns · `qualifier`: text or `null` | A variant case, optionally with nested payload patterns |
+| `LiteralPattern` | `value`: number, text or boolean | A literal case such as `true` or `0` |
 
 ## Example
 
@@ -211,6 +220,7 @@ version 3, and another one checks that this document mentions all of them.
 | Version | Published in | Changes |
 |---------|--------------|---------|
 | `nexora.inspect/3` | `nexora` 0.12.0 | **Incompatible change** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), 8.8): `Function.header`, one ordered list of `Contract` and `Example`, replaces `contracts` and `examples`; `Function.return_type` is `null` when the function has no `gives`; `Contract.clause` takes `needs`, `promises` and `trust`, `LoopClause.clause` takes `keeps` and `shrinks`, and both get the field `name` |
+| `nexora.inspect/3` | 0.16.0 development line | Added without changing the schema version: enum declaration and pattern nodes, `MatchArm`, `MatchExpr`, `IfLet` and the appended `enums` field of `Program`. Consumers must ignore unknown node kinds and fields |
 | `nexora.inspect/2` | `nexora` 0.11.0 | Added, without changing the version: the `ImportDecl` node (`path`, `path_span`) for the declaration `import "app/models.nex"`, the `imports` field at the end of `Program`, the `public` field (`true` or `false`) at the end of `TypeDecl`, `RecordDecl` and `Function`, and the `qualifier` field (text or `null`) at the end of `TypeRef` and of `RecordConstruction` for the types and records of another module, `models.Point` ([decision 0018](decisions/0018-modulos-e-importaciones.md)). A program without imports produces the same document as in 0.10.0, plus `"imports": []`, `"public": false` in every declaration and `"qualifier": null` in every type |
 | `nexora.inspect/2` | `nexora` 0.10.0 | Added, without changing the version: the `UsesDecl` node (`capability`, `path`, `path_span`) for the declaration `uses read "path"`, and the `uses` field at the end of `Program` ([decision 0015](decisions/0015-entrada-argumentos-archivos-y-permisos.md)) |
 | `nexora.inspect/2` | `nexora` 0.8.0 | Added, without changing the version: the nodes `RecordDecl` (`name`, `name_span`, `fields`), `FieldDecl` (`name`, `name_span`, `type`), `RecordConstruction` (`name`, `name_span`, `fields`), `FieldInitializer` (`name`, `name_span`, `value`) and `FieldAccess` (`target`, `name`, `name_span`); the statement `FieldAssign` (`target`, `name`, `name_span`, `value`); the `records` field at the end of `Program`; and `type` can be the name of a record ([decision 0014](decisions/0014-registros-nominales-inmutables.md)) |

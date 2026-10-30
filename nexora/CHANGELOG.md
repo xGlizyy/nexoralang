@@ -19,6 +19,14 @@ Each version groups its changes into these sections, when they contain content:
 
 ## Unreleased
 
+### Added
+
+- Closed user enums with named payloads, constructors, nested `match` patterns and `if let`.
+- Static exhaustive-case analysis for enums, `Option`, `Result` and `Bool`, including missing-case
+  witnesses and unreachable-arm diagnostics.
+- Enum support in language inspection, formatter, LSP completion and the VS Code grammar.
+- Decision 0024 and the NEXORA 0.14 language specification.
+
 ### Documentation
 
 - Publish a compatibility and versioning policy defining pre-1.0 language changes, 1.x SemVer,

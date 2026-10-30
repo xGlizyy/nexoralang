@@ -122,6 +122,36 @@ class FieldAccess(Node):
     name_span: Span
 
 
+@dataclass(frozen=True)
+class WildcardPattern(Node):
+    """The `_` pattern: matches a value without binding it."""
+
+
+@dataclass(frozen=True)
+class BindingPattern(Node):
+    """A lower-case name pattern that binds the matched value."""
+    name: str
+    name_span: Span
+
+
+@dataclass(frozen=True)
+class VariantPattern(Node):
+    """A variant pattern such as `Some(value)` or `Shape.Circle(radius)`."""
+    name: str
+    name_span: Span
+    arguments: tuple[Pattern, ...] = ()
+    qualifier: str | None = None
+
+
+@dataclass(frozen=True)
+class LiteralPattern(Node):
+    """A literal pattern. Literal coverage is finite only for Bool."""
+    value: int | float | str | bool
+
+
+Pattern = WildcardPattern | BindingPattern | VariantPattern | LiteralPattern
+
+
 Expr = (IntLiteral | FloatLiteral | TextLiteral | BoolLiteral | ListLiteral | Name | Unary | Binary | Group | Call
         | RecordConstruction | FieldAccess)
 EXPRESSION_NODES = (IntLiteral, FloatLiteral, TextLiteral, BoolLiteral, ListLiteral, Name, Unary, Binary, Group,
@@ -182,6 +212,23 @@ class RecordDecl(Node):
     fields: tuple[FieldDecl, ...]
     # True when the declaration is marked with `pub` and can be used from another
     # module (decision 0018, 3). Last, so the order of the existing fields stays.
+    public: bool = False
+
+
+@dataclass(frozen=True)
+class EnumVariantDecl(Node):
+    """One constructor of a closed enum, with named payload fields."""
+    name: str
+    name_span: Span
+    fields: tuple[FieldDecl, ...] = ()
+
+
+@dataclass(frozen=True)
+class EnumDecl(Node):
+    """`type Shape = enum { Circle(radius: Float), Square }`."""
+    name: str
+    name_span: Span
+    variants: tuple[EnumVariantDecl, ...]
     public: bool = False
 
 
@@ -257,7 +304,16 @@ class If(Node):
     condition: Expr
     then_block: Block
     # A Block for `else { ... }`, another If for `else if ...`, or None.
-    else_branch: Block | If | None
+    else_branch: Block | If | IfLet | None
+
+
+@dataclass(frozen=True)
+class IfLet(Node):
+    """`if let pattern = value { ... } else { ... }`."""
+    pattern: Pattern
+    value: Expr
+    then_block: Block
+    else_branch: Block | If | IfLet | None
 
 
 @dataclass(frozen=True)
@@ -306,7 +362,24 @@ class For(Node):
     body: Block
 
 
-Statement = Let | Var | Assign | FieldAssign | Return | If | While | For | ExprStatement | Block
+Statement = Let | Var | Assign | FieldAssign | Return | If | IfLet | While | For | ExprStatement | Block
+
+
+@dataclass(frozen=True)
+class MatchArm(Node):
+    pattern: Pattern
+    body: Expr | Block
+
+
+@dataclass(frozen=True)
+class MatchExpr(Node):
+    """An exhaustive value match over a closed enum or Bool."""
+    value: Expr
+    arms: tuple[MatchArm, ...]
+
+
+Expr = Expr | MatchExpr
+EXPRESSION_NODES = (*EXPRESSION_NODES, MatchExpr)
 
 
 # Declarations
@@ -377,6 +450,8 @@ class Program(Node):
     uses: tuple[UsesDecl, ...] = ()
     # The modules the program imports, after the capabilities (decision 0018).
     imports: tuple[ImportDecl, ...] = ()
+    # User-defined closed enums. Appended to preserve the positional form of earlier fields.
+    enums: tuple[EnumDecl, ...] = ()
 
 
 def to_dict(node, types: dict[int, str] | None = None):
