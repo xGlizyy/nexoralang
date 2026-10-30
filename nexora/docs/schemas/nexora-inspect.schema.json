@@ -336,6 +336,9 @@
               },
               {
                 "$ref": "#/$defs/FieldAccess"
+              },
+              {
+                "$ref": "#/$defs/MatchExpr"
               }
             ]
           }
@@ -432,6 +435,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -505,6 +511,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -545,6 +554,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -609,6 +621,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -684,6 +699,9 @@
               },
               {
                 "$ref": "#/$defs/FieldAccess"
+              },
+              {
+                "$ref": "#/$defs/MatchExpr"
               }
             ]
           }
@@ -766,6 +784,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         }
@@ -874,6 +895,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -889,6 +913,130 @@
             "null"
           ],
           "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "WildcardPattern": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span"
+      ],
+      "properties": {
+        "kind": {
+          "const": "WildcardPattern"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        }
+      }
+    },
+    "BindingPattern": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span"
+      ],
+      "properties": {
+        "kind": {
+          "const": "BindingPattern"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        }
+      }
+    },
+    "VariantPattern": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "arguments",
+        "qualifier"
+      ],
+      "properties": {
+        "kind": {
+          "const": "VariantPattern"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "arguments": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/WildcardPattern"
+              },
+              {
+                "$ref": "#/$defs/BindingPattern"
+              },
+              {
+                "$ref": "#/$defs/VariantPattern"
+              },
+              {
+                "$ref": "#/$defs/LiteralPattern"
+              }
+            ]
+          }
+        },
+        "qualifier": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "LiteralPattern": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "const": "LiteralPattern"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
         }
       }
     },
@@ -994,6 +1142,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -1066,6 +1217,70 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/FieldDecl"
+          }
+        },
+        "public": {
+          "type": "boolean"
+        }
+      }
+    },
+    "EnumVariantDecl": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "fields"
+      ],
+      "properties": {
+        "kind": {
+          "const": "EnumVariantDecl"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldDecl"
+          }
+        }
+      }
+    },
+    "EnumDecl": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "name",
+        "name_span",
+        "variants",
+        "public"
+      ],
+      "properties": {
+        "kind": {
+          "const": "EnumDecl"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_span": {
+          "$ref": "#/$defs/span"
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EnumVariantDecl"
           }
         },
         "public": {
@@ -1193,6 +1408,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         }
@@ -1268,6 +1486,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         }
@@ -1332,6 +1553,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         }
@@ -1391,6 +1615,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -1437,6 +1664,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         }
@@ -1493,6 +1723,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             },
             {
               "type": "null"
@@ -1554,6 +1787,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -1567,6 +1803,106 @@
             },
             {
               "$ref": "#/$defs/If"
+            },
+            {
+              "$ref": "#/$defs/IfLet"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "IfLet": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "pattern",
+        "value",
+        "then_block",
+        "else_branch"
+      ],
+      "properties": {
+        "kind": {
+          "const": "IfLet"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "pattern": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/WildcardPattern"
+            },
+            {
+              "$ref": "#/$defs/BindingPattern"
+            },
+            {
+              "$ref": "#/$defs/VariantPattern"
+            },
+            {
+              "$ref": "#/$defs/LiteralPattern"
+            }
+          ]
+        },
+        "value": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
+            }
+          ]
+        },
+        "then_block": {
+          "$ref": "#/$defs/Block"
+        },
+        "else_branch": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Block"
+            },
+            {
+              "$ref": "#/$defs/If"
+            },
+            {
+              "$ref": "#/$defs/IfLet"
             },
             {
               "type": "null"
@@ -1626,6 +1962,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         }
@@ -1666,6 +2005,9 @@
               },
               {
                 "$ref": "#/$defs/If"
+              },
+              {
+                "$ref": "#/$defs/IfLet"
               },
               {
                 "$ref": "#/$defs/While"
@@ -1751,6 +2093,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -1819,6 +2164,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -1894,6 +2242,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -1905,6 +2256,159 @@
         },
         "body": {
           "$ref": "#/$defs/Block"
+        }
+      }
+    },
+    "MatchArm": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "pattern",
+        "body"
+      ],
+      "properties": {
+        "kind": {
+          "const": "MatchArm"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "pattern": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/WildcardPattern"
+            },
+            {
+              "$ref": "#/$defs/BindingPattern"
+            },
+            {
+              "$ref": "#/$defs/VariantPattern"
+            },
+            {
+              "$ref": "#/$defs/LiteralPattern"
+            }
+          ]
+        },
+        "body": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Block"
+            }
+          ]
+        }
+      }
+    },
+    "MatchExpr": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "value",
+        "arms",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "MatchExpr"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
+            }
+          ]
+        },
+        "arms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MatchArm"
+          }
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
         }
       }
     },
@@ -2002,6 +2506,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -2069,6 +2576,9 @@
             },
             {
               "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
             }
           ]
         },
@@ -2156,7 +2666,8 @@
         "functions",
         "records",
         "uses",
-        "imports"
+        "imports",
+        "enums"
       ],
       "properties": {
         "kind": {
@@ -2193,6 +2704,12 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/ImportDecl"
+          }
+        },
+        "enums": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EnumDecl"
           }
         }
       }

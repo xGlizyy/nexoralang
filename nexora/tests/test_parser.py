@@ -173,7 +173,7 @@ def test_ast_converts_to_json():
     ("let for = 1", "E1101", 2, 9),            # keyword as a name
     ("let true = 1", "E1101", 2, 9),           # keyword as a name
     ("let if = 1", "E1101", 2, 9),
-    ("let x = match", "E1103", 2, 13),         # reserved word in an expression
+    ("let x = match", "E1101", 2, 18),         # match requires a scrutinee and arms
     ("let x: = 1", "E1101", 2, 12),            # annotation without a type
     ("let x: Int", "E1101", 2, 15),            # annotation without a value
     ("fn inner() {}", "E1101", 2, 5),  # nested function

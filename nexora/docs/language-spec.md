@@ -1,9 +1,9 @@
 # NEXORA language specification
 
-- **Specification version:** 0.13
+- **Specification version:** 0.14
 - **Reference implementation:** `nexora` 0.15.0 (this repository, directory `nexora/`)
-- **Status:** normative for the NEXORA 0.13 language. The reference implementation releases
-  0.14.0 through 0.15.0 do not change its grammar or core language semantics. Version 0.14.1 adds
+- **Status:** normative for the NEXORA 0.14 language. The reference implementation release 0.16.0 adds
+  enumerations and exhaustive pattern matching. Earlier releases do not change the 0.13 grammar. Version 0.14.1 adds
   opt-in local CLI resource limits, and 0.15.0 adds the local CLI debugger; both are specified in
   the [CLI reference](cli-reference.md).
   The syntax of 0.12 comes from
@@ -22,7 +22,7 @@ package. A package release can add tools or CLI options without changing the lan
 change to syntax or core semantics requires a new specification version and an update to the rules
 and executable examples affected by it. The project is still before 1.0, so a later specification
 version may make incompatible changes; this version remains the reference for programs that target
-0.13.
+0.14.
 
 The words **must**, **must not** and **may** state requirements, prohibitions and permitted choices
 for a conforming implementation. An unmarked rule in sections 2–12 describes guaranteed language
@@ -108,14 +108,14 @@ Keywords:
 
 ```
 fn   let   var   return   if   else   while   for   in   true   false   and   or   not
-gives   needs   promises   trust   example   keeps   shrinks   type   where   uses   import   pub
+gives   needs   promises   trust   example   keeps   shrinks   type   enum   match   where   uses   import   pub
 ```
 
 Words reserved for future versions. They cannot be used as names, and using them produces the
 error `E1103`:
 
 ```
-assert   break    const    continue enum     match    test     try
+assert   break    const    continue test     try
 ```
 
 The clause words of 0.11, `requires`, `ensures`, `invariant` and `decreases`, are not keywords and
@@ -196,13 +196,16 @@ line two
 In EBNF notation. `NEWLINE` is one or more consecutive line endings.
 
 ```ebnf
-program    = { NEWLINE } { import_decl } { ( type_decl | record_decl | uses_decl | function ) { NEWLINE } } ;
+program    = { NEWLINE } { import_decl } { ( type_decl | uses_decl | function ) { NEWLINE } } ;
 
 import_decl = "import" TEXT ;
-type_decl  = [ "pub" ] "type" NAME "=" type "where" expression [ explanation ] end ;
+type_decl  = [ "pub" ] "type" NAME "=" type "where" expression [ explanation ] end
+           | record_decl | enum_decl ;
 record_decl = [ "pub" ] "type" NAME "=" "{" record_fields "}" ;
 record_fields = record_field { "," record_field } ;
 record_field = NAME ":" type ;
+enum_decl = [ "pub" ] "type" NAME "=" "enum" "{" variant { "," variant } "}" ;
+variant = NAME [ "(" record_fields ")" ] ;
 uses_decl  = "uses" ( "read" | "write" | "network" | "process" ) TEXT ;
 function   = [ "pub" ] "fn" NAME "(" [ params ] ")" [ "gives" type ] body ;
 body       = block                                          (* no header clauses *)
@@ -213,17 +216,21 @@ header_clause = ( "needs" | "promises" ) [ clause_name ] expression [ explanatio
 clause_name = NAME ":" ;
 params     = param { "," param } ;
 param      = NAME ":" type ;
-type       = [ NAME "." ] NAME [ "[" type "]" ] ;
+type       = [ NAME "." ] NAME
+           | "List" "[" type "]"
+           | "Option" "[" type "]"
+           | "Result" "[" type "," type "]" ;
 explanation = "," TEXT ;
 
 block      = "{" { NEWLINE } { statement end } "}" ;
 end        = NEWLINE | (* nothing, if what follows is "}" *) ;
 
-statement  = let | var | return | if | while | for | block | assignment | field_assignment | expression ;
+statement  = let | var | return | if | if_let | while | for | block | assignment | field_assignment | expression ;
 let        = "let" NAME [ ":" type ] "=" expression ;
 var        = "var" NAME [ ":" type ] "=" expression ;
 return     = "return" [ expression ] ;
 if         = "if" expression block [ "else" ( if | block ) ] ;
+if_let     = "if" "let" pattern "=" expression block [ "else" ( if | if_let | block ) ] ;
 while      = "while" expression loop_body ;
 for        = "for" NAME "in" expression loop_body ;
 loop_body  = block                                          (* no header clauses *)
@@ -243,10 +250,14 @@ primary        = INT | FLOAT | TEXT | "true" | "false"
                | NAME
                | NAME "(" [ expression { "," expression } ] ")"
                | NAME "." NAME "(" [ expression { "," expression } ] ")"
+               | NAME "." NAME "." NAME "(" [ expression { "," expression } ] ")"
                | NAME "." NAME
                | NAME "(" record_fields_values ")"
+               | "match" expression "{" match_arm { [ "," ] match_arm } "}"
                | "[" [ expression { "," expression } ] "]"
                | "(" expression ")" ;
+match_arm = pattern "=>" ( expression | block ) ;
+pattern = "_" | NAME | literal | [ NAME "." ] NAME [ "(" [ pattern { "," pattern } ] ")" ] ;
 record_fields_values = record_value { "," record_value } ;
 record_value = NAME ":" expression ;
 ```
@@ -258,7 +269,7 @@ Notes:
   `E1101`. A type cannot be declared inside a function (`E1101`).
 - A file is a module (section 7.6). `import "app/models.nex"` declares that the program uses the
   file `app/models.nex`, and `pub` marks what a module makes visible from outside: `pub fn`,
-  `pub type` (both refined types and records) and nothing else. Everything else is private
+  `pub type` (refined types, records and enums) and nothing else. Everything else is private
   to the file that declares it.
 - An explanation (`explanation`) is a single non-empty text literal, on one line. A text that is
   empty, made only of spaces or containing a line break (`\n`) is the error `E1101`.
@@ -312,11 +323,10 @@ Notes:
   unary operators, blocks, `else if` branches or type constructors, and at most 256 levels in an
   expression tree. It reports `E1105` when a limit is exceeded. These thresholds protect this
   parser; another conforming implementation may use different thresholds.
-- A type is written `NAME`, `MODULE "." NAME`, or either of them with arguments in square
-  brackets. In this version only `List` accepts type arguments, and exactly one; a type from
-  another module accepts none, because it cannot be `List` (`E2012`). `List` without an argument is not a
-  type (`E2012`); `List[]`, `List[Int, Text]`, `List[Void]`, `Option[...]`, `Result[...]`, `Foo[...]`
-  and `Int[...]` are syntax errors (`E1101`). Nesting counts towards the 64-level limit.
+- A type is written `NAME`, `MODULE "." NAME`, `List[Type]`, `Option[Type]` or
+  `Result[Type, Type]`. User-declared enum types take no type arguments; a type from another module
+  accepts none. Missing, extra or invalid built-in type arguments are rejected (`E2012`/`E1101`).
+  Nesting counts towards the 64-level limit.
 
 This complete program exercises the grammar for refined and record types, a public function,
 construction, field access, a call, a declaration and a statement:
@@ -349,12 +359,15 @@ fn main() {
 | `Bool` | `true`, `false` | |
 | `Text` | Unicode text | Immutable |
 | `List[T]` | Immutable, finite sequence of values of type `T` | `T` cannot be `Void`; there is no covariance (section 4.5) |
+| `Option[T]` | `Some(value)` or `None` | A value may be absent (section 4.7) |
+| `Result[T, E]` | `Ok(value)` or `Err(error)` | A computation may fail with a value (section 4.7) |
 | `Void` | No value | The type of a call to a function that has no `gives`. It is never written in a program |
 | A record | The values built with `Name(field: value, ...)` | Declared by the program: `type Point = { x: Int, y: Int }` (section 4.6) |
+| An enum | One of the closed variants declared by the program | May carry named fields; construction and matching are checked statically (section 4.8) |
 
-`Int`, `Float`, `Bool` and `Text` are the built-in **value types**. `List[T]` is a compound value
-type (section 4.5); a program can also declare refined types over the built-in ones
-(section 4.4) and records (section 4.6). Value types are the ones a variable, a parameter or an
+`Int`, `Float`, `Bool` and `Text` are the built-in **value types**. `List[T]`, `Option[T]` and
+`Result[T, E]` are compound value types (sections 4.5 and 4.7); a program can also declare refined
+types (section 4.4), records (section 4.6) and enums (section 4.8). Value types are the ones a variable, a parameter or an
 expression can have. `Void` is not a value type: writing it, as the type of a variable or of a
 parameter or after `gives`, is the error `E2012` (`List[Void]` is `E1101`), and using a call to a
 function without `gives` where a value is needed is the error `E2011`.
@@ -749,11 +762,53 @@ are `false`.
 **How they are printed.** `Some(1)`, `None`, `Ok(1)` and `Err(boom)`, with the text unquoted, like the
 fields of a record. In diagnostics the text is quoted: `Err("boom")`.
 
-**What there is not.** There is no `match`, no `if let`, no `?` and no user enums: an `Option` or a
-`Result` is recognized with the functions above and read with `value_or`, or with `value` when it is
-known which variant it has. The type of a `None` or of an empty list that is an **argument** of a function with
+There is no `?`. The type of a `None` or of an empty list that is an **argument** of a function with
 type variables is not deduced from the other arguments: the language does not infer a type through
 the arguments of a call. Give the type in a variable first.
+
+### 4.8 Enumerations and exhaustive matching
+
+An enumeration is a closed nominal type. Its declaration lists every possible variant; a variant may
+carry named, immutable fields:
+
+```nex
+type Shape = enum { Circle(radius: Float), Square(side: Float) }
+```
+
+Construct a variant with `Shape.Circle(2.0)` or `Shape.Square(3.0)`. A variant without fields is
+written `Color.Red()`. Enum names and variant names start with an uppercase letter; field names follow
+the variable naming rules. Payload fields have value types and cannot be `Void`.
+
+`match` is an expression with one or more arms. Each arm uses `=>` and either an expression or a
+block. Patterns are `_`, a binding name, a literal, or a variant with nested patterns. `if let`
+applies the same pattern rules to a statement and has an optional `else` block. Each arm gets a new
+scope; names bound by its pattern are visible only in that arm. All expression arms must produce the
+same type.
+
+A match of an enum, `Option`, `Result` or `Bool` must cover every possible variant/value, recursively
+through payloads (`E2032`). A wildcard or binding covers every remaining case. A repeated or already-
+covered arm is rejected as unreachable (`E2034`). For open domains such as `Int`, `Float` and `Text`,
+a wildcard or binding is required. Guards and or-patterns are not part of this version. `if let` is a
+conditional and does not need to cover the other cases.
+
+The same exhaustiveness rules apply to the built-in `Option[T]` and `Result[T, E]`, so callers can
+handle success and failure without partial reads or runtime errors.
+
+<!-- nex:run -->
+```nex
+type Signal = enum { Red, Green }
+
+fn main() {
+    print(match Signal.Red() {
+        Red => "stop"
+        Green => "go"
+    })
+}
+```
+
+```text
+stop
+```
 
 ## 5. Variables and scopes
 
@@ -1990,7 +2045,7 @@ do.
 | `E2013` | Invalid parameter | `semantic` | `main` with parameters, or a parameter named `result` |
 | `E2014` | Missing return | `semantic` | A function that returns a value can end without `return` |
 | `E2015` | Unreachable code | `semantic` | Code placed after a `return` |
-| `E2016` | Invalid type declaration | `semantic` | A refined type with a lowercase name, a repeated one or one of a built-in type, an endless chain of types, or a base that is a list. Also a record with an invalid or repeated name, a repeated field, or a record that contains itself |
+| `E2016` | Invalid type declaration | `semantic` | A refined type with a lowercase name, a repeated one or one of a built-in type, an endless chain of types, or a base that is a list. Also a record or enum with an invalid or repeated name, repeated field or variant, or invalid payload type |
 | `E2017` | Value outside refined type | `type` | A constant used as a value of a refined type does not meet its condition |
 | `E2018` | Invalid refinement condition | `semantic` | The condition of a refined type calls a function of the program or checks another refined type |
 | `E2019` | Too many refinement checks | `semantic` | Checking the constants against their refined types exceeds the work limit of the analysis (section 4.4) |
@@ -2006,6 +2061,10 @@ do.
 | `E2029` | Circular import | `semantic` | Modules import each other, so that none can be analyzed before the one it needs (section 7.6) |
 | `E2030` | Module name clash | `semantic` | Two different files are imported as the same module, because they have the same name (section 7.6) |
 | `E2031` | Duplicate clause name | `semantic` | A clause name used twice in a function and its loops, or equal to a parameter or to `result` (decision 0019) |
+| `E2032` | Non-exhaustive match | `type` | A `match` omits one or more variants or values; the diagnostic includes a missing pattern |
+| `E2033` | Invalid enum pattern | `type` | A pattern names no variant of the matched enum, `Option` or `Result`, or has the wrong payload arity |
+| `E2034` | Unreachable match arm | `type` | A previous arm already covers every value this pattern could match |
+| `E2035` | Invalid enum construction | `type` | A value is constructed with an unknown enum variant or wrong number of payload values |
 | `W2001` | Unused variable | `semantic` | A variable, parameter or iterator is declared and its value is never read. A name that only receives assignments is unused too |
 | `W2002` | Variable never reassigned | `semantic` | A variable is declared with `var` and never receives a new value: `let` says what the program means |
 | `W2003` | Name is not snake_case | `semantic` | A variable, parameter, iterator or private function is not written in `snake_case`. Type names keep PascalCase, and public functions and their parameters keep the spelling of their interface |
@@ -2253,10 +2312,9 @@ These are real limitations of this version, not bugs:
 - The measure of a `while` is an `Int`: there are no compound measures (pairs, texts).
 - Parameters cannot be reassigned.
 - `if` is a statement, not an expression: it cannot be used as a value.
-- There are no maps, enumerations or `for` over ranges or `Text`. Records (section 4.6) have
-  immutable fields and allow no methods, refinements or recursion. `List[T]` lists are
-  immutable and finite. For `Option` and `Result` (section 4.7) there is no `match` or `if let`: the
-  variants are recognized with functions, and the value is read with `value_or` or `value`.
+- There are no maps or `for` over ranges or `Text`. Records (section 4.6) have immutable fields
+  and allow no methods or refinements. Enums (section 4.8) may be recursive. `List[T]` lists are
+  immutable and finite. `Option` and `Result` support exhaustive `match` and conditional `if let`.
 - The operations on texts are those of section 8.1: there is no `trim`, case conversion, `split`,
   `replace` or search for positions. A character is a code point: graphemes are not counted.
 - There is no remainder operator (`%`).
@@ -2297,11 +2355,9 @@ Nothing of what follows works today. It is the direction of the design, taken fr
 `docs/fase-1-diseno.md` at the root of the repository, and it may change:
 
 - `for` over ranges, `break` and `continue`.
-- `if` and `match` as expressions.
+- `if` as an expression.
 - Text interpolation (`"Hello {name}"`), for which the `{` is already reserved.
-  - Maps and enumerations. Records (section 4.6), `List[T]` lists and the two types
-    `Option[T]` and `Result[T, E]` (section 4.7) already exist, but not user generics
-    (`fn f[T]`), higher-order functions or functions as values.
+- Maps. Records, enums, lists, Option and Result exist, but not user generics (fn f[T]), higher-order functions or functions as values.
 - Static verification of contracts, and test blocks (`test`) outside functions.
 - A broader effect system. Declared effects (`uses`) exist for files, HTTPS origins and external
   processes (section 8.3), but a module does not declare what it needs and the rest of the language

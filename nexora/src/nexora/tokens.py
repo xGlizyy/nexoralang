@@ -25,6 +25,8 @@ class TokenType(Enum):
     PROMISES = "promises"
     TRUST = "trust"
     TYPE = "type"
+    ENUM = "enum"
+    MATCH = "match"
     WHERE = "where"
     EXAMPLE = "example"
     VAR = "var"
@@ -57,6 +59,7 @@ class TokenType(Enum):
     COLON = ":"
     DOT = "."
     ARROW = "->"
+    FAT_ARROW = "=>"
     EQUAL = "="
     PLUS = "+"
     MINUS = "-"
@@ -89,6 +92,8 @@ KEYWORDS: dict[str, TokenType] = {
     "promises": TokenType.PROMISES,
     "trust": TokenType.TRUST,
     "type": TokenType.TYPE,
+    "enum": TokenType.ENUM,
+    "match": TokenType.MATCH,
     "where": TokenType.WHERE,
     "example": TokenType.EXAMPLE,
     "var": TokenType.VAR,
@@ -105,7 +110,7 @@ KEYWORDS: dict[str, TokenType] = {
 # Keywords that can only start a statement or a declaration, never appear inside parentheses.
 STATEMENT_KEYWORDS: frozenset[str] = frozenset({
     "fn", "let", "var", "return", "if", "else", "while", "for", "needs", "gives", "promises", "trust",
-    "example", "keeps", "shrinks", "type", "where", "uses", "requires", "ensures", "invariant", "decreases",
+    "example", "keeps", "shrinks", "type", "where", "uses", "match", "requires", "ensures", "invariant", "decreases",
 })
 
 # The clause words of 0.11 and the words that replace them (decision 0019). They are not names
@@ -118,8 +123,7 @@ OLD_CLAUSE_WORDS: dict[str, str] = {
 # Reserving them now means adding those features later cannot break existing programs.
 # `ai` and `tool` were reserved until 0.11 and are ordinary names from 0.12 (decision 0019, 9).
 RESERVED_WORDS: frozenset[str] = frozenset({
-    "assert", "break", "const", "continue", "enum",
-    "match", "test", "try",
+    "assert", "break", "const", "continue", "test", "try",
 })
 
 

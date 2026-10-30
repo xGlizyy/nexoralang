@@ -125,6 +125,10 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E2029": ("Circular import", SEMANTIC),
     "E2030": ("Module name clash", SEMANTIC),
     "E2031": ("Duplicate clause name", SEMANTIC),
+    "E2032": ("Non-exhaustive match", TYPE),
+    "E2033": ("Invalid enum pattern", TYPE),
+    "E2034": ("Unreachable match arm", TYPE),
+    "E2035": ("Invalid enum construction", TYPE),
 
     # Warnings. They have their own prefix, so a tool can tell them apart from an error
     # without reading the severity. Their number follows the same stage ranges as the errors.

@@ -2,12 +2,12 @@
 // lexer grammar, is authoritative for syntax and type errors.
 const keywords = [
   "fn", "let", "var", "return", "if", "else", "while", "for", "in", "needs", "gives",
-  "promises", "trust", "example", "keeps", "shrinks", "uses", "type", "where", "import",
+  "promises", "trust", "example", "keeps", "shrinks", "uses", "type", "enum", "match", "where", "import",
   "pub", "and", "or", "not",
 ];
 
 const reserved = [
-  "assert", "break", "const", "continue", "enum", "match", "test", "try", "requires",
+  "assert", "break", "const", "continue", "test", "try", "requires",
   "ensures", "invariant", "decreases",
 ];
 
@@ -62,7 +62,7 @@ module.exports = grammar({
     builtin_constructor: () => token(prec(1, choice(...constructors))),
     builtin_function: () => token(prec(2, choice(...builtins))),
     invalid_arrow: () => token("->"),
-    operator: () => token(choice("==", "!=", "<=", ">=", "=", "+", "-", "*", "/", "<", ">")),
+    operator: () => token(choice("=>", "==", "!=", "<=", ">=", "=", "+", "-", "*", "/", "<", ">")),
     punctuation: () => token(choice("(", ")", "{", "}", "[", "]", ",", ":", ".")),
     identifier: () => /[A-Za-z_][A-Za-z0-9_]*/,
   },

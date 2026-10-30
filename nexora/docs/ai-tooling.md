@@ -240,7 +240,8 @@ fn main() {
     ],
     "records": [],
     "uses": [],
-    "imports": []
+    "imports": [],
+    "enums": []
   }
 }
 ```

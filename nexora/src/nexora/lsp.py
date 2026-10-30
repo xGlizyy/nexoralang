@@ -631,6 +631,7 @@ def _call_name_at(document: Document, line: int, column: int) -> str | None:
 def _type_names(facts: CheckedProgram) -> dict[str, str]:
     """The declared types, by name."""
     names = {name: "record" for name in facts.records}
+    names.update({name: "enum" for name in facts.enums})
     names.update({name: "refined type" for name in facts.refined})
     return names
 

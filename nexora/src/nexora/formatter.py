@@ -38,7 +38,7 @@ _NO_SPACE_BEFORE = frozenset({
 _BINARY = frozenset({
     TokenType.PLUS, TokenType.MINUS, TokenType.STAR, TokenType.SLASH, TokenType.EQUAL,
     TokenType.EQUAL_EQUAL, TokenType.NOT_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL,
-    TokenType.GREATER, TokenType.GREATER_EQUAL, TokenType.ARROW,
+    TokenType.GREATER, TokenType.GREATER_EQUAL, TokenType.ARROW, TokenType.FAT_ARROW,
 })
 # The tokens after which a space is always written.
 _SPACE_AFTER = frozenset({

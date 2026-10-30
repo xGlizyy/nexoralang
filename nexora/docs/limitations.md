@@ -1,6 +1,6 @@
 # Limitations
 
-What NEXORA does **not** do in version 0.15.0, and the risks worth knowing before using it.
+What NEXORA does **not** do in the 0.16.0 development line, and the risks worth knowing before using it.
 Nothing that appears here as "does not exist" works today, even if it is mentioned in the design
 draft, in the roadmap or in a decision that is accepted and pending implementation.
 
@@ -30,8 +30,8 @@ NEXORA is an early-stage project (before version 1.0):
 | Lists with elements of different types, or empty ones without an expected type | All the elements have the same type. `[]` and `for x in []` need an expected type (`E2011`) |
 | Refining a list (`type NonEmpty = List[Int] where ...`) | A refined type can only be built over `Int`, `Float`, `Bool`, `Text` or another refined type (`E2016`) |
 | `List` functions beyond `length`, `get`, `append`, `concat` and `contains` | There is no `map`, `filter`, `fold`, sorting, `slice` or search for positions |
-| Maps, enumerations and optionals | `List[T]` lists are immutable and finite; records (section 4.6 of the [specification](language-spec.md)) are immutable and have no methods, refinements or recursion. `Option[T]` and `Result[T, E]` (section 4.7) exist, but without `match` or `if let`: the variants are recognized with functions |
-| User-defined types and generics | Lists use `List[T]`, but the program cannot declare generic types or generic functions |
+| Maps and generic user-defined types | Enumerations (section 4.8 of the [specification](language-spec.md)) and recursive matching exist; user enums and functions cannot declare type parameters. Records and enums are immutable |
+| Advanced patterns | Guards and or-patterns are not supported. `if let` tests one pattern; full coverage is required only for `match` |
 | `trim`, case conversion, `split`, `replace`, search for positions | There are `Text.length`, `Text.slice`, `Text.contains`, `Text.starts_with`, `Text.ends_with` and the ordering between texts ([specification](language-spec.md), 8.1) |
 | Graphemes and Unicode normalization | A character is a code point: an `e` with the combining accent counts 2, and two texts that look the same can be different for `==` |
 | Alphabetical order according to the language | The order between texts is that of the code points: `"Z" < "a"` |

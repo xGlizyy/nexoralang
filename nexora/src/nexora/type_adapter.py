@@ -257,6 +257,15 @@ class TypeAdapter:
         self._records[name] = nominal
         return nominal
 
+    def register_enum(self, name: str, identity: type_model.RecordIdentity) -> type_model.Nominal:
+        """Register the nominal identity of an enum in the shared declared-type table."""
+        existing = self._records.get(name)
+        if existing is not None:
+            return existing
+        nominal = type_model.Nominal(name, (), identity)
+        self._records[name] = nominal
+        return nominal
+
     def record(self, name: str | None) -> type_model.Nominal | None:
         """The model for a valid record type, or None if it is absent."""
         if name is None:

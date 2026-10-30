@@ -133,6 +133,10 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E2029` | Circular import | Modules import each other, so that none can be analyzed before the one it needs ([decision 0018](decisions/0018-modulos-e-importaciones.md)) | Break the cycle: move what both share to a third module that both import |
 | `E2030` | Module name clash | Two different files are imported as the same module, because they have the same name ([decision 0018](decisions/0018-modulos-e-importaciones.md)) | Rename one of the two files: the module takes its name from its file |
 | `E2031` | Duplicate clause name | A clause name used twice in a function and its loops, or equal to a parameter or to `result` ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)) | Give each clause its own name |
+| `E2032` | Non-exhaustive match | A `match` omits possible values; the label includes a missing pattern | Add the missing pattern or a final `_` arm |
+| `E2033` | Invalid enum pattern | The pattern names an unknown variant or uses the wrong payload arity | Match a declared variant with the listed fields |
+| `E2034` | Unreachable match arm | An earlier pattern already covers this arm | Remove the arm or place a more specific arm first |
+| `E2035` | Invalid enum construction | A value is constructed with an unknown variant or wrong payload arity | Use a declared variant with its required number of payload values |
 
 ### Type
 

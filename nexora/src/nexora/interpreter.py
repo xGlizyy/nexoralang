@@ -131,6 +131,7 @@ class Interpreter:
         what the program may do besides computing: its arguments, its input and the files it may
         touch. Without one, the program can only compute and print (decision 0015)."""
         self._functions = checked.functions
+        self._enums = checked.enums
         # id(call node) -> the name of the function it calls, qualified with its module. A
         # call written inside a module uses the bare name, and the module is what tells it
         # apart from the same name in another module (decision 0018, 5).
@@ -398,12 +399,19 @@ class Interpreter:
             if statement.value is None:
                 return _Returned(None)
             return _Returned(self._evaluate(statement.value, environment))
-        if isinstance(statement, ast.If):
-            # Iterative over the 'else if' chain.
-            branch: ast.If | ast.Block | None = statement
-            while isinstance(branch, ast.If):
-                if self._evaluate(branch.condition, environment):
-                    return self._block(branch.then_block, Environment(environment))
+        if isinstance(statement, (ast.If, ast.IfLet)):
+            # Iterative over an `else if` / `else if let` chain.
+            branch: ast.If | ast.IfLet | ast.Block | None = statement
+            while isinstance(branch, (ast.If, ast.IfLet)):
+                if isinstance(branch, ast.If):
+                    if self._evaluate(branch.condition, environment):
+                        return self._block(branch.then_block, Environment(environment))
+                    branch = branch.else_branch
+                    continue
+                value = self._evaluate(branch.value, environment)
+                local = Environment(environment)
+                if self._matches(branch.pattern, value, local):
+                    return self._block(branch.then_block, local)
                 branch = branch.else_branch
             if branch is not None:
                 return self._block(branch, Environment(environment))
@@ -558,6 +566,16 @@ class Interpreter:
             return self._field(node, environment)
         if isinstance(node, ast.Group):
             return self._evaluate(node.expression, environment)
+        if isinstance(node, ast.MatchExpr):
+            value = self._evaluate(node.value, environment)
+            for arm in node.arms:
+                local = Environment(environment)
+                if self._matches(arm.pattern, value, local):
+                    if isinstance(arm.body, ast.Block):
+                        self._block(arm.body, local)
+                        return None
+                    return self._evaluate(arm.body, local)
+            raise RuntimeError("an exhaustive match had no matching arm")
         if isinstance(node, ast.Binary):
             return self._binary(node, environment)
         if isinstance(node, ast.Unary):
@@ -682,6 +700,9 @@ class Interpreter:
             return result
         if target in self._refined:
             return self._refine(node, arguments[0])
+        if target in self._enum_variant_targets():
+            enum_name, variant_name = target.rsplit(".", 1)
+            return VariantValue(variant_name, enum_name=enum_name, arguments=tuple(arguments))
 
         # The functions of a type (decision 0011): their 'needs' first, then the operation.
         implementation = IMPLEMENTATIONS.get(node.callee)
@@ -734,6 +755,41 @@ class Interpreter:
                 )
             return whole
         raise TypeError(f"call to '{node.callee}' reached the interpreter")
+
+    def _enum_variant_targets(self) -> set[str]:
+        return {f"{enum_name}.{variant.name}" for enum_name, enum in self._enums.items()
+                for variant in enum.variants}
+
+    def _matches(self, pattern: ast.Pattern, value: Value | None, environment: Environment) -> bool:
+        if isinstance(pattern, ast.WildcardPattern):
+            return True
+        if isinstance(pattern, ast.BindingPattern):
+            environment.declare(pattern.name, value)
+            return True
+        if isinstance(pattern, ast.LiteralPattern):
+            return value == pattern.value
+        if isinstance(pattern, ast.VariantPattern):
+            target = self._targets.get(id(pattern))
+            if target is None or not isinstance(value, VariantValue):
+                return False
+            enum_name, variant_name = target.rsplit(".", 1)
+            if value.kind != variant_name:
+                return False
+            if enum_name in ("Option", "Result"):
+                if value.enum_name is not None:
+                    return False
+                payloads = () if value.kind == NONE else (value.payload,)
+            else:
+                if value.enum_name != enum_name:
+                    return False
+                payloads = value.arguments
+            if len(payloads) != len(pattern.arguments):
+                return False
+            for child, payload in zip(pattern.arguments, payloads, strict=True):
+                if not self._matches(child, payload, environment):
+                    return False
+            return True
+        raise TypeError(f"pattern {type(pattern).__name__} reached the interpreter")
 
     def _extract(self, node: ast.Call, value: Value) -> Value:
         """The payload of an Option or a Result, when there is one.

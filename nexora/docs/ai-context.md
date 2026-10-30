@@ -252,10 +252,10 @@ Features used: none
 
 Diagnostics:
   syntax E1103 at 3:5: 'break' is reserved for a future version of NEXORA and is not implemented yet
-  syntax E1103 at 4:17: 'match' is reserved for a future version of NEXORA and cannot be used here
+  syntax E1101 at 4:22: Expected a value or an expression, found the end of line
 
 Notes:
-  - The program uses words reserved for features that are not implemented: break, match.
+  - The program uses words reserved for features that are not implemented: break.
   - The program has syntax errors, so this summary is partial: it covers only the code that could be parsed. Statements with errors, and functions whose declaration has errors, are missing, and a type that depends on them is unknown.
 ```
 

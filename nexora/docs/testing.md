@@ -43,7 +43,7 @@ The full suite takes about three minutes. The tests need no internet connection.
 
 ## Feature-by-feature specification coverage
 
-The [language specification](language-spec.md) is normative for language version 0.13. This table
+The [language specification](language-spec.md) is normative for language version 0.14. This table
 maps every numbered normative clause in sections 2–12 to an executable NEXORA program and focused
 tests. Add or update a row whenever a clause or stable feature changes. The coverage test in
 `tests/test_docs.py` requires an exact row for every numbered clause, verifies that every example
@@ -73,6 +73,7 @@ real request or start a platform-specific process.
 | [4.5.2 Immutability, equality and printing](language-spec.md#452-immutability-equality-and-printing) | [`lists.nex`](../examples/lists.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_type_lists_values.py`](../tests/test_type_lists_values.py) |
 | [4.6 Records](language-spec.md#46-records) | [`records.nex`](../examples/records.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_records_types.py`](../tests/test_records_types.py), [`test_records_values.py`](../tests/test_records_values.py) |
 | [4.7 Option and Result](language-spec.md#47-option-and-result) | [`option_result.nex`](../examples/option_result.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_option_result.py`](../tests/test_option_result.py) |
+| [4.8 Enumerations and exhaustive matching](language-spec.md#48-enumerations-and-exhaustive-matching) | [`enums.nex`](../examples/enums.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_enums.py`](../tests/test_enums.py), [`test_modules.py`](../tests/test_modules.py) |
 | [5.1 Declaration](language-spec.md#51-declaration) | [`variables.nex`](../examples/variables.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_checker.py`](../tests/test_checker.py) |
 | [5.2 Scopes and name resolution](language-spec.md#52-scopes-and-name-resolution) | [`functions.nex`](../examples/functions.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_checker.py`](../tests/test_checker.py), [`test_functions.py`](../tests/test_functions.py) |
 | [5.3 Variables that change: `var` and assignment](language-spec.md#53-variables-that-change-var-and-assignment) | [`variables.nex`](../examples/variables.nex) | [`test_examples.py`](../tests/test_examples.py), [`test_interpreter.py`](../tests/test_interpreter.py) |

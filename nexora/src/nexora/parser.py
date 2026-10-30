@@ -41,6 +41,7 @@ _NAME_KEYWORDS = (
     TokenType.FALSE, TokenType.AND, TokenType.OR, TokenType.NOT, TokenType.NEEDS, TokenType.GIVES,
     TokenType.PROMISES, TokenType.TRUST, TokenType.TYPE, TokenType.WHERE, TokenType.EXAMPLE, TokenType.VAR,
     TokenType.WHILE, TokenType.FOR, TokenType.IN, TokenType.KEEPS, TokenType.SHRINKS, TokenType.USES,
+    TokenType.ENUM, TokenType.MATCH,
 )
 _DECLARATION_KEYWORDS = (TokenType.FN, TokenType.TYPE)
 # The clauses of the header of a function, between its signature and its body (decision 0019).
@@ -103,6 +104,7 @@ class Parser:
         functions whose declaration has one. It is for tools; it is never run."""
         types: list[ast.TypeDecl] = []
         records: list[ast.RecordDecl] = []
+        enums: list[ast.EnumDecl] = []
         uses: list[ast.UsesDecl] = []
         imports: list[ast.ImportDecl] = []
         functions: list[ast.Function] = []
@@ -124,7 +126,7 @@ class Parser:
                                 hint="Only a function or a type can be public: pub fn add(a: Int) gives Int { }",
                             )
                     if self._check(TokenType.IMPORT):
-                        if types or records or uses or functions:
+                        if types or records or enums or uses or functions:
                             raise self._error(
                                 "E1101",
                                 "The imports of a program come before its other declarations",
@@ -136,6 +138,8 @@ class Parser:
                         declaration = self._type_declaration(public)
                         if isinstance(declaration, ast.RecordDecl):
                             records.append(declaration)
+                        elif isinstance(declaration, ast.EnumDecl):
+                            enums.append(declaration)
                         else:
                             types.append(declaration)
                     elif self._check(TokenType.USES):
@@ -155,7 +159,7 @@ class Parser:
         end = self._peek().span
         start = self._tokens[0].span
         return ast.Program(start.to(end), tuple(types), tuple(functions), tuple(records), tuple(uses),
-                          tuple(imports)), \
+                          tuple(imports), tuple(enums)), \
             self._diagnostics
 
     def _record(self, error: ParseError) -> None:
@@ -349,7 +353,7 @@ class Parser:
 
     # Declarations
 
-    def _type_declaration(self, public: bool = False) -> ast.TypeDecl | ast.RecordDecl:
+    def _type_declaration(self, public: bool = False) -> ast.TypeDecl | ast.RecordDecl | ast.EnumDecl:
         """`type Name = Base where condition` with an optional `, "explanation"`.
 
         A record is declared the same way but with its fields: `type Name = { x: Int }`.
@@ -360,6 +364,8 @@ class Parser:
         name = self._expect_name("a type name after 'type'")
         self._expect(TokenType.EQUAL, f"'=' after the type name '{name.lexeme}'",
                      hint=f"A refined type is written: type {name.lexeme} = Int where value > 0")
+        if self._check(TokenType.ENUM):
+            return self._enum_declaration(keyword, name, public)
         if self._peek_significant().type is TokenType.LBRACE:
             return self._record_declaration(keyword, name, public)
         base = self._type(f"the type that '{name.lexeme}' refines, after '='")
@@ -376,6 +382,49 @@ class Parser:
         message, end = self._explanation("where", condition.span)
         self._end_of_statement()
         return ast.TypeDecl(keyword.span.to(end), name.lexeme, name.span, base, condition, message, public)
+
+    def _enum_declaration(self, keyword: Token, name: Token, public: bool) -> ast.EnumDecl:
+        """`type Direction = enum { North, South }`: a closed, nominal set of variants."""
+        enum_keyword = self._advance()
+        opening = self._expect(TokenType.LBRACE, "'{' after 'enum'",
+                               hint=f"Write the variants of {name.lexeme}: type {name.lexeme} = enum {{ North, South }}")
+        self._enter(opening)
+        variants: list[ast.EnumVariantDecl] = []
+        self._skip_newlines()
+        if self._check(TokenType.RBRACE):
+            raise self._error("E1101", f"The enum '{name.lexeme}' needs at least one variant", opening)
+        while True:
+            variant = self._expect_name("a variant name", hint="Variant names start with a capital letter.")
+            if not variant.lexeme[:1].isupper():
+                raise self._error("E1101", f"The variant name '{variant.lexeme}' must start with a capital letter",
+                                  variant)
+            fields: list[ast.FieldDecl] = []
+            end = variant.span
+            if self._match(TokenType.LPAREN):
+                self._enter(variant)
+                if not self._check(TokenType.RPAREN):
+                    while True:
+                        field = self._expect_name("a payload field name")
+                        self._expect(TokenType.COLON, f"':' and the type of '{field.lexeme}'")
+                        field_type = self._type(f"the type of '{field.lexeme}'")
+                        fields.append(ast.FieldDecl(field.span.to(field_type.span), field.lexeme, field.span,
+                                                    field_type))
+                        if not self._match(TokenType.COMMA):
+                            break
+                closing_paren = self._expect(TokenType.RPAREN, "')' after the variant payload")
+                self._nesting -= 1
+                end = closing_paren.span
+            variants.append(ast.EnumVariantDecl(variant.span.to(end), variant.lexeme, variant.span, tuple(fields)))
+            self._skip_newlines()
+            if not self._match(TokenType.COMMA):
+                break
+            self._skip_newlines()
+            if self._check(TokenType.RBRACE):
+                raise self._error("E1101", "An enum variant cannot be left out after ','")
+        closing = self._expect(TokenType.RBRACE, "'}' to close the enum")
+        self._nesting -= 1
+        self._end_of_statement()
+        return ast.EnumDecl(keyword.span.to(closing.span), name.lexeme, name.span, tuple(variants), public)
 
     def _record_declaration(self, keyword: Token, name: Token, public: bool = False) -> ast.RecordDecl:
         """`type Point = { x: Int, y: Int }`: a record type.
@@ -840,15 +889,26 @@ class Parser:
         value = self._expression()
         return ast.Return(keyword.span.to(value.span), value)
 
-    def _if(self) -> ast.If:
+    def _if(self) -> ast.If | ast.IfLet:
         keyword = self._advance()
         self._enter(keyword)
+        if self._match(TokenType.LET):
+            pattern = self._pattern()
+            self._expect(TokenType.EQUAL, "'=' between the pattern and the value in 'if let'")
+            value = self._expression()
+            then_block = self._block("the body of 'if let'")
+            else_branch: ast.Block | ast.If | ast.IfLet | None = None
+            if self._match(TokenType.ELSE):
+                else_branch = self._if() if self._check(TokenType.IF) else self._block("the body of 'else'")
+            self._nesting -= 1
+            end = else_branch.span if else_branch is not None else then_block.span
+            return ast.IfLet(keyword.span.to(end), pattern, value, then_block, else_branch)
         if self._check(TokenType.LBRACE):
             raise self._error("E1101", "Expected a condition after 'if', found '{'")
         condition = self._expression()
         then_block = self._block("the body of 'if'")
 
-        else_branch: ast.Block | ast.If | None = None
+        else_branch: ast.Block | ast.If | ast.IfLet | None = None
         if self._match(TokenType.ELSE):
             if self._check(TokenType.IF):
                 else_branch = self._if()
@@ -940,6 +1000,9 @@ class Parser:
     def _primary(self) -> ast.Expr:
         token = self._peek()
 
+        if token.type is TokenType.MATCH:
+            return self._match_expression()
+
         if token.type is TokenType.INT:
             return ast.IntLiteral(self._advance().span, token.value)
         if token.type is TokenType.FLOAT:
@@ -955,7 +1018,7 @@ class Parser:
                 # to a function of a type, never the reading of a field. A name that is
                 # called is a call too, whatever it is: `name.length()` says that a
                 # value has no functions of its own.
-                if token.lexeme in self._type_names or self._peek(2).type is TokenType.LPAREN:
+                if token.lexeme in self._type_names or self._qualified_call_ahead():
                     return self._qualified_call(token)
                 return self._field_access(token)
             if self._check(TokenType.LPAREN):
@@ -978,6 +1041,84 @@ class Parser:
                 f"'{token.lexeme}' is reserved for a future version of NEXORA and cannot be used here",
             )
         raise self._error("E1101", f"Expected a value or an expression, found {token.describe()}")
+
+    def _qualified_call_ahead(self) -> bool:
+        """Whether the current name is followed by one or more dotted names and a call."""
+        index = self._pos
+        while (index + 1 < len(self._tokens) and self._tokens[index].type is TokenType.DOT
+               and self._tokens[index + 1].type is TokenType.IDENT):
+            index += 2
+        return index < len(self._tokens) and self._tokens[index].type is TokenType.LPAREN
+
+    def _match_expression(self) -> ast.MatchExpr:
+        keyword = self._advance()
+        self._enter(keyword)
+        value = self._expression()
+        opening = self._expect(TokenType.LBRACE, "'{' before the match arms")
+        self._enter(opening)
+        arms: list[ast.MatchArm] = []
+        self._skip_newlines()
+        if self._check(TokenType.RBRACE):
+            raise self._error("E1101", "A match needs at least one arm", opening)
+        while True:
+            pattern = self._pattern()
+            self._expect(TokenType.FAT_ARROW, "'=>' after the pattern")
+            body: ast.Expr | ast.Block = self._block("the body of a match arm") if self._check(TokenType.LBRACE) \
+                else self._expression()
+            arms.append(ast.MatchArm(pattern.span.to(body.span), pattern, body))
+            self._skip_newlines()
+            if self._check(TokenType.RBRACE):
+                break
+            self._match(TokenType.COMMA)
+            self._skip_newlines()
+            if self._check(TokenType.RBRACE):
+                break
+        closing = self._expect(TokenType.RBRACE, "'}' to close the match")
+        self._nesting -= 2
+        bodies = tuple(arm.body for arm in arms if isinstance(arm.body, ast.EXPRESSION_NODES))
+        return self._built(ast.MatchExpr(keyword.span.to(closing.span), value, tuple(arms)), value, *bodies)
+
+    def _pattern(self) -> ast.Pattern:
+        token = self._peek()
+        if token.type in (TokenType.INT, TokenType.FLOAT, TokenType.STRING, TokenType.TRUE, TokenType.FALSE):
+            self._advance()
+            value = token.value if token.type in (TokenType.INT, TokenType.FLOAT, TokenType.STRING) \
+                else token.type is TokenType.TRUE
+            return ast.LiteralPattern(token.span, value)
+        if token.type is not TokenType.IDENT:
+            raise self._error("E1101", f"Expected a pattern, found {token.describe()}")
+        self._advance()
+        if token.lexeme == "_":
+            return ast.WildcardPattern(token.span)
+        qualifier = None
+        name = token
+        start = token.span
+        segments = [token]
+        dots = []
+        while (dot := self._match(TokenType.DOT)) is not None:
+            dots.append(dot)
+            segments.append(self._expect_name("a type or variant name after '.'"))
+        if any(not (_touches(segments[index].span, separator.span)
+                    and _touches(separator.span, segments[index + 1].span))
+               for index, separator in enumerate(dots)):
+            raise self._error("E1101", "Write a variant pattern without spaces around '.'",
+                              span=segments[0].span.to(segments[-1].span))
+        if len(segments) > 1:
+            qualifier = ".".join(item.lexeme for item in segments[:-1])
+            name = segments[-1]
+        if self._match(TokenType.LPAREN):
+            self._enter(token)
+            arguments: list[ast.Pattern] = []
+            if not self._check(TokenType.RPAREN):
+                arguments.append(self._pattern())
+                while self._match(TokenType.COMMA):
+                    arguments.append(self._pattern())
+            closing = self._expect(TokenType.RPAREN, "')' after the variant pattern")
+            self._nesting -= 1
+            return ast.VariantPattern(start.to(closing.span), name.lexeme, name.span, tuple(arguments), qualifier)
+        if qualifier is not None or name.lexeme[:1].isupper():
+            return ast.VariantPattern(start.to(name.span), name.lexeme, name.span, (), qualifier)
+        return ast.BindingPattern(token.span, token.lexeme, token.span)
 
     def _list_literal(self) -> ast.ListLiteral:
         """`[a, b]`, or `[]`. A comma is a separator: a trailing comma is not accepted."""
@@ -1074,24 +1215,39 @@ class Parser:
         name = self._peek()
         if name.type is not TokenType.IDENT:
             raise self._error("E1101", f"Expected the name of a function after '{qualifier.lexeme}.'", dot)
-        full = f"{qualifier.lexeme}.{name.lexeme}"
+        segments = [qualifier, name]
+        dots = [dot]
+        full = ".".join(item.lexeme for item in segments)
         # The '.' touches both names. Inside parentheses a line break leaves no token, so the
         # positions are compared, not the tokens.
         if not (_touches(qualifier.span, dot.span) and _touches(dot.span, name.span)):
             raise self._error("E1101", f"Write '{full}' without spaces around the '.'",
                               span=qualifier.span.to(name.span))
         self._advance()
-        if self._check(TokenType.DOT):
-            raise self._error("E1101", f"Expected '(' after '{full}', found '.'",
-                              notes=("A qualified name has one '.': Type.function",))
+        while (extra_dot := self._match(TokenType.DOT)) is not None:
+            dots.append(extra_dot)
+            segments.append(self._expect_name("a name after '.'"))
+        full = ".".join(item.lexeme for item in segments)
+        if len(segments) > 3:
+            raise self._error("E1101", "A qualified constructor can have at most a module, type and variant",
+                              span=segments[0].span.to(segments[-1].span))
+        if len(segments) == 3 and not (segments[1].lexeme[:1].isupper() and segments[2].lexeme[:1].isupper()):
+            raise self._error("E1101", f"Expected '(' after '{segments[0].lexeme}.{segments[1].lexeme}', "
+                              f"found '.'", span=dots[-1].span)
+        if any(not (_touches(segments[index].span, separator.span)
+                    and _touches(separator.span, segments[index + 1].span))
+               for index, separator in enumerate(dots)):
+            raise self._error("E1101", f"Write '{full}' without spaces around '.'",
+                              span=segments[0].span.to(segments[-1].span))
         if not self._check(TokenType.LPAREN):
             raise self._error("E1101", f"Expected '(' to call '{full}'",
                               hint=f"A function is not a value: call it, as in {full}(...).")
-        if self._peek(1).type is TokenType.IDENT and self._peek(2).type is TokenType.COLON:
+        if len(segments) == 2 and self._peek(1).type is TokenType.IDENT and self._peek(2).type is TokenType.COLON:
             # `models.Point(x: 1)`: the parentheses hold named fields, so this builds the
             # record the module declares instead of calling a function.
             return self._record_construction(name, qualifier=qualifier.lexeme, start=qualifier.span)
-        return self._call(qualifier, name=full, name_span=qualifier.span.to(name.span), qualifier=qualifier.lexeme)
+        return self._call(qualifier, name=full, name_span=qualifier.span.to(segments[-1].span),
+                          qualifier=qualifier.lexeme)
 
     def _call(self, callee: Token, *, name: str | None = None, name_span: Span | None = None,
               qualifier: str | None = None) -> ast.Call:
@@ -1168,9 +1324,11 @@ def _declared_type_names(tokens: list[Token]) -> tuple[frozenset[str], frozenset
             name = tokens[index + 1].lexeme
             names.add(name)
             following = tokens[index + 2:index + 4]
-            if (len(following) == 2 and following[0].type is TokenType.EQUAL
-                    and following[1].type is TokenType.LBRACE):
-                records.add(name)
+            if len(following) == 2 and following[0].type is TokenType.EQUAL:
+                if following[1].type is TokenType.LBRACE:
+                    records.add(name)
+                elif following[1].type is TokenType.ENUM:
+                    pass
             index += 2
         index += 1
     return frozenset(names), frozenset(records)

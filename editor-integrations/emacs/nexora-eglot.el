@@ -26,9 +26,9 @@
 (defconst nexora--keywords
   '("fn" "let" "var" "return" "if" "else" "while" "for" "in"
     "needs" "gives" "promises" "trust" "example" "keeps" "shrinks"
-    "uses" "type" "where" "import" "pub" "and" "or" "not" "true" "false"))
+    "uses" "type" "enum" "match" "where" "import" "pub" "and" "or" "not" "true" "false"))
 (defconst nexora--reserved-words
-  '("assert" "break" "const" "continue" "enum" "match" "test" "try"
+  '("assert" "break" "const" "continue" "test" "try"
     "requires" "ensures" "invariant" "decreases"))
 (defconst nexora--primitive-types '("Int" "Float" "Bool" "Text" "Void"))
 (defconst nexora--compound-types '("List" "Option" "Result"))
