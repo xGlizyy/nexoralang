@@ -2,7 +2,7 @@
 
 Changelog for NEXORA, with the most recent version first.
 
-All versions are prior to 1.0: the language may change incompatibly between versions. Each incompatible change is indicated here and explained in `docs/decisions/`.
+All versions are prior to 1.0: the language may change incompatibly between versions. Every incompatible change is recorded here; language-design and stable-contract changes are also explained in `docs/decisions/`.
 
 This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Versions 0.10.0, with `Option` and `Result`, 0.11.0, with modules and imports, 0.12.0, with the syntax of decision 0019, 0.13.0, with network and process capabilities, 0.14.0, with editor integrations and LSP project support, and 0.14.1, with local execution limits, are also tagged and published in both registries. Earlier ones only identify code states: they were never tagged or published.
 
@@ -20,6 +20,10 @@ Each version groups its changes into these sections, when they contain content:
 ## Unreleased
 
 ### Documentation
+
+- Publish a compatibility and versioning policy defining pre-1.0 language changes, 1.x SemVer,
+  deprecation, migration and compatibility-test requirements, and the latest-release-only support
+  period.
 
 - Publish the supported release policy, private vulnerability reporting process and response targets in the repository-level `SECURITY.md`.
 

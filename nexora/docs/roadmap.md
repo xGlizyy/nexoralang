@@ -27,6 +27,7 @@ that decision or an approved reference application requires them.
 
 | Item | How it is verified |
 |------|--------------------|
+| Public compatibility policy for pre-1.0 and 1.x, deprecation, migrations and support periods | `docs/compatibility.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `tests/test_compatibility_policy.py` |
 | Lexer and parser, with error recovery | `tests/test_lexer.py`, `tests/test_parser.py` |
 | Types `Int`, `Float`, `Bool`, `Text`, `Void`; inference and annotations | `tests/test_types.py` |
 | Immutable **lists** `List[T]`, with literals, equality and `List.length`, `List.get`, `List.append`, `List.concat` and `List.contains` | `tests/test_type_lists_syntax.py`, `tests/test_type_lists_values.py`, `tests/test_type_lists_functions.py` |
