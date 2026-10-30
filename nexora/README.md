@@ -60,7 +60,9 @@ offline. What there is and what there is not, precisely: [Automated tools and AI
 ## Status
 
 **Version 0.15.0. Early-stage project**, before 1.0: the language may change
-incompatibly and NEXORA programs are not suitable for production use. The public Playground is a
+incompatibly and NEXORA programs are not suitable for production use. The CLI, diagnostic machine
+fields, and versioned JSON schemas have explicit interface-level stability guarantees; this does
+not freeze the language. The public Playground is a
 production-hosted service for trying the language; that does not make the language itself
 production-ready.
 
@@ -71,6 +73,8 @@ production-ready.
 | **Live in production, still experimental** | The [web Playground](https://nexoralang.org/playground) runs a previous interpreter release. It supports Check, Run, multi-file projects with an entry file, and a statement debugger with breakpoints, Step, Continue and Stop. Public runs use the same interpreter in a Docker worker with network access disabled. |
 | **Planned** (does not exist) | `break` and `continue`, `for` over ranges or `Text`, maps and user generics |
 | **Under research** (does not exist) | Static verification of contracts, AI features inside the language, and the evaluation of the hypothesis of the project |
+
+Interface commitments: [public interfaces and stability](docs/interface-stability.md).
 
 Detail: [roadmap](docs/roadmap.md) and [limitations](docs/limitations.md).
 

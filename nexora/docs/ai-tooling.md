@@ -9,10 +9,11 @@ that **today**, precisely, and what is still an intention.
 | | What it includes | Status |
 |-|------------------|--------|
 | **Features of the language** | Static types without implicit conversions, a single meaning per name, contracts and refined types with the explanation of every rule | Implemented |
-| **Structured data for tools** | Diagnostics, syntax tree, symbols and summary of the program as JSON, with [versioned schemas](json-protocol.md) | Implemented and tested |
+| **Command-line interface** | `nex` and its documented commands, options and exit codes | **Stable** ([compatibility promise](interface-stability.md)) |
+| **Structured data for tools** | Diagnostics, syntax tree, symbols and summary of the program as JSON, with [versioned schemas](json-protocol.md) | **Stable per schema version**; diagnostic machine fields are stable |
 | **Python API** | The `nexora.tooling` module: the same outputs, without going through the command line | Implemented and tested. **Experimental**: it may change before 1.0 |
-| **MCP server** | An optional server that offers the analysis as tools to a compatible assistant ([MCP](mcp.md)) | Implemented and tested with the client of the official SDK. Checked by hand in a Claude Code session; **in no other assistant** |
-| **Language server (LSP)** | Integration with editors ([LSP](lsp.md)): diagnostics, completion, hover, navigation, rename and formatting | Implemented and tested (`nexora-lsp`), including relative imports and negotiated position encodings |
+| **MCP server** | An optional server that offers the analysis as tools to a compatible assistant ([MCP](mcp.md)) | **Experimental**; tested with the client of the official SDK. Checked by hand in a Claude Code session; **in no other assistant** |
+| **Language server (LSP)** | Integration with editors ([LSP](lsp.md)): diagnostics, completion, hover, navigation, rename and formatting | **Experimental**; implemented and tested (`nexora-lsp`), including relative imports and negotiated position encodings |
 | **Research goal** | Finding out whether these decisions make it easier for an automated tool to understand, generate or fix code | **Not evaluated** |
 | **Integrations with AI models** | Calls to models, code generation, an assistant of its own | **They do not exist** |
 
