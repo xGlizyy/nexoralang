@@ -6,7 +6,7 @@
 - **Affects:** language scope, public interfaces, compatibility guarantees, supported platforms and
   the 1.0 release gate.
 - **Related to:** [limitations](../limitations.md), [roadmap](../roadmap.md),
-  [language specification](../language-spec.md), [security policy](../../SECURITY.md).
+  [language specification](../language-spec.md), [security policy](../../../SECURITY.md).
 
 ## Executive summary
 
