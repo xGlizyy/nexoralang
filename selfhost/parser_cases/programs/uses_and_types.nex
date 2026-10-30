@@ -1,0 +1,23 @@
+uses read "a.txt"
+uses write ""
+uses delete "x"
+uses read
+uses network 5
+uses process "python"
+
+fn types(a: List[Int], b: Option[Text], c: Result[Int, Text]) gives List[List[Int]] {
+}
+fn bad_types(a: List[], b: List[Int, Int], c: Result[Int], d: Int[Int], e: Option[Void]) {
+}
+fn qualified(a: models.Point, b: models . Point, c: List[models.Point]) {
+}
+fn unclosed(a: List[Int {
+}
+fn no_colon(a) {
+}
+fn no_paren a: Int {
+}
+fn dotted.name() {
+}
+fn () {
+}

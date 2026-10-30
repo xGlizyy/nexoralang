@@ -1,0 +1,25 @@
+fn f(a: Int) -> Int
+    requires a > 0
+    ensures result > 0
+{
+    return a
+}
+
+fn g(a: Int) -> Void {
+    print(a)
+}
+
+fn h(a: Int) -> List[Int] {
+    return [a]
+}
+
+fn k(n: Int) gives Int {
+    var i = 0
+    while i < n
+        invariant i >= 0
+        decreases n - i
+    {
+        i = i + 1
+    }
+    return i
+}

@@ -1,0 +1,5 @@
+let x = 1
+fn main() {
+    print(x)
+}
+print(3)

@@ -1,0 +1,9 @@
+fn f(x: Option[Int]) gives Int {
+    return match x {
+        Some(v) => match v {
+            0 => 1
+            _ => 2
+        }
+        None => 3
+    }
+}

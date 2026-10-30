@@ -1,0 +1,7 @@
+fn main() {
+    print(1)
+}
+}
+fn other() {
+    print(2)
+}

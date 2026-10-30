@@ -1,0 +1,28 @@
+import "a.nex"
+import "b"
+import ""
+import 5
+type Pct = Int where value >= 0 and value <= 100, "a percentage"
+import "late.nex"
+pub type Point = { x: Int, y: Int }
+pub fn f() {
+}
+pub let x = 1
+pub
+type Empty = { }
+type Wrong =
+{
+    x: Int
+}
+type Comma = { x: Int, }
+type NoType = { x }
+type Colors = enum { Red, Green, Blue }
+type Bad = enum { red }
+type Empty2 = enum { }
+type Trail = enum { A, }
+type Payload = enum { A(x: Int, y: Text), B(), C }
+type Open = enum { A(x }
+type NoCond = Int
+type NoCond2 = Int where
+type Upper = Int where value > 0, "ok"
+type lower = Int where value > 0

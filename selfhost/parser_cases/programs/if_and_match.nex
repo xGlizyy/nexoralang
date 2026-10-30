@@ -1,0 +1,39 @@
+type Shape = enum { Circle(radius: Float), Square(side: Float), Dot }
+
+fn area(s: Shape) gives Float {
+    if let Shape.Circle(r) = s {
+        return r
+    } else if let Shape.Square(a) = s {
+        return a
+    } else {
+        return 0.0
+    }
+    if {
+    }
+    if s == s
+    {
+    }
+    let n = match s {
+        Shape.Circle(r) => r * r
+        Shape.Square(a) => {
+            return a
+        }
+        Dot => 0.0,
+        _ => 1.0
+    }
+    let m = match s {
+    }
+    let o = match s {
+        Circle(r)
+    }
+    let q = match 1 {
+        1 => "one"
+        1.5 => "x"
+        "s" => "y"
+        true => "z"
+        x => "w"
+        a.b.C(1, _) => "v"
+        a . B => "u"
+    }
+    return n
+}
