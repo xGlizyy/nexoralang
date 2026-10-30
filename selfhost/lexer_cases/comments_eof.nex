@@ -1,0 +1,7 @@
+fn main() {
+    // comment at end of line
+    let a = 1 // trailing
+
+
+    let b = 2
+    // final comment without newline
