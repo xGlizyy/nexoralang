@@ -2,6 +2,8 @@
 
 This policy describes the compatibility promise for each interface. It is separate from the
 project's pre-1.0 status: the language and programs written in it can still change incompatibly.
+Package versioning, deprecation, migrations and support periods are defined in the
+[compatibility policy](compatibility.md).
 
 | Interface | Status | Compatibility promise |
 |-----------|--------|-----------------------|

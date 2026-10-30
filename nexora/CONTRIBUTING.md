@@ -117,9 +117,11 @@ failing test: if the output changed without you meaning it to, you have found a 
 
 Follow this order. Every step leaves something that can be checked.
 
-1. **Decide and document.** If it is a design decision or an incompatible change, add a
-   document to `docs/decisions/` (next free number) with the reason, the alternatives
-   ruled out and the effect on existing programs.
+1. **Decide and document.** Follow the [compatibility and versioning policy](docs/compatibility.md).
+   For a language-design or stable-contract change, add a document to `docs/decisions/` (next free
+   number) with the reason, alternatives ruled out and effect on existing programs. For any
+   incompatible change, describe the affected versions in `CHANGELOG.md` and provide migration
+   guidance.
 2. **Write the specification.** Add the syntax to the EBNF grammar of `docs/language-spec.md`
    and describe its meaning: types, possible errors, and what is checked before and while
    running.
@@ -132,7 +134,8 @@ Follow this order. Every step leaves something that can be checked.
 6. **Add an example** in `examples/` and register it in `tests/test_examples.py` and in
    `examples/README.md`.
 7. **Update the guides** (`docs/`), the `CHANGELOG.md` and, where applicable, `docs/limitations.md` and
-   `docs/roadmap.md`.
+   `docs/roadmap.md`. Add regression and compatibility tests for every behavior change; for
+   incompatible changes, test the old behavior or syntax and the documented migration.
 
 A feature is not finished until it works, has tests and its documentation describes
 its real behaviour. Do not document as existing something that is only planned.
@@ -203,7 +206,7 @@ Include the version (`nex --version`), the operating system, the smallest `.nex`
 reproduces the problem, what you expected and what happened. If the message starts with
 `internal error:`, run again with the environment variable `NEXORA_DEBUG=1` and attach the traceback.
 
-Security problems are reported as [`SECURITY.md`](SECURITY.md) says, not in a public
+Security problems are reported as the repository's [`SECURITY.md`](../SECURITY.md) says, not in a public
 issue.
 
 ## Conduct

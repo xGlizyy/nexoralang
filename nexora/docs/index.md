@@ -33,6 +33,7 @@ these pages is run by the automated tests and compared against the real output o
 | [Structured context](ai-context.md) | `nex context` and `nex symbols`: a summary and the symbols of a program, without running it |
 | [JSON protocol](json-protocol.md) | Every JSON format, its versions, its rules and its JSON Schemas |
 | [Public interfaces and stability](interface-stability.md) | The compatibility promise for the CLI, diagnostics, JSON, LSP, MCP and Python APIs |
+| [Compatibility and versioning](compatibility.md) | What may change before 1.0, the 1.x version rules, deprecation, migration and support periods |
 | [MCP server](mcp.md) | Optional server for compatible AI assistants: installation, tools and security |
 | [LSP](lsp.md) | VS Code, Neovim, Helix and Emacs integration through `nexora-lsp` |
 | [`nex inspect` schema](inspect-schema.md) | Every node and field of the syntax tree in JSON |
@@ -49,7 +50,7 @@ these pages is run by the automated tests and compared against the real output o
 | [Limitations](limitations.md) | What does not exist and the known risks |
 | [Changelog](../CHANGELOG.md) | What changed in each version |
 | [Contributing](../CONTRIBUTING.md) | Development environment and checks before proposing a change |
-| [Security](../SECURITY.md) | The real scope of the protections and how to report a problem |
+| [Security](../../SECURITY.md) | Supported releases, response targets, the real scope of protections and how to report a problem |
 
 ## Status of each part
 

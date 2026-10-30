@@ -74,7 +74,8 @@ production-ready.
 | **Planned** (does not exist) | `break` and `continue`, `for` over ranges or `Text`, maps and user generics |
 | **Under research** (does not exist) | Static verification of contracts, AI features inside the language, and the evaluation of the hypothesis of the project |
 
-Interface commitments: [public interfaces and stability](docs/interface-stability.md).
+Interface commitments: [public interfaces and stability](docs/interface-stability.md). The release,
+migration and deprecation rules are in the [compatibility and versioning policy](docs/compatibility.md).
 
 Detail: [roadmap](docs/roadmap.md) and [limitations](docs/limitations.md).
 
@@ -288,7 +289,7 @@ are handled in its [issue tracker](https://github.com/xGlizyy/nexoralang/issues)
 
 - [How to contribute](CONTRIBUTING.md): development environment, how to add a feature and which
   checks must pass.
-- [Security](SECURITY.md): what the project protects, what it does not, and how to report a problem.
+- [Security](../SECURITY.md): supported releases, vulnerability reporting and response targets, and what the project does and does not protect.
 - [Code of conduct](CODE_OF_CONDUCT.md).
 
 ## Licence

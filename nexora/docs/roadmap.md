@@ -27,6 +27,7 @@ that decision or an approved reference application requires them.
 
 | Item | How it is verified |
 |------|--------------------|
+| Public compatibility policy for pre-1.0 and 1.x, deprecation, migrations and support periods | `docs/compatibility.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `tests/test_compatibility_policy.py` |
 | Lexer and parser, with error recovery | `tests/test_lexer.py`, `tests/test_parser.py` |
 | Types `Int`, `Float`, `Bool`, `Text`, `Void`; inference and annotations | `tests/test_types.py` |
 | Immutable **lists** `List[T]`, with literals, equality and `List.length`, `List.get`, `List.append`, `List.concat` and `List.contains` | `tests/test_type_lists_syntax.py`, `tests/test_type_lists_values.py`, `tests/test_type_lists_functions.py` |
@@ -75,7 +76,7 @@ that decision or an approved reference application requires them.
 | **Continuous integration** | GitHub Actions runs the Python test suite on Python 3.11, 3.12 and 3.13 on Linux, Windows and macOS | Manual smoke checks on native Linux and macOS machines remain (see platform verification below) |
 | **Optional values and results** | `Option[T]` and `Result[T, E]`, with `Some`, `None`, `Ok` and `Err`, and the functions that recognize the variant and read the value. No `match` or `?` | `match`, `if let` and the `?` operator, when there are user enums |
 | **Verification on other platforms** | Checked on Windows 11 with Python 3.12; run on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13 by the continuous integration | Checking it on macOS and on Linux on a real machine, not only on the runners |
-| **Readiness for contributors** | MIT licence, contribution guide, security policy, code of conduct, public repository with its issue tracker | Defining a private contact channel |
+| **Readiness for contributors** | MIT licence, contribution guide, code of conduct, public repository with its issue tracker, and a repository-level security policy with private reporting and response targets | No LTS or security backports; only the latest published release of each component is supported |
 
 ## Main line: verifiable requirements
 

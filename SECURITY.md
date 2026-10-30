@@ -1,0 +1,125 @@
+# Security policy
+
+This document explains which NEXORA releases receive security fixes, what the project protects,
+what it does **not** protect, and how to report a vulnerability.
+
+NEXORA is an early-stage project that has not been audited. **We do not claim that it is safe to run
+untrusted code with it.**
+
+## Supported versions
+
+NEXORA is pre-1.0 and has no long-term-support branch. Only the most recent published release of
+each component receives security fixes; older releases do not receive backports. A newer published
+release replaces the previous release in this table.
+
+| Component | Supported release as of 30 October 2026 |
+| --- | --- |
+| `nexora-lang` on PyPI and npm (Python package and CLI) | `0.15.0` |
+| NEXORA Visual Studio Code extension | `0.14.0`, the latest published VSIX |
+
+Development snapshots and older releases are unsupported. If a vulnerability affects a supported
+component, fixes are prepared for its current source and included in a new release. There is no
+commitment to backport fixes to older releases.
+
+## How to report a vulnerability
+
+Use GitHub's **Report a vulnerability** button on the repository's **Security** tab:
+<https://github.com/xGlizyy/nexoralang/security/advisories/new>. The report is private and is
+shared with the project maintainers. **Do not describe a vulnerability in a public issue, pull
+request or discussion** before a coordinated disclosure.
+
+Please include, when possible:
+
+- The affected component and version (`nex --version` for the CLI), operating system and Python
+  version.
+- The smallest `.nex` program or command that reproduces the problem.
+- The impact you observed and what you expected to happen.
+
+### Response targets
+
+- We will acknowledge a report within **5 business days**.
+- We will provide an initial assessment within **10 business days** of receiving enough information
+  to reproduce or assess it. If essential details are missing, we will ask for them within that
+  period.
+- While a report remains open, we will send a status update at least every **10 business days**.
+
+These are response and communication targets, not a promise that a fix will be ready within a set
+period. Remediation time depends on the impact, affected components and the work needed to make a
+safe release. We will coordinate disclosure with the reporter and publish details after a fix is
+available or a coordinated disclosure plan has been agreed.
+
+There is no bug bounty programme.
+
+## What is in scope
+
+Any way of achieving, **through a `.nex` file or through the arguments of `nex`**, any of the
+following is considered a security problem:
+
+- Running Python code or system commands without the program's `uses process` declaration and the
+  matching `--allow-process` grant.
+- Reading or writing files, accessing a network origin, or starting a process **without** the matching
+  `uses` declaration, explicit CLI grant and environment permission.
+- Letting a program running in the web Playground or through the in-memory API access files, the
+  network or external processes.
+- Making `nex check` or `nex inspect` run the program they analyze.
+- Having a text of the program interpreted as code instead of being treated as data.
+
+Also of interest, although less serious, is any input that causes an internal error
+(`internal error`, exit code `70`) or an unexpected exit of the process.
+
+## What the design protects
+
+These properties follow from how the language is built and **are checked by automated tests**
+(`nexora/tests/test_security.py`, `nexora/tests/test_robustness.py`):
+
+| Property | How it is achieved | What the test checks |
+|----------|--------------------|----------------------|
+| External actions are explicit | File, network and process operations require a program declaration, a user grant and a host that enables them. The API defaults to `NoHost`; the Playground worker uses it too | Missing declarations and grants fail; worker tests verify it does not accept permission fields |
+| The interpreter does not evaluate Python code | It walks its own syntax tree. It does not use `eval`, `exec` or `compile` | The source code of every module is analyzed and any call to those functions is rejected |
+| The analysis does not run | `nex check` and `nex inspect` end before the execution stage | A program that prints, divides by zero and enters infinite recursion is analyzed without any of that happening |
+| Arguments are not code | `nex` only accepts file paths. There is no option to pass code | Arguments shaped like code are treated as names of files that do not exist |
+| The language core does not touch the system | The parser, checker and interpreter ask `host.py`; only the CLI grants local operations | Core modules do not import system, network or process APIs |
+| File writes are explicit | `write_file` requires `uses write`, `--allow-write` and an enabled local host | File permission tests verify all three parts are required |
+| No external dependencies | Only the Python standard library is used | The list of dependencies is empty, and the modules only import from a closed list |
+| Wrong inputs do not make the interpreter crash | Limits on nesting, on depth and on the number of errors | Truncated, mutated, random, binary, huge or extremely nested files produce diagnostics, not exceptions |
+
+## What is **not** protected
+
+- **NEXORA is not a sandbox.** The interpreter is a normal Python program, which runs with the
+  permissions of whoever launches it. The properties above depend on the interpreter having no
+  defects; there is no second barrier (process isolation, restriction of system calls) if it has
+  them.
+- **A process explicitly allowed by `--allow-process` runs with the user's operating-system
+  permissions.** It can access files, the network and other resources available to that user;
+  command and argument choices are not a sandbox boundary. Do not grant this permission to
+  untrusted code. The CLI timeout is available on POSIX interval-timer platforms; on Windows, use a
+  Job Object or container to enforce a deadline and stop the full process tree. On POSIX,
+  `Process.run` cleans up its process group when the command returns or is interrupted. A descendant
+  that deliberately leaves that group still requires an OS supervisor.
+- **An explicitly allowed network origin is not isolated from local services.** Only HTTPS requests
+  to the declared origin are made, but if that origin resolves to a private address, the CLI does
+  not block it. Only grant network access to programs you trust.
+- **Resource limits are opt-in.** `nex run` provides `--timeout` on POSIX interval-timer platforms,
+  `--max-memory` on Linux, and limits for source files, standard input, printed output and Text
+  values. `--timeout` and `--max-memory` are not enforced on every operating system. The limits do
+  not cover `nex test`, analysis time, file writes, network use, or all OS resources.
+- **The tests with random inputs are limited.** They go through a few thousand cases generated with
+  a fixed seed. They are not an exhaustive search and do not replace an audit.
+- **No external audit has been done**, nor any security analysis with specialized tools.
+- **The output of a program is not filtered.** A program can write terminal control sequences. If
+  you show the output of an untrusted program in a terminal, keep it in mind.
+
+Consequently: running an unknown NEXORA program should not be able to read your files or run other
+programs unless you explicitly grant those capabilities, but it can still use resources outside the
+limits you selected. For untrusted code, use OS isolation such as a restricted container, VM, or job
+object, and let that supervisor enforce a wall-clock deadline, memory, CPU, process-count,
+file-system and network limits.
+
+## Supply chain
+
+- The interpreter has no runtime dependencies.
+- The development dependencies (`pytest`, `pytest-cov`, `ruff`) and the packaging one (`setuptools`)
+  are downloaded from PyPI on installation. They are not pinned to exact versions or verified by
+  *hash*.
+- The packages of this project are published as `nexora-lang`, on PyPI and on npm. Any package
+  called `nexora`, or any other name, on PyPI or another index **does not come from this project**.

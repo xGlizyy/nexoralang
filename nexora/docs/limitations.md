@@ -148,7 +148,7 @@ with the local user's permissions. Even with these checks:
 - It has not been audited.
 
 Do not run untrusted NEXORA programs in an environment where excessive use of
-resources is a problem. The exact scope is in [`SECURITY.md`](../SECURITY.md).
+resources is a problem. The exact scope is in the repository's [`SECURITY.md`](../../SECURITY.md).
 
 ## Platforms
 
