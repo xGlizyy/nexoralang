@@ -1,0 +1,7 @@
+uses read "selfhost/host_cases/data"
+uses write "selfhost/host_cases/data"
+fn main() {
+    let path = "selfhost/host_cases/data/out.txt"
+    write_file(path, "written by the program")
+    print(read_file(path))
+}

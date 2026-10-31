@@ -1,0 +1,4 @@
+fn main() {
+    let url = "https://example.com/data"
+    print(Net.get(url))
+}

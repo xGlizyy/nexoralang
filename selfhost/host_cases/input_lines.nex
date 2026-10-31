@@ -1,0 +1,6 @@
+fn main() {
+    let first = input()
+    let second = input()
+    print(first + "-" + second)
+    print(Text.length(input()))
+}

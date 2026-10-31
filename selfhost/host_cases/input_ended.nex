@@ -1,0 +1,5 @@
+fn main() {
+    print(input())
+    print(input())
+    print(input())
+}

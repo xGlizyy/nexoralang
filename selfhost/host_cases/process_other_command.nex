@@ -1,0 +1,5 @@
+uses process "python"
+fn main() {
+    let command = "ruby"
+    print(Process.run(command, ["--version"]))
+}

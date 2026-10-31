@@ -1,0 +1,4 @@
+fn main() {
+    let path = "selfhost/host_cases/data/out.txt"
+    write_file(path, "x")
+}
