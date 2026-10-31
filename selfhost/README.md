@@ -188,8 +188,7 @@ NEXORA_CC="cc" PYTHONPATH=nexora/src python selfhost/compare_cgen.py --host
 
 `compare_cgen.py` compiles each program, runs it and `nex run`, and compares the standard output, the standard error and the exit
 status: the 46 programs of [`cgen_cases/`](cgen_cases/) (each runtime error, a broken `needs`, `promises`, `keeps`, `shrinks` and
-refined type, with the chain of calls and loops in the notes), 14 of the 16 examples of the repository (the other two read the
-host: they are in `--host`), 13 projects of modules and 18 cases of the host are equal.
+refined type, with the chain of calls and loops in the notes), all 16 examples of the repository, 13 projects of modules and 18 cases of the host are equal.
 
 ### The compiler compiles itself
 
