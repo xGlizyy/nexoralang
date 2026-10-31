@@ -165,8 +165,10 @@ What they say about stage 4:
 an executable that needs neither Python nor the interpreter. It compiles `Int`, `Float`, `Bool` and `Text`, lists, records, enums,
 `Option` and `Result`, `match` and `if let`, functions with `needs` and `promises`, refined types, `if`, `while` and `for` with
 `keeps` and `shrinks`, modules, `args`, `input`, `read_file` and `write_file`, and the built-in functions of `Text`, `Int`, `Float`,
-`List`, `Option` and `Result`. `Net.get` and `Process.run` and the options `--max-text`, `--max-output`, `--max-input` and
-`--max-source` are not compiled yet; the generator says so and writes nothing.
+`List`, `Option` and `Result`. The executables take the options of `nex run` (`--allow-read`, `--allow-write`, `--max-text`,
+`--max-output`, `--max-input`; `--max-source` has no meaning for them, they read no source). `Net.get` and `Process.run` decide as the
+Python host does (URL, what the program declares, what the user allowed) and, when everything allows the operation, stop with a
+diagnostic that says a compiled program cannot make it yet.
 
 ```bash
 nex run selfhost/cgen.nex --allow-read . --allow-write . -- PROGRAM.nex OUTPUT.c
@@ -200,7 +202,10 @@ refined type, with the chain of calls and loops in the notes), all 16 examples o
 4. Generation 1 is the same text as generation 0, byte by byte (2,141,337 bytes). Then the C compiler builds the second compiler from
    it, and that one writes the same C again (generation 2: `bootstrap.py --seed` runs all of it from a C file).
 
-`--seed generation0.c` starts from step 2, so a machine with a C compiler and nothing else can rebuild the compiler. The same
+[`seed/cgen.c`](seed/cgen.c) is the C of generation 1, kept so that a machine with a C compiler and nothing else can rebuild the
+compiler: `NEXORA_CC=cc python selfhost/bootstrap.py --seed selfhost/seed/cgen.c` (Python only drives the steps; it runs no NEXORA).
+It has to be replaced when `cgen.nex` or the runtime change: `bootstrap.py` says when the seed is older than the source, and
+generation 1 is the new seed. The same
 generator compiles `nex.nex`, and that executable is `nex check`, `nex run` and `nex test`: it writes the same text as `nex` on
 43 programs for `check`, 46 for `run` and 15 for `test` (`NEXORA_NEX=path compare_nex.py ...`), and it checks a program in 0.08 s
 where the Python implementation takes seconds. Compiled by the first compiler, 76 programs of the batteries above give the same
@@ -208,8 +213,8 @@ result as `nex run` in 73 seconds.
 
 | Limit | Why |
 |---|---|
-| The first compiler needs Python once | Generation 0 is written by the interpreter; a repository can keep that C as a seed (an open question of decision 0026). |
-| `Net.get`, `Process.run`, `--max-*` | Not compiled yet. |
+| The very first compiler needs Python once | Generation 0 was written by the interpreter; the seed keeps its result. |
+| `Net.get`, `Process.run` do not run | They need a TLS library and a process supervisor; the permission decisions are the same as `nex run`'s. |
 | The collector is conservative | A word that looks like a pointer keeps a block alive; it never frees what is in use, but it may keep what is not. |
 | The compiler needs a large stack for deep recursion | A NEXORA program can nest 1,000 calls; the default stack of the system is enough for the programs tested. |
 
