@@ -1,0 +1,24 @@
+fn main() {
+    let a = []
+    let b: List[Int] = []
+    let c = [1, "x"]
+    let d = [1, 2.5]
+    let e: List[Text] = [1]
+    let f = [[1], [2]]
+    let g = [[1], ["x"]]
+    let h = [print(1)]
+    print(List.length(5))
+    print(List.get([1], "x"))
+    print(List.append([1], "x"))
+    print(List.append([1], 2))
+    print(List.concat([1], ["x"]))
+    print(List.contains([1], "x"))
+    print(List.length([]))
+    print(List.get(b, 0) + 1)
+    let n: List[Int] = List.append(b, 1)
+    let m: List[Text] = List.append(b, 1)
+    print([1] == [1])
+    print([1] == ["x"])
+    print([1] < [2])
+    print(b == [])
+}

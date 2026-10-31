@@ -1,0 +1,21 @@
+fn f(x: Int) gives Int
+    needs a: x > 0
+    needs a: x > 1
+    needs x: x > 2
+    promises result: result > 0
+    needs b: x > 3
+{
+    var i = 0
+    while i < 3
+        keeps b: i >= 0
+        keeps c: i >= 0
+        shrinks 3 - i
+    {
+        i = i + 1
+    }
+    for k in [1]
+        keeps c: k > 0
+    {
+    }
+    return x
+}

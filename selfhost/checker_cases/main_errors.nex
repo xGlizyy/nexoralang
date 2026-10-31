@@ -1,0 +1,3 @@
+fn main(x: Int, y: Int) gives Int {
+    return x
+}

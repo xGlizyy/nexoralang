@@ -1,0 +1,13 @@
+fn main() {
+    if 1 {
+        print(1)
+    }
+    if "x" {
+    }
+    if 1.5 {
+    }
+    var i = 0
+    while i {
+        i = 1
+    }
+}

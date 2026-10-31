@@ -42,8 +42,8 @@ def python_result(path: Path) -> list[str]:
 
 def nexora_results(paths: list[Path]) -> dict[str, list[str]]:
     run = subprocess.run(
-        [sys.executable, "-m", "nexora", "run", str(HERE / "parser.nex"), "--allow-read", ".",
-         "--max-output", "1000000000", "--", "--program", *[str(p) for p in paths]],
+        [sys.executable, "-m", "nexora", "run", (HERE / "parser.nex").as_posix(), "--allow-read", ".",
+         "--max-output", "1000000000", "--", "--program", *[p.as_posix() for p in paths]],
         capture_output=True, text=True, encoding="utf-8",
     )
     if run.returncode != 0:
@@ -116,7 +116,7 @@ def main(names: list[str]) -> int:
             continue
         for path in batch:
             expected = python_result(path)
-            got = actual.get(str(path), ["<missing>"])
+            got = actual.get(path.as_posix(), ["<missing>"])
             if expected == ["SKIP"]:
                 skipped += 1
                 print(f"skip  {path}")

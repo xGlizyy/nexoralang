@@ -15,9 +15,9 @@ import "lexer.nex"
 
 uses read "."
 
-type Span = { line: Int, column: Int, end_line: Int, end_column: Int }
+pub type Span = { line: Int, column: Int, end_line: Int, end_column: Int }
 
-type Node = enum {
+pub type Node = enum {
     Null,
     Flag(value: Bool),
     Whole(value: Int),
@@ -28,7 +28,7 @@ type Node = enum {
     Obj(kind: Text, names: List[Text], values: List[Node])
 }
 
-type Problem = {
+pub type Problem = {
     code: Text, label: Text, hint: Text, notes: List[Text],
     line: Int, column: Int, end_line: Int, end_column: Int
 }
@@ -60,11 +60,11 @@ fn token_span(t: lexer.Token) gives Span {
     return Span(line: t.line, column: t.column, end_line: t.end_line, end_column: t.end_column)
 }
 
-fn join_spans(a: Span, b: Span) gives Span {
+pub fn join_spans(a: Span, b: Span) gives Span {
     return Span(line: a.line, column: a.column, end_line: b.end_line, end_column: b.end_column)
 }
 
-fn no_span() gives Span {
+pub fn no_span() gives Span {
     return Span(line: 0, column: 0, end_line: 0, end_column: 0)
 }
 
@@ -84,7 +84,7 @@ fn obj(kind: Text, names: List[Text], values: List[Node]) gives Node {
 }
 
 // A name that may be absent: the empty text stands for None.
-fn optional_text(value: Text) gives Node {
+pub fn optional_text(value: Text) gives Node {
     if value == "" {
         return Node.Null()
     }
@@ -2574,12 +2574,12 @@ fn declared_type_names(tokens: List[lexer.Token]) gives Names {
     return Names(types: types, records: records)
 }
 
-type Outcome = { program: Node, diagnostics: List[Problem] }
+pub type Outcome = { program: Node, diagnostics: List[Problem] }
 
 // The program and the syntax errors found. When the list is not empty the program is partial: it holds
 // the functions and statements that parsed, without the statements that have an error and without the
 // functions whose declaration has one. It is for tools; it is never run.
-fn parse_program(tokens: List[lexer.Token]) gives Outcome {
+pub fn parse_program(tokens: List[lexer.Token]) gives Outcome {
     let names = declared_type_names(tokens)
     var current = Parser(
         tokens: tokens, pos: 0, nesting: 0, type_names: names.types, record_names: names.records,
@@ -2663,7 +2663,7 @@ fn quote(text: Text) gives Text {
     return result + "\""
 }
 
-fn to_json(node: Node) gives Text {
+pub fn to_json(node: Node) gives Text {
     return match node {
         Node.Null => "null"
         Node.Flag(value) => to_text(value)
@@ -2752,7 +2752,7 @@ fn words_after_first(line: Text) gives List[Text] {
     return words
 }
 
-fn join_texts(items: List[Text], separator: Text) gives Text {
+pub fn join_texts(items: List[Text], separator: Text) gives Text {
     var result = ""
     var i = 0
     while i < List.length(items)
@@ -2767,7 +2767,7 @@ fn join_texts(items: List[Text], separator: Text) gives Text {
     return result
 }
 
-fn span_text(line: Int, column: Int, end_line: Int, end_column: Int) gives Text {
+pub fn span_text(line: Int, column: Int, end_line: Int, end_column: Int) gives Text {
     return to_text(line) + ":" + to_text(column) + "-" + to_text(end_line) + ":" + to_text(end_column)
 }
 

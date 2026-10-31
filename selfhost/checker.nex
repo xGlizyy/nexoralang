@@ -1,0 +1,1864 @@
+// The NEXORA checker, written in NEXORA (decision 0024, stage 2).
+//
+// It follows nexora/src/nexora/checker.py. Like the parser, it threads its state through every call:
+// a check returns the new state beside its result, and an error is added to the state.
+//
+// The result of checking is a new tree where every expression node has a "type" field, which is what
+// `nex inspect` shows. A type is a Text ("Int", "List[Text]"...); the empty Text stands for None, the
+// type of an expression that had an error.
+//
+// This first slice checks functions, variables, loops, `if`, operators, lists and calls to the
+// functions of the program and the built-in ones. What it does not know yet it reports as
+// `unsupported` in the state, and the comparison with the Python checker skips those programs.
+
+import "lexer.nex"
+import "parser.nex"
+
+uses read "."
+
+// A name that is visible: a parameter, a variable or the iterator of a `for`.
+type Binding = {
+    name: Text, category: Text, ty: Text, mutable: Bool, loop_variable: Bool, line: Int, column: Int
+}
+
+// What a call needs to know about a function. `generic` marks the built-ins of List, whose types
+// mention the type variable T.
+type Sig = {
+    name: Text, param_names: List[Text], param_types: List[Text], return_type: Text, builtin: Bool,
+    generic: Bool, line: Int, column: Int
+}
+
+type State = {
+    problems: List[parser.Problem], user: List[Sig], function: Text, return_type: Text,
+    in_example: Text, unsupported: Text
+}
+
+type Checked = { node: parser.Node, ty: Text, state: State }
+
+type Free = { state: State, free: Bool }
+
+type Typed = { node: parser.Node, state: State }
+
+type Flow = { node: parser.Node, state: State, env: List[Binding], returns: Bool }
+
+// The types a value can have, and the one of a call to a function that gives nothing.
+fn any_value() gives Text {
+    return "Int | Float | Bool | Text"
+}
+
+// Reading the tree
+
+fn kind_of(node: parser.Node) gives Text {
+    return match node {
+        parser.Node.Obj(kind, names, values) => kind
+        _ => ""
+    }
+}
+
+fn index_of(names: List[Text], name: Text) gives Int {
+    var i = 0
+    while i < List.length(names)
+        shrinks List.length(names) - i
+    {
+        if List.get(names, i) == name {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn field(node: parser.Node, name: Text) gives parser.Node {
+    return match node {
+        parser.Node.Obj(kind, names, values) => field_at(names, values, name)
+        _ => parser.Node.Null()
+    }
+}
+
+fn field_at(names: List[Text], values: List[parser.Node], name: Text) gives parser.Node {
+    let index = index_of(names, name)
+    if index < 0 {
+        return parser.Node.Null()
+    }
+    return List.get(values, index)
+}
+
+fn text_of(node: parser.Node) gives Text {
+    return match node {
+        parser.Node.Str(value) => value
+        _ => ""
+    }
+}
+
+fn items_of(node: parser.Node) gives List[parser.Node] {
+    return match node {
+        parser.Node.Items(items) => items
+        _ => []
+    }
+}
+
+fn is_null(node: parser.Node) gives Bool {
+    return match node {
+        parser.Node.Null => true
+        _ => false
+    }
+}
+
+fn span_of(node: parser.Node) gives parser.Span {
+    return match field(node, "span") {
+        parser.Node.Place(line, column, end_line, end_column) => parser.Span(
+            line: line, column: column, end_line: end_line, end_column: end_column
+        )
+        _ => parser.no_span()
+    }
+}
+
+// The same node with the value of one field replaced.
+fn with_field(node: parser.Node, name: Text, value: parser.Node) gives parser.Node {
+    return match node {
+        parser.Node.Obj(kind, names, values) => parser.Node.Obj(kind, names, replace_at(values, index_of(names, name), value))
+        _ => node
+    }
+}
+
+fn replace_at(values: List[parser.Node], index: Int, value: parser.Node) gives List[parser.Node] {
+    var result: List[parser.Node] = []
+    var i = 0
+    while i < List.length(values)
+        shrinks List.length(values) - i
+    {
+        if i == index {
+            result = List.append(result, value)
+        } else {
+            result = List.append(result, List.get(values, i))
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// The same node with its type added, as `nex inspect` shows it.
+fn with_type(node: parser.Node, ty: Text) gives parser.Node {
+    return match node {
+        parser.Node.Obj(kind, names, values) => parser.Node.Obj(
+            kind, List.append(names, "type"), List.append(values, parser.optional_text(ty))
+        )
+        _ => node
+    }
+}
+
+// State
+
+fn with_problems(state: State, problems: List[parser.Problem]) gives State {
+    return State(
+        problems: problems, user: state.user, function: state.function, return_type: state.return_type,
+        in_example: state.in_example, unsupported: state.unsupported
+    )
+}
+
+fn with_user(state: State, user: List[Sig]) gives State {
+    return State(
+        problems: state.problems, user: user, function: state.function, return_type: state.return_type,
+        in_example: state.in_example, unsupported: state.unsupported
+    )
+}
+
+fn with_function(state: State, function: Text, return_type: Text) gives State {
+    return State(
+        problems: state.problems, user: state.user, function: function, return_type: return_type,
+        in_example: state.in_example, unsupported: state.unsupported
+    )
+}
+
+fn with_example(state: State, in_example: Text) gives State {
+    return State(
+        problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
+        in_example: in_example, unsupported: state.unsupported
+    )
+}
+
+// Records the first thing the checker does not know yet.
+fn unsupported(state: State, reason: Text) gives State {
+    if state.unsupported != "" {
+        return state
+    }
+    return State(
+        problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
+        in_example: state.in_example, unsupported: reason
+    )
+}
+
+fn report(state: State, code: Text, label: Text, hint: Text, notes: List[Text], span: parser.Span) gives State {
+    let problem = parser.Problem(
+        code: code, label: label, hint: hint, notes: notes,
+        line: span.line, column: span.column, end_line: span.end_line, end_column: span.end_column
+    )
+    return with_problems(state, List.append(state.problems, problem))
+}
+
+fn note_declared(name: Text, line: Int, column: Int) gives Text {
+    return "'" + name + "' is declared at line " + to_text(line) + ", column " + to_text(column) + "."
+}
+
+// Built-in functions
+
+fn make_sig(name: Text, param_names: List[Text], param_types: List[Text], return_type: Text, generic: Bool) gives Sig {
+    return Sig(
+        name: name, param_names: param_names, param_types: param_types, return_type: return_type,
+        builtin: true, generic: generic, line: 0, column: 0
+    )
+}
+
+fn builtin_names() gives List[Text] {
+    return (
+        [
+            "print", "to_text", "to_float", "to_int", "args", "input", "read_file", "write_file", "Net.get",
+            "Process.run", "Text.length", "Text.slice", "Text.contains", "Text.starts_with", "Text.ends_with",
+            "Int.can_parse", "Int.parse", "Float.can_parse", "Float.parse", "List.length", "List.get",
+            "List.append", "List.concat", "List.contains", "Some", "Ok", "Err", "Option.is_some",
+            "Option.is_none", "Option.value_or", "Option.value", "Result.is_ok", "Result.is_err",
+            "Result.value_or", "Result.value", "Result.error"
+        ]
+    )
+}
+
+fn is_builtin(name: Text) gives Bool {
+    return List.contains(builtin_names(), name)
+}
+
+// The built-ins this slice checks. The others are reported as unsupported by the call.
+fn builtin(name: Text) gives Sig {
+    let any = any_value()
+    if name == "print" {
+        return make_sig(name, ["value"], [any], "Void", false)
+    }
+    if name == "to_text" {
+        return make_sig(name, ["value"], [any], "Text", false)
+    }
+    if name == "to_float" {
+        return make_sig(name, ["value"], ["Int"], "Float", false)
+    }
+    if name == "to_int" {
+        return make_sig(name, ["value"], ["Float"], "Int", false)
+    }
+    if name == "args" {
+        return make_sig(name, [], [], "List[Text]", false)
+    }
+    if name == "input" {
+        return make_sig(name, [], [], "Text", false)
+    }
+    if name == "Text.length" {
+        return make_sig(name, ["text"], ["Text"], "Int", false)
+    }
+    if name == "Text.slice" {
+        return make_sig(name, ["text", "start", "end"], ["Text", "Int", "Int"], "Text", false)
+    }
+    if name == "Text.contains" or name == "Text.starts_with" or name == "Text.ends_with" {
+        return make_sig(name, ["text", "part"], ["Text", "Text"], "Bool", false)
+    }
+    if name == "Int.can_parse" {
+        return make_sig(name, ["text"], ["Text"], "Bool", false)
+    }
+    if name == "Int.parse" {
+        return make_sig(name, ["text"], ["Text"], "Int", false)
+    }
+    if name == "Float.can_parse" {
+        return make_sig(name, ["text"], ["Text"], "Bool", false)
+    }
+    if name == "Float.parse" {
+        return make_sig(name, ["text"], ["Text"], "Float", false)
+    }
+    if name == "List.length" {
+        return make_sig(name, ["xs"], ["List[T]"], "Int", true)
+    }
+    if name == "List.get" {
+        return make_sig(name, ["xs", "i"], ["List[T]", "Int"], "T", true)
+    }
+    if name == "List.append" {
+        return make_sig(name, ["xs", "x"], ["List[T]", "T"], "List[T]", true)
+    }
+    if name == "List.concat" {
+        return make_sig(name, ["xs", "ys"], ["List[T]", "List[T]"], "List[T]", true)
+    }
+    if name == "List.contains" {
+        return make_sig(name, ["xs", "x"], ["List[T]", "T"], "Bool", true)
+    }
+    return make_sig("", [], [], "", false)
+}
+
+fn describe(sig: Sig) gives Text {
+    var params = ""
+    var i = 0
+    while i < List.length(sig.param_names)
+        shrinks List.length(sig.param_names) - i
+    {
+        if i > 0 {
+            params = params + ", "
+        }
+        var shown = List.get(sig.param_types, i)
+        if shown == "" {
+            shown = "?"
+        }
+        params = params + List.get(sig.param_names, i) + ": " + shown
+        i = i + 1
+    }
+    if sig.return_type == "Void" {
+        return "fn " + sig.name + "(" + params + ")"
+    }
+    var given = sig.return_type
+    if given == "" {
+        given = "?"
+    }
+    return "fn " + sig.name + "(" + params + ") gives " + given
+}
+
+fn user_index(state: State, name: Text) gives Int {
+    var i = 0
+    while i < List.length(state.user)
+        shrinks List.length(state.user) - i
+    {
+        let sig = List.get(state.user, i)
+        if sig.name == name {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+// Types
+
+fn is_value_type(ty: Text) gives Bool {
+    return ty == "Int" or ty == "Float" or ty == "Bool" or ty == "Text" or is_list(ty)
+}
+
+fn is_list(ty: Text) gives Bool {
+    return Text.starts_with(ty, "List[") and Text.ends_with(ty, "]")
+}
+
+// The element type of a list type, or the empty text when it is not one.
+fn list_item(ty: Text) gives Text {
+    if is_list(ty) {
+        return Text.slice(ty, 5, Text.length(ty) - 1)
+    }
+    return ""
+}
+
+fn conversion_hint(found: Text, expected: Text) gives Text {
+    if found == "Int" and expected == "Float" {
+        return "Convert the Int explicitly with to_float(...)."
+    }
+    if found == "Float" and expected == "Int" {
+        return "Convert the Float explicitly with to_int(...), which drops the fractional part."
+    }
+    if expected == "Text" and is_value_type(found) {
+        return "Convert the value explicitly with to_text(...)."
+    }
+    return ""
+}
+
+fn binary_hint(operator: Text, left: Text, right: Text) gives Text {
+    let numbers = (left == "Int" and right == "Float") or (left == "Float" and right == "Int")
+    let texts = left == "Text" or right == "Text"
+    let only_basic = (left == "Text" or left == "Int" or left == "Float") and (right == "Text" or right == "Int" or right == "Float")
+    if left == "Void" or right == "Void" {
+        return "A call to a Void function does not produce a value."
+    }
+    if operator == "and" or operator == "or" {
+        return "'" + operator + "' combines two Bool values."
+    }
+    if numbers {
+        return "Int and Float are never mixed. Convert one side: to_float(x) turns an Int into a Float."
+    }
+    if operator == "==" or operator == "!=" {
+        return "Both sides of '" + operator + "' must have the same type."
+    }
+    if operator == "<" or operator == "<=" or operator == ">" or operator == ">=" {
+        if texts and only_basic {
+            return (
+                "'" + operator + "' compares two values of the same type. Convert one side: to_text(...) "
+                + "turns a number into a Text, and Int.parse(...) reads an Int from a Text."
+            )
+        }
+        return "'" + operator + "' compares two Int values, two Float values or two Text values."
+    }
+    if operator == "+" and texts {
+        return "'+' joins Text with Text. Convert the other side with to_text(...)."
+    }
+    if left == "Text" and right == "Text" {
+        return "The only arithmetic operator defined for Text is '+', which joins two texts."
+    }
+    if left == "Bool" or right == "Bool" {
+        return "Arithmetic works on numbers. Bool values are combined with 'and', 'or' and 'not'."
+    }
+    return ""
+}
+
+// The type of `left operator right`, or the empty text when the operation is not defined. Both
+// operands always have the same type: nothing is converted implicitly.
+fn binary_result(operator: Text, left: Text, right: Text) gives Text {
+    if left != right or not is_value_type(left) {
+        return ""
+    }
+    if operator == "and" or operator == "or" {
+        if left == "Bool" {
+            return "Bool"
+        }
+        return ""
+    }
+    if operator == "==" or operator == "!=" {
+        return "Bool"
+    }
+    if operator == "<" or operator == "<=" or operator == ">" or operator == ">=" {
+        if left == "Int" or left == "Float" or left == "Text" {
+            return "Bool"
+        }
+        return ""
+    }
+    if left == "Int" or left == "Float" {
+        return left
+    }
+    if left == "Text" and operator == "+" {
+        return "Text"
+    }
+    return ""
+}
+
+// Checks that an expression of type `found` can be used where `expected` is needed.
+fn expect_type(state: State, expected: Text, found: Text, span: parser.Span, notes: List[Text]) gives State {
+    if expected == found {
+        return state
+    }
+    return report(
+        state, "E2011", "Expected " + expected + ", found " + found, conversion_hint(found, expected),
+        notes, span
+    )
+}
+
+// Visible names
+
+fn binding_index(env: List[Binding], name: Text) gives Int {
+    var i = List.length(env) - 1
+    while i >= 0
+        shrinks i + 1
+    {
+        let binding = List.get(env, i)
+        if binding.name == name {
+            return i
+        }
+        i = i - 1
+    }
+    return 0 - 1
+}
+
+fn make_binding(name: Text, category: Text, ty: Text, mutable: Bool, loop_variable: Bool, span: parser.Span) gives Binding {
+    return Binding(
+        name: name, category: category, ty: ty, mutable: mutable, loop_variable: loop_variable,
+        line: span.line, column: span.column
+    )
+}
+
+// Reports E2006 and says that `name` cannot be declared when it is a built-in, a function or already
+// visible: functions, parameters and variables share one namespace.
+fn name_is_free(state: State, env: List[Binding], name: Text, span: parser.Span) gives Free {
+    if is_builtin(name) or user_index(state, name) >= 0 {
+        var what = "a function"
+        if is_builtin(name) {
+            what = "a built-in function"
+        }
+        return Free(
+            state: report(
+                state, "E2006", "'" + name + "' is the name of " + what + " and cannot be used for something else",
+                "Choose a different name.", [], span
+            ),
+            free: false
+        )
+    }
+    let index = binding_index(env, name)
+    if index >= 0 {
+        let existing = List.get(env, index)
+        return Free(
+            state: report(
+                state, "E2006", "'" + name + "' is already declared and still visible here",
+                "Choose a different name: a visible name cannot be declared again.",
+                [
+                    "It was first declared at line " + to_text(existing.line) + ", column "
+                    + to_text(existing.column) + "."
+                ],
+                span
+            ),
+            free: false
+        )
+    }
+    return Free(state: state, free: true)
+}
+
+// Expressions
+
+fn checked(node: parser.Node, ty: Text, state: State) gives Checked {
+    return Checked(node: with_type(node, ty), ty: ty, state: state)
+}
+
+// The type of each argument is its own expression's; the Checked keeps the typed nodes in order.
+type ArgList = { nodes: List[parser.Node], types: List[Text], state: State }
+
+fn check_expression(state: State, env: List[Binding], node: parser.Node, expected: Text) gives Checked {
+    let kind = kind_of(node)
+    if kind == "IntLiteral" {
+        return checked(node, "Int", state)
+    }
+    if kind == "FloatLiteral" {
+        return checked(node, "Float", state)
+    }
+    if kind == "TextLiteral" {
+        return checked(node, "Text", state)
+    }
+    if kind == "BoolLiteral" {
+        return checked(node, "Bool", state)
+    }
+    if kind == "ListLiteral" {
+        return check_list_literal(state, env, node, expected)
+    }
+    if kind == "Group" {
+        let inner = check_expression(state, env, field(node, "expression"), expected)
+        return checked(with_field(node, "expression", inner.node), inner.ty, inner.state)
+    }
+    if kind == "Name" {
+        return check_name(state, env, node)
+    }
+    if kind == "Unary" {
+        return check_unary(state, env, node)
+    }
+    if kind == "Binary" {
+        return check_binary(state, env, node)
+    }
+    if kind == "Call" {
+        return check_call(state, env, node, expected)
+    }
+    return checked(node, "", unsupported(state, kind))
+}
+
+fn check_name(state: State, env: List[Binding], node: parser.Node) gives Checked {
+    let name = text_of(field(node, "name"))
+    let index = binding_index(env, name)
+    if index >= 0 {
+        let binding = List.get(env, index)
+        return checked(node, binding.ty, state)
+    }
+    if is_builtin(name) or user_index(state, name) >= 0 {
+        return checked(
+            node, "",
+            report(
+                state, "E2011", "'" + name + "' is a function, not a value",
+                "Call it with parentheses: " + name + "(...)", [], span_of(node)
+            )
+        )
+    }
+    if name == "None" {
+        return checked(node, "", unsupported(state, "None"))
+    }
+    return checked(node, "", check_unknown_variable(state, env, name, span_of(node)))
+}
+
+fn check_unknown_variable(state: State, env: List[Binding], name: Text, span: parser.Span) gives State {
+    if state.in_example != "" {
+        return report(
+            state, "E2005", "There is no variable named '" + name + "' here",
+            "An example has no parameters: write its inputs as values, for example: " + state.in_example + "(2)",
+            [], span
+        )
+    }
+    if name == "result" {
+        return report(
+            state, "E2005", "There is no variable named 'result' here",
+            "'result' only exists inside a 'promises' clause of a function that gives a value.", [], span
+        )
+    }
+    if List.length(env) == 0 {
+        return report(
+            state, "E2005", "There is no variable named '" + name + "' here", "Declare it first with 'let'.", [], span
+        )
+    }
+    return unsupported(state, "close matches")
+}
+
+fn check_unary(state: State, env: List[Binding], node: parser.Node) gives Checked {
+    let operand = check_expression(state, env, field(node, "operand"), "")
+    let rebuilt = with_field(node, "operand", operand.node)
+    if operand.ty == "" {
+        return checked(rebuilt, "", operand.state)
+    }
+    let operator = text_of(field(node, "operator"))
+    if operator == "-" {
+        if operand.ty == "Int" or operand.ty == "Float" {
+            return checked(rebuilt, operand.ty, operand.state)
+        }
+        return checked(
+            rebuilt, "",
+            report(
+                operand.state, "E2011", "Cannot apply '-' to " + operand.ty, "'-' negates an Int or a Float.", [],
+                span_of(node)
+            )
+        )
+    }
+    if operand.ty == "Bool" {
+        return checked(rebuilt, "Bool", operand.state)
+    }
+    var hint = "'not' negates a Bool."
+    if operand.ty == "Int" or operand.ty == "Float" {
+        hint = hint + " To negate a comparison, put it in parentheses: not (a == b)"
+    }
+    return checked(
+        rebuilt, "",
+        report(operand.state, "E2011", "Cannot apply 'not' to " + operand.ty, hint, [], span_of(node))
+    )
+}
+
+fn is_empty_list_literal(node: parser.Node) gives Bool {
+    return kind_of(node) == "ListLiteral" and List.length(items_of(field(node, "elements"))) == 0
+}
+
+fn check_binary(state: State, env: List[Binding], node: parser.Node) gives Checked {
+    let operator = text_of(field(node, "operator"))
+    let left = check_expression(state, env, field(node, "left"), "")
+    // The left side is an expected type for an empty list on the right: `[1] == []`.
+    var right_expected = ""
+    if is_empty_list_literal(field(node, "right")) {
+        right_expected = left.ty
+    }
+    let right = check_expression(left.state, env, field(node, "right"), right_expected)
+    let rebuilt = with_field(with_field(node, "left", left.node), "right", right.node)
+    if left.ty == "" or right.ty == "" {
+        return checked(rebuilt, "", right.state)
+    }
+    let result = binary_result(operator, left.ty, right.ty)
+    if result == "" {
+        return checked(
+            rebuilt, "",
+            report(
+                right.state, "E2011", "Cannot apply '" + operator + "' to " + left.ty + " and " + right.ty,
+                binary_hint(operator, left.ty, right.ty), [], parser.Span(
+                    line: span_line(field(node, "operator_span")), column: span_column(field(node, "operator_span")),
+                    end_line: span_end_line(field(node, "operator_span")),
+                    end_column: span_end_column(field(node, "operator_span"))
+                )
+            )
+        )
+    }
+    return checked(rebuilt, result, right.state)
+}
+
+fn span_line(place: parser.Node) gives Int {
+    return match place {
+        parser.Node.Place(line, column, end_line, end_column) => line
+        _ => 0
+    }
+}
+
+fn span_column(place: parser.Node) gives Int {
+    return match place {
+        parser.Node.Place(line, column, end_line, end_column) => column
+        _ => 0
+    }
+}
+
+fn span_end_line(place: parser.Node) gives Int {
+    return match place {
+        parser.Node.Place(line, column, end_line, end_column) => end_line
+        _ => 0
+    }
+}
+
+fn span_end_column(place: parser.Node) gives Int {
+    return match place {
+        parser.Node.Place(line, column, end_line, end_column) => end_column
+        _ => 0
+    }
+}
+
+fn place_span(place: parser.Node) gives parser.Span {
+    return parser.Span(
+        line: span_line(place), column: span_column(place), end_line: span_end_line(place),
+        end_column: span_end_column(place)
+    )
+}
+
+// The type of `[a, b]`, or the empty text if an element is invalid or an empty list is ambiguous. The
+// first element (or the expected type) fixes the element type.
+fn check_list_literal(state: State, env: List[Binding], node: parser.Node, expected: Text) gives Checked {
+    var item = list_item(expected)
+    let elements = items_of(field(node, "elements"))
+    if List.length(elements) == 0 {
+        if item == "" {
+            return checked(
+                node, "",
+                report(
+                    state, "E2011", "Cannot infer the type of an empty list without an expected type",
+                    "Write the type of its elements, for example: let xs: List[Int] = [].", [], span_of(node)
+                )
+            )
+        }
+        return checked(node, "List[" + item + "]", state)
+    }
+    var current = state
+    var invalid = false
+    var typed: List[parser.Node] = []
+    var i = 0
+    while i < List.length(elements)
+        shrinks List.length(elements) - i
+    {
+        let element = List.get(elements, i)
+        let found = check_expression(current, env, element, item)
+        typed = List.append(typed, found.node)
+        current = found.state
+        if found.ty == "" {
+            invalid = true
+        } else if found.ty == "Void" {
+            current = report(
+                current, "E2011", "This call does not produce a value to put in a list", "", [], span_of(element)
+            )
+            invalid = true
+        } else if item == "" {
+            item = found.ty
+        } else if item != found.ty {
+            var notes: List[Text] = []
+            if expected == "" {
+                notes = ["The first element of this list is " + item + "."]
+            }
+            current = report(
+                current, "E2011", "Expected " + item + ", found " + found.ty,
+                "Every element of a list has the same type: " + item + ".", notes, span_of(element)
+            )
+            invalid = true
+        }
+        i = i + 1
+    }
+    let rebuilt = with_field(node, "elements", parser.Node.Items(typed))
+    if invalid or item == "" {
+        return checked(rebuilt, "", current)
+    }
+    return checked(rebuilt, "List[" + item + "]", current)
+}
+
+// The type each argument is checked against before the arguments are read: only a resolved signature
+// fixes one, and a parameter that still mentions T or accepts any value fixes nothing.
+fn expectation(sig: Sig, index: Int) gives Text {
+    if index >= List.length(sig.param_types) {
+        return ""
+    }
+    let declared = List.get(sig.param_types, index)
+    if declared == any_value() or (sig.generic and has_variable(declared)) {
+        return ""
+    }
+    return declared
+}
+
+fn check_arguments(state: State, env: List[Binding], arguments: List[parser.Node], sig: Sig) gives ArgList {
+    var current = state
+    var nodes: List[parser.Node] = []
+    var types: List[Text] = []
+    var i = 0
+    while i < List.length(arguments)
+        shrinks List.length(arguments) - i
+    {
+        let found = check_expression(current, env, List.get(arguments, i), expectation(sig, i))
+        nodes = List.append(nodes, found.node)
+        types = List.append(types, found.ty)
+        current = found.state
+        i = i + 1
+    }
+    return ArgList(nodes: nodes, types: types, state: current)
+}
+
+fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Text) gives Checked {
+    let callee = text_of(field(node, "callee"))
+    let callee_span = place_span(field(node, "callee_span"))
+    let arguments = items_of(field(node, "arguments"))
+    let qualifier = text_of(field(node, "qualifier"))
+    var sig = builtin(callee)
+    let user = user_index(state, callee)
+    if qualifier != "" and sig.name == "" and user < 0 {
+        // `Name.function(...)` with no such function: it needs a suggestion.
+        return checked(node, "", unsupported(state, "qualified call"))
+    }
+    if is_builtin(callee) and sig.name == "" {
+        return checked(node, "", unsupported(state, "built-in " + callee))
+    }
+    if sig.name == "" and user >= 0 {
+        sig = List.get(state.user, user)
+    }
+    let known = sig.name != ""
+    var expectations_sig = sig
+    if not known {
+        expectations_sig = make_sig("", [], [], "", false)
+    }
+    let given = check_arguments(state, env, arguments, expectations_sig)
+    let rebuilt = with_field(node, "arguments", parser.Node.Items(given.nodes))
+    if not known {
+        if binding_index(env, callee) >= 0 {
+            return checked(
+                rebuilt, "",
+                report(given.state, "E2008", "'" + callee + "' is a variable, not a function", "", [], callee_span)
+            )
+        }
+        return checked(rebuilt, "", unsupported(given.state, "function hint"))
+    }
+    let expected_count = List.length(sig.param_types)
+    let count = List.length(arguments)
+    if count != expected_count {
+        var plural = "s"
+        if expected_count == 1 {
+            plural = ""
+        }
+        var verb = "were"
+        if count == 1 {
+            verb = "was"
+        }
+        var result = sig.return_type
+        if sig.generic {
+            result = ""
+        }
+        return checked(
+            rebuilt, result,
+            report(
+                given.state, "E2009",
+                "'" + sig.name + "' takes " + to_text(expected_count) + " argument" + plural + ", but "
+                + to_text(count) + " " + verb + " given",
+                "", ["Its signature is: " + describe(sig)], span_of(node)
+            )
+        )
+    }
+    if sig.generic {
+        return check_generic_call(given, rebuilt, sig, arguments)
+    }
+    var current = given.state
+    var i = 0
+    while i < count
+        shrinks count - i
+    {
+        let found = List.get(given.types, i)
+        let wanted = List.get(sig.param_types, i)
+        if found != "" and wanted != "" {
+            if found == "Void" {
+                current = report(
+                    current, "E2011", "This call does not produce a value to pass as an argument", "", [],
+                    span_of(List.get(arguments, i))
+                )
+            } else if wanted != any_value() {
+                current = expect_type(
+                    current, wanted, found, span_of(List.get(arguments, i)),
+                    [
+                        "This is the argument for '" + List.get(sig.param_names, i) + "' in: " + describe(sig)
+                    ]
+                )
+            }
+        }
+        i = i + 1
+    }
+    return checked(rebuilt, sig.return_type, current)
+}
+
+// Substitutes the type variable T in a type written with it.
+fn has_variable(ty: Text) gives Bool {
+    return ty == "T" or Text.contains(ty, "[T]")
+}
+
+fn substitute(ty: Text, bound: Text) gives Text {
+    if bound == "" {
+        return ty
+    }
+    if ty == "T" {
+        return bound
+    }
+    if ty == "List[T]" {
+        return "List[" + bound + "]"
+    }
+    return ty
+}
+
+// A call to a built-in of List: each argument is unified, in order, with its parameter type, and the
+// result is the return type after the same substitution.
+fn check_generic_call(given: ArgList, node: parser.Node, sig: Sig, arguments: List[parser.Node]) gives Checked {
+    var current = given.state
+    var bound = ""
+    var invalid = false
+    var i = 0
+    while i < List.length(arguments)
+        shrinks List.length(arguments) - i
+    {
+        let found = List.get(given.types, i)
+        let declared = List.get(sig.param_types, i)
+        let argument = List.get(arguments, i)
+        let notes = ["This is the argument for '" + List.get(sig.param_names, i) + "' in: " + describe(sig)]
+        if found == "" {
+            invalid = true
+        } else if found == "Void" {
+            current = report(
+                current, "E2011", "This call does not produce a value to pass as an argument", "", [],
+                span_of(argument)
+            )
+            invalid = true
+        } else {
+            let wanted = substitute(declared, bound)
+            if has_variable(wanted) {
+                // Still mentions the variable: unify.
+                if wanted == "T" {
+                    bound = found
+                } else if is_list(found) {
+                    bound = list_item(found)
+                } else {
+                    current = report(
+                        current, "E2011", "Expected " + wanted + ", found " + found,
+                        "A list accepts only one element type: List[Int] and List[Text] are different types.",
+                        notes, span_of(argument)
+                    )
+                    invalid = true
+                }
+            } else {
+                let problems_before = List.length(current.problems)
+                current = expect_type(current, wanted, found, span_of(argument), notes)
+                if List.length(current.problems) != problems_before {
+                    invalid = true
+                }
+            }
+        }
+        i = i + 1
+    }
+    if invalid {
+        return checked(node, "", current)
+    }
+    let result = substitute(sig.return_type, bound)
+    if has_variable(result) {
+        return checked(
+            node, "",
+            report(
+                current, "E2011", "Cannot infer the type of the elements of this list",
+                "Write the type of the list explicitly, for example: let xs: List[Int] = [].", [], span_of(node)
+            )
+        )
+    }
+    return checked(node, result, current)
+}
+
+// Conditions
+
+fn check_condition(state: State, env: List[Binding], node: parser.Node, owner: Text) gives Checked {
+    let found = check_expression(state, env, node, "")
+    if found.ty == "" or found.ty == "Bool" {
+        return found
+    }
+    var hint = ""
+    if found.ty == "Int" or found.ty == "Float" {
+        hint = "A number is not a condition. Compare it explicitly, for example: x != 0"
+    } else if found.ty == "Void" {
+        hint = "A call to a Void function does not produce a value."
+    }
+    return Checked(
+        node: found.node, ty: found.ty,
+        state: report(
+            found.state, "E2011", "The condition of " + owner + " must be Bool, found " + found.ty, hint, [],
+            span_of(node)
+        )
+    )
+}
+
+// Statements. Each returns the new tree, the new state and whether it always ends the function with
+// `return`. A declaration also returns the environment with the new name.
+
+fn flow(node: parser.Node, state: State, env: List[Binding], returns: Bool) gives Flow {
+    return Flow(node: node, state: state, env: env, returns: returns)
+}
+
+fn declared_type(state: State, node: parser.Node, what: Text) gives Checked {
+    // The type a TypeRef names. The empty type stands for a type written wrong.
+    let name = text_of(field(node, "name"))
+    let qualifier = field(node, "qualifier")
+    let arguments = items_of(field(node, "arguments"))
+    if not is_null(qualifier) {
+        return checked(node, "", unsupported(state, "qualified type"))
+    }
+    if name == "Void" {
+        return checked(
+            node, "",
+            report(
+                state, "E2012", what + " cannot have the type Void",
+                "Void means 'no value', and it is never written: a function that gives nothing has no 'gives'.",
+                [], span_of(node)
+            )
+        )
+    }
+    if name == "Int" or name == "Float" or name == "Bool" or name == "Text" {
+        return checked(node, name, state)
+    }
+    if name == "List" and List.length(arguments) == 1 {
+        let item = declared_type(state, List.get(arguments, 0), "A list element")
+        if item.ty == "" {
+            return checked(node, "", item.state)
+        }
+        return checked(node, "List[" + item.ty + "]", item.state)
+    }
+    return checked(node, "", unsupported(state, "type " + name))
+}
+
+fn check_let(state: State, env: List[Binding], node: parser.Node) gives Flow {
+    let name = text_of(field(node, "name"))
+    let name_span = place_span(field(node, "name_span"))
+    let declared_node = field(node, "declared_type")
+    var declared = ""
+    var current = state
+    if not is_null(declared_node) {
+        let resolved = declared_type(current, declared_node, "The variable '" + name + "'")
+        declared = resolved.ty
+        current = resolved.state
+    }
+    let value = check_expression(current, env, field(node, "value"), declared)
+    current = value.state
+    var value_type = value.ty
+    if value_type == "Void" {
+        current = report(
+            current, "E2011", "This call does not produce a value to store", "", [], span_of(field(node, "value"))
+        )
+        value_type = ""
+    }
+    var variable_type = value_type
+    if declared != "" {
+        // The annotation decides the type, so later uses are checked against what was intended.
+        variable_type = declared
+        if value_type != "" {
+            current = expect_type(
+                current, declared, value_type, span_of(field(node, "value")),
+                ["'" + name + "' is declared as " + declared + "."]
+            )
+        }
+    }
+    let free = name_is_free(current, env, name, name_span)
+    var next_env = env
+    if free.free {
+        next_env = List.append(
+            env, make_binding(name, "variable", variable_type, kind_of(node) == "Var", false, name_span)
+        )
+    }
+    return flow(with_field(node, "value", value.node), free.state, next_env, false)
+}
+
+fn check_assign(state: State, env: List[Binding], node: parser.Node) gives Flow {
+    let name = text_of(field(node, "name"))
+    let span = place_span(field(node, "name_span"))
+    let index = binding_index(env, name)
+    var target_type = ""
+    if index >= 0 {
+        let target = List.get(env, index)
+        target_type = target.ty
+    }
+    let value = check_expression(state, env, field(node, "value"), target_type)
+    let rebuilt = with_field(node, "value", value.node)
+    var current = value.state
+    if index < 0 {
+        return flow(rebuilt, check_unknown_variable(current, env, name, span), env, false)
+    }
+    let target = List.get(env, index)
+    if target.category == "parameter" {
+        return flow(
+            rebuilt,
+            report(
+                current, "E2007", "'" + name + "' is a parameter and cannot be given a new value",
+                "Copy it into a variable: 'var name = " + name + "'.", [], span
+            ),
+            env, false
+        )
+    }
+    if target.loop_variable {
+        return flow(
+            rebuilt,
+            report(
+                current, "E2007", "'" + name + "' is the iterator of a 'for' loop and cannot be given a new value",
+                "The iterator takes each element of the list in turn; declare a 'var' for anything that changes.",
+                [], span
+            ),
+            env, false
+        )
+    }
+    if not target.mutable {
+        return flow(
+            rebuilt,
+            report(
+                current, "E2007", "'" + name + "' was declared with 'let' and cannot be given a new value",
+                "Declare it with 'var' if its value has to change.",
+                [note_declared(name, target.line, target.column)], span
+            ),
+            env, false
+        )
+    }
+    if value.ty == "Void" {
+        current = report(
+            current, "E2011", "This call does not produce a value to store", "", [], span_of(field(node, "value"))
+        )
+    } else if value.ty != "" and target.ty != "" {
+        current = expect_type(
+            current, target.ty, value.ty, span_of(field(node, "value")),
+            ["'" + name + "' is declared as " + target.ty + "."]
+        )
+    }
+    return flow(rebuilt, current, env, false)
+}
+
+fn check_return(state: State, env: List[Binding], node: parser.Node) gives Typed {
+    let expected = state.return_type
+    let name = state.function
+    let value_node = field(node, "value")
+    if is_null(value_node) {
+        if expected != "" and expected != "Void" {
+            return Typed(
+                node: node,
+                state: report(
+                    state, "E2011", "Expected a value of type " + expected + " after 'return'", "",
+                    ["'" + name + "' is declared to return " + expected + "."], span_of(node)
+                )
+            )
+        }
+        return Typed(node: node, state: state)
+    }
+    var wanted = ""
+    if expected != "" and expected != "Void" {
+        wanted = expected
+    }
+    let found = check_expression(state, env, value_node, wanted)
+    let rebuilt = with_field(node, "value", found.node)
+    if found.ty == "" or expected == "" {
+        return Typed(node: rebuilt, state: found.state)
+    }
+    if expected == "Void" {
+        return Typed(
+            node: rebuilt,
+            state: report(
+                found.state, "E2011", "'" + name + "' returns Void, so 'return' cannot be followed by a value",
+                "Write 'return' on its own, or change the return type of the function.", [], span_of(value_node)
+            )
+        )
+    }
+    if found.ty == "Void" {
+        return Typed(
+            node: rebuilt,
+            state: report(found.state, "E2011", "This call does not produce a value to return", "", [], span_of(value_node))
+        )
+    }
+    return Typed(
+        node: rebuilt,
+        state: expect_type(
+            found.state, expected, found.ty, span_of(value_node),
+            ["'" + name + "' is declared to return " + expected + "."]
+        )
+    )
+}
+
+fn check_expression_statement(state: State, env: List[Binding], node: parser.Node) gives Typed {
+    let expression = field(node, "expression")
+    let found = check_expression(state, env, expression, "")
+    let rebuilt = with_field(node, "expression", found.node)
+    if found.ty == "" {
+        return Typed(node: rebuilt, state: found.state)
+    }
+    let hint = "Store it with 'let name = ...' or pass it to a function."
+    if kind_of(expression) != "Call" {
+        return Typed(
+            node: rebuilt,
+            state: report(found.state, "E2010", "The value of this expression is never used", hint, [], span_of(expression))
+        )
+    }
+    if found.ty != "Void" {
+        return Typed(
+            node: rebuilt,
+            state: report(
+                found.state, "E2010",
+                "The " + found.ty + " returned by '" + text_of(field(expression, "callee")) + "' is never used",
+                hint, [], span_of(expression)
+            )
+        )
+    }
+    return Typed(node: rebuilt, state: found.state)
+}
+
+// A block opens a scope: the names it declares are not visible after it. The Flow holds the typed
+// block and whether it always returns; its environment is the one it received.
+fn check_block(state: State, env: List[Binding], node: parser.Node) gives Flow {
+    let statements = items_of(field(node, "statements"))
+    var current = state
+    var scope = env
+    var typed: List[parser.Node] = []
+    var returned = false
+    var reported = false
+    var i = 0
+    while i < List.length(statements)
+        shrinks List.length(statements) - i
+    {
+        let statement = List.get(statements, i)
+        if returned and not reported {
+            current = report(
+                current, "E2015", "This code can never run: the function has already returned",
+                "Remove it, or move it before the 'return'.", [], span_of(statement)
+            )
+            reported = true
+        }
+        let done = check_statement(current, scope, statement)
+        typed = List.append(typed, done.node)
+        current = done.state
+        scope = done.env
+        if done.returns {
+            returned = true
+        }
+        i = i + 1
+    }
+    return flow(with_field(node, "statements", parser.Node.Items(typed)), current, env, returned)
+}
+
+fn check_statement(state: State, env: List[Binding], node: parser.Node) gives Flow {
+    let kind = kind_of(node)
+    if kind == "Let" or kind == "Var" {
+        return check_let(state, env, node)
+    }
+    if kind == "Return" {
+        let done = check_return(state, env, node)
+        return flow(done.node, done.state, env, true)
+    }
+    if kind == "If" {
+        return check_if(state, env, node)
+    }
+    if kind == "Block" {
+        return check_block(state, env, node)
+    }
+    if kind == "While" {
+        return check_while(state, env, node)
+    }
+    if kind == "For" {
+        return check_for(state, env, node)
+    }
+    if kind == "Assign" {
+        return check_assign(state, env, node)
+    }
+    if kind == "ExprStatement" {
+        let done = check_expression_statement(state, env, node)
+        return flow(done.node, done.state, env, false)
+    }
+    return flow(node, unsupported(state, kind), env, false)
+}
+
+// `if`, with its `else` branch: a block, another `if`, or nothing.
+fn check_if(state: State, env: List[Binding], node: parser.Node) gives Flow {
+    let condition = check_condition(state, env, field(node, "condition"), "'if'")
+    let then_flow = check_block(condition.state, env, field(node, "then_block"))
+    let else_node = field(node, "else_branch")
+    let head = with_field(with_field(node, "condition", condition.node), "then_block", then_flow.node)
+    if is_null(else_node) {
+        return flow(head, then_flow.state, env, false)
+    }
+    var else_flow = check_block(then_flow.state, env, else_node)
+    if kind_of(else_node) == "If" {
+        else_flow = check_if(then_flow.state, env, else_node)
+    } else if kind_of(else_node) == "IfLet" {
+        return flow(head, unsupported(then_flow.state, "IfLet"), env, false)
+    }
+    return flow(
+        with_field(head, "else_branch", else_flow.node), else_flow.state, env, then_flow.returns and else_flow.returns
+    )
+}
+
+// The clauses of a loop. A `keeps` is a condition; a `shrinks` is an Int measure, and a `for` has none.
+fn check_loop_clauses(state: State, env: List[Binding], clauses: List[parser.Node], is_for: Bool) gives Typed {
+    var current = state
+    var typed: List[parser.Node] = []
+    var i = 0
+    while i < List.length(clauses)
+        shrinks List.length(clauses) - i
+    {
+        let clause = List.get(clauses, i)
+        if text_of(field(clause, "clause")) == "keeps" {
+            let kept = check_condition(current, env, field(clause, "condition"), "'keeps'")
+            typed = List.append(typed, with_field(clause, "condition", kept.node))
+            current = kept.state
+        } else if is_for {
+            typed = List.append(typed, clause)
+            current = report(
+                current, "E2022", "'shrinks' has no meaning in a 'for' loop",
+                "A 'for' loop ends when the list is exhausted; remove the 'shrinks' clause.", [], span_of(clause)
+            )
+        } else {
+            let measure = check_expression(current, env, field(clause, "condition"), "")
+            typed = List.append(typed, with_field(clause, "condition", measure.node))
+            current = measure.state
+            if measure.ty != "" and measure.ty != "Int" {
+                current = report(
+                    current, "E2011", "The measure of 'shrinks' must be Int, found " + measure.ty,
+                    "The measure is a whole number that gets smaller on every turn and never goes below 0.",
+                    [], span_of(field(clause, "condition"))
+                )
+            }
+        }
+        i = i + 1
+    }
+    return Typed(node: parser.Node.Items(typed), state: current)
+}
+
+fn count_measures(clauses: List[parser.Node]) gives Int {
+    var count = 0
+    var i = 0
+    while i < List.length(clauses)
+        shrinks List.length(clauses) - i
+    {
+        if text_of(field(List.get(clauses, i), "clause")) == "shrinks" {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+// A loop never counts as always returning: the analysis does not evaluate conditions.
+fn check_while(state: State, env: List[Binding], node: parser.Node) gives Flow {
+    let condition = check_condition(state, env, field(node, "condition"), "'while'")
+    let clauses = items_of(field(node, "clauses"))
+    let checked_clauses = check_loop_clauses(condition.state, env, clauses, false)
+    var current = checked_clauses.state
+    let measures = count_measures(clauses)
+    if measures == 0 {
+        let at = span_of(node)
+        current = report(
+            current, "E2021", "This loop does not say why it ends",
+            "Add 'shrinks <expression>' to the header of the loop, with an Int that gets smaller on every turn and "
+            + "never goes below 0, for example 'shrinks n - i'.",
+            [], parser.Span(line: at.line, column: at.column, end_line: at.line, end_column: at.column + 5)
+        )
+    }
+    var seen = 0
+    var j = 0
+    while j < List.length(clauses)
+        shrinks List.length(clauses) - j
+    {
+        let clause = List.get(clauses, j)
+        if text_of(field(clause, "clause")) == "shrinks" {
+            if seen == 0 {
+                seen = 1
+            } else {
+                let first = first_measure_span(clauses)
+                current = report(
+                    current, "E2021", "A loop has exactly one measure",
+                    "Combine them into one Int that gets smaller on every turn.",
+                    ["The first 'shrinks' is at line " + to_text(first.line) + ", column " + to_text(first.column) + "."],
+                    span_of(clause)
+                )
+            }
+        }
+        j = j + 1
+    }
+    let body = check_block(current, env, field(node, "body"))
+    let rebuilt = with_field(with_field(with_field(node, "condition", condition.node), "clauses", checked_clauses.node), "body", body.node)
+    return flow(rebuilt, body.state, env, false)
+}
+
+fn first_measure_span(clauses: List[parser.Node]) gives parser.Span {
+    var i = 0
+    while i < List.length(clauses)
+        shrinks List.length(clauses) - i
+    {
+        let clause = List.get(clauses, i)
+        if text_of(field(clause, "clause")) == "shrinks" {
+            return span_of(clause)
+        }
+        i = i + 1
+    }
+    return parser.no_span()
+}
+
+// A `for` loop over a `List[T]`: the iterator is a new immutable name in the scope of the body.
+fn check_for(state: State, env: List[Binding], node: parser.Node) gives Flow {
+    let iterable = check_expression(state, env, field(node, "iterable"), "")
+    var current = iterable.state
+    var item = ""
+    if iterable.ty == "Void" {
+        current = report(
+            current, "E2011", "This call does not produce a value to walk over", "", [],
+            span_of(field(node, "iterable"))
+        )
+    } else if iterable.ty != "" {
+        item = list_item(iterable.ty)
+        if item == "" {
+            current = report(
+                current, "E2011", "The value a 'for' walks over must be a List, found " + iterable.ty,
+                "Write the list the loop walks over, for example: for x in xs \{ ... }.", [],
+                span_of(field(node, "iterable"))
+            )
+        }
+    }
+    let clauses = check_loop_clauses(current, env, items_of(field(node, "clauses")), true)
+    current = clauses.state
+    let name = text_of(field(node, "name"))
+    let name_span = place_span(field(node, "name_span"))
+    let free = name_is_free(current, env, name, name_span)
+    var body_env = env
+    if free.free {
+        body_env = List.append(env, make_binding(name, "variable", item, false, true, name_span))
+    }
+    let body = check_block(free.state, body_env, field(node, "body"))
+    let rebuilt = with_field(
+        with_field(with_field(node, "iterable", iterable.node), "clauses", clauses.node), "body", body.node
+    )
+    return flow(rebuilt, body.state, env, false)
+}
+
+// Functions
+
+fn declare_param(state: State, env: List[Binding], name: Text, span: parser.Span, ty: Text) gives Flow {
+    if name == "result" {
+        return flow(
+            parser.Node.Null(),
+            report(
+                state, "E2013", "A parameter cannot be named 'result'",
+                "'result' is the name of the value a function gives, inside a 'promises' clause.", [], span
+            ),
+            List.append(env, make_binding(name, "parameter", ty, false, false, span)),
+            false
+        )
+    }
+    let free = name_is_free(state, env, name, span)
+    if not free.free {
+        return flow(parser.Node.Null(), free.state, env, false)
+    }
+    return flow(parser.Node.Null(), free.state, List.append(env, make_binding(name, "parameter", ty, false, false, span)), false)
+}
+
+// The signature of a function: the types of its parameters and what it gives.
+type SigResult = { sig: Sig, state: State }
+
+fn make_signature(state: State, node: parser.Node) gives SigResult {
+    var current = state
+    var names: List[Text] = []
+    var types: List[Text] = []
+    let params = items_of(field(node, "params"))
+    var i = 0
+    while i < List.length(params)
+        shrinks List.length(params) - i
+    {
+        let param = List.get(params, i)
+        let name = text_of(field(param, "name"))
+        let resolved = declared_type(current, field(param, "type"), "The parameter '" + name + "'")
+        current = resolved.state
+        names = List.append(names, name)
+        types = List.append(types, resolved.ty)
+        i = i + 1
+    }
+    let name_span = place_span(field(node, "name_span"))
+    let return_node = field(node, "return_type")
+    var return_type = "Void"
+    if not is_null(return_node) {
+        if text_of(field(return_node, "name")) == "Void" and is_null(field(return_node, "qualifier")) {
+            // `gives Void` is not written; the function still gives nothing.
+            current = report(
+                current, "E2012", "'Void' is not written after 'gives'",
+                "A function that gives nothing has no 'gives'", [], span_of(return_node)
+            )
+        } else {
+            let resolved = declared_type(current, return_node, "")
+            current = resolved.state
+            return_type = resolved.ty
+        }
+    }
+    let sig = Sig(
+        name: text_of(field(node, "name")), param_names: names, param_types: types, return_type: return_type,
+        builtin: false, generic: false, line: name_span.line, column: name_span.column
+    )
+    return SigResult(sig: sig, state: current)
+}
+
+// The loops inside a block, at any depth, in the order they are written. As in Python, only blocks,
+// loops and `if` are looked into.
+fn collect_loops(node: parser.Node) gives List[parser.Node] {
+    let kind = kind_of(node)
+    var found: List[parser.Node] = []
+    if kind == "Block" {
+        for statement in items_of(field(node, "statements")) {
+            found = List.concat(found, collect_loops(statement))
+        }
+    } else if kind == "While" or kind == "For" {
+        found = List.append(found, node)
+        found = List.concat(found, collect_loops(field(node, "body")))
+    } else if kind == "If" {
+        found = List.concat(found, collect_loops(field(node, "then_block")))
+        let else_branch = field(node, "else_branch")
+        if not is_null(else_branch) {
+            found = List.concat(found, collect_loops(else_branch))
+        }
+    }
+    return found
+}
+
+fn header_of_kind(header: List[parser.Node], kind: Text) gives List[parser.Node] {
+    var found: List[parser.Node] = []
+    for item in header {
+        if kind_of(item) == kind {
+            found = List.append(found, item)
+        }
+    }
+    return found
+}
+
+// Whether the clauses are ordered by position, so a stable insertion sort can put them in order.
+fn before(a: parser.Node, b: parser.Node) gives Bool {
+    let first = span_of(a)
+    let second = span_of(b)
+    return first.line < second.line or (first.line == second.line and first.column < second.column)
+}
+
+fn sort_by_position(nodes: List[parser.Node]) gives List[parser.Node] {
+    var sorted: List[parser.Node] = []
+    for node in nodes {
+        var result: List[parser.Node] = []
+        var placed = false
+        for existing in sorted {
+            if not placed and before(node, existing) {
+                result = List.append(result, node)
+                placed = true
+            }
+            result = List.append(result, existing)
+        }
+        if not placed {
+            result = List.append(result, node)
+        }
+        sorted = result
+    }
+    return sorted
+}
+
+// E2031: a clause name is used once in a function, its loops included, and is neither a parameter nor
+// `result`. A name is not a variable.
+fn check_clause_names(state: State, node: parser.Node, sig: Sig) gives State {
+    var clauses = header_of_kind(items_of(field(node, "header")), "Contract")
+    for loop in collect_loops(field(node, "body")) {
+        clauses = List.concat(clauses, items_of(field(loop, "clauses")))
+    }
+    var current = state
+    var seen_names: List[Text] = []
+    var seen_lines: List[Int] = []
+    var seen_columns: List[Int] = []
+    for clause in sort_by_position(clauses) {
+        let name_node = field(clause, "name")
+        if not is_null(name_node) {
+            let name = text_of(name_node)
+            let span = span_of(clause)
+            let seen = index_of(seen_names, name)
+            if seen >= 0 {
+                current = report(
+                    current, "E2031", "The promise name '" + name + "' is used twice in '" + sig.name + "'",
+                    "Give each clause of a function, and of its loops, its own name.",
+                    [
+                        "It is first used at line " + to_text(List.get(seen_lines, seen)) + ", column "
+                        + to_text(List.get(seen_columns, seen)) + "."
+                    ],
+                    span
+                )
+            } else if List.contains(sig.param_names, name) {
+                current = report(
+                    current, "E2031", "The promise name '" + name + "' is also a parameter of '" + sig.name + "'",
+                    "A clause name says what the clause is about; choose one that is not a parameter.", [], span
+                )
+            } else if name == "result" {
+                current = report(
+                    current, "E2031", "'result' cannot be the name of a clause",
+                    "'result' is the value the function gives; choose another name.", [], span
+                )
+            }
+            if seen < 0 {
+                seen_names = List.append(seen_names, name)
+                seen_lines = List.append(seen_lines, span.line)
+                seen_columns = List.append(seen_columns, span.column)
+            }
+        }
+    }
+    return current
+}
+
+// Whether a tree has a call to `function` anywhere inside it.
+fn calls_function(node: parser.Node, function: Text) gives Bool {
+    return match node {
+        parser.Node.Obj(kind, names, values) => object_calls(kind, names, values, function)
+        parser.Node.Items(items) => any_calls(items, function)
+        _ => false
+    }
+}
+
+fn object_calls(kind: Text, names: List[Text], values: List[parser.Node], function: Text) gives Bool {
+    if kind == "Call" and text_of(field_at(names, values, "callee")) == function {
+        return true
+    }
+    return any_calls(values, function)
+}
+
+fn any_calls(nodes: List[parser.Node], function: Text) gives Bool {
+    for node in nodes {
+        if calls_function(node, function) {
+            return true
+        }
+    }
+    return false
+}
+
+// An `example` clause: checked, never evaluated. It sees no parameter and no `result`, only the
+// functions of the program.
+fn check_example(state: State, node: parser.Node, function: Text) gives Typed {
+    let inside = check_condition(with_example(state, function), [], field(node, "condition"), "'example'")
+    var current = with_example(inside.state, "")
+    if not calls_function(field(node, "condition"), function) {
+        current = report(
+            current, "E2020", "This example of '" + function + "' never calls '" + function + "'",
+            "Write the call with its inputs, for example: example " + function + "(2) == 4", [],
+            span_of(field(node, "condition"))
+        )
+    }
+    return Typed(node: with_field(node, "condition", inside.node), state: current)
+}
+
+fn check_function(state: State, node: parser.Node, sig: Sig) gives Typed {
+    var current = with_function(state, sig.name, sig.return_type)
+    var env: List[Binding] = []
+    let params = items_of(field(node, "params"))
+    var i = 0
+    while i < List.length(params)
+        shrinks List.length(params) - i
+    {
+        let param = List.get(params, i)
+        let declared = declare_param(
+            current, env, text_of(field(param, "name")), place_span(field(param, "name_span")),
+            List.get(sig.param_types, i)
+        )
+        current = declared.state
+        env = declared.env
+        i = i + 1
+    }
+    current = check_clause_names(current, node, sig)
+    let header = items_of(field(node, "header"))
+    let has_value = sig.return_type != "" and sig.return_type != "Void"
+    var typed_contracts: List[parser.Node] = []
+    for item in header {
+        if kind_of(item) == "Contract" {
+            var contract_env = env
+            let clause = text_of(field(item, "clause"))
+            if clause == "promises" and has_value {
+                // `result` exists only here, and only when there is a value to name.
+                contract_env = List.append(
+                    env, make_binding("result", "result", sig.return_type, false, false, span_of(item))
+                )
+            }
+            let condition = check_condition(current, contract_env, field(item, "condition"), "'" + clause + "'")
+            typed_contracts = List.append(typed_contracts, with_field(item, "condition", condition.node))
+            current = condition.state
+        }
+    }
+    var typed_examples: List[parser.Node] = []
+    for item in header {
+        if kind_of(item) == "Example" {
+            let checked_example = check_example(current, item, sig.name)
+            typed_examples = List.append(typed_examples, checked_example.node)
+            current = checked_example.state
+        }
+    }
+    var typed_header: List[parser.Node] = []
+    var contract_index = 0
+    var example_index = 0
+    for item in header {
+        if kind_of(item) == "Contract" {
+            typed_header = List.append(typed_header, List.get(typed_contracts, contract_index))
+            contract_index = contract_index + 1
+        } else {
+            typed_header = List.append(typed_header, List.get(typed_examples, example_index))
+            example_index = example_index + 1
+        }
+    }
+    let body = check_block(current, env, field(node, "body"))
+    current = body.state
+    if has_value and not body.returns {
+        current = report(
+            current, "E2014",
+            "'" + sig.name + "' must return a value of type " + sig.return_type
+            + ", but its body can end without a 'return'",
+            "Make sure every path through the function ends with 'return'. "
+            + "An 'if' without 'else' can be skipped, and a loop may not run at all.",
+            [], place_span(field(node, "name_span"))
+        )
+    }
+    let rebuilt = with_field(with_field(node, "header", parser.Node.Items(typed_header)), "body", body.node)
+    return Typed(node: rebuilt, state: current)
+}
+
+// The entry point.
+fn check_main(state: State, entry: parser.Node, found: Bool, sig: Sig) gives State {
+    if not found {
+        return report(
+            state, "E2001", "This program has no 'main' function, so there is nothing to run",
+            "Add the entry point: fn main() \{ ... }", [], parser.no_span()
+        )
+    }
+    var current = state
+    let params = items_of(field(entry, "params"))
+    if List.length(params) > 0 {
+        current = report(
+            current, "E2013", "'main' cannot have parameters", "Write: fn main() \{", [],
+            parser.join_spans(span_of(List.get(params, 0)), span_of(List.get(params, List.length(params) - 1)))
+        )
+    }
+    if sig.return_type != "" and sig.return_type != "Void" {
+        current = report(
+            current, "E2004", "'main' gives nothing", "Write: fn main() \{", [], span_of(field(entry, "return_type"))
+        )
+    }
+    return current
+}
+
+fn has_declarations(program: parser.Node) gives Bool {
+    return (
+        List.length(items_of(field(program, "types"))) > 0 or List.length(items_of(field(program, "records"))) > 0
+        or List.length(items_of(field(program, "enums"))) > 0 or List.length(items_of(field(program, "uses"))) > 0
+        or List.length(items_of(field(program, "imports"))) > 0
+    )
+}
+
+fn is_expression_kind(kind: Text) gives Bool {
+    return List.contains(
+        [
+            "IntLiteral", "FloatLiteral", "TextLiteral", "BoolLiteral", "ListLiteral", "Name", "Unary", "Binary",
+            "Group", "Call", "RecordConstruction", "FieldAccess", "MatchExpr"
+        ],
+        kind
+    )
+}
+
+// An expression the checker never reached has no type: `nex inspect` shows it as null.
+fn fill_types(node: parser.Node) gives parser.Node {
+    return match node {
+        parser.Node.Obj(kind, names, values) => fill_object(kind, names, values)
+        parser.Node.Items(items) => parser.Node.Items(fill_all(items))
+        _ => node
+    }
+}
+
+fn fill_all(nodes: List[parser.Node]) gives List[parser.Node] {
+    var result: List[parser.Node] = []
+    for node in nodes {
+        result = List.append(result, fill_types(node))
+    }
+    return result
+}
+
+fn fill_object(kind: Text, names: List[Text], values: List[parser.Node]) gives parser.Node {
+    var filled_names = names
+    var filled_values = fill_all(values)
+    if is_expression_kind(kind) and index_of(names, "type") < 0 {
+        filled_names = List.append(filled_names, "type")
+        filled_values = List.append(filled_values, parser.Node.Null())
+    }
+    return parser.Node.Obj(kind, filled_names, filled_values)
+}
+
+fn initial_state() gives State {
+    return State(problems: [], user: [], function: "", return_type: "", in_example: "", unsupported: "")
+}
+
+fn check_program(program: parser.Node) gives Typed {
+    var current = initial_state()
+    if has_declarations(program) {
+        return Typed(node: program, state: unsupported(current, "declarations"))
+    }
+    let functions = items_of(field(program, "functions"))
+    var signatures: List[Sig] = []
+    var main_node = parser.Node.Null()
+    var main_found = false
+    var main_sig = make_sig("", [], [], "", false)
+    // Signatures first: a function can be called before the line that declares it.
+    for function in functions {
+        let made = make_signature(current, function)
+        current = made.state
+        signatures = List.append(signatures, made.sig)
+        let sig = made.sig
+        let name_span = place_span(field(function, "name_span"))
+        if is_builtin(sig.name) {
+            current = report(
+                current, "E2002", "'" + sig.name + "' is a built-in function and cannot be declared again",
+                "Choose a different name for this function.", [], name_span
+            )
+        } else if user_index(current, sig.name) >= 0 {
+            let first = List.get(current.user, user_index(current, sig.name))
+            current = report(
+                current, "E2002", "The function '" + sig.name + "' is declared more than once", "",
+                ["It was first declared at line " + to_text(first.line) + ", column " + to_text(first.column) + "."],
+                name_span
+            )
+        } else {
+            current = with_user(current, List.append(current.user, sig))
+            if sig.name == "main" {
+                main_node = function
+                main_found = true
+                main_sig = sig
+            }
+        }
+    }
+    current = check_main(current, main_node, main_found, main_sig)
+    var typed_functions: List[parser.Node] = []
+    var i = 0
+    while i < List.length(functions)
+        shrinks List.length(functions) - i
+    {
+        let done = check_function(current, List.get(functions, i), List.get(signatures, i))
+        typed_functions = List.append(typed_functions, done.node)
+        current = done.state
+        i = i + 1
+    }
+    return Typed(
+        node: fill_types(with_field(program, "functions", parser.Node.Items(typed_functions))), state: current
+    )
+}
+
+// Test driver: every argument after the first is a file. For each one prints `FILE|path` and then
+// SKIP when it has lexical or syntax errors, UNSUPPORTED when the checker meets something it does not
+// know yet, or the typed tree and the errors found (the format selfhost/compare_checker.py reads).
+fn run_checks() {
+    let files = args()
+    var i = 1
+    while i < List.length(files)
+        shrinks List.length(files) - i
+    {
+        let path = List.get(files, i)
+        print("FILE|" + path)
+        let lexed = lexer.tokenize(read_file(path))
+        if List.length(lexed.diagnostics) > 0 {
+            print("SKIP|lexical")
+        } else {
+            let outcome = parser.parse_program(lexed.tokens)
+            if List.length(outcome.diagnostics) > 0 {
+                print("SKIP|syntax")
+            } else {
+                let result = check_program(outcome.program)
+                if result.state.unsupported != "" {
+                    print("UNSUPPORTED|" + result.state.unsupported)
+                } else {
+                    print("CHECKED|" + parser.to_json(result.node))
+                    var shown = 0
+                    for problem in result.state.problems {
+                        if shown < 100 {
+                            var place_text = ""
+                            if problem.line > 0 {
+                                place_text = parser.span_text(problem.line, problem.column, problem.end_line, problem.end_column)
+                            }
+                            print(
+                                "D|" + problem.code + "|" + problem.label + "|" + problem.hint + "|"
+                                + parser.join_texts(problem.notes, "~~") + "|" + place_text
+                            )
+                        }
+                        shown = shown + 1
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+}
+
+fn main() {
+    run_checks()
+}

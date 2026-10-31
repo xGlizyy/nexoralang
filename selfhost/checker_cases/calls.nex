@@ -1,0 +1,26 @@
+fn add(a: Int, b: Int) gives Int {
+    return a + b
+}
+fn nothing() {
+}
+fn main() {
+    print(add(1))
+    print(add(1, 2, 3))
+    print(add("x", 2))
+    print(add(1.5, 2))
+    let v = nothing()
+    print(nothing())
+    add(1, 2)
+    nothing()
+    1 + 2
+    let k = 5
+    k(1)
+    print(to_float("x"))
+    print(to_int(1))
+    print(Text.length(5))
+    print(Text.slice("abc", "x", 1))
+    print(Int.parse(1))
+    print(add)
+    print(print)
+    to_text(1)
+}
