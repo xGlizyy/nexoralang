@@ -337,10 +337,13 @@ class Interpreter:
                 return declaration
         return None
 
-    def _refine(self, node: ast.Call, value: Value) -> Value:
-        """`Percent(x)`: lets `value` through only if it satisfies the condition of the type."""
+    def _refine(self, node: ast.Call, target: str, value: Value) -> Value:
+        """`Percent(x)`: lets `value` through only if it satisfies the condition of the type.
+
+        `target` is the type the analysis resolved the call to, qualified with its module: a module writes the
+        type with its own bare name (decision 0018, 5)."""
         try:
-            broken = self.broken_rule(self._refined[node.callee], value)
+            broken = self.broken_rule(self._refined[target], value)
         except NexoraRuntimeError as error:
             # The error points into the type's declaration; say which check led there.
             site = node.span
@@ -699,7 +702,7 @@ class Interpreter:
             record.status, record.value = "returned", result
             return result
         if target in self._refined:
-            return self._refine(node, arguments[0])
+            return self._refine(node, target, arguments[0])
         if target in self._enum_variant_targets():
             enum_name, variant_name = target.rsplit(".", 1)
             return VariantValue(variant_name, enum_name=enum_name, arguments=tuple(arguments))

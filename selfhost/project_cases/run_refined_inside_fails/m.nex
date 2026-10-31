@@ -1,0 +1,5 @@
+pub type Percent = Int where value >= 0 and value <= 100
+pub type Small = Percent where value < 30
+pub fn checked(n: Int) gives Int {
+    return Small(n) + 1
+}

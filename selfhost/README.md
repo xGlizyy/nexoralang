@@ -123,14 +123,13 @@ PYTHONPATH=nexora/src python selfhost/compare_nex.py check|run|test FILE [FILE .
 ```
 
 `compare_nex.py` joins what `nex` writes to the standard output and the standard error and compares it with what `nex.nex` writes:
-the same text on 41 projects and programs for `check`, on 44 for `run` (two differ on purpose, below) and on 15 for `test`.
+the same text on 41 projects and programs for `check`, on 46 for `run` and on 15 for `test`.
 
 | Limit | Why |
 |---|---|
 | No exit status, no standard error | A program has neither. Everything goes to the standard output, in the order `nex` writes it, and the process ends with status 0. |
 | The input of `run` comes from `--stdin FILE` | A program cannot read the standard input without stopping at its end. |
 | The output limit stops in the middle of a line | `print` writes whole lines, so what fit of that line is printed with a line break. |
-| A runtime error inside an imported module | `nex.nex` shows that module's file and line; `nex run` shows the file that runs, with an empty line, because it does not keep the file of the error (a bug of the Python implementation). |
 | A file with syntax errors | Only its lexical and syntax errors are shown, as for the file that runs. `nex check` also checks the partial tree of an imported module. |
 
 ## Projects of modules
@@ -150,7 +149,7 @@ PYTHONPATH=nexora/src python selfhost/compare_interpreter.py selfhost/project_ca
 ```
 
 `project_cases/` has one directory per case, with its `main.nex` and the modules it imports. 26 projects give the same modules,
-diagnostics and typed tree as `modules.load`, 11 run with the same output and diagnostics as `nex run`, and `nex test` gives the
+diagnostics and typed tree as `modules.load`, 13 run with the same output and diagnostics as `nex run`, and `nex test` gives the
 same result on the example of the repository that imports a module.
 
 | Limit | Why |
@@ -158,7 +157,6 @@ same result on the example of the repository that imports a module.
 | A file that cannot be read (`E0001`) is not reported | A missing file ends this interpreter, as for `read_file`. |
 | A module that has lexical or syntax errors | The project is skipped, as a file by itself is. |
 | A module that calls itself with its own name in front (`models.area` inside `models.nex`) | Its own names are bare while it is checked; `checker.py` accepts it. |
-| A refined type used by the module that declares it | `nex run` stops with an internal error (`the type 'Small' of expression ... was not resolved`): a bug of the Python implementation, not reproduced here. |
 
 ## Stage 1 measurement: call depth
 

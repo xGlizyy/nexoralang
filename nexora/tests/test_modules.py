@@ -583,3 +583,44 @@ def test_an_analysis_without_a_reader_reports_the_import():
 
     assert codes_of(analysis) == ["E0001"]
     assert analysis.project.modules[0].name == "program"
+
+
+# A refined type used by the module that declares it
+
+REFINED_MODULE = """\
+pub type Small = Int where value < 30
+
+pub fn checked(n: Int) gives Int {
+    return Small(n) + 1
+}
+"""
+
+
+def test_a_module_can_use_its_own_refined_type(files, capsys):
+    path = files('import "m.nex"\n\nfn main() {\n    print(m.checked(20))\n}\n', "main.nex")
+    files(REFINED_MODULE, "m.nex")
+
+    assert cli.main(["run", path]) == 0
+    assert capsys.readouterr().out == "21\n"
+
+
+def test_a_constant_that_breaks_the_refined_type_of_its_own_module_is_found_before_running(files, capsys):
+    path = files('import "m.nex"\n\nfn main() {\n    print(m.checked(1))\n}\n', "main.nex")
+    files(REFINED_MODULE.replace("Small(n)", "Small(50)"), "m.nex")
+
+    assert cli.main(["run", path]) == 1
+    assert "50 is not a valid m.Small" in capsys.readouterr().err
+
+
+# An error while running is shown with the file of the function that failed
+
+def test_a_runtime_error_inside_a_module_is_shown_with_that_module(files, capsys):
+    path = files('import "m.nex"\n\nfn main() {\n    print(m.checked(50))\n}\n', "main.nex")
+    module = files(REFINED_MODULE, "m.nex")
+
+    assert cli.main(["run", path]) == 5
+    error = capsys.readouterr().err
+    assert "m.nex:4:12" in error
+    assert "    return Small(n) + 1" in error
+    assert path in error.splitlines()[-1]
+    assert module not in error.splitlines()[-1]
