@@ -76,6 +76,9 @@ def host(compiler: list[str]) -> int:
                 print(f"skip  {name}  ({report.strip().splitlines()[0] if report.strip() else 'no output'})")
                 continue
             executable = Path(scratch, "program.exe").as_posix()
+            if os.environ.get("NEXORA_SPLICE"):
+                import splice_runtime
+                splice_runtime.main([c_file, c_file])
             built = run([*compiler, "-std=c11", "-O1", c_file, "-o", executable])
             if built.returncode != 0:
                 different += 1
@@ -104,6 +107,7 @@ def host(compiler: list[str]) -> int:
 
 
 def main(paths: list[str]) -> int:
+    sys.path.insert(0, str(HERE))
     compiler = shlex.split(os.environ.get("NEXORA_CC", "cc"))
     if paths == ["--host"]:
         return host(compiler)
@@ -118,6 +122,10 @@ def main(paths: list[str]) -> int:
                 print(f"skip  {posix}  ({report.strip().splitlines()[0] if report.strip() else 'no output'})")
                 continue
             executable = Path(scratch, "program.exe").as_posix()
+            if os.environ.get("NEXORA_SPLICE"):
+                # Put the runtime of this working tree on C that an older compiler wrote (see splice_runtime.py).
+                import splice_runtime
+                splice_runtime.main([c_file, c_file])
             built = run([*compiler, "-std=c11", "-O1", c_file, "-o", executable])
             if built.returncode != 0:
                 different += 1
