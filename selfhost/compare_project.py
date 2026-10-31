@@ -6,7 +6,7 @@ Each file is the program that runs; the modules it imports are read from beside 
 give the modules in the order they are checked, the diagnostics of each one and the typed tree of the program that runs, and
 they are compared. A project that uses something the NEXORA checker does not know yet is skipped and counted.
 
-This is a test tool for the self-hosted work of decision 0024; it is not part of the language.
+This is a test tool for the self-hosted work of decision 0025; it is not part of the language.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 # Self-hosted NEXORA
 
 The NEXORA implementation written in NEXORA, following
-[decision 0024](../nexora/docs/decisions/0024-interprete-autoalojado.md). The Python interpreter
+[decision 0025](../nexora/docs/decisions/0025-interprete-autoalojado.md). The Python interpreter
 runs it for now; it is the bootstrap, not the goal.
 
 | Part | File | State |
@@ -67,7 +67,7 @@ What the first runs show:
 | | |
 |---|---|
 | Call depth | A program that nests 997 calls runs and prints what `nex run` prints. The machine keeps what is left to do in a linked stack, so the depth of the program does not use the depth of the interpreter. A recursive evaluator would have stopped at about 250. |
-| Speed | About 2,500 steps per second, running on the Python interpreter. `fib(15)` is 50,318 steps and a loop of 3,000 turns 105,271. It is for checking the language, not for running programs: stage 4 of decision 0024 is about that. |
+| Speed | About 2,500 steps per second, running on the Python interpreter. `fib(15)` is 50,318 steps and a loop of 3,000 turns 105,271. It is for checking the language, not for running programs: stage 4 of decision 0025 is about that. |
 
 For the examples:
 
@@ -157,7 +157,7 @@ What they say about stage 4:
   above, run again by level 1) before it can run anything.
 - Level 3, the interpreter running itself running itself, would need level 2 to check 13,000 lines at that speed. It was not run:
   by these numbers it is years, not hours. Without a faster way to execute NEXORA that does not go through Python (stage 4, which
-  decision 0024 leaves open), the fixed point stops at level 2.
+  decision 0025 leaves open), the fixed point stops at level 2.
 
 ## The code generator to C (decision 0026)
 
@@ -233,12 +233,12 @@ What this means for the plan:
   250 interpreted calls. The evaluator has to keep its own stack of frames in a list, so that the
   depth of the interpreted program does not use the depth of the interpreter.
 
-The stop condition of decision 0024, stage 1 is therefore **not** triggered: the bounded-recursion
+The stop condition of decision 0025, stage 1 is therefore **not** triggered: the bounded-recursion
 option works.
 
 ## Language gaps found so far
 
-Each one is a real limitation hit while writing the lexer. The decision 0024 rule applies: nothing
+Each one is a real limitation hit while writing the lexer. The decision 0025 rule applies: nothing
 is added to the language except what the self-hosted code needs.
 
 | Gap | Effect | Workaround used |

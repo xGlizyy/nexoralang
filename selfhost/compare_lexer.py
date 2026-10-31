@@ -4,7 +4,7 @@
 
 For every file both lexers run on the same text and their tokens (kind, lexeme, span, and the
 decoded value of text literals) and lexical errors (code, label, hint, span) are compared. Exit
-status 1 when any file differs. This is a test tool for the self-hosted work of decision 0024; it
+status 1 when any file differs. This is a test tool for the self-hosted work of decision 0025; it
 is not part of the language.
 """
 

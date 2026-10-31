@@ -3,16 +3,16 @@
 - **Status:** proposed.
 - **Date:** 2026-10-31.
 - **Decision owner:** NEXORA maintainer.
-- **Affects:** stage 4 of the self-hosted decision (leaving Python), the meaning of "the reference
+- **Affects:** stage 4 of decision 0025 (leaving Python), the meaning of "the reference
   implementation", the tools a user needs to build a NEXORA program into an executable.
-- **Related to:** the self-hosted interpreter decision ([PR #38](https://github.com/xGlizyy/nexoralang/pull/38); it is
-  numbered 0024 there, which now collides with the enums decision 0024 already in `main`, and has to be renumbered;
-  this document calls it "the self-hosted decision"; this decision takes its stage 4), [0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md) (only what
-  has been checked runs), [0015](0015-entrada-argumentos-archivos-y-permisos.md) (capabilities and limits).
+- **Related to:** [0025](0025-interprete-autoalojado.md) (the self-hosted interpreter, in stages; this
+  decision takes its stage 4; it is proposed in [PR #42](https://github.com/xGlizyy/nexoralang/pull/42)),
+  [0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md) (only what has been checked runs),
+  [0015](0015-entrada-argumentos-archivos-y-permisos.md) (capabilities and limits).
 
 ## Executive summary
 
-The self-hosted interpreter of the self-hosted decision reaches a fixed point at level 2 and no further:
+The self-hosted interpreter of decision 0025 reaches a fixed point at level 2 and no further:
 each level costs two to three orders of magnitude more than the one below, and level 3 would
 take years (measurements in section 2). A faster interpreter in NEXORA does not remove Python from
 under it. A second way to execute NEXORA that is not Python does.
@@ -31,10 +31,10 @@ generator needs no file at run time.
 
 ## 1. Purpose and status
 
-The self-hosted decision left stage 4 open because it "reintroduces the question of which language is
+Decision 0025 left stage 4 open because it "reintroduces the question of which language is
 underneath", and asked for real measurements first. They exist now, and this decision answers.
 It is **proposed**: nothing in the language changes until the maintainer accepts it, and the
-interpreters of the self-hosted decision stay as they are, the reference for what a program must do.
+interpreters of decision 0025 stay as they are, the reference for what a program must do.
 
 ## 2. What the measurements say
 
@@ -108,7 +108,7 @@ as the earlier ones were:
 4. The host and the limits.
 5. Modules (the linker of `project.nex` already makes one tree of them).
 6. **The generator compiles itself** (`nex.nex` as an executable). Its output on a program is
-   compared with that of the interpreter: that is the fixed point of the self-hosted decision, now
+   compared with that of the interpreter: that is the fixed point of decision 0025, now
    reachable, and from there the executable is the compiler.
 
 ### 3.4 What Python still does
@@ -124,7 +124,7 @@ reviewed) as the seed.
 | Alternative | Why not |
 |---|---|
 | Make the interpreter in NEXORA faster (module cache, better data structures) | Useful and cheap, but Python stays underneath: it does not do what the maintainer asked. The numbers above say it gains a constant. |
-| A bytecode virtual machine | Needs the VM written in some language that is not Python; the self-hosted decision ruled out a native runtime in another language as the first option because it keeps a second language in the project for good. |
+| A bytecode virtual machine | Needs the VM written in some language that is not Python; decision 0025 ruled out a native runtime in another language as the first option because it keeps a second language in the project for good. |
 | Emit machine code directly (an x86-64 and ARM64 backend) | No dependency on a C compiler, but a backend for each architecture and a binary format for each system is a project of its own, and it is much harder to review than C. |
 | Emit WebAssembly or JavaScript | Both need a runtime written in another language (a browser, `node`). Possible as extra targets later; they do not remove the dependency, they move it. |
 | Emit LLVM IR | A very good target, but it makes LLVM a build dependency, which is far bigger than a C compiler. |
@@ -138,7 +138,7 @@ reviewed) as the seed.
 - C compilers differ in small ways. The generator uses only what C11 and the overflow builtins of
   GCC and Clang give, and the tests run with both where they are available.
 - The language does not change: a program means what it meant. If the generator needs something
-  the language lacks (the rule of the self-hosted decision, section 4), it is proposed on its own.
+  the language lacks (the rule of decision 0025, section 4), it is proposed on its own.
 
 ## 6. Risks
 

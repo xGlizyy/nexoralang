@@ -1,4 +1,4 @@
-// The NEXORA lexer, written in NEXORA (decision 0024, stage 2).
+// The NEXORA lexer, written in NEXORA (decision 0025, stage 2).
 //
 // It follows nexora/src/nexora/lexer.py branch by branch and in the same order, so that the two can
 // be compared token by token. Token kinds are the same texts as the values of TokenType.

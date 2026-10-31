@@ -8,7 +8,7 @@ their result is compared: the tree as JSON when it parses, or the first syntax e
 hint, notes, span) when it does not. A line with a lexical error is skipped: the lexer is checked
 on its own (compare_lexer.py). Exit status 1 when any line differs.
 
-This is a test tool for the self-hosted work of decision 0024; it is not part of the language.
+This is a test tool for the self-hosted work of decision 0025; it is not part of the language.
 """
 
 from __future__ import annotations

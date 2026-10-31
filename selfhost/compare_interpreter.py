@@ -10,7 +10,7 @@ processes). Exit status 1 when a compared program differs.
 
 The files go to the NEXORA interpreter in batches, to pay the start-up of the interpreter once per batch.
 
-This is a test tool for the self-hosted work of decision 0024; it is not part of the language.
+This is a test tool for the self-hosted work of decision 0025; it is not part of the language.
 """
 
 from __future__ import annotations

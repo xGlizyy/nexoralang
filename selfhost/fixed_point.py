@@ -1,4 +1,4 @@
-"""Stage 3 of decision 0024: the interpreter written in NEXORA runs its own source.
+"""Stage 3 of decision 0025: the interpreter written in NEXORA runs its own source.
 
     PYTHONPATH=nexora/src python selfhost/fixed_point.py PROGRAM.nex [--levels 0,1,2]
 
@@ -15,7 +15,7 @@ optional. Level 3, the interpreter running itself running itself, is not run: se
 
 The program must not need the host (files, input, arguments): the point is the interpreter, not the grants.
 
-This is a test tool for the self-hosted work of decision 0024; it is not part of the language.
+This is a test tool for the self-hosted work of decision 0025; it is not part of the language.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-// The NEXORA interpreter, written in NEXORA (decision 0024, stage 2).
+// The NEXORA interpreter, written in NEXORA (decision 0025, stage 2).
 //
 // It runs the typed tree the checker gives (checker.nex) and follows nexora/src/nexora/interpreter.py.
 //
