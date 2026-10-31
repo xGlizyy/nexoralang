@@ -60,7 +60,14 @@ def host(compiler: list[str]) -> int:
     compare_host.prepare()
     same = different = skipped = 0
     with tempfile.TemporaryDirectory(dir=HERE.parent) as scratch:
-        for name, (_, allow, stdin, arguments) in compare_host.CASES_TABLE.items():
+        cases = [(name, allow, stdin, arguments, []) for name, (_, allow, stdin, arguments) in compare_host.CASES_TABLE.items()]
+        for name, (_, limits) in compare_host.LIMIT_CASES.items():
+            if name.startswith("source_"):
+                continue  # --max-source limits the file `nex run` reads; an executable has no source to read
+            read = [("read", compare_host.DATA)] if name == "text_read_long" else []
+            arguments = ["abcdefgh"] if name == "text_argument_long" else []
+            cases.append((name, read, compare_host.LIMIT_INPUT.get(name, ""), arguments, limits))
+        for name, allow, stdin, arguments, limits in cases:
             path = f"selfhost/host_cases/{name}.nex"
             c_file = Path(scratch, "program.c").relative_to(Path.cwd()).as_posix()
             report = generate(path, c_file)
@@ -75,13 +82,13 @@ def host(compiler: list[str]) -> int:
                 print(f"DIFF  {name}\n  the C does not compile:\n{text(built.stderr)[:1500]}")
                 continue
             expected_run = subprocess.run(
-                [sys.executable, "-m", "nexora", "run", path, *options_of(allow), *(["--", *arguments] if arguments else [])],
+                [sys.executable, "-m", "nexora", "run", path, *options_of(allow), *limits, *(["--", *arguments] if arguments else [])],
                 capture_output=True, input=stdin.encode("utf-8"),
             )
             expected = (text(expected_run.stdout), text(expected_run.stderr), expected_run.returncode)
             (HERE / "host_cases" / "data" / "out.txt").unlink(missing_ok=True)
             done = subprocess.run(
-                [executable, *options_of(allow), *(["--", *arguments] if arguments else [])],
+                [executable, *options_of(allow), *limits, *(["--", *arguments] if arguments else [])],
                 capture_output=True, input=stdin.encode("utf-8"),
             )
             actual = (text(done.stdout), text(done.stderr), done.returncode)
