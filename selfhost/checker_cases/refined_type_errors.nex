@@ -1,0 +1,29 @@
+type Percent = Int where value >= 0 and value <= 100
+
+fn takes(p: Percent) gives Int {
+    return p
+}
+
+fn main() {
+    var x = 5
+    let a: Percent = x
+    let b: Percent = takes(1)
+    let c = Percent("x")
+    let d = Percent(1, 2)
+    let e = Percent()
+    let f = Percent(1.5)
+    let g = Percent(print(1))
+    let h: Percent = 1.5
+    let i: Text = Percent(1)
+    let j = Percent
+    print(Percent)
+    let Percent = 1
+    print(Percent.foo(1))
+    print(Percent.length(1))
+    let k: Percent = "s"
+    let l = [Percent(1), 5]
+    print(takes(x))
+    print(takes(Percent(x)))
+    print(takes(5))
+    print(takes(500))
+}

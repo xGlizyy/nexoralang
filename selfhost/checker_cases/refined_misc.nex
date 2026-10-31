@@ -1,0 +1,30 @@
+type Pos = Int where value > 0, "positive"
+type Bounded = Pos where value < 100, "below 100"
+
+fn f(x: Pos) gives Bounded {
+    return x
+}
+
+fn g(x: Bounded) gives Pos {
+    return x
+}
+
+fn main() {
+    var p: Pos = 1
+    p = 2
+    p = -1
+    var xs: List[Pos] = []
+    let ys: List[Int] = [p]
+    let zs: List[Pos] = [1, 2, 3]
+    let ws: List[Pos] = [1, -2]
+    print(Pos(5) + Bounded(6))
+    print(p == 1)
+    if p > 0 and p < 10 {
+    }
+    while p < 10
+        shrinks 10 - p
+    {
+        p = p + 1
+    }
+    print(Text.length(Pos(5)))
+}

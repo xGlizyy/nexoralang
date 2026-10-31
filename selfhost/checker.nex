@@ -30,7 +30,7 @@ type Sig = {
 
 type State = {
     problems: List[parser.Problem], user: List[Sig], function: Text, return_type: Text,
-    in_example: Text, unsupported: Text, declared: List[Text], records: List[Rec]
+    in_example: Text, unsupported: Text, tables: Tables
 }
 
 type Checked = { node: parser.Node, ty: Text, state: State }
@@ -153,7 +153,7 @@ fn with_problems(state: State, problems: List[parser.Problem]) gives State {
     return State(
         problems: problems, user: state.user, function: state.function, return_type: state.return_type,
         in_example: state.in_example, unsupported: state.unsupported,
-        declared: state.declared, records: state.records
+        tables: state.tables
     )
 }
 
@@ -161,14 +161,7 @@ fn with_user(state: State, user: List[Sig]) gives State {
     return State(
         problems: state.problems, user: user, function: state.function, return_type: state.return_type,
         in_example: state.in_example, unsupported: state.unsupported,
-        declared: state.declared, records: state.records
-    )
-}
-
-fn with_types(state: State, declared: List[Text], records: List[Rec]) gives State {
-    return State(
-        problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
-        in_example: state.in_example, unsupported: state.unsupported, declared: declared, records: records
+        tables: state.tables
     )
 }
 
@@ -176,7 +169,7 @@ fn with_function(state: State, function: Text, return_type: Text) gives State {
     return State(
         problems: state.problems, user: state.user, function: function, return_type: return_type,
         in_example: state.in_example, unsupported: state.unsupported,
-        declared: state.declared, records: state.records
+        tables: state.tables
     )
 }
 
@@ -184,7 +177,7 @@ fn with_example(state: State, in_example: Text) gives State {
     return State(
         problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
         in_example: in_example, unsupported: state.unsupported,
-        declared: state.declared, records: state.records
+        tables: state.tables
     )
 }
 
@@ -195,7 +188,7 @@ fn unsupported(state: State, reason: Text) gives State {
     }
     return State(
         problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
-        in_example: state.in_example, unsupported: reason, declared: state.declared, records: state.records
+        in_example: state.in_example, unsupported: reason, tables: state.tables
     )
 }
 
@@ -435,14 +428,31 @@ fn binary_result(operator: Text, left: Text, right: Text) gives Text {
     return ""
 }
 
-// Checks that an expression of type `found` can be used where `expected` is needed.
-fn expect_type(state: State, expected: Text, found: Text, span: parser.Span, notes: List[Text]) gives State {
-    if expected == found {
+// Checks that the expression `node`, of type `found`, can be used where `expected` is needed. A constant of the
+// base type is accepted where a refined type is expected if it satisfies the condition, which is checked here.
+// Any other value has to be checked explicitly.
+fn expect_type(state: State, expected: Text, found: Text, node: parser.Node, notes: List[Text]) gives State {
+    if accepts(state, expected, found) {
         return state
     }
+    let span = span_of(node)
+    if ref_index(state, expected) >= 0 {
+        if root_of(state, found) == root_of(state, expected) {
+            let constant = constant_of(node)
+            if constant.present and ref_index(state, found) < 0 {
+                return check_constant(state, node, expected)
+            }
+            return report(
+                state, "E2011", "Expected " + expected + ", found " + found,
+                "Check the value explicitly with " + expected + "(...). The program stops there if the value does "
+                + "not satisfy the condition of " + expected + ".",
+                notes, span
+            )
+        }
+    }
     return report(
-        state, "E2011", "Expected " + expected + ", found " + found, conversion_hint(found, expected),
-        notes, span
+        state, "E2011", "Expected " + expected + ", found " + found,
+        conversion_hint(root_of(state, found), root_of(state, expected)), notes, span
     )
 }
 
@@ -472,7 +482,7 @@ fn make_binding(name: Text, category: Text, ty: Text, mutable: Bool, loop_variab
 // Reports E2006 and says that `name` cannot be declared when it is a built-in, a function or already
 // visible: functions, parameters and variables share one namespace.
 fn name_is_free(state: State, env: List[Binding], name: Text, span: parser.Span) gives Free {
-    if is_declared_record(state, name) {
+    if is_declared_record(state, name) or is_type_name(state, name) {
         return Free(
             state: report(
                 state, "E2006", "'" + name + "' is the name of a type and cannot be used for something else",
@@ -571,6 +581,16 @@ fn check_name(state: State, env: List[Binding], node: parser.Node) gives Checked
         let binding = List.get(env, index)
         return checked(node, binding.ty, state)
     }
+    if is_type_name(state, name) {
+        return checked(
+            node, "",
+            report(
+                state, "E2011", "'" + name + "' is a type, not a value",
+                "To check a refined value use " + name + "(x); to build an enum use " + name + ".Variant(...).",
+                [], span_of(node)
+            )
+        )
+    }
     if is_declared_record(state, name) {
         return checked(
             node, "",
@@ -603,6 +623,13 @@ fn check_unknown_variable(state: State, env: List[Binding], name: Text, span: pa
             [], span
         )
     }
+    if state.tables.refining != "" {
+        return report(
+            state, "E2005", "There is no variable named '" + name + "' here",
+            "In the condition of '" + state.tables.refining + "', the only name is 'value': the value being checked.",
+            [], span
+        )
+    }
     if name == "result" {
         return report(
             state, "E2005", "There is no variable named 'result' here",
@@ -623,29 +650,31 @@ fn check_unary(state: State, env: List[Binding], node: parser.Node) gives Checke
     if operand.ty == "" {
         return checked(rebuilt, "", operand.state)
     }
+    // A refined value takes part in operations as a value of its base type.
+    let root = root_of(operand.state, operand.ty)
     let operator = text_of(field(node, "operator"))
     if operator == "-" {
-        if operand.ty == "Int" or operand.ty == "Float" {
-            return checked(rebuilt, operand.ty, operand.state)
+        if root == "Int" or root == "Float" {
+            return checked(rebuilt, root, operand.state)
         }
         return checked(
             rebuilt, "",
             report(
-                operand.state, "E2011", "Cannot apply '-' to " + operand.ty, "'-' negates an Int or a Float.", [],
+                operand.state, "E2011", "Cannot apply '-' to " + root, "'-' negates an Int or a Float.", [],
                 span_of(node)
             )
         )
     }
-    if operand.ty == "Bool" {
+    if root == "Bool" {
         return checked(rebuilt, "Bool", operand.state)
     }
     var hint = "'not' negates a Bool."
-    if operand.ty == "Int" or operand.ty == "Float" {
+    if root == "Int" or root == "Float" {
         hint = hint + " To negate a comparison, put it in parentheses: not (a == b)"
     }
     return checked(
         rebuilt, "",
-        report(operand.state, "E2011", "Cannot apply 'not' to " + operand.ty, hint, [], span_of(node))
+        report(operand.state, "E2011", "Cannot apply 'not' to " + root, hint, [], span_of(node))
     )
 }
 
@@ -666,7 +695,7 @@ fn check_binary(state: State, env: List[Binding], node: parser.Node) gives Check
     if left.ty == "" or right.ty == "" {
         return checked(rebuilt, "", right.state)
     }
-    var result = binary_result(operator, left.ty, right.ty)
+    var result = binary_result(operator, root_of(right.state, left.ty), root_of(right.state, right.ty))
     if left.ty == right.ty and rec_index(right.state, left.ty) >= 0 {
         // A record is a value type: two values of the same record are compared by value.
         result = ""
@@ -679,7 +708,7 @@ fn check_binary(state: State, env: List[Binding], node: parser.Node) gives Check
             rebuilt, "",
             report(
                 right.state, "E2011", "Cannot apply '" + operator + "' to " + left.ty + " and " + right.ty,
-                binary_hint(operator, left.ty, right.ty), [], parser.Span(
+                binary_hint(operator, root_of(right.state, left.ty), root_of(right.state, right.ty)), [], parser.Span(
                     line: span_line(field(node, "operator_span")), column: span_column(field(node, "operator_span")),
                     end_line: span_end_line(field(node, "operator_span")),
                     end_column: span_end_column(field(node, "operator_span"))
@@ -762,7 +791,7 @@ fn check_list_literal(state: State, env: List[Binding], node: parser.Node, expec
             invalid = true
         } else if item == "" {
             item = found.ty
-        } else if item != found.ty {
+        } else if not accepts(current, item, found.ty) {
             var notes: List[Text] = []
             if expected == "" {
                 notes = ["The first element of this list is " + item + "."]
@@ -836,6 +865,21 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
     }
     let given = check_arguments(state, env, arguments, expectations_sig)
     let rebuilt = with_field(node, "arguments", parser.Node.Items(given.nodes))
+    if is_type_name(state, callee) {
+        return refinement_check(given, rebuilt, callee, arguments)
+    }
+    if state.tables.refining != "" and List.contains(state.tables.fn_names, callee) and not is_builtin(callee) {
+        return checked(
+            rebuilt, "",
+            report(
+                given.state, "E2018",
+                "The condition of '" + state.tables.refining + "' cannot call the function '" + callee + "'",
+                "A refinement only describes the value itself: it can use operators, literals and the built-in "
+                + "conversions. Write the rule there, or check it with 'needs'.",
+                [], callee_span
+            )
+        )
+    }
     if not known {
         if binding_index(env, callee) >= 0 {
             return checked(
@@ -894,7 +938,7 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
                 )
             } else if wanted != any_value() {
                 current = expect_type(
-                    current, wanted, found, span_of(List.get(arguments, i)),
+                    current, wanted, found, List.get(arguments, i),
                     [
                         "This is the argument for '" + List.get(sig.param_names, i) + "' in: " + describe(sig)
                     ]
@@ -964,7 +1008,7 @@ fn check_generic_call(given: ArgList, node: parser.Node, sig: Sig, arguments: Li
                 }
             } else {
                 let problems_before = List.length(current.problems)
-                current = expect_type(current, wanted, found, span_of(argument), notes)
+                current = expect_type(current, wanted, found, argument, notes)
                 if List.length(current.problems) != problems_before {
                     invalid = true
                 }
@@ -992,7 +1036,7 @@ fn check_generic_call(given: ArgList, node: parser.Node, sig: Sig, arguments: Li
 
 fn check_condition(state: State, env: List[Binding], node: parser.Node, owner: Text) gives Checked {
     let found = check_expression(state, env, node, "")
-    if found.ty == "" or found.ty == "Bool" {
+    if found.ty == "" or accepts(found.state, "Bool", found.ty) {
         return found
     }
     var hint = ""
@@ -1048,6 +1092,13 @@ fn declared_type(state: State, node: parser.Node, what: Text, allow_broken: Bool
     if name == "Int" or name == "Float" or name == "Bool" or name == "Text" {
         return checked(node, name, state)
     }
+    if is_type_name(state, name) {
+        // A refined type whose own declaration has an error is already reported there: it is no type here.
+        if ref_index(state, name) >= 0 {
+            return checked(node, name, state)
+        }
+        return checked(node, "", state)
+    }
     if is_declared_record(state, name) {
         // A record whose own declaration has an error is already reported there: it is no type here.
         if rec_index(state, name) >= 0 or allow_broken {
@@ -1055,7 +1106,9 @@ fn declared_type(state: State, node: parser.Node, what: Text, allow_broken: Bool
         }
         return checked(node, "", state)
     }
-    let close = close_match(name, List.concat(known_type_names(), state.declared))
+    let close = close_match(
+        name, List.concat(List.concat(known_type_names(), state.tables.type_names), state.tables.declared)
+    )
     var hint = "The types are Int, Float, Bool, Text and Void, and the types the program declares."
     if name == "String" {
         hint = "The text type is called Text."
@@ -1091,7 +1144,7 @@ fn check_let(state: State, env: List[Binding], node: parser.Node) gives Flow {
         variable_type = declared
         if value_type != "" {
             current = expect_type(
-                current, declared, value_type, span_of(field(node, "value")),
+                current, declared, value_type, field(node, "value"),
                 ["'" + name + "' is declared as " + declared + "."]
             )
         }
@@ -1160,7 +1213,7 @@ fn check_assign(state: State, env: List[Binding], node: parser.Node) gives Flow 
         )
     } else if value.ty != "" and target.ty != "" {
         current = expect_type(
-            current, target.ty, value.ty, span_of(field(node, "value")),
+            current, target.ty, value.ty, field(node, "value"),
             ["'" + name + "' is declared as " + target.ty + "."]
         )
     }
@@ -1210,7 +1263,7 @@ fn check_return(state: State, env: List[Binding], node: parser.Node) gives Typed
     return Typed(
         node: rebuilt,
         state: expect_type(
-            found.state, expected, found.ty, span_of(value_node),
+            found.state, expected, found.ty, value_node,
             ["'" + name + "' is declared to return " + expected + "."]
         )
     )
@@ -1353,7 +1406,7 @@ fn check_loop_clauses(state: State, env: List[Binding], clauses: List[parser.Nod
             let measure = check_expression(current, env, field(clause, "condition"), "")
             typed = List.append(typed, with_field(clause, "condition", measure.node))
             current = measure.state
-            if measure.ty != "" and measure.ty != "Int" {
+            if measure.ty != "" and root_of(current, measure.ty) != "Int" {
                 current = report(
                     current, "E2011", "The measure of 'shrinks' must be Int, found " + measure.ty,
                     "The measure is a whole number that gets smaller on every turn and never goes below 0.",
@@ -1781,8 +1834,7 @@ fn check_main(state: State, entry: parser.Node, found: Bool, sig: Sig) gives Sta
 
 fn has_declarations(program: parser.Node) gives Bool {
     return (
-        List.length(items_of(field(program, "types"))) > 0
-        or List.length(items_of(field(program, "enums"))) > 0 or List.length(items_of(field(program, "uses"))) > 0
+        List.length(items_of(field(program, "enums"))) > 0 or List.length(items_of(field(program, "uses"))) > 0
         or List.length(items_of(field(program, "imports"))) > 0
     )
 }
@@ -1827,7 +1879,7 @@ fn fill_object(kind: Text, names: List[Text], values: List[parser.Node]) gives p
 fn initial_state() gives State {
     return State(
         problems: [], user: [], function: "", return_type: "", in_example: "", unsupported: "",
-        declared: [], records: []
+        tables: empty_tables()
     )
 }
 
@@ -1836,9 +1888,23 @@ fn check_program(program: parser.Node) gives Typed {
     if has_declarations(program) {
         return Typed(node: program, state: unsupported(current, "declarations"))
     }
-    current = declare_record_names(current, program)
-    current = declare_records(current, program)
+    current = declare_type_names(current, program)
+    current = declare_types(current)
     let functions = items_of(field(program, "functions"))
+    var function_names: List[Text] = []
+    for function in functions {
+        function_names = List.append(function_names, text_of(field(function, "name")))
+    }
+    current = with_tables(current, set_fn_names(current.tables, function_names))
+    // The conditions of the refined types are checked before the signatures, so a type whose condition is
+    // wrong is already unusable when a signature names it.
+    var typed_types: List[parser.Node] = []
+    for declaration in items_of(field(program, "types")) {
+        let done = check_type_condition(current, declaration)
+        typed_types = List.append(typed_types, done.node)
+        current = done.state
+    }
+    current = declare_records(current, program)
     var signatures: List[Sig] = []
     var main_node = parser.Node.Null()
     var main_found = false
@@ -1855,10 +1921,14 @@ fn check_program(program: parser.Node) gives Typed {
                 current, "E2002", "'" + sig.name + "' is a built-in function and cannot be declared again",
                 "Choose a different name for this function.", [], name_span
             )
-        } else if is_declared_record(current, sig.name) {
+        } else if is_declared_record(current, sig.name) or is_type_name(current, sig.name) {
+            var meaning = sig.name + "(x) already means: check that x is a valid " + sig.name + "."
+            if is_declared_record(current, sig.name) {
+                meaning = sig.name + "(x) already means: build one: " + sig.name + "(field: value)"
+            }
             current = report(
                 current, "E2006", "'" + sig.name + "' is the name of a type and cannot be used for a function",
-                sig.name + "(x) already means: build one: " + sig.name + "(field: value)", [], name_span
+                meaning, [], name_span
             )
         } else if user_index(current, sig.name) >= 0 {
             let first = List.get(current.user, user_index(current, sig.name))
@@ -1888,7 +1958,10 @@ fn check_program(program: parser.Node) gives Typed {
         i = i + 1
     }
     return Typed(
-        node: fill_types(with_field(program, "functions", parser.Node.Items(typed_functions))), state: current
+        node: fill_types(
+            with_field(with_field(program, "functions", parser.Node.Items(typed_functions)), "types", parser.Node.Items(typed_types))
+        ),
+        state: current
     )
 }
 
@@ -2135,10 +2208,10 @@ type Rec = { name: Text, field_names: List[Text], field_types: List[Text], line:
 
 fn rec_index(state: State, name: Text) gives Int {
     var i = 0
-    while i < List.length(state.records)
-        shrinks List.length(state.records) - i
+    while i < List.length(state.tables.records)
+        shrinks List.length(state.tables.records) - i
     {
-        let rec = List.get(state.records, i)
+        let rec = List.get(state.tables.records, i)
         if rec.name == name {
             return i
         }
@@ -2156,7 +2229,7 @@ fn rec_field_type(rec: Rec, name: Text) gives Text {
 }
 
 fn is_declared_record(state: State, name: Text) gives Bool {
-    return List.contains(state.declared, name)
+    return List.contains(state.tables.declared, name)
 }
 
 fn record_decl(program: parser.Node, name: Text) gives parser.Node {
@@ -2166,44 +2239,6 @@ fn record_decl(program: parser.Node, name: Text) gives parser.Node {
         }
     }
     return parser.Node.Null()
-}
-
-// Registers the name of every record the program declares, in the order they appear. A name belongs
-// to one type: it cannot be declared twice.
-fn declare_record_names(state: State, program: parser.Node) gives State {
-    var current = state
-    var first_lines: List[Int] = []
-    var first_columns: List[Int] = []
-    for declaration in items_of(field(program, "records")) {
-        let name = text_of(field(declaration, "name"))
-        let span = place_span(field(declaration, "name_span"))
-        if List.contains(known_type_names(), name) or name == "List" {
-            current = report(
-                current, "E2016", "'" + name + "' is a built-in type and cannot be declared again",
-                "Choose a different name for this type.", [], span
-            )
-        } else if not starts_upper(name) {
-            current = report(
-                current, "E2016", "The type name '" + name + "' must start with a capital letter",
-                "Write it as: " + upper_first(name), [], span
-            )
-        } else if is_declared_record(current, name) {
-            let at = index_of(current.declared, name)
-            current = report(
-                current, "E2016", "The type '" + name + "' is declared more than once", "",
-                [
-                    "It was first declared at line " + to_text(List.get(first_lines, at)) + ", column "
-                    + to_text(List.get(first_columns, at)) + "."
-                ],
-                span
-            )
-        } else {
-            current = with_types(current, List.append(current.declared, name), current.records)
-            first_lines = List.append(first_lines, span.line)
-            first_columns = List.append(first_columns, span.column)
-        }
-    }
-    return current
 }
 
 // The record types a type reference depends on, looking inside `List[...]` too.
@@ -2337,7 +2372,7 @@ fn declare_records(state: State, program: parser.Node) gives State {
     var dependencies: List[List[Text]] = []
     var resolved_names: List[Text] = []
     var resolved_fields: List[List[Text]] = []
-    for name in state.declared {
+    for name in state.tables.declared {
         let declaration = record_decl(program, name)
         let fields = resolve_fields(current, declaration)
         current = fields.state
@@ -2363,7 +2398,7 @@ fn declare_records(state: State, program: parser.Node) gives State {
     }
     // A record that uses a record that cannot be used is not usable either.
     var invalid = cyclic
-    for name in state.declared {
+    for name in state.tables.declared {
         if not List.contains(resolved_names, name) and not List.contains(invalid, name) {
             invalid = List.append(invalid, name)
         }
@@ -2406,7 +2441,7 @@ fn declare_records(state: State, program: parser.Node) gives State {
         }
         index = index + 1
     }
-    return with_types(current, current.declared, records)
+    return with_tables(current, set_records(current.tables, records))
 }
 
 // `Point(x: 1, y: 2)`: builds a record value. Every field is given once, with a value of its type; the
@@ -2427,7 +2462,7 @@ fn check_record_construction(state: State, env: List[Binding], node: parser.Node
         }
         return checked(with_field(node, "fields", parser.Node.Items(typed)), "", current)
     }
-    let rec = List.get(current.records, at)
+    let rec = List.get(current.tables.records, at)
     var given: List[Text] = []
     var repeated: List[parser.Node] = []
     var unknown: List[parser.Node] = []
@@ -2472,7 +2507,7 @@ fn check_record_construction(state: State, env: List[Binding], node: parser.Node
         current = value.state
         if value.ty != "" and wanted != "" {
             current = expect_type(
-                current, wanted, value.ty, span_of(field(initializer, "value")),
+                current, wanted, value.ty, field(initializer, "value"),
                 ["The field '" + field_name + "' of '" + rec.name + "' is " + wanted + "."]
             )
         }
@@ -2497,7 +2532,7 @@ fn check_field_access(state: State, env: List[Binding], node: parser.Node) gives
             )
         )
     }
-    let rec = List.get(target.state.records, at)
+    let rec = List.get(target.state.tables.records, at)
     let field_name = text_of(field(node, "name"))
     let kind = rec_field_type(rec, field_name)
     if kind == "" {
@@ -2531,7 +2566,7 @@ fn check_field_assign(state: State, env: List[Binding], node: parser.Node) gives
             env, false
         )
     }
-    let rec = List.get(target.state.records, at)
+    let rec = List.get(target.state.tables.records, at)
     let field_name = text_of(field(node, "name"))
     if rec_field_type(rec, field_name) == "" {
         return flow(
@@ -2577,8 +2612,12 @@ fn unknown_qualified_call(state: State, env: List[Binding], node: parser.Node) g
         } else {
             notes = [qualifier + " has no functions yet."]
         }
-    } else if is_declared_record(state, qualifier) {
+    } else if is_declared_record(state, qualifier) or is_type_name(state, qualifier) {
         label = "'" + qualifier + "' has no functions of its own"
+        let base = root_of(state, qualifier)
+        if List.length(type_functions(base)) > 0 {
+            hint = "A value of " + qualifier + " can be passed to the functions of its base type, " + base + "."
+        }
     } else if symbol >= 0 {
         let binding = List.get(env, symbol)
         label = "'" + qualifier + "' is a " + binding.category + ": values have no functions of their own"
@@ -2599,12 +2638,986 @@ fn unknown_qualified_call(state: State, env: List[Binding], node: parser.Node) g
             )
         }
         label = "There is no type named '" + qualifier + "'"
-        let close = close_match(qualifier, List.concat(List.append(known_type_names(), "List"), state.declared))
+        let close = close_match(
+            qualifier,
+            List.concat(List.concat(List.append(known_type_names(), "List"), state.tables.type_names), state.tables.declared)
+        )
         if close != "" {
             hint = "Did you mean '" + close + "'?"
         }
     }
     return report(state, "E2008", label, hint, notes, span)
+}
+
+// Tables of types
+
+// A declared refined type once its base is resolved: the type it refines, the built-in type at the end of
+// its chain, and the names of the declarations whose conditions a value must satisfy, from the root outwards.
+type Ref = { name: Text, base: Text, root: Text, chain: List[Text] }
+
+type Tables = {
+    declared: List[Text], records: List[Rec], type_names: List[Text], type_decls: List[parser.Node],
+    refined: List[Ref], steps: Int, refining: Text, fn_names: List[Text],
+    reg_names: List[Text], reg_lines: List[Int], reg_columns: List[Int]
+}
+
+fn empty_tables() gives Tables {
+    return Tables(
+        declared: [], records: [], type_names: [], type_decls: [], refined: [], steps: 0, refining: "",
+        fn_names: [], reg_names: [], reg_lines: [], reg_columns: []
+    )
+}
+
+fn set_declared(t: Tables, value: List[Text]) gives Tables {
+    return Tables(
+        declared: value, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
+        refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+    )
+}
+
+fn set_records(t: Tables, value: List[Rec]) gives Tables {
+    return Tables(
+        declared: t.declared, records: value, type_names: t.type_names, type_decls: t.type_decls,
+        refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+    )
+}
+
+fn set_type_names(t: Tables, names: List[Text], decls: List[parser.Node]) gives Tables {
+    return Tables(
+        declared: t.declared, records: t.records, type_names: names, type_decls: decls,
+        refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+    )
+}
+
+fn set_refined(t: Tables, value: List[Ref]) gives Tables {
+    return Tables(
+        declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
+        refined: value, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+    )
+}
+
+fn set_steps(t: Tables, value: Int) gives Tables {
+    return Tables(
+        declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
+        refined: t.refined, steps: value, refining: t.refining, fn_names: t.fn_names,
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+    )
+}
+
+fn set_refining(t: Tables, value: Text) gives Tables {
+    return Tables(
+        declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
+        refined: t.refined, steps: t.steps, refining: value, fn_names: t.fn_names,
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+    )
+}
+
+fn set_fn_names(t: Tables, value: List[Text]) gives Tables {
+    return Tables(
+        declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
+        refined: t.refined, steps: t.steps, refining: t.refining, fn_names: value,
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+    )
+}
+
+fn set_registered(t: Tables, names: List[Text], lines: List[Int], columns: List[Int]) gives Tables {
+    return Tables(
+        declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
+        refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
+        reg_names: names, reg_lines: lines, reg_columns: columns
+    )
+}
+
+fn with_tables(state: State, tables: Tables) gives State {
+    return State(
+        problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
+        in_example: state.in_example, unsupported: state.unsupported, tables: tables
+    )
+}
+
+fn is_type_name(state: State, name: Text) gives Bool {
+    return List.contains(state.tables.type_names, name)
+}
+
+fn ref_index(state: State, name: Text) gives Int {
+    var i = 0
+    while i < List.length(state.tables.refined)
+        shrinks List.length(state.tables.refined) - i
+    {
+        let ref = List.get(state.tables.refined, i)
+        if ref.name == name {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+// The declaration of a refined type by name.
+fn type_decl(state: State, name: Text) gives parser.Node {
+    let at = index_of(state.tables.type_names, name)
+    if at < 0 {
+        return parser.Node.Null()
+    }
+    return List.get(state.tables.type_decls, at)
+}
+
+// The built-in type at the end of a chain of refinements, or the type itself if it is not refined.
+fn root_of(state: State, ty: Text) gives Text {
+    let at = ref_index(state, ty)
+    if at < 0 {
+        return ty
+    }
+    let ref = List.get(state.tables.refined, at)
+    return ref.root
+}
+
+// Whether a value of type `found` can be used where `expected` is needed: the same type, or a refined type
+// widening through its chain of bases. A base is never accepted where a refined type is expected.
+fn accepts(state: State, expected: Text, found: Text) gives Bool {
+    var current = found
+    var steps = 0
+    while steps <= List.length(state.tables.refined)
+        shrinks List.length(state.tables.refined) + 1 - steps
+    {
+        if current == expected {
+            return true
+        }
+        let at = ref_index(state, current)
+        if at < 0 {
+            return false
+        }
+        let ref = List.get(state.tables.refined, at)
+        current = ref.base
+        steps = steps + 1
+    }
+    return false
+}
+
+// Declaring the types
+
+// Registers the name of every record and refined type the program declares, in the order they appear. A
+// name belongs to one type: it cannot be declared twice, whatever the kind of the two declarations.
+fn declare_type_names(state: State, program: parser.Node) gives State {
+    var current = state
+    let ordered = sort_by_position(
+        List.concat(items_of(field(program, "records")), items_of(field(program, "types")))
+    )
+    for declaration in ordered {
+        let name = text_of(field(declaration, "name"))
+        let span = place_span(field(declaration, "name_span"))
+        let is_record = kind_of(declaration) == "RecordDecl"
+        let registered = index_of(current.tables.reg_names, name)
+        if List.contains(known_type_names(), name) or (is_record and name == "List") {
+            current = report(
+                current, "E2016", "'" + name + "' is a built-in type and cannot be declared again",
+                "Choose a different name for this type.", [], span
+            )
+        } else if not starts_upper(name) {
+            current = report(
+                current, "E2016", "The type name '" + name + "' must start with a capital letter",
+                "Write it as: " + upper_first(name), [], span
+            )
+        } else if registered >= 0 {
+            current = report(
+                current, "E2016", "The type '" + name + "' is declared more than once", "",
+                [
+                    "It was first declared at line " + to_text(List.get(current.tables.reg_lines, registered))
+                    + ", column " + to_text(List.get(current.tables.reg_columns, registered)) + "."
+                ],
+                span
+            )
+        } else {
+            var tables = set_registered(
+                current.tables, List.append(current.tables.reg_names, name),
+                List.append(current.tables.reg_lines, span.line), List.append(current.tables.reg_columns, span.column)
+            )
+            if is_record {
+                tables = set_declared(tables, List.append(tables.declared, name))
+            } else {
+                tables = set_type_names(
+                    tables, List.append(tables.type_names, name), List.append(tables.type_decls, declaration)
+                )
+            }
+            current = with_tables(current, tables)
+        }
+    }
+    return current
+}
+
+type Resolution = { state: State, found: Bool, ref: Ref }
+
+fn no_ref() gives Ref {
+    return Ref(name: "", base: "", root: "", chain: [])
+}
+
+fn base_name_of(state: State, name: Text) gives Text {
+    return text_of(field(field(type_decl(state, name), "base"), "name"))
+}
+
+// Whether a chain of refined types comes back to `name`.
+fn in_cycle(state: State, name: Text) gives Bool {
+    var seen: List[Text] = []
+    var current = base_name_of(state, name)
+    while is_type_name(state, current) and not List.contains(seen, current)
+        shrinks List.length(state.tables.type_names) + 1 - List.length(seen)
+    {
+        if current == name {
+            return true
+        }
+        seen = List.append(seen, current)
+        current = base_name_of(state, current)
+    }
+    return false
+}
+
+// The refined type `name`, with its chain of bases. Not found if its declaration has an error.
+fn resolve_type(state: State, name: Text, visiting: List[Text]) gives Resolution {
+    let known = ref_index(state, name)
+    if known >= 0 {
+        return Resolution(state: state, found: true, ref: List.get(state.tables.refined, known))
+    }
+    let declaration = type_decl(state, name)
+    if List.contains(visiting, name) {
+        // Reported once, at the declaration where the chain started.
+        return Resolution(state: state, found: false, ref: no_ref())
+    }
+    let base = field(declaration, "base")
+    let base_name = text_of(field(base, "name"))
+    let base_span = span_of(base)
+    if not is_null(field(base, "qualifier")) {
+        return Resolution(state: unsupported(state, "qualified type"), found: false, ref: no_ref())
+    }
+    if base_name == "List" and List.length(items_of(field(base, "arguments"))) > 0 {
+        var current = state
+        if List.length(visiting) == 0 {
+            current = report(
+                current, "E2016", "The refined type '" + name + "' cannot refine a list type yet",
+                "Refining 'List[T]' is not supported yet. Refine a built-in type such as Int or Text.", [], base_span
+            )
+        }
+        return Resolution(state: current, found: false, ref: no_ref())
+    }
+    if is_declared_record(state, base_name) {
+        var current = state
+        if List.length(visiting) == 0 {
+            current = report(
+                current, "E2016", "The refined type '" + name + "' cannot refine a record type",
+                "Refining a record is not supported yet. Refine a built-in type such as Int or Text.", [], base_span
+            )
+        }
+        return Resolution(state: current, found: false, ref: no_ref())
+    }
+    var made = no_ref()
+    var current = state
+    if is_type_name(state, base_name) {
+        let resolved = resolve_type(state, base_name, List.append(visiting, name))
+        current = resolved.state
+        if not resolved.found {
+            if List.length(visiting) == 0 and in_cycle(current, name) {
+                current = report(
+                    current, "E2016", "The type '" + name + "' refines itself through a chain of types",
+                    "A chain of refined types must end in Int, Float, Bool or Text.", [], base_span
+                )
+            }
+            return Resolution(state: current, found: false, ref: no_ref())
+        }
+        made = Ref(
+            name: name, base: base_name, root: resolved.ref.root, chain: List.append(resolved.ref.chain, name)
+        )
+    } else {
+        let base_type = declared_type(current, base, "The type '" + name + "'", false)
+        current = base_type.state
+        if base_type.ty == "" {
+            return Resolution(state: current, found: false, ref: no_ref())
+        }
+        made = Ref(name: name, base: base_type.ty, root: base_type.ty, chain: [name])
+    }
+    return Resolution(
+        state: with_tables(current, set_refined(current.tables, List.append(current.tables.refined, made))),
+        found: true, ref: made
+    )
+}
+
+fn declare_types(state: State) gives State {
+    var current = state
+    for name in state.tables.type_names {
+        let resolved = resolve_type(current, name, [])
+        current = resolved.state
+    }
+    return current
+}
+
+// Every refined type whose chain goes through `name` is left without a valid chain.
+fn drop_type(state: State, name: Text) gives State {
+    var kept: List[Ref] = []
+    for ref in state.tables.refined {
+        if not List.contains(ref.chain, name) {
+            kept = List.append(kept, ref)
+        }
+    }
+    return with_tables(state, set_refined(state.tables, kept))
+}
+
+// Checks the condition after `where`. Only `value` is visible in it, and it calls no function of the
+// program: a refinement is a fact about one value and nothing else.
+fn check_type_condition(state: State, declaration: parser.Node) gives Typed {
+    let name = text_of(field(declaration, "name"))
+    let at = ref_index(state, name)
+    let registered_span = span_of(type_decl(state, name))
+    let declared_span = span_of(declaration)
+    if at < 0 or registered_span.line != declared_span.line or registered_span.column != declared_span.column {
+        return Typed(node: declaration, state: state)
+    }
+    let ref = List.get(state.tables.refined, at)
+    let env = [make_binding("value", "value", ref.base, false, false, place_span(field(declaration, "name_span")))]
+    let before_count = List.length(state.problems)
+    let inside = check_condition(
+        with_tables(state, set_refining(state.tables, name)), env, field(declaration, "condition"),
+        "'where' in '" + name + "'"
+    )
+    var current = with_tables(inside.state, set_refining(inside.state.tables, ""))
+    if List.length(current.problems) > before_count {
+        // Constants cannot be checked against a condition that is not well formed, and the types that refine
+        // this one are left without a valid chain.
+        current = drop_type(current, name)
+    }
+    return Typed(node: with_field(declaration, "condition", inside.node), state: current)
+}
+
+// Values, and the evaluation of the conditions of refined types
+
+type Val = enum { VInt(v: Int), VFloat(v: Float), VText(v: Text), VBool(v: Bool) }
+
+type EvalOut = { ok: Bool, val: Val, label: Text, unsupported: Text }
+
+fn int_max() gives Int {
+    return 9223372036854775807
+}
+
+fn int_min() gives Int {
+    return 0 - 9223372036854775807 - 1
+}
+
+fn ok_val(v: Val) gives EvalOut {
+    return EvalOut(ok: true, val: v, label: "", unsupported: "")
+}
+
+fn eval_failure(label: Text) gives EvalOut {
+    return EvalOut(ok: false, val: Val.VBool(false), label: label, unsupported: "")
+}
+
+fn eval_unsupported(reason: Text) gives EvalOut {
+    return EvalOut(ok: false, val: Val.VBool(false), label: "", unsupported: reason)
+}
+
+fn int_of(node: parser.Node) gives Int {
+    return match node {
+        parser.Node.Whole(value) => value
+        _ => 0
+    }
+}
+
+fn real_of(node: parser.Node) gives Text {
+    return match node {
+        parser.Node.Real(text) => text
+        _ => "0.0"
+    }
+}
+
+fn flag_of(node: parser.Node) gives Bool {
+    return match node {
+        parser.Node.Flag(value) => value
+        _ => false
+    }
+}
+
+fn truth(v: Val) gives Bool {
+    return match v {
+        Val.VBool(b) => b
+        _ => false
+    }
+}
+
+fn vals_equal(a: Val, b: Val) gives Bool {
+    return match a {
+        Val.VInt(x) => match b {
+            Val.VInt(y) => x == y
+            _ => false
+        }
+        Val.VFloat(x) => match b {
+            Val.VFloat(y) => x == y
+            _ => false
+        }
+        Val.VText(x) => match b {
+            Val.VText(y) => x == y
+            _ => false
+        }
+        Val.VBool(x) => match b {
+            Val.VBool(y) => x == y
+            _ => false
+        }
+    }
+}
+
+fn vals_less(a: Val, b: Val) gives Bool {
+    return match a {
+        Val.VInt(x) => match b {
+            Val.VInt(y) => x < y
+            _ => false
+        }
+        Val.VFloat(x) => match b {
+            Val.VFloat(y) => x < y
+            _ => false
+        }
+        Val.VText(x) => match b {
+            Val.VText(y) => x < y
+            _ => false
+        }
+        Val.VBool(x) => false
+    }
+}
+
+fn add_overflows(a: Int, b: Int) gives Bool {
+    return (b > 0 and a > int_max() - b) or (b < 0 and a < int_min() - b)
+}
+
+fn subtract_overflows(a: Int, b: Int) gives Bool {
+    return (b < 0 and a > int_max() + b) or (b > 0 and a < int_min() + b)
+}
+
+fn multiply_overflows(a: Int, b: Int) gives Bool {
+    if a == 0 or b == 0 {
+        return false
+    }
+    if a > 0 and b > 0 {
+        return a > int_max() / b
+    }
+    if a > 0 and b < 0 {
+        return b < int_min() / a
+    }
+    if a < 0 and b > 0 {
+        return a < int_min() / b
+    }
+    return a < int_max() / b
+}
+
+fn int_overflow() gives EvalOut {
+    return eval_failure("The result of this operation does not fit in an Int")
+}
+
+fn evaluate_int(operator: Text, a: Int, b: Int) gives EvalOut {
+    if operator == "+" {
+        if add_overflows(a, b) {
+            return int_overflow()
+        }
+        return ok_val(Val.VInt(a + b))
+    }
+    if operator == "-" {
+        if subtract_overflows(a, b) {
+            return int_overflow()
+        }
+        return ok_val(Val.VInt(a - b))
+    }
+    if operator == "*" {
+        if multiply_overflows(a, b) {
+            return int_overflow()
+        }
+        return ok_val(Val.VInt(a * b))
+    }
+    if b == 0 {
+        return eval_failure("The right-hand side of this division is zero")
+    }
+    if a == int_min() and b == 0 - 1 {
+        return int_overflow()
+    }
+    return ok_val(Val.VInt(a / b))
+}
+
+fn evaluate_float(operator: Text, a: Float, b: Float) gives EvalOut {
+    if operator == "+" {
+        return ok_val(Val.VFloat(a + b))
+    }
+    if operator == "-" {
+        return ok_val(Val.VFloat(a - b))
+    }
+    if operator == "*" {
+        return ok_val(Val.VFloat(a * b))
+    }
+    if b == 0.0 {
+        return eval_failure("The right-hand side of this division is zero")
+    }
+    return ok_val(Val.VFloat(a / b))
+}
+
+fn evaluate_arithmetic(operator: Text, a: Val, b: Val) gives EvalOut {
+    return match a {
+        Val.VInt(x) => match b {
+            Val.VInt(y) => evaluate_int(operator, x, y)
+            _ => eval_unsupported("mixed arithmetic")
+        }
+        Val.VFloat(x) => match b {
+            Val.VFloat(y) => evaluate_float(operator, x, y)
+            _ => eval_unsupported("mixed arithmetic")
+        }
+        Val.VText(x) => match b {
+            Val.VText(y) => ok_val(Val.VText(x + y))
+            _ => eval_unsupported("mixed arithmetic")
+        }
+        Val.VBool(x) => eval_unsupported("arithmetic on Bool")
+    }
+}
+
+fn evaluate_binary(node: parser.Node, current: Val) gives EvalOut {
+    let operator = text_of(field(node, "operator"))
+    let left = evaluate(field(node, "left"), current)
+    if not left.ok {
+        return left
+    }
+    // 'and' and 'or' only evaluate their right side when it can change the result.
+    if operator == "or" or operator == "and" {
+        let decided = truth(left.val)
+        if (operator == "or" and decided) or (operator == "and" and not decided) {
+            return left
+        }
+        return evaluate(field(node, "right"), current)
+    }
+    let right = evaluate(field(node, "right"), current)
+    if not right.ok {
+        return right
+    }
+    if operator == "==" {
+        return ok_val(Val.VBool(vals_equal(left.val, right.val)))
+    }
+    if operator == "!=" {
+        return ok_val(Val.VBool(not vals_equal(left.val, right.val)))
+    }
+    if operator == "<" {
+        return ok_val(Val.VBool(vals_less(left.val, right.val)))
+    }
+    if operator == ">" {
+        return ok_val(Val.VBool(vals_less(right.val, left.val)))
+    }
+    if operator == "<=" {
+        return ok_val(Val.VBool(not vals_less(right.val, left.val)))
+    }
+    if operator == ">=" {
+        return ok_val(Val.VBool(not vals_less(left.val, right.val)))
+    }
+    return evaluate_arithmetic(operator, left.val, right.val)
+}
+
+fn evaluate_unary(node: parser.Node, current: Val) gives EvalOut {
+    let operand = evaluate(field(node, "operand"), current)
+    if not operand.ok {
+        return operand
+    }
+    if text_of(field(node, "operator")) == "not" {
+        return ok_val(Val.VBool(not truth(operand.val)))
+    }
+    return match operand.val {
+        Val.VInt(x) => negate_int(x)
+        Val.VFloat(x) => ok_val(Val.VFloat(0.0 - x))
+        _ => eval_unsupported("negation")
+    }
+}
+
+fn negate_int(x: Int) gives EvalOut {
+    if x == int_min() {
+        return int_overflow()
+    }
+    return ok_val(Val.VInt(0 - x))
+}
+
+// The text a value is shown with, as in `to_text`.
+fn format_val(v: Val) gives Text {
+    return match v {
+        Val.VInt(x) => to_text(x)
+        Val.VFloat(x) => to_text(x)
+        Val.VText(x) => x
+        Val.VBool(x) => to_text(x)
+    }
+}
+
+// A value as it would be written in source code, for diagnostics: Text is quoted.
+fn show_val(v: Val) gives Text {
+    return match v {
+        Val.VText(x) => parser.quote(x)
+        _ => format_val(v)
+    }
+}
+
+fn text_arg(v: Val) gives Text {
+    return match v {
+        Val.VText(x) => x
+        _ => ""
+    }
+}
+
+fn evaluate_call(node: parser.Node, current: Val) gives EvalOut {
+    let callee = text_of(field(node, "callee"))
+    let arguments = items_of(field(node, "arguments"))
+    var values: List[Val] = []
+    for argument in arguments {
+        let evaluated = evaluate(argument, current)
+        if not evaluated.ok {
+            return evaluated
+        }
+        values = List.append(values, evaluated.val)
+    }
+    if callee == "to_text" and List.length(values) == 1 {
+        return ok_val(Val.VText(format_val(List.get(values, 0))))
+    }
+    if callee == "to_float" and List.length(values) == 1 {
+        return match List.get(values, 0) {
+            Val.VInt(x) => ok_val(Val.VFloat(to_float(x)))
+            _ => eval_unsupported("to_float")
+        }
+    }
+    if callee == "to_int" and List.length(values) == 1 {
+        return match List.get(values, 0) {
+            Val.VFloat(x) => convert_float(x)
+            _ => eval_unsupported("to_int")
+        }
+    }
+    if callee == "Text.length" and List.length(values) == 1 {
+        return ok_val(Val.VInt(Text.length(text_arg(List.get(values, 0)))))
+    }
+    if List.length(values) == 2 {
+        let first = text_arg(List.get(values, 0))
+        let second = text_arg(List.get(values, 1))
+        if callee == "Text.contains" {
+            return ok_val(Val.VBool(Text.contains(first, second)))
+        }
+        if callee == "Text.starts_with" {
+            return ok_val(Val.VBool(Text.starts_with(first, second)))
+        }
+        if callee == "Text.ends_with" {
+            return ok_val(Val.VBool(Text.ends_with(first, second)))
+        }
+    }
+    if callee == "Int.can_parse" and List.length(values) == 1 {
+        return ok_val(Val.VBool(Int.can_parse(text_arg(List.get(values, 0)))))
+    }
+    if callee == "Float.can_parse" and List.length(values) == 1 {
+        return ok_val(Val.VBool(Float.can_parse(text_arg(List.get(values, 0)))))
+    }
+    return eval_unsupported("call " + callee)
+}
+
+// to_int drops the fractional part (rounds toward zero) and stops when the result does not fit.
+fn convert_float(x: Float) gives EvalOut {
+    if x >= 9223372036854775808.0 or x < 0.0 - 9223372036854775808.0 {
+        return eval_failure(to_text(x) + " is outside the range of Int")
+    }
+    return ok_val(Val.VInt(to_int(x)))
+}
+
+// Evaluates the condition of a refined type for one value. Only `value` is visible in it.
+fn evaluate(node: parser.Node, current: Val) gives EvalOut {
+    let kind = kind_of(node)
+    if kind == "IntLiteral" {
+        return ok_val(Val.VInt(int_of(field(node, "value"))))
+    }
+    if kind == "FloatLiteral" {
+        return ok_val(Val.VFloat(Float.parse(real_of(field(node, "value")))))
+    }
+    if kind == "TextLiteral" {
+        return ok_val(Val.VText(text_of(field(node, "value"))))
+    }
+    if kind == "BoolLiteral" {
+        return ok_val(Val.VBool(flag_of(field(node, "value"))))
+    }
+    if kind == "Name" {
+        if text_of(field(node, "name")) == "value" {
+            return ok_val(current)
+        }
+        return eval_unsupported("name")
+    }
+    if kind == "Group" {
+        return evaluate(field(node, "expression"), current)
+    }
+    if kind == "Unary" {
+        return evaluate_unary(node, current)
+    }
+    if kind == "Binary" {
+        return evaluate_binary(node, current)
+    }
+    if kind == "Call" {
+        return evaluate_call(node, current)
+    }
+    return eval_unsupported(kind)
+}
+
+// An expression written back as source text, for the notes of a refinement.
+fn unparse(node: parser.Node) gives Text {
+    let kind = kind_of(node)
+    if kind == "TextLiteral" {
+        return parser.quote(text_of(field(node, "value")))
+    }
+    if kind == "IntLiteral" {
+        return to_text(int_of(field(node, "value")))
+    }
+    if kind == "FloatLiteral" {
+        return to_text(Float.parse(real_of(field(node, "value"))))
+    }
+    if kind == "BoolLiteral" {
+        return to_text(flag_of(field(node, "value")))
+    }
+    if kind == "Name" {
+        return text_of(field(node, "name"))
+    }
+    if kind == "Group" {
+        return "(" + unparse(field(node, "expression")) + ")"
+    }
+    if kind == "Unary" {
+        var separator = ""
+        if text_of(field(node, "operator")) == "not" {
+            separator = " "
+        }
+        return text_of(field(node, "operator")) + separator + unparse(field(node, "operand"))
+    }
+    if kind == "Binary" {
+        return (
+            unparse(field(node, "left")) + " " + text_of(field(node, "operator")) + " "
+            + unparse(field(node, "right"))
+        )
+    }
+    if kind == "ListLiteral" {
+        return "[" + parser.join_texts(unparse_all(items_of(field(node, "elements"))), ", ") + "]"
+    }
+    if kind == "RecordConstruction" {
+        var written: List[Text] = []
+        for initializer in items_of(field(node, "fields")) {
+            written = List.append(written, text_of(field(initializer, "name")) + ": " + unparse(field(initializer, "value")))
+        }
+        var prefix = ""
+        if not is_null(field(node, "qualifier")) {
+            prefix = text_of(field(node, "qualifier")) + "."
+        }
+        return prefix + text_of(field(node, "name")) + "(" + parser.join_texts(written, ", ") + ")"
+    }
+    if kind == "FieldAccess" {
+        return unparse(field(node, "target")) + "." + text_of(field(node, "name"))
+    }
+    return text_of(field(node, "callee")) + "(" + parser.join_texts(unparse_all(items_of(field(node, "arguments"))), ", ") + ")"
+}
+
+fn unparse_all(nodes: List[parser.Node]) gives List[Text] {
+    var result: List[Text] = []
+    for node in nodes {
+        result = List.append(result, unparse(node))
+    }
+    return result
+}
+
+// The number of nodes of an expression.
+fn size_of(node: parser.Node) gives Int {
+    let kind = kind_of(node)
+    if kind == "Binary" {
+        return 1 + size_of(field(node, "left")) + size_of(field(node, "right"))
+    }
+    if kind == "Unary" {
+        return 1 + size_of(field(node, "operand"))
+    }
+    if kind == "Group" {
+        return 1 + size_of(field(node, "expression"))
+    }
+    if kind == "Call" {
+        var total = 1
+        for argument in items_of(field(node, "arguments")) {
+            total = total + size_of(argument)
+        }
+        return total
+    }
+    if kind == "ListLiteral" {
+        var total = 1
+        for element in items_of(field(node, "elements")) {
+            total = total + size_of(element)
+        }
+        return total
+    }
+    return 1
+}
+
+// Constants
+
+type ConstOut = { present: Bool, val: Val }
+
+// The value of a literal (possibly negated or in parentheses), or nothing for anything else.
+fn constant_of(node: parser.Node) gives ConstOut {
+    let kind = kind_of(node)
+    let none = ConstOut(present: false, val: Val.VBool(false))
+    if kind == "IntLiteral" {
+        return ConstOut(present: true, val: Val.VInt(int_of(field(node, "value"))))
+    }
+    if kind == "FloatLiteral" {
+        return ConstOut(present: true, val: Val.VFloat(Float.parse(real_of(field(node, "value")))))
+    }
+    if kind == "TextLiteral" {
+        return ConstOut(present: true, val: Val.VText(text_of(field(node, "value"))))
+    }
+    if kind == "BoolLiteral" {
+        return ConstOut(present: true, val: Val.VBool(flag_of(field(node, "value"))))
+    }
+    if kind == "Group" {
+        return constant_of(field(node, "expression"))
+    }
+    if kind == "Unary" {
+        let inner = constant_of(field(node, "operand"))
+        if not inner.present {
+            return none
+        }
+        let operator = text_of(field(node, "operator"))
+        if operator == "-" {
+            return match inner.val {
+                Val.VInt(x) => ConstOut(present: true, val: Val.VInt(0 - x))
+                Val.VFloat(x) => ConstOut(present: true, val: Val.VFloat(0.0 - x))
+                _ => none
+            }
+        }
+        return match inner.val {
+            Val.VBool(x) => ConstOut(present: true, val: Val.VBool(not x))
+            _ => none
+        }
+    }
+    return none
+}
+
+fn refinement_notes(state: State, kind: Text, broken: parser.Node, written: Text) gives List[Text] {
+    let condition = "where " + unparse(field(broken, "condition"))
+    let broken_name = text_of(field(broken, "name"))
+    var notes: List[Text] = []
+    if broken_name == kind {
+        notes = ["The condition of '" + kind + "' is false: " + condition]
+    } else {
+        let refines = "'" + kind + "' refines '" + broken_name + "', and the condition of '" + broken_name + "' is false: "
+        notes = [refines + condition]
+    }
+    notes = List.append(notes, "The value: " + written)
+    let message = field(broken, "message")
+    if not is_null(message) {
+        notes = List.append(notes, "Reason: " + text_of(message))
+    }
+    return notes
+}
+
+// The most work the analysis may spend checking constants, counted as the nodes of the conditions it evaluates.
+fn max_refinement_steps() gives Int {
+    return 100000
+}
+
+// Reports E2017 if the constant `node` is not a valid value of the refined type `kind`.
+fn check_constant(state: State, node: parser.Node, kind: Text) gives State {
+    let at = ref_index(state, kind)
+    let constant = constant_of(node)
+    if at < 0 or not constant.present or state.tables.steps < 0 {
+        return state
+    }
+    let refined = List.get(state.tables.refined, at)
+    var cost = 0
+    for name in refined.chain {
+        cost = cost + size_of(field(type_decl(state, name), "condition"))
+    }
+    let total = state.tables.steps + cost
+    if total > max_refinement_steps() {
+        return report(
+            with_tables(state, set_steps(state.tables, 0 - 1)), "E2019",
+            "Checking constants against refined types needs more than " + to_text(max_refinement_steps()) + " steps",
+            "Use fewer constants of long chains of refined types, or shorter conditions. "
+            + "The limit keeps the analysis fast; every constant is still checked before running.",
+            [], span_of(node)
+        )
+    }
+    let counted = with_tables(state, set_steps(state.tables, total))
+    let written = show_val(constant.val)
+    for name in refined.chain {
+        let declaration = type_decl(counted, name)
+        let outcome = evaluate(field(declaration, "condition"), constant.val)
+        if outcome.unsupported != "" {
+            return unsupported(counted, outcome.unsupported)
+        }
+        if not outcome.ok {
+            return report(
+                counted, "E2017", written + " cannot be checked against the condition of '" + kind + "'", "",
+                ["Evaluating the condition stops with: " + outcome.label], span_of(node)
+            )
+        }
+        if not truth(outcome.val) {
+            return report(
+                counted, "E2017", written + " is not a valid " + kind, "",
+                refinement_notes(counted, kind, declaration, written), span_of(node)
+            )
+        }
+    }
+    return counted
+}
+
+// `Percent(x)`: checks, when the program runs, that x satisfies the condition of Percent.
+fn refinement_check(given: ArgList, node: parser.Node, name: Text, arguments: List[parser.Node]) gives Checked {
+    let state = given.state
+    let callee_span = place_span(field(node, "callee_span"))
+    if state.tables.refining != "" {
+        return checked(
+            node, "",
+            report(
+                state, "E2018",
+                "The condition of '" + state.tables.refining + "' cannot check a value against '" + name + "'",
+                "To build on '" + name + "', refine it: type " + state.tables.refining + " = " + name + " where ...",
+                [], callee_span
+            )
+        )
+    }
+    let at = ref_index(state, name)
+    let count = List.length(arguments)
+    if count != 1 {
+        var verb = "were"
+        if count == 1 {
+            verb = "was"
+        }
+        var result = ""
+        if at >= 0 {
+            result = name
+        }
+        return checked(
+            node, result,
+            report(
+                state, "E2009", "'" + name + "' takes 1 argument, but " + to_text(count) + " " + verb + " given", "",
+                [name + "(x) checks that x satisfies the condition of " + name + "."], span_of(node)
+            )
+        )
+    }
+    if at < 0 {
+        return checked(node, "", state)
+    }
+    let refined = List.get(state.tables.refined, at)
+    let found = List.get(given.types, 0)
+    let argument = List.get(arguments, 0)
+    if found == "" {
+        return checked(node, name, state)
+    }
+    if found == "Void" {
+        return checked(
+            node, name,
+            report(state, "E2011", "This call does not produce a value to check", "", [], span_of(argument))
+        )
+    }
+    if root_of(state, found) != refined.root {
+        return checked(
+            node, name,
+            report(
+                state, "E2011", "Expected " + refined.root + ", found " + found,
+                conversion_hint(root_of(state, found), refined.root),
+                ["'" + name + "' refines " + refined.base + ", so it checks values of type " + refined.root + "."],
+                span_of(argument)
+            )
+        )
+    }
+    return checked(node, name, check_constant(state, argument, name))
 }
 
 // Test driver: every argument after the first is a file. For each one prints `FILE|path` and then
