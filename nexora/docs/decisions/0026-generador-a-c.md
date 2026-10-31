@@ -65,10 +65,12 @@ program.c ── the system's C compiler (cc) ──▶ executable
 Everything up to the typed tree already exists in NEXORA and is checked against the Python
 implementation. The new part is the generator and the runtime it emits.
 
-**Status (2026-10-31).** Stage 1 below is written and checked: `selfhost/cgen.nex`, the runtime and
-`selfhost/compare_cgen.py`, which builds 22 programs (arithmetic and its overflows, text, logic, recursion, loops with
-`shrinks`, `needs`, `promises`, and each way of failing) and finds the same output, the same diagnostics and the same
-exit status as `nex run`. The C compiler used to build them was `zig cc`, from a virtual environment.
+**Status (2026-10-31).** Stages 1 to 5 and 6 below are written and checked in `selfhost/`: the generator `cgen.nex`, the runtime
+(with a conservative garbage collector), `compare_cgen.py` and `bootstrap.py`. 46 programs, 14 of the 16 examples of the repository,
+13 projects of modules and 18 cases of the host build with a C compiler and give the same output, diagnostics and exit status as
+`nex run`. The compiler compiles itself: the executable built from the C that Python wrote compiles `cgen.nex` into byte-identical C,
+and the same generator builds `nex.nex` as a native `nex check`, `nex run` and `nex test`. Not done: `Net.get`, `Process.run`, the
+limits `--max-*`, and a decision on keeping the generated C as the seed. The C compiler used was `zig cc`, from a virtual environment.
 
 ### 3.2 What the generated program must do
 

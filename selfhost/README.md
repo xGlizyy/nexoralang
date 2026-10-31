@@ -161,26 +161,58 @@ What they say about stage 4:
 
 ## The code generator to C (decision 0026)
 
-[`cgen.nex`](cgen.nex) reads and checks a program with the rest of this directory and writes the C of an executable that needs
-neither Python nor the interpreter. Stage 1 compiles `Int`, `Bool` and `Text`, functions with `needs` and `promises`, `let`, `var`,
-assignment, `if`, `while` with `shrinks`, `return`, `print`, `to_text` and `Text.length`; what it cannot compile yet it says, and
-writes nothing.
+[`cgen.nex`](cgen.nex) reads and checks a program (and the modules it imports) with the rest of this directory and writes the C of
+an executable that needs neither Python nor the interpreter. It compiles `Int`, `Float`, `Bool` and `Text`, lists, records, enums,
+`Option` and `Result`, `match` and `if let`, functions with `needs` and `promises`, refined types, `if`, `while` and `for` with
+`keeps` and `shrinks`, modules, `args`, `input`, `read_file` and `write_file`, and the built-in functions of `Text`, `Int`, `Float`,
+`List`, `Option` and `Result`. `Net.get` and `Process.run` and the options `--max-text`, `--max-output`, `--max-input` and
+`--max-source` are not compiled yet; the generator says so and writes nothing.
 
 ```bash
 nex run selfhost/cgen.nex --allow-read . --allow-write . -- PROGRAM.nex OUTPUT.c
 cc -std=c11 OUTPUT.c -o program
-NEXORA_CC="cc" PYTHONPATH=nexora/src python selfhost/compare_cgen.py selfhost/cgen_cases/*.nex
+./program [--allow-read PATH ...] [--allow-write PATH ...] [-- ARGUMENTS]
 ```
 
-The runtime of the generated programs is one header, [`runtime/nexora_rt.h`](runtime/nexora_rt.h): checked `Int` arithmetic, `Text`
-as code points, the stack of calls and loops that explains an error, and the text of a diagnostic as `nex` writes it.
-`runtime_text.nex` is that header as data for the generator (`make_runtime.py` writes it; run it again after changing the header).
+The runtime of the generated programs is one header, [`runtime/nexora_rt.h`](runtime/nexora_rt.h): values as one tagged type, checked
+`Int` arithmetic, `Text` as code points, the stack of calls and loops that explains an error, the text of a diagnostic as `nex` writes
+it, the host with the three rules of decision 0015, and a conservative garbage collector (the stack is searched for words that point
+into a block of memory; text bytes are not searched). `runtime_text.nex` is that header as data for the generator (`make_runtime.py`
+writes it; run it again after changing the header). `NEXORA_GC_FLOOR=2000` makes the collector run constantly, which is how it is
+tested.
+
+```bash
+NEXORA_CC="cc" PYTHONPATH=nexora/src python selfhost/compare_cgen.py selfhost/cgen_cases/*.nex
+NEXORA_CC="cc" PYTHONPATH=nexora/src python selfhost/compare_cgen.py --host
+```
 
 `compare_cgen.py` compiles each program, runs it and `nex run`, and compares the standard output, the standard error and the exit
-status: 22 programs of [`cgen_cases/`](cgen_cases/) are equal, among them each runtime error (`E3001`, `E3002`, `E3004`), a broken
-`needs`, `promises` and `shrinks`, with the chain of calls and loops in the notes. Of the 16 examples of the repository two compile
-(`hello` and `functions`); the others need `Float`, refined types, lists, records, enums, `for`, the host or more functions of
-`Text`, which are the next stages of the decision.
+status: the 46 programs of [`cgen_cases/`](cgen_cases/) (each runtime error, a broken `needs`, `promises`, `keeps`, `shrinks` and
+refined type, with the chain of calls and loops in the notes), 14 of the 16 examples of the repository (the other two read the
+host: they are in `--host`), 13 projects of modules and 18 cases of the host are equal.
+
+### The compiler compiles itself
+
+[`bootstrap.py`](bootstrap.py) builds the compiler as an executable and checks the fixed point:
+
+1. Python runs `cgen.nex` on its own source and writes C (generation 0, about 17 minutes).
+2. A C compiler turns it into an executable, the first compiler (45 seconds).
+3. That executable compiles `cgen.nex` and writes C (generation 1, no Python, about 6 minutes).
+4. Generation 1 is the same text as generation 0, byte by byte (2,141,337 bytes). Then the C compiler builds the second compiler from
+   it, and that one writes the same C again (generation 2: `bootstrap.py --seed` runs all of it from a C file).
+
+`--seed generation0.c` starts from step 2, so a machine with a C compiler and nothing else can rebuild the compiler. The same
+generator compiles `nex.nex`, and that executable is `nex check`, `nex run` and `nex test`: it writes the same text as `nex` on
+43 programs for `check`, 46 for `run` and 15 for `test` (`NEXORA_NEX=path compare_nex.py ...`), and it checks a program in 0.08 s
+where the Python implementation takes seconds. Compiled by the first compiler, 76 programs of the batteries above give the same
+result as `nex run` in 73 seconds.
+
+| Limit | Why |
+|---|---|
+| The first compiler needs Python once | Generation 0 is written by the interpreter; a repository can keep that C as a seed (an open question of decision 0026). |
+| `Net.get`, `Process.run`, `--max-*` | Not compiled yet. |
+| The collector is conservative | A word that looks like a pointer keeps a block alive; it never frees what is in use, but it may keep what is not. |
+| The compiler needs a large stack for deep recursion | A NEXORA program can nest 1,000 calls; the default stack of the system is enough for the programs tested. |
 
 ## Projects of modules
 
