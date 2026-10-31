@@ -35,6 +35,7 @@ whose rules it replaces say so at the top.
 | [0023](0023-despliegue-aplicaciones.md) | Exact runtime pins and external configuration for deployed applications | Accepted | No |
 | [0024](0024-enumeraciones-y-match-exhaustivo.md) | Closed enums, `match`, `if let` and recursive static exhaustiveness for enums, `Option`, `Result` and `Bool` | Accepted; implemented in the 0.16.0 development line | No |
 | [0025](0025-interprete-autoalojado.md) | A self-hosted interpreter written in NEXORA, in stages; leaving Python is a later decision | Proposed | No |
+| [0026](0026-generador-a-c.md) | A code generator to C written in NEXORA, so a program runs without Python; the compiler compiles itself | Proposed | No |
 
 ## Possible incompatible changes in the future
 
