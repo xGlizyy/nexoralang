@@ -45,31 +45,117 @@ static const char *const *rt_file_path = 0;
 static const char *const *const *rt_file_lines = 0;
 static const int *rt_file_count = 0;
 
-/* Memory. Every block is kept in a table, and when a good deal has been allocated the stack is searched for what still points into
- * a block (any word that does, whatever it is: the search is conservative), what those blocks point to is searched in turn, and
- * the rest is freed. A block of text bytes is `raw`: it points to nothing, so it is not searched. */
+/* Memory. A small block (up to 256 bytes) comes from a page of blocks of its size, and a free one is taken from a list in a few
+ * instructions; a big one comes from malloc and is kept in a table. When a good deal has been allocated, the stack is searched
+ * for what still points into a block (any word that does, whatever it is: the search is conservative), what those blocks point
+ * to is searched in turn, and the rest is given back. A block of text bytes is `raw`: it points to nothing, so it is not
+ * searched. */
 
 #include <setjmp.h>
+#ifdef _WIN32
+#include <malloc.h>
+#define rt_page_alloc(size) _aligned_malloc((size), (size))
+#else
+#define rt_page_alloc(size) aligned_alloc((size), (size))
+#endif
 
-typedef struct {
-    char *p;
-    size_t size;
-    unsigned char raw, mark;
-} rt_block;
+#define RT_PAGE ((size_t)1 << 16)
+#define RT_PAGE_HEADER ((size_t)4160) /* 64 bytes of header and 4,096 marks: the most blocks a page can hold (16 bytes each) */
+#define RT_SMALL_MAX 256
+#define RT_CLASSES 16 /* sizes 16, 32, ... 256 */
 
+typedef struct rt_page {
+    struct rt_page *next;
+    uint32_t size;
+    uint32_t count;
+    unsigned char raw;
+} rt_page;
+
+typedef struct { char *p; size_t size; unsigned char raw, mark; } rt_block; /* the big ones */
+
+static rt_page *rt_pages = 0;
+static void *rt_free_list[2][RT_CLASSES];
 static rt_block *rt_blocks = 0;
 static size_t rt_nblocks = 0, rt_cap_blocks = 0;
-static size_t rt_since_gc = 0, rt_threshold = (size_t)256 << 20, rt_floor = (size_t)128 << 20;
+static size_t rt_since_gc = 0, rt_threshold = (size_t)48 << 20, rt_floor = (size_t)48 << 20;
 static void *rt_stack_base = 0;
-static size_t *rt_mark_stack = 0;
+
+/* The addresses of the pages, to tell whether a word points into one. */
+static uintptr_t *rt_page_set = 0;
+static size_t rt_page_set_cap = 0, rt_page_set_count = 0;
+
+typedef struct { char *p; size_t size; } rt_mark_item;
+static rt_mark_item *rt_mark_stack = 0;
 static size_t rt_mark_count = 0, rt_mark_cap = 0;
+
+static void rt_out_of_memory(void) {
+    fputs("error: out of memory\n", stderr);
+    exit(3);
+}
+
+static size_t rt_page_hash(uintptr_t page, size_t cap) { return (size_t)((page >> 16) * 0x9E3779B97F4A7C15ULL) & (cap - 1); }
+
+static void rt_page_set_add(uintptr_t page) {
+    if ((rt_page_set_count + 1) * 2 > rt_page_set_cap) {
+        size_t cap = rt_page_set_cap ? rt_page_set_cap * 2 : 1024;
+        uintptr_t *set = (uintptr_t *)calloc(cap, sizeof(uintptr_t));
+        if (!set) rt_out_of_memory();
+        for (size_t i = 0; i < rt_page_set_cap; i++) {
+            if (rt_page_set[i]) {
+                size_t at = rt_page_hash(rt_page_set[i], cap);
+                while (set[at]) at = (at + 1) & (cap - 1);
+                set[at] = rt_page_set[i];
+            }
+        }
+        free(rt_page_set);
+        rt_page_set = set;
+        rt_page_set_cap = cap;
+    }
+    size_t at = rt_page_hash(page, rt_page_set_cap);
+    while (rt_page_set[at]) at = (at + 1) & (rt_page_set_cap - 1);
+    rt_page_set[at] = page;
+    rt_page_set_count++;
+}
+
+static int rt_is_page(uintptr_t page) {
+    if (!rt_page_set_cap) return 0;
+    size_t at = rt_page_hash(page, rt_page_set_cap);
+    while (rt_page_set[at]) {
+        if (rt_page_set[at] == page) return 1;
+        at = (at + 1) & (rt_page_set_cap - 1);
+    }
+    return 0;
+}
+
+static unsigned char *rt_page_marks(rt_page *page) { return (unsigned char *)page + sizeof(rt_page); }
+static char *rt_page_first(rt_page *page) { return (char *)page + RT_PAGE_HEADER; }
+
+/* A new page of blocks of one size, all of them free. */
+static void rt_new_page(int raw, int class_index) {
+    rt_page *page = (rt_page *)rt_page_alloc(RT_PAGE);
+    if (!page) rt_out_of_memory();
+    uint32_t size = (uint32_t)((class_index + 1) * 16);
+    page->next = rt_pages;
+    page->size = size;
+    page->count = (uint32_t)((RT_PAGE - RT_PAGE_HEADER) / size);
+    page->raw = (unsigned char)raw;
+    rt_pages = page;
+    memset(rt_page_marks(page), 0, page->count);
+    rt_page_set_add((uintptr_t)page);
+    char *at = rt_page_first(page);
+    for (uint32_t i = page->count; i > 0; i--) {
+        char *block = at + (size_t)(i - 1) * size;
+        *(void **)block = rt_free_list[raw][class_index];
+        rt_free_list[raw][class_index] = block;
+    }
+}
 
 static int rt_block_order(const void *x, const void *y) {
     const rt_block *a = (const rt_block *)x, *b = (const rt_block *)y;
     return a->p < b->p ? -1 : (a->p > b->p ? 1 : 0);
 }
 
-/* The block that holds an address, or -1. The table is sorted while a collection runs. */
+/* The big block that holds an address, or -1. The table is sorted while a collection runs. */
 static long rt_find_block(const char *address) {
     long lo = 0, hi = (long)rt_nblocks - 1, found = -1;
     while (lo <= hi) {
@@ -80,30 +166,51 @@ static long rt_find_block(const char *address) {
     return -1;
 }
 
-static void rt_mark_push(size_t index) {
+static void rt_mark_push(char *p, size_t size) {
     if (rt_mark_count == rt_mark_cap) {
         rt_mark_cap = rt_mark_cap ? rt_mark_cap * 2 : 4096;
-        rt_mark_stack = (size_t *)realloc(rt_mark_stack, rt_mark_cap * sizeof(size_t));
-        if (!rt_mark_stack) { fputs("error: out of memory\n", stderr); exit(3); }
+        rt_mark_stack = (rt_mark_item *)realloc(rt_mark_stack, rt_mark_cap * sizeof(rt_mark_item));
+        if (!rt_mark_stack) rt_out_of_memory();
     }
-    rt_mark_stack[rt_mark_count++] = index;
+    rt_mark_stack[rt_mark_count].p = p;
+    rt_mark_stack[rt_mark_count].size = size;
+    rt_mark_count++;
+}
+
+/* Marks what a word points to, if it points into a block that is in use. */
+static void rt_mark_word(uintptr_t word) {
+    uintptr_t page_address = word & ~(uintptr_t)(RT_PAGE - 1);
+    if (rt_is_page(page_address)) {
+        rt_page *page = (rt_page *)page_address;
+        if (word < page_address + RT_PAGE_HEADER) return;
+        size_t index = (word - page_address - RT_PAGE_HEADER) / page->size;
+        if (index >= page->count) return;
+        unsigned char *mark = &rt_page_marks(page)[index];
+        if (!*mark) {
+            *mark = 1;
+            if (!page->raw) rt_mark_push(rt_page_first(page) + index * page->size, page->size);
+        }
+        return;
+    }
+    if (rt_nblocks == 0) return;
+    long found = rt_find_block((const char *)word);
+    if (found >= 0 && !rt_blocks[found].mark) {
+        rt_blocks[found].mark = 1;
+        if (!rt_blocks[found].raw) rt_mark_push(rt_blocks[found].p, rt_blocks[found].size);
+    }
 }
 
 static void rt_mark_words(const char *lo, const char *hi) {
     uintptr_t start = ((uintptr_t)lo + sizeof(void *) - 1) & ~(uintptr_t)(sizeof(void *) - 1);
     for (uintptr_t at = start; at + sizeof(void *) <= (uintptr_t)hi; at += sizeof(void *)) {
-        long found = rt_find_block(*(const char *const *)at);
-        if (found >= 0 && !rt_blocks[found].mark) {
-            rt_blocks[found].mark = 1;
-            if (!rt_blocks[found].raw) rt_mark_push((size_t)found);
-        }
+        rt_mark_word(*(const uintptr_t *)at);
     }
 }
 
 static void rt_collect(void) {
     RT_COUNT(2);
-    if (!rt_stack_base || rt_nblocks == 0) { rt_since_gc = 0; return; }
-    qsort(rt_blocks, rt_nblocks, sizeof(rt_block), rt_block_order);
+    if (!rt_stack_base) { rt_since_gc = 0; return; }
+    if (rt_nblocks > 1) qsort(rt_blocks, rt_nblocks, sizeof(rt_block), rt_block_order);
     for (size_t i = 0; i < rt_nblocks; i++) rt_blocks[i].mark = 0;
     jmp_buf registers;
     setjmp(registers);
@@ -111,10 +218,12 @@ static void rt_collect(void) {
     const char *base = (const char *)rt_stack_base;
     if (here < base) rt_mark_words(here, base + sizeof(void *)); else rt_mark_words(base, here + sizeof registers);
     while (rt_mark_count > 0) {
-        size_t index = rt_mark_stack[--rt_mark_count];
-        rt_mark_words(rt_blocks[index].p, rt_blocks[index].p + rt_blocks[index].size);
+        rt_mark_item item = rt_mark_stack[--rt_mark_count];
+        rt_mark_words(item.p, item.p + item.size);
     }
-    size_t kept = 0, live = 0;
+    size_t live = 0;
+    /* The big blocks that nothing points to are freed. */
+    size_t kept = 0;
     for (size_t i = 0; i < rt_nblocks; i++) {
         if (rt_blocks[i].mark) {
             live += rt_blocks[i].size;
@@ -124,6 +233,25 @@ static void rt_collect(void) {
         }
     }
     rt_nblocks = kept;
+    /* The small ones are put back on the lists of free blocks, and the marks are cleared. */
+    for (int r = 0; r < 2; r++) {
+        for (int c = 0; c < RT_CLASSES; c++) rt_free_list[r][c] = 0;
+    }
+    for (rt_page *page = rt_pages; page; page = page->next) {
+        unsigned char *marks = rt_page_marks(page);
+        int class_index = (int)(page->size / 16) - 1;
+        char *first = rt_page_first(page);
+        for (uint32_t i = page->count; i > 0; i--) {
+            if (marks[i - 1]) {
+                marks[i - 1] = 0;
+                live += page->size;
+            } else {
+                char *block = first + (size_t)(i - 1) * page->size;
+                *(void **)block = rt_free_list[page->raw][class_index];
+                rt_free_list[page->raw][class_index] = block;
+            }
+        }
+    }
     rt_since_gc = 0;
     rt_threshold = live > rt_floor ? live : rt_floor;
 }
@@ -144,16 +272,31 @@ static void rt_gc_start(void *stack_base) {
 static void *rt_alloc_kind(size_t n, int raw, int zero) {
     if (n == 0) n = 1;
     if (rt_since_gc > rt_threshold) rt_collect();
+    RT_COUNT(0);
+    RT_COUNT_BY(1, n);
+    if (n <= RT_SMALL_MAX) {
+        int class_index = (int)((n + 15) / 16) - 1;
+        void *p = rt_free_list[raw][class_index];
+        if (!p) {
+            rt_new_page(raw, class_index);
+            p = rt_free_list[raw][class_index];
+        }
+        rt_free_list[raw][class_index] = *(void **)p;
+        size_t size = (size_t)(class_index + 1) * 16;
+        if (zero) memset(p, 0, size);
+        rt_since_gc += size;
+        return p;
+    }
     char *p = (char *)(zero ? calloc(1, n) : malloc(n));
     if (!p) {
         rt_collect();
         p = (char *)(zero ? calloc(1, n) : malloc(n));
-        if (!p) { fputs("error: out of memory\n", stderr); exit(3); }
+        if (!p) rt_out_of_memory();
     }
     if (rt_nblocks == rt_cap_blocks) {
-        rt_cap_blocks = rt_cap_blocks ? rt_cap_blocks * 2 : 65536;
+        rt_cap_blocks = rt_cap_blocks ? rt_cap_blocks * 2 : 4096;
         rt_blocks = (rt_block *)realloc(rt_blocks, rt_cap_blocks * sizeof(rt_block));
-        if (!rt_blocks) { fputs("error: out of memory\n", stderr); exit(3); }
+        if (!rt_blocks) rt_out_of_memory();
     }
     rt_block *block = &rt_blocks[rt_nblocks++];
     block->p = p;
@@ -161,8 +304,6 @@ static void *rt_alloc_kind(size_t n, int raw, int zero) {
     block->raw = (unsigned char)raw;
     block->mark = 0;
     rt_since_gc += n;
-    RT_COUNT(0);
-    RT_COUNT_BY(1, n);
     return p;
 }
 
@@ -546,8 +687,38 @@ static rv rt_record_new(const char *name, const char *const *names, int n, const
     return v;
 }
 
+/* A variant with no payload (`None`, a unit case of an enum) is always the same value, so there is one of each, never freed. */
+typedef struct { const char *owner, *kind; rt_variant *value; } rt_nullary_entry;
+static rt_nullary_entry rt_nullary[256];
+static int rt_nullary_count = 0;
+
 static rv rt_variant_new(const char *owner, const char *kind, int n, const rv *args) {
     RT_COUNT(7);
+    if (n == 0) {
+        for (int i = 0; i < rt_nullary_count; i++) {
+            if (rt_nullary[i].owner == owner && rt_nullary[i].kind == kind) {
+                rv shared;
+                shared.tag = RT_VARIANT;
+                shared.u.o = rt_nullary[i].value;
+                return shared;
+            }
+        }
+        if (rt_nullary_count < 256) {
+            rt_variant *x = (rt_variant *)malloc(sizeof(rt_variant));
+            if (!x) rt_out_of_memory();
+            x->owner = owner;
+            x->kind = kind;
+            x->n = 0;
+            rt_nullary[rt_nullary_count].owner = owner;
+            rt_nullary[rt_nullary_count].kind = kind;
+            rt_nullary[rt_nullary_count].value = x;
+            rt_nullary_count++;
+            rv first;
+            first.tag = RT_VARIANT;
+            first.u.o = x;
+            return first;
+        }
+    }
     rt_variant *x = (rt_variant *)rt_alloc_scan(sizeof(rt_variant) + (size_t)n * sizeof(rv));
     x->owner = owner;
     x->kind = kind;

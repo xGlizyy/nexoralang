@@ -1,0 +1,21 @@
+fn main() {
+    var s = ""
+    var i = 0
+    while i < 3000
+        shrinks 3000 - i
+    {
+        s = s + to_text(i) + ","
+        i = i + 1
+    }
+    var count = 0
+    var j = 0
+    while j < Text.length(s)
+        shrinks Text.length(s) - j
+    {
+        if Text.slice(s, j, j + 1) == "," {
+            count = count + 1
+        }
+        j = j + 1
+    }
+    print(count)
+}

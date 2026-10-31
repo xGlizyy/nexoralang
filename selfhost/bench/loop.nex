@@ -1,0 +1,11 @@
+fn main() {
+    var i = 0
+    var total = 0
+    while i < 150000
+        shrinks 150000 - i
+    {
+        total = total + i * 2 - 1
+        i = i + 1
+    }
+    print(total)
+}

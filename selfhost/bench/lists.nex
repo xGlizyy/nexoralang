@@ -1,0 +1,24 @@
+fn sum(xs: List[Int]) gives Int {
+    var total = 0
+    for x in xs {
+        total = total + x
+    }
+    return total
+}
+
+fn build(n: Int) gives List[Int] {
+    var xs: List[Int] = []
+    var i = 0
+    while i < n
+        shrinks n - i
+    {
+        xs = List.append(xs, i)
+        i = i + 1
+    }
+    return xs
+}
+
+fn main() {
+    print(sum(build(3000)))
+    print(sum(build(2000)) + List.length(build(1000)))
+}
