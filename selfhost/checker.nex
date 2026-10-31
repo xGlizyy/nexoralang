@@ -227,7 +227,7 @@ fn builtin_names() gives List[Text] {
     )
 }
 
-fn is_builtin(name: Text) gives Bool {
+pub fn is_builtin(name: Text) gives Bool {
     return List.contains(builtin_names(), name)
 }
 
@@ -5540,6 +5540,15 @@ fn warnings_of(state: State, program: parser.Node) gives List[parser.Problem] {
         }
     }
     return sort_problems(pending)
+}
+
+// What the interpreter needs from the analysis of a program: the typed tree, the problems found and, when the
+// checker met something it does not know yet, what it was.
+pub type Analysis = { node: parser.Node, problems: List[parser.Problem], unsupported: Text }
+
+pub fn analyze(program: parser.Node) gives Analysis {
+    let result = check_program(program)
+    return Analysis(node: result.node, problems: result.state.problems, unsupported: result.state.unsupported)
 }
 
 // Test driver: every argument after the first is a file. For each one prints `FILE|path` and then

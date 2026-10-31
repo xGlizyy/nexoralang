@@ -1,0 +1,1394 @@
+// The NEXORA interpreter, written in NEXORA (decision 0024, stage 2).
+//
+// It runs the typed tree the checker gives (checker.nex) and follows nexora/src/nexora/interpreter.py.
+//
+// The interpreter is an abstract machine with an explicit stack of continuations. A tree-walking evaluator
+// written with recursive calls would spend several calls of its own for each call of the program it runs, and
+// the language limits the nesting of calls to 1000: a recursive program that nests 1000 calls would reach
+// that limit after about 250. Here the depth of the program does not use the depth of the interpreter: what
+// is left to do after a call returns is kept in a linked stack, which can be as deep as memory allows, and a
+// push or a pop costs one step.
+//
+// A machine has a control (what it does now), an environment (the visible names), a stack and the output.
+// Every step moves it one transition; the loop that runs it is bounded by a fuel that goes down on every step.
+//
+// This first slice runs expressions, statements, functions, records, enums, Option and Result, `match`, refined
+// checks and the pure built-ins. It does not check contracts, loop clauses or examples yet, so it runs the
+// programs that do not break any: their output is what the Python interpreter prints. The host functions
+// (files, input, network, processes) are not run.
+
+import "lexer.nex"
+import "parser.nex"
+import "checker.nex"
+
+uses read "."
+
+// Values
+
+type Val = enum {
+    VInt(v: Int), VFloat(v: Float), VText(v: Text), VBool(v: Bool), VUnit,
+    VList(items: List[Val]),
+    VRecord(name: Text, names: List[Text], vals: List[Val]),
+    VVariant(owner: Text, kind: Text, items: List[Val])
+}
+
+// A scope: the names it declares and their values.
+type Frame = { names: List[Text], vals: List[Val] }
+
+// What the machine does now.
+type Control = enum {
+    CEval(node: parser.Node), CExec(node: parser.Node), CValue(v: Val), CReturn(v: Val), CHalt, CDone(v: Val),
+    CFail(code: Text, label: Text, line: Int, column: Int)
+}
+
+// What is left to do when a value arrives.
+type Kont = enum {
+    KUnary(node: parser.Node),
+    KBinLeft(node: parser.Node),
+    KBinRight(node: parser.Node, left: Val),
+    KArgs(node: parser.Node, done: List[Val]),
+    KField(node: parser.Node),
+    KMatch(node: parser.Node),
+    KPopFrame,
+    KSeq(statements: List[parser.Node], next: Int),
+    KLet(node: parser.Node),
+    KAssign(node: parser.Node),
+    KReturn,
+    KIf(node: parser.Node),
+    KWhile(node: parser.Node),
+    KWhileBody(node: parser.Node),
+    KForStart(node: parser.Node),
+    KForIter(node: parser.Node, items: List[Val], next: Int),
+    KIfLet(node: parser.Node),
+    KDiscard,
+    KCall(saved: List[Frame], name: Text),
+    KHalt
+}
+
+type Stk = enum { Nil, Cons(top: Kont, rest: Stk) }
+
+type Machine = {
+    control: Control, env: List[Frame], stack: Stk, out: List[Text], depth: Int, fuel: Int
+}
+
+// What the program declares, indexed once.
+type Prog = {
+    fn_names: List[Text], fn_nodes: List[parser.Node],
+    record_names: List[Text], record_fields: List[List[Text]],
+    type_names: List[Text], type_nodes: List[parser.Node]
+}
+
+// Reading the tree
+
+fn kind_of(node: parser.Node) gives Text {
+    return match node {
+        parser.Node.Obj(kind, names, values) => kind
+        _ => ""
+    }
+}
+
+fn index_of(names: List[Text], name: Text) gives Int {
+    var i = 0
+    while i < List.length(names)
+        shrinks List.length(names) - i
+    {
+        if List.get(names, i) == name {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn field(node: parser.Node, name: Text) gives parser.Node {
+    return match node {
+        parser.Node.Obj(kind, names, values) => field_at(names, values, name)
+        _ => parser.Node.Null()
+    }
+}
+
+fn field_at(names: List[Text], values: List[parser.Node], name: Text) gives parser.Node {
+    let index = index_of(names, name)
+    if index < 0 {
+        return parser.Node.Null()
+    }
+    return List.get(values, index)
+}
+
+fn text_of(node: parser.Node) gives Text {
+    return match node {
+        parser.Node.Str(value) => value
+        _ => ""
+    }
+}
+
+fn int_of(node: parser.Node) gives Int {
+    return match node {
+        parser.Node.Whole(value) => value
+        _ => 0
+    }
+}
+
+fn real_of(node: parser.Node) gives Text {
+    return match node {
+        parser.Node.Real(text) => text
+        _ => "0.0"
+    }
+}
+
+fn flag_of(node: parser.Node) gives Bool {
+    return match node {
+        parser.Node.Flag(value) => value
+        _ => false
+    }
+}
+
+fn items_of(node: parser.Node) gives List[parser.Node] {
+    return match node {
+        parser.Node.Items(items) => items
+        _ => []
+    }
+}
+
+fn is_null(node: parser.Node) gives Bool {
+    return match node {
+        parser.Node.Null => true
+        _ => false
+    }
+}
+
+fn place_of(node: parser.Node) gives parser.Span {
+    return match field(node, "span") {
+        parser.Node.Place(line, column, end_line, end_column) => parser.Span(
+            line: line, column: column, end_line: end_line, end_column: end_column
+        )
+        _ => parser.no_span()
+    }
+}
+
+// The program
+
+fn build_prog(program: parser.Node) gives Prog {
+    var fn_names: List[Text] = []
+    var fn_nodes: List[parser.Node] = []
+    for function in items_of(field(program, "functions")) {
+        let name = text_of(field(function, "name"))
+        if index_of(fn_names, name) < 0 {
+            fn_names = List.append(fn_names, name)
+            fn_nodes = List.append(fn_nodes, function)
+        }
+    }
+    var record_names: List[Text] = []
+    var record_fields: List[List[Text]] = []
+    for record in items_of(field(program, "records")) {
+        var names: List[Text] = []
+        for declared in items_of(field(record, "fields")) {
+            names = List.append(names, text_of(field(declared, "name")))
+        }
+        record_names = List.append(record_names, text_of(field(record, "name")))
+        record_fields = List.append(record_fields, names)
+    }
+    var type_names: List[Text] = []
+    var type_nodes: List[parser.Node] = []
+    for declaration in items_of(field(program, "types")) {
+        type_names = List.append(type_names, text_of(field(declaration, "name")))
+        type_nodes = List.append(type_nodes, declaration)
+    }
+    return Prog(
+        fn_names: fn_names, fn_nodes: fn_nodes, record_names: record_names, record_fields: record_fields,
+        type_names: type_names, type_nodes: type_nodes
+    )
+}
+
+// Values: showing and comparing
+
+fn join_vals(items: List[Val]) gives Text {
+    var shown: List[Text] = []
+    for item in items {
+        shown = List.append(shown, format_val(item))
+    }
+    return parser.join_texts(shown, ", ")
+}
+
+// The text `print` writes for a value, and what `to_text` returns.
+fn format_val(v: Val) gives Text {
+    return match v {
+        Val.VInt(n) => to_text(n)
+        Val.VFloat(x) => to_text(x)
+        Val.VText(t) => t
+        Val.VBool(b) => to_text(b)
+        Val.VUnit => ""
+        Val.VList(items) => "[" + join_vals(items) + "]"
+        Val.VRecord(name, names, vals) => format_record(name, names, vals)
+        Val.VVariant(owner, kind, items) => format_variant(owner, kind, items)
+    }
+}
+
+fn format_record(name: Text, names: List[Text], vals: List[Val]) gives Text {
+    var fields: List[Text] = []
+    var i = 0
+    while i < List.length(names)
+        shrinks List.length(names) - i
+    {
+        fields = List.append(fields, List.get(names, i) + ": " + format_val(List.get(vals, i)))
+        i = i + 1
+    }
+    return name + "(" + parser.join_texts(fields, ", ") + ")"
+}
+
+fn format_variant(owner: Text, kind: Text, items: List[Val]) gives Text {
+    if owner != "" {
+        if List.length(items) == 0 {
+            return owner + "." + kind
+        }
+        return owner + "." + kind + "(" + join_vals(items) + ")"
+    }
+    if kind == "None" {
+        return "None"
+    }
+    return kind + "(" + join_vals(items) + ")"
+}
+
+fn vals_equal(a: Val, b: Val) gives Bool {
+    return match a {
+        Val.VInt(x) => match b {
+            Val.VInt(y) => x == y
+            _ => false
+        }
+        Val.VFloat(x) => match b {
+            Val.VFloat(y) => x == y
+            _ => false
+        }
+        Val.VText(x) => match b {
+            Val.VText(y) => x == y
+            _ => false
+        }
+        Val.VBool(x) => match b {
+            Val.VBool(y) => x == y
+            _ => false
+        }
+        Val.VUnit => true
+        Val.VList(xs) => match b {
+            Val.VList(ys) => all_equal(xs, ys)
+            _ => false
+        }
+        Val.VRecord(n1, names1, vals1) => match b {
+            Val.VRecord(n2, names2, vals2) => n1 == n2 and all_equal(vals1, vals2)
+            _ => false
+        }
+        Val.VVariant(o1, k1, i1) => match b {
+            Val.VVariant(o2, k2, i2) => o1 == o2 and k1 == k2 and all_equal(i1, i2)
+            _ => false
+        }
+    }
+}
+
+fn all_equal(xs: List[Val], ys: List[Val]) gives Bool {
+    if List.length(xs) != List.length(ys) {
+        return false
+    }
+    var i = 0
+    while i < List.length(xs)
+        shrinks List.length(xs) - i
+    {
+        if not vals_equal(List.get(xs, i), List.get(ys, i)) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+fn vals_less(a: Val, b: Val) gives Bool {
+    return match a {
+        Val.VInt(x) => match b {
+            Val.VInt(y) => x < y
+            _ => false
+        }
+        Val.VFloat(x) => match b {
+            Val.VFloat(y) => x < y
+            _ => false
+        }
+        Val.VText(x) => match b {
+            Val.VText(y) => x < y
+            _ => false
+        }
+        _ => false
+    }
+}
+
+fn truth(v: Val) gives Bool {
+    return match v {
+        Val.VBool(b) => b
+        _ => false
+    }
+}
+
+// The result of an operation that may fail
+
+type Res = { ok: Bool, val: Val, code: Text, label: Text }
+
+fn good(v: Val) gives Res {
+    return Res(ok: true, val: v, code: "", label: "")
+}
+
+fn bad(code: Text, label: Text) gives Res {
+    return Res(ok: false, val: Val.VUnit(), code: code, label: label)
+}
+
+fn int_max() gives Int {
+    return 9223372036854775807
+}
+
+fn int_min() gives Int {
+    return 0 - 9223372036854775807 - 1
+}
+
+fn add_overflows(a: Int, b: Int) gives Bool {
+    return (b > 0 and a > int_max() - b) or (b < 0 and a < int_min() - b)
+}
+
+fn subtract_overflows(a: Int, b: Int) gives Bool {
+    return (b < 0 and a > int_max() + b) or (b > 0 and a < int_min() + b)
+}
+
+fn multiply_overflows(a: Int, b: Int) gives Bool {
+    if a == 0 or b == 0 {
+        return false
+    }
+    if a > 0 and b > 0 {
+        return a > int_max() / b
+    }
+    if a > 0 and b < 0 {
+        return b < int_min() / a
+    }
+    if a < 0 and b > 0 {
+        return a < int_min() / b
+    }
+    return a < int_max() / b
+}
+
+fn int_overflow() gives Res {
+    return bad("E3002", "The result of this operation does not fit in an Int")
+}
+
+fn int_operation(operator: Text, a: Int, b: Int) gives Res {
+    if operator == "+" {
+        if add_overflows(a, b) {
+            return int_overflow()
+        }
+        return good(Val.VInt(a + b))
+    }
+    if operator == "-" {
+        if subtract_overflows(a, b) {
+            return int_overflow()
+        }
+        return good(Val.VInt(a - b))
+    }
+    if operator == "*" {
+        if multiply_overflows(a, b) {
+            return int_overflow()
+        }
+        return good(Val.VInt(a * b))
+    }
+    if b == 0 {
+        return bad("E3001", "The right-hand side of this division is zero")
+    }
+    if a == int_min() and b == 0 - 1 {
+        return int_overflow()
+    }
+    return good(Val.VInt(a / b))
+}
+
+fn float_operation(operator: Text, a: Float, b: Float) gives Res {
+    if operator == "+" {
+        return good(Val.VFloat(a + b))
+    }
+    if operator == "-" {
+        return good(Val.VFloat(a - b))
+    }
+    if operator == "*" {
+        return good(Val.VFloat(a * b))
+    }
+    if b == 0.0 {
+        return bad("E3001", "The right-hand side of this division is zero")
+    }
+    return good(Val.VFloat(a / b))
+}
+
+fn arithmetic(operator: Text, a: Val, b: Val) gives Res {
+    return match a {
+        Val.VInt(x) => match b {
+            Val.VInt(y) => int_operation(operator, x, y)
+            _ => bad("E0000", "mixed operands")
+        }
+        Val.VFloat(x) => match b {
+            Val.VFloat(y) => float_operation(operator, x, y)
+            _ => bad("E0000", "mixed operands")
+        }
+        Val.VText(x) => match b {
+            Val.VText(y) => good(Val.VText(x + y))
+            _ => bad("E0000", "mixed operands")
+        }
+        _ => bad("E0000", "arithmetic on a value that is not a number or a text")
+    }
+}
+
+fn binary_value(operator: Text, a: Val, b: Val) gives Res {
+    if operator == "==" {
+        return good(Val.VBool(vals_equal(a, b)))
+    }
+    if operator == "!=" {
+        return good(Val.VBool(not vals_equal(a, b)))
+    }
+    if operator == "<" {
+        return good(Val.VBool(vals_less(a, b)))
+    }
+    if operator == ">" {
+        return good(Val.VBool(vals_less(b, a)))
+    }
+    if operator == "<=" {
+        return good(Val.VBool(not vals_less(b, a)))
+    }
+    if operator == ">=" {
+        return good(Val.VBool(not vals_less(a, b)))
+    }
+    return arithmetic(operator, a, b)
+}
+
+// The machine
+
+fn nil_stack() gives Stk {
+    return Stk.Nil()
+}
+
+fn push(k: Kont, rest: Stk) gives Stk {
+    return Stk.Cons(k, rest)
+}
+
+// The machine after one more step: the fuel always goes down, which is what makes the loop end.
+fn mk(m: Machine, control: Control, env: List[Frame], stack: Stk) gives Machine {
+    return Machine(control: control, env: env, stack: stack, out: m.out, depth: m.depth, fuel: m.fuel - 1)
+}
+
+fn mk_depth(m: Machine, control: Control, env: List[Frame], stack: Stk, depth: Int) gives Machine {
+    return Machine(control: control, env: env, stack: stack, out: m.out, depth: depth, fuel: m.fuel - 1)
+}
+
+fn mk_out(m: Machine, control: Control, stack: Stk, out: List[Text]) gives Machine {
+    return Machine(control: control, env: m.env, stack: stack, out: out, depth: m.depth, fuel: m.fuel - 1)
+}
+
+fn fail_at(m: Machine, code: Text, label: Text, node: parser.Node) gives Machine {
+    let at = place_of(node)
+    return mk(m, Control.CFail(code, label, at.line, at.column), m.env, m.stack)
+}
+
+fn failed(m: Machine, res: Res, node: parser.Node) gives Machine {
+    return fail_at(m, res.code, res.label, node)
+}
+
+// Environment
+
+fn empty_frame() gives Frame {
+    return Frame(names: [], vals: [])
+}
+
+fn lookup(env: List[Frame], name: Text) gives Val {
+    var i = List.length(env) - 1
+    while i >= 0
+        shrinks i + 1
+    {
+        let frame = List.get(env, i)
+        let at = index_of(frame.names, name)
+        if at >= 0 {
+            return List.get(frame.vals, at)
+        }
+        i = i - 1
+    }
+    return Val.VUnit()
+}
+
+fn declare(env: List[Frame], name: Text, value: Val) gives List[Frame] {
+    let last = List.length(env) - 1
+    if last < 0 {
+        return [Frame(names: [name], vals: [value])]
+    }
+    var result: List[Frame] = []
+    var i = 0
+    while i < List.length(env)
+        shrinks List.length(env) - i
+    {
+        let frame = List.get(env, i)
+        if i == last {
+            result = List.append(result, Frame(names: List.append(frame.names, name), vals: List.append(frame.vals, value)))
+        } else {
+            result = List.append(result, frame)
+        }
+        i = i + 1
+    }
+    return result
+}
+
+fn replace_val(vals: List[Val], at: Int, value: Val) gives List[Val] {
+    var result: List[Val] = []
+    var i = 0
+    while i < List.length(vals)
+        shrinks List.length(vals) - i
+    {
+        if i == at {
+            result = List.append(result, value)
+        } else {
+            result = List.append(result, List.get(vals, i))
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Gives a new value to the innermost variable with that name.
+fn assign(env: List[Frame], name: Text, value: Val) gives List[Frame] {
+    var found = 0 - 1
+    var i = List.length(env) - 1
+    while i >= 0 and found < 0
+        shrinks i + 1
+    {
+        let candidate = List.get(env, i)
+        if index_of(candidate.names, name) >= 0 {
+            found = i
+        }
+        i = i - 1
+    }
+    if found < 0 {
+        return env
+    }
+    var result: List[Frame] = []
+    var j = 0
+    while j < List.length(env)
+        shrinks List.length(env) - j
+    {
+        let frame = List.get(env, j)
+        if j == found {
+            let at = index_of(frame.names, name)
+            result = List.append(result, Frame(names: frame.names, vals: replace_val(frame.vals, at, value)))
+        } else {
+            result = List.append(result, frame)
+        }
+        j = j + 1
+    }
+    return result
+}
+
+fn drop_frame(env: List[Frame]) gives List[Frame] {
+    var result: List[Frame] = []
+    var i = 0
+    while i < List.length(env) - 1
+        shrinks List.length(env) - i
+    {
+        result = List.append(result, List.get(env, i))
+        i = i + 1
+    }
+    return result
+}
+
+fn push_frame(env: List[Frame], frame: Frame) gives List[Frame] {
+    return List.append(env, frame)
+}
+
+// Patterns
+
+type Bound = { ok: Bool, names: List[Text], vals: List[Val] }
+
+fn no_match() gives Bound {
+    return Bound(ok: false, names: [], vals: [])
+}
+
+fn literal_val(value: parser.Node) gives Val {
+    return match value {
+        parser.Node.Flag(b) => Val.VBool(b)
+        parser.Node.Whole(n) => Val.VInt(n)
+        parser.Node.Real(text) => Val.VFloat(Float.parse(text))
+        parser.Node.Str(text) => Val.VText(text)
+        _ => Val.VUnit()
+    }
+}
+
+fn variant_kind(v: Val) gives Text {
+    return match v {
+        Val.VVariant(owner, kind, items) => kind
+        _ => ""
+    }
+}
+
+fn variant_items(v: Val) gives List[Val] {
+    return match v {
+        Val.VVariant(owner, kind, items) => items
+        _ => []
+    }
+}
+
+// Whether a value matches a pattern, and the names it binds.
+fn match_pattern(pattern: parser.Node, v: Val) gives Bound {
+    let kind = kind_of(pattern)
+    if kind == "WildcardPattern" {
+        return Bound(ok: true, names: [], vals: [])
+    }
+    if kind == "BindingPattern" {
+        return Bound(ok: true, names: [text_of(field(pattern, "name"))], vals: [v])
+    }
+    if kind == "LiteralPattern" {
+        return Bound(ok: vals_equal(literal_val(field(pattern, "value")), v), names: [], vals: [])
+    }
+    if variant_kind(v) != text_of(field(pattern, "name")) {
+        return no_match()
+    }
+    let arguments = items_of(field(pattern, "arguments"))
+    let items = variant_items(v)
+    var names: List[Text] = []
+    var vals: List[Val] = []
+    var i = 0
+    while i < List.length(arguments)
+        shrinks List.length(arguments) - i
+    {
+        let inner = match_pattern(List.get(arguments, i), List.get(items, i))
+        if not inner.ok {
+            return no_match()
+        }
+        names = List.concat(names, inner.names)
+        vals = List.concat(vals, inner.vals)
+        i = i + 1
+    }
+    return Bound(ok: true, names: names, vals: vals)
+}
+
+// Built-in functions
+
+fn is_user_function(prog: Prog, name: Text) gives Bool {
+    return index_of(prog.fn_names, name) >= 0
+}
+
+fn require(ok: Bool, callee: Text) gives Res {
+    if ok {
+        return good(Val.VUnit())
+    }
+    return bad("E4001", "This call breaks a 'needs' condition of '" + callee + "'")
+}
+
+fn text_val(v: Val) gives Text {
+    return match v {
+        Val.VText(t) => t
+        _ => ""
+    }
+}
+
+fn int_val(v: Val) gives Int {
+    return match v {
+        Val.VInt(n) => n
+        _ => 0
+    }
+}
+
+fn float_val(v: Val) gives Float {
+    return match v {
+        Val.VFloat(x) => x
+        _ => 0.0
+    }
+}
+
+fn list_val(v: Val) gives List[Val] {
+    return match v {
+        Val.VList(items) => items
+        _ => []
+    }
+}
+
+fn some_val(v: Val) gives Val {
+    return Val.VVariant("", "Some", [v])
+}
+
+fn none_val() gives Val {
+    return Val.VVariant("", "None", [])
+}
+
+// The functions that are pure: they compute a value from the arguments or stop with a broken `needs`.
+fn apply_builtin(callee: Text, a: List[Val]) gives Res {
+    let count = List.length(a)
+    if callee == "to_text" {
+        return good(Val.VText(format_val(List.get(a, 0))))
+    }
+    if callee == "to_float" {
+        return good(Val.VFloat(to_float(int_val(List.get(a, 0)))))
+    }
+    if callee == "to_int" {
+        let x = float_val(List.get(a, 0))
+        if x >= 9223372036854775808.0 or x < 0.0 - 9223372036854775808.0 {
+            return bad("E3005", to_text(x) + " is outside the range of Int")
+        }
+        return good(Val.VInt(to_int(x)))
+    }
+    if callee == "args" {
+        return good(Val.VList([]))
+    }
+    if callee == "Text.length" {
+        return good(Val.VInt(Text.length(text_val(List.get(a, 0)))))
+    }
+    if callee == "Text.slice" {
+        let text = text_val(List.get(a, 0))
+        let start = int_val(List.get(a, 1))
+        let end = int_val(List.get(a, 2))
+        let check = require(start >= 0 and start <= end and end <= Text.length(text), callee)
+        if not check.ok {
+            return check
+        }
+        return good(Val.VText(Text.slice(text, start, end)))
+    }
+    if callee == "Text.contains" {
+        return good(Val.VBool(Text.contains(text_val(List.get(a, 0)), text_val(List.get(a, 1)))))
+    }
+    if callee == "Text.starts_with" {
+        return good(Val.VBool(Text.starts_with(text_val(List.get(a, 0)), text_val(List.get(a, 1)))))
+    }
+    if callee == "Text.ends_with" {
+        return good(Val.VBool(Text.ends_with(text_val(List.get(a, 0)), text_val(List.get(a, 1)))))
+    }
+    if callee == "Int.can_parse" {
+        return good(Val.VBool(Int.can_parse(text_val(List.get(a, 0)))))
+    }
+    if callee == "Int.parse" {
+        let text = text_val(List.get(a, 0))
+        let check = require(Int.can_parse(text), callee)
+        if not check.ok {
+            return check
+        }
+        return good(Val.VInt(Int.parse(text)))
+    }
+    if callee == "Float.can_parse" {
+        return good(Val.VBool(Float.can_parse(text_val(List.get(a, 0)))))
+    }
+    if callee == "Float.parse" {
+        let text = text_val(List.get(a, 0))
+        let check = require(Float.can_parse(text), callee)
+        if not check.ok {
+            return check
+        }
+        return good(Val.VFloat(Float.parse(text)))
+    }
+    if callee == "List.length" {
+        return good(Val.VInt(List.length(list_val(List.get(a, 0)))))
+    }
+    if callee == "List.get" {
+        let items = list_val(List.get(a, 0))
+        let index = int_val(List.get(a, 1))
+        let check = require(index >= 0 and index < List.length(items), callee)
+        if not check.ok {
+            return check
+        }
+        return good(List.get(items, index))
+    }
+    if callee == "List.append" {
+        return good(Val.VList(List.append(list_val(List.get(a, 0)), List.get(a, 1))))
+    }
+    if callee == "List.concat" {
+        return good(Val.VList(List.concat(list_val(List.get(a, 0)), list_val(List.get(a, 1)))))
+    }
+    if callee == "List.contains" {
+        let items = list_val(List.get(a, 0))
+        for item in items {
+            if vals_equal(item, List.get(a, 1)) {
+                return good(Val.VBool(true))
+            }
+        }
+        return good(Val.VBool(false))
+    }
+    if callee == "Some" {
+        return good(some_val(List.get(a, 0)))
+    }
+    if callee == "Ok" {
+        return good(Val.VVariant("", "Ok", [List.get(a, 0)]))
+    }
+    if callee == "Err" {
+        return good(Val.VVariant("", "Err", [List.get(a, 0)]))
+    }
+    if callee == "Option.is_some" or callee == "Option.is_none" {
+        let some = variant_kind(List.get(a, 0)) == "Some"
+        if callee == "Option.is_some" {
+            return good(Val.VBool(some))
+        }
+        return good(Val.VBool(not some))
+    }
+    if callee == "Option.value_or" {
+        if variant_kind(List.get(a, 0)) == "Some" {
+            return good(List.get(variant_items(List.get(a, 0)), 0))
+        }
+        return good(List.get(a, 1))
+    }
+    if callee == "Option.value" {
+        if variant_kind(List.get(a, 0)) == "Some" {
+            return good(List.get(variant_items(List.get(a, 0)), 0))
+        }
+        return bad("E4002", "This value has no payload to read")
+    }
+    if callee == "Result.is_ok" or callee == "Result.is_err" {
+        let ok = variant_kind(List.get(a, 0)) == "Ok"
+        if callee == "Result.is_ok" {
+            return good(Val.VBool(ok))
+        }
+        return good(Val.VBool(not ok))
+    }
+    if callee == "Result.value_or" {
+        if variant_kind(List.get(a, 0)) == "Ok" {
+            return good(List.get(variant_items(List.get(a, 0)), 0))
+        }
+        return good(List.get(a, 1))
+    }
+    if callee == "Result.value" {
+        if variant_kind(List.get(a, 0)) == "Ok" {
+            return good(List.get(variant_items(List.get(a, 0)), 0))
+        }
+        return bad("E4002", "This value has no payload to read")
+    }
+    if callee == "Result.error" {
+        if variant_kind(List.get(a, 0)) == "Err" {
+            return good(List.get(variant_items(List.get(a, 0)), 0))
+        }
+        return bad("E4002", "This value has no payload to read")
+    }
+    return bad("E0000", "the built-in '" + callee + "' is not run by this interpreter yet (" + to_text(count) + ")")
+}
+
+// Expressions
+
+fn call_children(node: parser.Node) gives List[parser.Node] {
+    let kind = kind_of(node)
+    if kind == "Call" {
+        return items_of(field(node, "arguments"))
+    }
+    if kind == "ListLiteral" {
+        return items_of(field(node, "elements"))
+    }
+    var values: List[parser.Node] = []
+    for initializer in items_of(field(node, "fields")) {
+        values = List.append(values, field(initializer, "value"))
+    }
+    return values
+}
+
+// Starts to evaluate an expression.
+fn step_eval(prog: Prog, m: Machine, node: parser.Node) gives Machine {
+    let kind = kind_of(node)
+    if kind == "IntLiteral" {
+        return mk(m, Control.CValue(Val.VInt(int_of(field(node, "value")))), m.env, m.stack)
+    }
+    if kind == "FloatLiteral" {
+        return mk(m, Control.CValue(Val.VFloat(Float.parse(real_of(field(node, "value"))))), m.env, m.stack)
+    }
+    if kind == "TextLiteral" {
+        return mk(m, Control.CValue(Val.VText(text_of(field(node, "value")))), m.env, m.stack)
+    }
+    if kind == "BoolLiteral" {
+        return mk(m, Control.CValue(Val.VBool(flag_of(field(node, "value")))), m.env, m.stack)
+    }
+    if kind == "Name" {
+        let name = text_of(field(node, "name"))
+        if name == "None" and not has_name(m.env, name) {
+            return mk(m, Control.CValue(none_val()), m.env, m.stack)
+        }
+        return mk(m, Control.CValue(lookup(m.env, name)), m.env, m.stack)
+    }
+    if kind == "Group" {
+        return mk(m, Control.CEval(field(node, "expression")), m.env, m.stack)
+    }
+    if kind == "Unary" {
+        return mk(m, Control.CEval(field(node, "operand")), m.env, push(Kont.KUnary(node), m.stack))
+    }
+    if kind == "Binary" {
+        return mk(m, Control.CEval(field(node, "left")), m.env, push(Kont.KBinLeft(node), m.stack))
+    }
+    if kind == "FieldAccess" {
+        return mk(m, Control.CEval(field(node, "target")), m.env, push(Kont.KField(node), m.stack))
+    }
+    if kind == "MatchExpr" {
+        return mk(m, Control.CEval(field(node, "value")), m.env, push(Kont.KMatch(node), m.stack))
+    }
+    // A call, a list or a record: its parts are evaluated one by one, from the first.
+    let children = call_children(node)
+    if List.length(children) == 0 {
+        return finish_parts(prog, m, node, [])
+    }
+    return mk(m, Control.CEval(List.get(children, 0)), m.env, push(Kont.KArgs(node, []), m.stack))
+}
+
+fn has_name(env: List[Frame], name: Text) gives Bool {
+    for frame in env {
+        if index_of(frame.names, name) >= 0 {
+            return true
+        }
+    }
+    return false
+}
+
+// A call, a list or a record whose parts have all been evaluated.
+fn finish_parts(prog: Prog, m: Machine, node: parser.Node, parts: List[Val]) gives Machine {
+    let kind = kind_of(node)
+    if kind == "ListLiteral" {
+        return mk(m, Control.CValue(Val.VList(parts)), m.env, m.stack)
+    }
+    if kind == "RecordConstruction" {
+        return mk(m, Control.CValue(build_record(prog, node, parts)), m.env, m.stack)
+    }
+    return finish_call(prog, m, node, parts)
+}
+
+// The record, with its fields in the order of the declaration and not in the order they were written.
+fn build_record(prog: Prog, node: parser.Node, parts: List[Val]) gives Val {
+    let name = text_of(field(node, "name"))
+    let declared = List.get(prog.record_fields, index_of(prog.record_names, name))
+    let written = items_of(field(node, "fields"))
+    var vals: List[Val] = []
+    for field_name in declared {
+        var i = 0
+        while i < List.length(written)
+            shrinks List.length(written) - i
+        {
+            if text_of(field(List.get(written, i), "name")) == field_name {
+                vals = List.append(vals, List.get(parts, i))
+            }
+            i = i + 1
+        }
+    }
+    return Val.VRecord(name, declared, vals)
+}
+
+fn last_dot_index(text: Text) gives Int {
+    var i = Text.length(text) - 1
+    while i >= 0
+        shrinks i + 1
+    {
+        if Text.slice(text, i, i + 1) == "." {
+            return i
+        }
+        i = i - 1
+    }
+    return 0 - 1
+}
+
+fn max_call_depth() gives Int {
+    return 1000
+}
+
+// A call whose arguments have been evaluated: a function of the program, the check of a refined type, a variant
+// of an enum or a built-in.
+fn finish_call(prog: Prog, m: Machine, node: parser.Node, arguments: List[Val]) gives Machine {
+    let callee = text_of(field(node, "callee"))
+    let at = index_of(prog.fn_names, callee)
+    if at >= 0 {
+        return call_function(m, List.get(prog.fn_nodes, at), arguments, node)
+    }
+    if index_of(prog.type_names, callee) >= 0 {
+        return refine(prog, m, node, callee, List.get(arguments, 0))
+    }
+    if not checker.is_builtin(callee) {
+        // `Shape.Circle(2.0)`: a variant of an enum.
+        let dot = last_dot_index(callee)
+        let owner = Text.slice(callee, 0, dot)
+        let kind = Text.slice(callee, dot + 1, Text.length(callee))
+        return mk(m, Control.CValue(Val.VVariant(owner, kind, arguments)), m.env, m.stack)
+    }
+    if callee == "print" {
+        let line = format_val(List.get(arguments, 0))
+        return mk_out(m, Control.CValue(Val.VUnit()), m.stack, List.append(m.out, line))
+    }
+    let res = apply_builtin(callee, arguments)
+    if not res.ok {
+        return failed(m, res, node)
+    }
+    return mk(m, Control.CValue(res.val), m.env, m.stack)
+}
+
+// Enters a function of the program: its parameters are the first scope, and what is left to do after it returns
+// is saved on the stack.
+fn call_function(m: Machine, function: parser.Node, arguments: List[Val], node: parser.Node) gives Machine {
+    if m.depth >= max_call_depth() {
+        return fail_at(m, "E3004", "The program nested more than 1000 calls", node)
+    }
+    var names: List[Text] = []
+    for param in items_of(field(function, "params")) {
+        names = List.append(names, text_of(field(param, "name")))
+    }
+    let frame = Frame(names: names, vals: arguments)
+    return mk_depth(
+        m, Control.CExec(field(function, "body")), [frame],
+        push(Kont.KCall(m.env, text_of(field(function, "name"))), m.stack), m.depth + 1
+    )
+}
+
+// `Percent(x)`: lets a value through only if it satisfies the conditions of the type and of the types it refines.
+fn refine(prog: Prog, m: Machine, node: parser.Node, name: Text, v: Val) gives Machine {
+    let broken = broken_rule(prog, name, v)
+    if broken != "" {
+        return fail_at(m, "E4003", "This value is not a valid " + name, node)
+    }
+    return mk(m, Control.CValue(v), m.env, m.stack)
+}
+
+// The name of the first declaration in the chain of `name` whose condition the value does not satisfy.
+fn broken_rule(prog: Prog, name: Text, v: Val) gives Text {
+    let at = index_of(prog.type_names, name)
+    if at < 0 {
+        return ""
+    }
+    let declaration = List.get(prog.type_nodes, at)
+    let base = text_of(field(field(declaration, "base"), "name"))
+    let inner = broken_rule(prog, base, v)
+    if inner != "" {
+        return inner
+    }
+    let machine = Machine(
+        control: Control.CEval(field(declaration, "condition")),
+        env: [Frame(names: ["value"], vals: [v])], stack: push(Kont.KHalt(), nil_stack()),
+        out: [], depth: 0, fuel: 1000000
+    )
+    let done = run_machine(prog, machine)
+    return match done.control {
+        Control.CDone(outcome) => rule_name(outcome, name)
+        _ => name
+    }
+}
+
+fn rule_name(outcome: Val, name: Text) gives Text {
+    if truth(outcome) {
+        return ""
+    }
+    return name
+}
+
+fn field_of_record(v: Val, name: Text) gives Val {
+    return match v {
+        Val.VRecord(type_name, names, vals) => List.get(vals, index_of(names, name))
+        _ => Val.VUnit()
+    }
+}
+
+// A value arrives and the top of the stack says what to do with it.
+fn step_value(prog: Prog, m: Machine, v: Val) gives Machine {
+    return match m.stack {
+        Stk.Nil => mk(m, Control.CHalt(), m.env, m.stack)
+        Stk.Cons(top, rest) => handle_value(prog, m, top, rest, v)
+    }
+}
+
+fn handle_value(prog: Prog, m: Machine, top: Kont, rest: Stk, v: Val) gives Machine {
+    return match top {
+        Kont.KUnary(node) => unary_value(m, node, rest, v)
+        Kont.KBinLeft(node) => binary_left(m, node, rest, v)
+        Kont.KBinRight(node, left) => binary_right(m, node, rest, left, v)
+        Kont.KArgs(node, done) => next_part(prog, m, node, rest, done, v)
+        Kont.KField(node) => mk(m, Control.CValue(field_of_record(v, text_of(field(node, "name")))), m.env, rest)
+        Kont.KMatch(node) => match_value(m, node, rest, v)
+        Kont.KPopFrame => mk(m, Control.CValue(v), drop_frame(m.env), rest)
+        Kont.KSeq(statements, next) => next_statement(m, statements, next, rest)
+        Kont.KLet(node) => mk(
+            m, Control.CValue(Val.VUnit()), declare(m.env, text_of(field(node, "name")), v), rest
+        )
+        Kont.KAssign(node) => mk(
+            m, Control.CValue(Val.VUnit()), assign(m.env, text_of(field(node, "name")), v), rest
+        )
+        Kont.KReturn => mk(m, Control.CReturn(v), m.env, rest)
+        Kont.KIf(node) => if_value(m, node, rest, v)
+        Kont.KWhile(node) => while_value(m, node, rest, v)
+        Kont.KWhileBody(node) => mk(m, Control.CExec(node), m.env, rest)
+        Kont.KForStart(node) => iterate(m, node, list_val(v), 0, rest)
+        Kont.KForIter(node, items, next) => iterate(m, node, items, next, rest)
+        Kont.KIfLet(node) => if_let_value(m, node, rest, v)
+        Kont.KDiscard => mk(m, Control.CValue(Val.VUnit()), m.env, rest)
+        Kont.KCall(saved, name) => mk_depth(m, Control.CValue(v), saved, rest, m.depth - 1)
+        Kont.KHalt => mk(m, Control.CDone(v), m.env, rest)
+    }
+}
+
+fn unary_value(m: Machine, node: parser.Node, rest: Stk, v: Val) gives Machine {
+    if text_of(field(node, "operator")) == "not" {
+        return mk(m, Control.CValue(Val.VBool(not truth(v))), m.env, rest)
+    }
+    return match v {
+        Val.VInt(n) => negate(m, node, rest, n)
+        Val.VFloat(x) => mk(m, Control.CValue(Val.VFloat(0.0 - x)), m.env, rest)
+        _ => mk(m, Control.CValue(v), m.env, rest)
+    }
+}
+
+fn negate(m: Machine, node: parser.Node, rest: Stk, n: Int) gives Machine {
+    if n == int_min() {
+        return fail_at(m, "E3002", "The result of this operation does not fit in an Int", node)
+    }
+    return mk(m, Control.CValue(Val.VInt(0 - n)), m.env, rest)
+}
+
+fn binary_left(m: Machine, node: parser.Node, rest: Stk, left: Val) gives Machine {
+    let operator = text_of(field(node, "operator"))
+    if operator == "or" or operator == "and" {
+        // The right side is evaluated only when it can change the result.
+        let decided = truth(left)
+        if (operator == "or" and decided) or (operator == "and" and not decided) {
+            return mk(m, Control.CValue(left), m.env, rest)
+        }
+        return mk(m, Control.CEval(field(node, "right")), m.env, rest)
+    }
+    return mk(m, Control.CEval(field(node, "right")), m.env, push(Kont.KBinRight(node, left), rest))
+}
+
+fn binary_right(m: Machine, node: parser.Node, rest: Stk, left: Val, right: Val) gives Machine {
+    let res = binary_value(text_of(field(node, "operator")), left, right)
+    if not res.ok {
+        return failed(m, res, node)
+    }
+    return mk(m, Control.CValue(res.val), m.env, rest)
+}
+
+// One more part of a call, a list or a record has been evaluated.
+fn next_part(prog: Prog, m: Machine, node: parser.Node, rest: Stk, done: List[Val], v: Val) gives Machine {
+    let parts = List.append(done, v)
+    let children = call_children(node)
+    if List.length(parts) < List.length(children) {
+        return mk(
+            m, Control.CEval(List.get(children, List.length(parts))), m.env,
+            push(Kont.KArgs(node, parts), rest)
+        )
+    }
+    let next = Machine(control: m.control, env: m.env, stack: rest, out: m.out, depth: m.depth, fuel: m.fuel)
+    return finish_parts(prog, next, node, parts)
+}
+
+fn match_value(m: Machine, node: parser.Node, rest: Stk, v: Val) gives Machine {
+    for arm in items_of(field(node, "arms")) {
+        let bound = match_pattern(field(arm, "pattern"), v)
+        if bound.ok {
+            return mk(
+                m, Control.CEval(field(arm, "body")), push_frame(m.env, Frame(names: bound.names, vals: bound.vals)),
+                push(Kont.KPopFrame(), rest)
+            )
+        }
+    }
+    return fail_at(m, "E0000", "an exhaustive match had no matching arm", node)
+}
+
+// Statements
+
+fn step_exec(prog: Prog, m: Machine, node: parser.Node) gives Machine {
+    let kind = kind_of(node)
+    if kind == "Block" {
+        return mk(
+            m, Control.CValue(Val.VUnit()), push_frame(m.env, empty_frame()),
+            push(Kont.KSeq(items_of(field(node, "statements")), 0), push(Kont.KPopFrame(), m.stack))
+        )
+    }
+    if kind == "Let" or kind == "Var" {
+        return mk(m, Control.CEval(field(node, "value")), m.env, push(Kont.KLet(node), m.stack))
+    }
+    if kind == "Assign" {
+        return mk(m, Control.CEval(field(node, "value")), m.env, push(Kont.KAssign(node), m.stack))
+    }
+    if kind == "Return" {
+        if is_null(field(node, "value")) {
+            return mk(m, Control.CReturn(Val.VUnit()), m.env, m.stack)
+        }
+        return mk(m, Control.CEval(field(node, "value")), m.env, push(Kont.KReturn(), m.stack))
+    }
+    if kind == "If" {
+        return mk(m, Control.CEval(field(node, "condition")), m.env, push(Kont.KIf(node), m.stack))
+    }
+    if kind == "IfLet" {
+        return mk(m, Control.CEval(field(node, "value")), m.env, push(Kont.KIfLet(node), m.stack))
+    }
+    if kind == "While" {
+        return mk(m, Control.CEval(field(node, "condition")), m.env, push(Kont.KWhile(node), m.stack))
+    }
+    if kind == "For" {
+        return mk(m, Control.CEval(field(node, "iterable")), m.env, push(Kont.KForStart(node), m.stack))
+    }
+    if kind == "ExprStatement" {
+        return mk(m, Control.CEval(field(node, "expression")), m.env, push(Kont.KDiscard(), m.stack))
+    }
+    return fail_at(m, "E0000", "a statement the interpreter does not know: " + kind, node)
+}
+
+// The block runs its statements in order; when none is left, the value goes on.
+fn next_statement(m: Machine, statements: List[parser.Node], next: Int, rest: Stk) gives Machine {
+    if next < List.length(statements) {
+        return mk(
+            m, Control.CExec(List.get(statements, next)), m.env, push(Kont.KSeq(statements, next + 1), rest)
+        )
+    }
+    return mk(m, Control.CValue(Val.VUnit()), m.env, rest)
+}
+
+fn branch(m: Machine, else_node: parser.Node, rest: Stk) gives Machine {
+    if is_null(else_node) {
+        return mk(m, Control.CValue(Val.VUnit()), m.env, rest)
+    }
+    return mk(m, Control.CExec(else_node), m.env, rest)
+}
+
+fn if_value(m: Machine, node: parser.Node, rest: Stk, v: Val) gives Machine {
+    if truth(v) {
+        return mk(m, Control.CExec(field(node, "then_block")), m.env, rest)
+    }
+    return branch(m, field(node, "else_branch"), rest)
+}
+
+fn if_let_value(m: Machine, node: parser.Node, rest: Stk, v: Val) gives Machine {
+    let bound = match_pattern(field(node, "pattern"), v)
+    if bound.ok {
+        return mk(
+            m, Control.CExec(field(node, "then_block")), push_frame(m.env, Frame(names: bound.names, vals: bound.vals)),
+            push(Kont.KPopFrame(), rest)
+        )
+    }
+    return branch(m, field(node, "else_branch"), rest)
+}
+
+fn while_value(m: Machine, node: parser.Node, rest: Stk, v: Val) gives Machine {
+    if truth(v) {
+        return mk(m, Control.CExec(field(node, "body")), m.env, push(Kont.KWhileBody(node), rest))
+    }
+    return mk(m, Control.CValue(Val.VUnit()), m.env, rest)
+}
+
+// One turn of a `for`: the iterator is a new name in a new scope of the body.
+fn iterate(m: Machine, node: parser.Node, items: List[Val], next: Int, rest: Stk) gives Machine {
+    var env = m.env
+    if next > 0 {
+        env = drop_frame(env)
+    }
+    if next >= List.length(items) {
+        return mk(m, Control.CValue(Val.VUnit()), env, rest)
+    }
+    let frame = Frame(names: [text_of(field(node, "name"))], vals: [List.get(items, next)])
+    return mk(
+        m, Control.CExec(field(node, "body")), push_frame(env, frame), push(Kont.KForIter(node, items, next + 1), rest)
+    )
+}
+
+// A return unwinds the stack up to the call that is returning.
+fn step_return(m: Machine, v: Val) gives Machine {
+    return match m.stack {
+        Stk.Nil => mk(m, Control.CHalt(), m.env, m.stack)
+        Stk.Cons(top, rest) => unwind(m, top, rest, v)
+    }
+}
+
+fn unwind(m: Machine, top: Kont, rest: Stk, v: Val) gives Machine {
+    return match top {
+        Kont.KCall(saved, name) => mk_depth(m, Control.CValue(v), saved, rest, m.depth - 1)
+        Kont.KHalt => mk(m, Control.CDone(v), m.env, rest)
+        _ => mk(m, Control.CReturn(v), m.env, rest)
+    }
+}
+
+fn step(prog: Prog, m: Machine) gives Machine {
+    return match m.control {
+        Control.CEval(node) => step_eval(prog, m, node)
+        Control.CExec(node) => step_exec(prog, m, node)
+        Control.CValue(v) => step_value(prog, m, v)
+        Control.CReturn(v) => step_return(m, v)
+        Control.CHalt => m
+        Control.CDone(v) => m
+        Control.CFail(code, label, line, column) => m
+    }
+}
+
+fn is_finished(control: Control) gives Bool {
+    return match control {
+        Control.CHalt => true
+        Control.CDone(v) => true
+        Control.CFail(code, label, line, column) => true
+        _ => false
+    }
+}
+
+// Runs the machine until it stops or the fuel is spent.
+fn run_machine(prog: Prog, start: Machine) gives Machine {
+    var m = start
+    while m.fuel > 0 and not is_finished(m.control)
+        shrinks m.fuel
+    {
+        m = step(prog, m)
+    }
+    return m
+}
+
+// The program
+
+fn start_machine(prog: Prog, fuel: Int) gives Machine {
+    let main_at = index_of(prog.fn_names, "main")
+    let body = field(List.get(prog.fn_nodes, main_at), "body")
+    return Machine(
+        control: Control.CExec(body), env: [empty_frame()],
+        stack: push(Kont.KCall([], "main"), push(Kont.KHalt(), nil_stack())), out: [], depth: 1, fuel: fuel
+    )
+}
+
+// Test driver: every argument is a file. For each one prints `FILE|path` and then what the
+// program prints, followed by `STOP|` and how the run ended.
+fn run_files() {
+    let files = args()
+    var i = 0
+    while i < List.length(files)
+        shrinks List.length(files) - i
+    {
+        let path = List.get(files, i)
+        print("FILE|" + path)
+        let lexed = lexer.tokenize(read_file(path))
+        if List.length(lexed.diagnostics) > 0 {
+            print("STOP|lexical")
+        } else {
+            let outcome = parser.parse_program(lexed.tokens)
+            if List.length(outcome.diagnostics) > 0 {
+                print("STOP|syntax")
+            } else {
+                let analysis = checker.analyze(outcome.program)
+                if analysis.unsupported != "" {
+                    print("STOP|unsupported " + analysis.unsupported)
+                } else if has_errors(analysis.problems) {
+                    print("STOP|check")
+                } else {
+                    let prog = build_prog(analysis.node)
+                    let done = run_machine(prog, start_machine(prog, start_fuel()))
+                    for line in done.out {
+                        print(line)
+                    }
+                    print(stop_text(done))
+                }
+            }
+        }
+        i = i + 1
+    }
+}
+
+// Whether any of the problems is an error: the warnings of a program do not stop it.
+fn has_errors(problems: List[parser.Problem]) gives Bool {
+    for problem in problems {
+        if not Text.starts_with(problem.code, "W") {
+            return true
+        }
+    }
+    return false
+}
+
+// The steps a run may take before it is stopped.
+fn start_fuel() gives Int {
+    return 300000000
+}
+
+fn stop_text(m: Machine) gives Text {
+    return match m.control {
+        Control.CHalt => "STOP|ok " + to_text(start_fuel() - m.fuel)
+        Control.CDone(v) => "STOP|ok " + to_text(start_fuel() - m.fuel)
+        Control.CFail(code, label, line, column) => "STOP|fail " + code + " " + to_text(line) + ":" + to_text(column)
+        _ => "STOP|fuel"
+    }
+}
+
+fn main() {
+    run_files()
+}

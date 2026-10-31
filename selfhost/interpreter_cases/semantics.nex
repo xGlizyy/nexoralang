@@ -1,0 +1,98 @@
+type Shape = enum { Circle(radius: Float), Rect(width: Float, height: Float), Dot }
+type Point = { x: Int, y: Int }
+type Line = { from: Point, to: Point }
+
+fn side_effect(label: Text, value: Bool) gives Bool {
+    print(label)
+    return value
+}
+
+fn first_negative(xs: List[Int]) gives Option[Int] {
+    for x in xs {
+        if x < 0 {
+            return Some(x)
+        }
+    }
+    return None
+}
+
+fn classify(n: Int) gives Text {
+    var i = 0
+    while i < 10
+        shrinks 10 - i
+    {
+        if i == n {
+            return "found " + to_text(i)
+        }
+        i = i + 1
+    }
+    return "missing"
+}
+
+fn area(s: Shape) gives Float {
+    return match s {
+        Shape.Circle(r) => r * r * 3.0
+        Shape.Rect(w, h) => w * h
+        Shape.Dot => 0.0
+    }
+}
+
+fn shadow(n: Int) gives Int {
+    var total = n
+    if n > 0 {
+        let inner = n * 2
+        total = total + inner
+    }
+    {
+        let inner = 100
+        total = total + inner
+    }
+    return total
+}
+
+fn main() {
+    print(side_effect("a", false) and side_effect("b", true))
+    print(side_effect("c", true) or side_effect("d", true))
+    print(side_effect("e", true) and side_effect("f", false))
+    print(first_negative([3, -1, -2]))
+    print(first_negative([3]))
+    print(classify(4))
+    print(classify(40))
+    print(area(Shape.Circle(2.0)))
+    print(area(Shape.Rect(2.0, 3.5)))
+    print(area(Shape.Dot()))
+    print(shadow(5))
+    print(shadow(-5))
+    let line = Line(from: Point(x: 1, y: 2), to: Point(x: 3, y: 4))
+    print(line)
+    print(line.to.y - line.from.y)
+    print(line == Line(from: Point(y: 2, x: 1), to: Point(x: 3, y: 4)))
+    print([1, 2, 3] == [1, 2, 3])
+    print(-7 / 2)
+    print(7 / -2)
+    print(7.0 / 2.0)
+    print(to_int(-2.7))
+    print(to_float(3) / 2.0)
+    print("a" + "b" < "ab" + "c")
+    print([Some(1), None])
+    let good: Result[Int, Text] = Ok(1)
+    let bad: Result[Int, Text] = Err("no")
+    print(good)
+    print(bad)
+    let xs: List[Text] = ["x", "y"]
+    print(xs)
+    print(List.append(xs, "z"))
+    print(Text.slice("hello", 1, 3))
+    print(Int.parse("-42") + 1)
+    if let Some(v) = first_negative([5, -9]) {
+        print(v)
+    } else {
+        print("none")
+    }
+    let message = match line.from.x {
+        0 => "zero"
+        1 => "one"
+        other => "many"
+    }
+    print(message)
+}
