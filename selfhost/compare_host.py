@@ -136,6 +136,7 @@ CASES_TABLE = {
 
 # name -> (program, limits). The limits are options of `nex run` that the interpreter in NEXORA also reads.
 FLOAT = 'fn main() {{\n    let a = Float.parse("{a}")\n    let b = Float.parse("{b}")\n    print(a {op} b)\n}}\n'
+TWO_INPUTS = 'fn main() {\n    print(input())\n    print(input())\n}\n'
 TWO_LINES = 'fn main() {\n    print("hello")\n    print("world")\n}\n'
 LIMIT_CASES = {
     "float_multiply_overflows": (FLOAT.format(a="1e200", b="1e200", op="*"), []),
@@ -163,6 +164,22 @@ LIMIT_CASES = {
     "output_fits_exactly": (TWO_LINES, ["--max-output", "12"]),
     "output_cut_at_a_line": (TWO_LINES, ["--max-output", "6"]),
     "output_one_over": (TWO_LINES, ["--max-output", "11"]),
+    "source_fits": (TWO_LINES, ["--max-source", "1000"]),
+    "source_exact": (TWO_LINES, ["--max-source", str(len(TWO_LINES))]),
+    "source_one_over": (TWO_LINES, ["--max-source", str(len(TWO_LINES) - 1)]),
+    "input_fits": (TWO_INPUTS, ["--max-input", "6"]),
+    "input_second_over": (TWO_INPUTS, ["--max-input", "5"]),
+    "input_first_over": (TWO_INPUTS, ["--max-input", "2"]),
+    "input_no_final_newline": (TWO_INPUTS, ["--max-input", "5"]),
+    "input_with_text_limit": (TWO_INPUTS, ["--max-input", "1000", "--max-text", "1"]),
+    "input_over_before_text_limit": (TWO_INPUTS, ["--max-input", "2", "--max-text", "1"]),
+}
+
+# name -> what the standard input holds, when it is not the default of the table of limits.
+LIMIT_INPUT = {
+    "input_fits": "ab\ncd\n", "input_second_over": "ab\ncd\n", "input_first_over": "ab\ncd\n",
+    "input_no_final_newline": "ab\ncd", "input_with_text_limit": "ab\ncd\n",
+    "input_over_before_text_limit": "ab\ncd\n", "text_input_long": "abcdefgh\n",
 }
 
 
@@ -186,12 +203,15 @@ def python_run(path: str, allow: list[tuple[str, str]], text: str, arguments: li
     run = subprocess.run(
         [sys.executable, "-m", "nexora", "run", path, "--format", "json", *options_of(allow), *limits,
          *(["--", *arguments] if arguments else [])],
-        capture_output=True, text=True, encoding="utf-8", input=text,
+        capture_output=True, input=text.encode("utf-8"),
     )
+    # The input goes as bytes, so a line break is one byte; what comes back is read with its line breaks normalised.
+    stdout = run.stdout.decode("utf-8").replace("\r\n", "\n")
+    stderr = run.stderr.decode("utf-8")
     diagnostic = None
     if run.returncode in (3, 5):
-        diagnostic = json.loads(run.stderr)["diagnostics"][0]
-    return run.returncode, run.stdout, diagnostic
+        diagnostic = json.loads(stderr)["diagnostics"][0]
+    return run.returncode, stdout, diagnostic
 
 
 def nexora_run(path: str, allow: list[tuple[str, str]], text: str, arguments: list[str], limits: list[str] = ()):
@@ -245,7 +265,7 @@ def main() -> int:
     cases = [(name, allow, text, arguments, []) for name, (_, allow, text, arguments) in CASES_TABLE.items()]
     for name, (_, limits) in LIMIT_CASES.items():
         read = [("read", DATA)] if name == "text_read_long" else []
-        text = "abcdefgh\n" if name == "text_input_long" else ""
+        text = LIMIT_INPUT.get(name, "")
         arguments = ["abcdefgh"] if name == "text_argument_long" else []
         cases.append((name, read, text, arguments, limits))
     for name, allow, text, arguments, limits in cases:

@@ -22,9 +22,14 @@ pub type Module = {
 }
 
 // What has been read so far.
-pub type Project = { modules: List[Module], names: List[Text] }
+// `over` is the file that was bigger than the limit of --max-source, or the file whose size cannot be counted (it is written
+// with a `?` in front), and it stops the reading.
+pub type Project = { modules: List[Module], names: List[Text], over: Text }
 
-type Loader = { modules: List[Module], stack: List[Text], keys: List[Text], names: List[Text], name_keys: List[Text] }
+type Loader = {
+    modules: List[Module], stack: List[Text], keys: List[Text], names: List[Text], name_keys: List[Text],
+    limit: Int, over: Text
+}
 
 // Reading the tree
 
@@ -185,11 +190,41 @@ fn leaves(paths: List[Text]) gives List[Text] {
 
 // Reading
 
+// Whether a text is made of ASCII characters only, which is the only case where its bytes can be counted.
+pub fn is_ascii_text(text: Text) gives Bool {
+    let ascii = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz\{|}~\t\n"
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if not Text.contains(ascii, Text.slice(text, i, i + 1)) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
 fn read_module(loader: Loader, path: Text) gives Loader {
-    if List.contains(loader.keys, path) {
+    if List.contains(loader.keys, path) or loader.over != "" {
         return loader
     }
-    let lexed = lexer.tokenize(read_file(path))
+    let text = read_file(path)
+    if loader.limit > 0 {
+        if not is_ascii_text(text) {
+            return Loader(
+                modules: loader.modules, stack: loader.stack, keys: loader.keys, names: loader.names,
+                name_keys: loader.name_keys, limit: loader.limit, over: "?" + path
+            )
+        }
+        if Text.length(text) > loader.limit {
+            return Loader(
+                modules: loader.modules, stack: loader.stack, keys: loader.keys, names: loader.names,
+                name_keys: loader.name_keys, limit: loader.limit, over: path
+            )
+        }
+    }
+    let lexed = lexer.tokenize(text)
     var program = parser.Node.Null()
     var clean = false
     var reason = "lexical"
@@ -201,7 +236,7 @@ fn read_module(loader: Loader, path: Text) gives Loader {
     }
     var current = Loader(
         modules: loader.modules, stack: List.append(loader.stack, path), keys: loader.keys, names: loader.names,
-        name_keys: loader.name_keys
+        name_keys: loader.name_keys, limit: loader.limit, over: loader.over
     )
     var imports: List[Text] = []
     var pending: List[parser.Problem] = []
@@ -235,7 +270,8 @@ fn read_module(loader: Loader, path: Text) gives Loader {
             } else {
                 let registered = Loader(
                     modules: current.modules, stack: current.stack, keys: current.keys,
-                    names: List.append(current.names, name), name_keys: List.append(current.name_keys, target)
+                    names: List.append(current.names, name), name_keys: List.append(current.name_keys, target),
+                    limit: current.limit, over: current.over
                 )
                 current = read_module(registered, target)
                 imports = List.append(imports, target)
@@ -248,15 +284,20 @@ fn read_module(loader: Loader, path: Text) gives Loader {
     )
     return Loader(
         modules: List.append(current.modules, module), stack: loader.stack, keys: List.append(current.keys, path),
-        names: current.names, name_keys: current.name_keys
+        names: current.names, name_keys: current.name_keys, limit: current.limit, over: current.over
     )
 }
 
 // The modules of a project in the order they are checked.
 pub fn load(entry: Text) gives Project {
-    let start = Loader(modules: [], stack: [], keys: [], names: [], name_keys: [])
+    return load_limited(entry, 0)
+}
+
+// The same, stopping at the first file bigger than `limit` bytes (0 is no limit), in the order they are read.
+pub fn load_limited(entry: Text, limit: Int) gives Project {
+    let start = Loader(modules: [], stack: [], keys: [], names: [], name_keys: [], limit: limit, over: "")
     let done = read_module(start, entry)
-    return Project(modules: done.modules, names: done.names)
+    return Project(modules: done.modules, names: done.names, over: done.over)
 }
 
 // The result of checking one module.
