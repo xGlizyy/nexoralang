@@ -1,0 +1,5 @@
+import "empty.nex"
+
+fn main() {
+    print(empty.volume(1))
+}

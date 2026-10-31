@@ -8,8 +8,8 @@ runs it for now; it is the bootstrap, not the goal.
 |------|------|-------|
 | Lexer | [`lexer.nex`](lexer.nex) | Done. Same tokens and lexical errors as `lexer.py` on every program of the repository and on the cases in [`lexer_cases/`](lexer_cases/), with the gaps below |
 | Parser | [`parser.nex`](parser.nex) | Done. Same tree and same syntax errors as `parser.py` on every program of the repository and on the cases in [`parser_cases/`](parser_cases/), including error recovery, the limit of 100 errors and the nesting and depth limits |
-| Checker | [`checker.nex`](checker.nex) | In progress. Everything of a single file, warnings included: functions, variables, loops, `if`, operators, lists, records, refined types (with an evaluator of conditions written in NEXORA), enums, `Option` and `Result`, `match` and `if let`, contracts, examples, `uses` and the capabilities of the built-ins, the "did you mean" hints and the warnings `W2001` to `W2003`. Same typed tree, errors and warnings as `checker.py` on the programs it supports; modules are next |
-| Interpreter | [`interpreter.nex`](interpreter.nex) | In progress. An abstract machine with an explicit stack of continuations that runs the typed tree: expressions, statements, functions with their `needs` and `promises`, loops with their `keeps` and `shrinks`, records, enums, `Option`/`Result`, `match`, `if let`, refined checks, the pure built-ins, the `example` clauses of `nex test` and the host (arguments, input and files, with the three rules of what the program declares, the user allows and the environment permits). It stops with the same diagnostic as `nex run` on 41 programs that fail on purpose, reports each example as `nex test` does on 16, and gives the same result as `nex run` on 52 host cases, among them `E3003`, the text limit and the output limit. Same output as `nex run` on 14 repository programs and on 6 programs written for it. `--max-text`, `--max-output` and `E3003` are done; `--timeout`, `--max-memory`, `--max-input`, `--max-source` and modules are next |
+| Checker | [`checker.nex`](checker.nex) | In progress. Everything of a single file, warnings included: functions, variables, loops, `if`, operators, lists, records, refined types (with an evaluator of conditions written in NEXORA), enums, `Option` and `Result`, `match` and `if let`, contracts, examples, `uses` and the capabilities of the built-ins, the "did you mean" hints and the warnings `W2001` to `W2003`. Same typed tree, errors and warnings as `checker.py` on the programs it supports, and on projects of modules (`project.nex`, below) |
+| Interpreter | [`interpreter.nex`](interpreter.nex) | In progress. An abstract machine with an explicit stack of continuations that runs the typed tree: expressions, statements, functions with their `needs` and `promises`, loops with their `keeps` and `shrinks`, records, enums, `Option`/`Result`, `match`, `if let`, refined checks, the pure built-ins, the `example` clauses of `nex test` and the host (arguments, input and files, with the three rules of what the program declares, the user allows and the environment permits). It stops with the same diagnostic as `nex run` on 41 programs that fail on purpose, reports each example as `nex test` does on 16, and gives the same result as `nex run` on 52 host cases, among them `E3003`, the text limit and the output limit. Same output as `nex run` on 14 repository programs and on 6 programs written for it. `--max-text`, `--max-output` and `E3003` are done, and so are projects of modules; `--timeout`, `--max-memory`, `--max-input` and `--max-source` are not possible (see below) |
 
 ## Checking a part against the Python implementation
 
@@ -108,6 +108,33 @@ The host has limits that come from the language and are not fixed here:
 | `--timeout` and `--max-memory` | There is no clock and no way to ask for the memory in use. The interpreter has its own bound, the fuel of the machine. |
 | `--max-input` and `--max-source` | They count bytes: the terminator of each line of the input is lost when it is split into lines, and a Text has no byte size. |
 | Symbolic links are not followed | Paths are resolved by their text, there is no `realpath`. A link that points outside what is allowed is not noticed. |
+
+## Projects of modules
+
+[`project.nex`](project.nex) follows `modules.py` (decision 0018): it reads the program that runs and, before it, the files it
+imports (each one once, relative to the file that has the import), orders them so that the imports of a module come first,
+reports the cycles (`E2029`) and the two files with one name (`E2030`) on the import that causes them, and checks the modules
+one after the other. `checker.nex` checks a module by itself, with its own names bare, and gives the next ones its `Export`: the
+same tables with every name qualified by the module, and the names that module did not mark with `pub` listed apart (`E2028`).
+Then `link` makes one program of the modules: each node that names something of its own module gets a `target` and each
+declaration a `key`, with the name qualified, which is what the analysis of `checker.py` records, and the interpreter resolves
+calls, records and refined types by it.
+
+```bash
+PYTHONPATH=nexora/src python selfhost/compare_project.py selfhost/project_cases/*/main.nex   # checker and loader
+PYTHONPATH=nexora/src python selfhost/compare_interpreter.py selfhost/project_cases/run_*/main.nex   # run
+```
+
+`project_cases/` has one directory per case, with its `main.nex` and the modules it imports. 26 projects give the same modules,
+diagnostics and typed tree as `modules.load`, 11 run with the same output and diagnostics as `nex run`, and `nex test` gives the
+same result on the example of the repository that imports a module.
+
+| Limit | Why |
+|---|---|
+| A file that cannot be read (`E0001`) is not reported | A missing file ends this interpreter, as for `read_file`. |
+| A module that has lexical or syntax errors | The project is skipped, as a file by itself is. |
+| A module that calls itself with its own name in front (`models.area` inside `models.nex`) | Its own names are bare while it is checked; `checker.py` accepts it. |
+| A refined type used by the module that declares it | `nex run` stops with an internal error (`the type 'Small' of expression ... was not resolved`): a bug of the Python implementation, not reproduced here. |
 
 ## Stage 1 measurement: call depth
 

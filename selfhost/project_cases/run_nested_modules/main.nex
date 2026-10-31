@@ -1,0 +1,6 @@
+import "outer.nex"
+
+fn main() {
+    print(outer.twice(3))
+    print(outer.make())
+}

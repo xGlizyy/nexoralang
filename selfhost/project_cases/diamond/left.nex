@@ -1,0 +1,5 @@
+import "base.nex"
+
+pub fn value() gives Int {
+    return base.one()
+}

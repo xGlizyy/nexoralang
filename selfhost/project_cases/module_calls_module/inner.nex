@@ -1,0 +1,3 @@
+pub fn double(n: Int) gives Int {
+    return n * 2
+}

@@ -1,0 +1,4 @@
+pub type P = { a: Int }
+pub fn make(n: Int) gives P {
+    return P(a: n)
+}

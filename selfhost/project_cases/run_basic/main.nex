@@ -1,0 +1,9 @@
+import "m.nex"
+
+fn main() {
+    print(m.add(2, 3))
+    print(m.twice(4))
+    let p = m.Pair(a: 1, b: "x")
+    print(p)
+    print(m.first(p))
+}

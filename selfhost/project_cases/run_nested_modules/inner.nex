@@ -1,0 +1,4 @@
+pub type Box = { v: Int }
+pub fn double(n: Int) gives Int {
+    return n * 2
+}

@@ -1,0 +1,7 @@
+import "models.nex"
+
+fn main() {
+    print(models.area(3))
+    print(models.area(models.Point(x: "a", y: 2)))
+    print(models.area(models.Point(x: 1)))
+}

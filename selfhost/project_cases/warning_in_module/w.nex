@@ -1,0 +1,4 @@
+pub fn one() gives Int {
+    let unused = 3
+    return 1
+}

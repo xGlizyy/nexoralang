@@ -1,0 +1,3 @@
+fn hidden() gives Int {
+    return 1
+}

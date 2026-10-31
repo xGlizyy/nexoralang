@@ -1,0 +1,5 @@
+import "bad.nex"
+
+fn main() {
+    print(bad.one())
+}

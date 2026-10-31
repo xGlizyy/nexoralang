@@ -1,0 +1,5 @@
+import "lib/a.nex"
+
+fn main() {
+    print(a.value())
+}

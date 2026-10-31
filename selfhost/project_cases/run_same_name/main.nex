@@ -1,0 +1,12 @@
+import "one.nex"
+import "two.nex"
+
+fn helper() gives Int {
+    return 100
+}
+
+fn main() {
+    print(one.value())
+    print(two.value())
+    print(helper())
+}

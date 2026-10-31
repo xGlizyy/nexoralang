@@ -1,0 +1,7 @@
+pub type Shape = enum { Circle(radius: Float), Square(side: Float) }
+pub fn area(s: Shape) gives Float {
+    return match s {
+        Shape.Circle(r) => r * r * 3.0
+        Shape.Square(a) => a * a
+    }
+}

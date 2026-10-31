@@ -1,0 +1,5 @@
+import "a.nex"
+
+fn main() {
+    print(a.one())
+}

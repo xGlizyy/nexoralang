@@ -1,0 +1,3 @@
+pub fn divide(a: Int, b: Int) gives Int {
+    return a / b
+}

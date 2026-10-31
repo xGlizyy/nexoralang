@@ -1,0 +1,5 @@
+import "m.nex"
+
+fn main() {
+    print(m.Small(m.pick(500)))
+}

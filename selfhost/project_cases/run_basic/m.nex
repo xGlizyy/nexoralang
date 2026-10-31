@@ -1,0 +1,13 @@
+pub type Pair = { a: Int, b: Text }
+fn helper(n: Int) gives Int {
+    return n * 2
+}
+pub fn add(x: Int, y: Int) gives Int {
+    return x + y
+}
+pub fn twice(n: Int) gives Int {
+    return helper(n)
+}
+pub fn first(p: Pair) gives Int {
+    return p.a
+}

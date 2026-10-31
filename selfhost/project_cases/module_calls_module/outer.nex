@@ -1,0 +1,5 @@
+import "inner.nex"
+
+pub fn twice(n: Int) gives Int {
+    return inner.double(n)
+}
