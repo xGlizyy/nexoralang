@@ -543,7 +543,9 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
 
     # A failure is shown with the file of the function that was running, which is not always the program: it may be
     # a module, and its position belongs to that file's text.
-    source_by_key = {module.source.name.replace("\\", "/"): module.source for module in analysis.project.modules}         if analysis.project else {source.name.replace("\\", "/"): source}
+    source_by_key = {
+        module.source.name.replace("\\", "/"): module.source for module in analysis.project.modules
+    } if analysis.project else {source.name.replace("\\", "/"): source}
     function_files = {
         id(function): module.source.name
         for module in analysis.project.modules if module.program
