@@ -1,0 +1,11 @@
+fn main() {
+    var total = 0
+    var i = 0
+    while i < 5
+        keeps total < 3, "the total stays small"
+        shrinks 5 - i
+    {
+        total = total + i
+        i = i + 1
+    }
+}

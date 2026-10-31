@@ -1,0 +1,11 @@
+fn first(xs: List[Int]) gives Option[Int] {
+    if List.length(xs) == 0 {
+        return None
+    }
+    return Some(List.get(xs, 0))
+}
+
+fn main() {
+    print(Option.value(first([7])))
+    print(Option.value(first([])))
+}

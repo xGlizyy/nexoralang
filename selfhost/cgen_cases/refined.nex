@@ -1,0 +1,11 @@
+type Percent = Int where value >= 0 and value <= 100
+type Small = Percent where value < 30
+type Name = Text where Text.length(value) > 0, "a name cannot be empty"
+
+fn main() {
+    print(Percent(50) + 1)
+    print(Small(20))
+    print(Name("nex"))
+    let n = Percent(Int.parse("70"))
+    print(n)
+}

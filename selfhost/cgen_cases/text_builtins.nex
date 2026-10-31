@@ -1,0 +1,17 @@
+fn main() {
+    let s = "héllo wörld"
+    print(Text.length(s))
+    print(Text.slice(s, 1, 4))
+    print(Text.contains(s, "wör"))
+    print(Text.starts_with(s, "hé"))
+    print(Text.ends_with(s, "ld"))
+    print(Text.ends_with(s, "xx"))
+    print(Int.can_parse("123"))
+    print(Int.can_parse("12a"))
+    print(Int.parse("-42") + 1)
+    print(Float.can_parse("1.5"))
+    print(Float.can_parse("15"))
+    print(Float.parse("2.5e2"))
+    print(to_text(1.5) + to_text(false))
+    print(Text.slice(s, 0, 0) == "")
+}

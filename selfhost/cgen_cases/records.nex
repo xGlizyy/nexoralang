@@ -1,0 +1,20 @@
+type Point = { x: Int, y: Int }
+type Line = { from: Point, to: Point, label: Text }
+
+fn length2(l: Line) gives Int {
+    let dx = l.to.x - l.from.x
+    let dy = l.to.y - l.from.y
+    return dx * dx + dy * dy
+}
+
+fn main() {
+    let a = Point(y: 2, x: 1)
+    let b = Point(x: 4, y: 6)
+    let l = Line(from: a, to: b, label: "ab")
+    print(a)
+    print(l)
+    print(length2(l))
+    print(a == Point(x: 1, y: 2))
+    print(a == b)
+    print(l.label)
+}

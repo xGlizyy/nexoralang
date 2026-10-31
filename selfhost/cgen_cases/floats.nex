@@ -1,0 +1,16 @@
+fn main() {
+    let x = 0.1 + 0.2
+    print(x)
+    print(1.5 * 4.0)
+    print(10.0 / 4.0)
+    print(0.0 - 2.5)
+    print(-3.0)
+    print(1000000.0 * 1000000.0 * 1000000.0)
+    print(to_float(7) / 2.0)
+    print(to_int(9.99))
+    print(to_int(0.0 - 9.99))
+    print(1.0 < 2.0)
+    print(2.5 == 2.5)
+    print(100000000000000000000.0)
+    print(0.00001)
+}
