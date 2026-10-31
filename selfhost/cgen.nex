@@ -148,7 +148,8 @@ fn c_name(name: Text) gives Text {
 
 // What the generator knows of the program: its functions, records (with their fields), enums and refined types.
 type Info = {
-    fns: List[Text], records: List[Text], record_fields: List[List[Text]], enums: List[Text], refined: List[Text]
+    fns: List[Text], records: List[Text], record_fields: List[List[Text]], enums: List[Text], refined: List[Text],
+    files: List[Text]
 }
 
 // What the generator keeps while it writes: the number of the next temporary, and the first thing it cannot do yet.
@@ -406,8 +407,20 @@ fn callee_of(node: parser.Node) gives Text {
 }
 
 fn builtin_expression(callee: Text, values: List[Text], here: Text, node: parser.Node) gives Text {
+    if callee == "args" {
+        return "rt_args()"
+    }
+    if callee == "input" {
+        return "rt_input(" + here + ")"
+    }
     if List.length(values) == 0 {
         return ""
+    }
+    if callee == "read_file" {
+        return "rt_read_file(" + List.get(values, 0) + ", " + node_span(arg_node(node, 0)) + ")"
+    }
+    if callee == "write_file" {
+        return "rt_write_file(" + List.get(values, 0) + ", " + List.get(values, 1) + ", " + node_span(arg_node(node, 0)) + ")"
     }
     let first = List.get(values, 0)
     if callee == "to_text" {
@@ -1009,7 +1022,14 @@ fn gen_function(st: St, function: parser.Node) gives Part {
     let scope = Fn(name: name, params: param_vars(function), afters: clauses_of(function, "promises"))
     let entry = needs_code(st, function, scope)
     let body = gen_block(entry.st, scope, scope.params, field(function, "body"))
-    let opening = signature(function) + " \{\nint rt_saved = rt_enter(" + c_string(name) + ", s_l, s_c, s_el, s_ec);\n"
+    let file = index_of(st.info.files, text_of(field(function, "file")))
+    var file_index = 0
+    if file > 0 {
+        file_index = file
+    }
+    let opening = (
+        signature(function) + " \{\nint rt_saved = rt_enter(" + c_string(name) + ", " + to_text(file_index) + ", s_l, s_c, s_el, s_ec);\n"
+    )
     if body.returns {
         return part(opening + entry.code + body.code + "}\n\n", "", body.st)
     }
@@ -1067,17 +1087,45 @@ fn record_descriptor(record: parser.Node) gives Text {
     return "static const char *const rec_" + c_name(declared_name(record)) + "[] = \{" + list + "};\n"
 }
 
-fn generate(program: parser.Node, path: Text, source: Text) gives Part {
+// The sources of the files of the program, as C arrays of lines and a table that names them.
+fn sources_code(paths: List[Text]) gives Text {
+    var code = ""
+    var names: List[Text] = []
+    var arrays: List[Text] = []
+    var counts: List[Text] = []
+    var index = 0
+    for path in paths {
+        let lines = render.lines_of(read_file(path))
+        code = code + "static const char *const nx_lines" + to_text(index) + "[] = \{\n"
+        for line in lines {
+            code = code + c_string(line) + ",\n"
+        }
+        code = code + "0};\n"
+        names = List.append(names, c_string(path))
+        arrays = List.append(arrays, "nx_lines" + to_text(index))
+        counts = List.append(counts, to_text(List.length(lines)))
+        index = index + 1
+    }
+    code = code + "static const char *const nx_paths[] = \{" + parser.join_texts(names, ", ") + "};\n"
+    code = code + "static const char *const *const nx_files[] = \{" + parser.join_texts(arrays, ", ") + "};\n"
+    code = code + "static const int nx_counts[] = \{" + parser.join_texts(counts, ", ") + "};\n\n"
+    return code
+}
+
+fn uses_code(program: parser.Node) gives Text {
+    var code = ""
+    for declaration in items_of(field(program, "uses")) {
+        code = code + "rt_declare(" + c_string(text_of(field(declaration, "capability"))) + ", " + c_string(text_of(field(declaration, "path"))) + ");\n"
+    }
+    return code
+}
+
+fn generate(program: parser.Node, path: Text, paths: List[Text]) gives Part {
     var code = ""
     for line in runtime_text.runtime_lines() {
         code = code + line + "\n"
     }
-    code = code + "\n/* The program: " + path + " */\n\nstatic const char *nx_source[] = \{\n"
-    let lines = render.lines_of(source)
-    for line in lines {
-        code = code + c_string(line) + ",\n"
-    }
-    code = code + "0};\n\n"
+    code = code + "\n/* The program: " + path + " */\n\n" + sources_code(paths)
     var fns: List[Text] = []
     for function in items_of(field(program, "functions")) {
         fns = List.append(fns, declared_name(function))
@@ -1103,7 +1151,9 @@ fn generate(program: parser.Node, path: Text, source: Text) gives Part {
     }
     var st = St(
         next: 0, bad: "",
-        info: Info(fns: fns, records: record_names, record_fields: record_fields, enums: enums, refined: refined)
+        info: Info(
+            fns: fns, records: record_names, record_fields: record_fields, enums: enums, refined: refined, files: paths
+        )
     )
     var declarations = ""
     var definitions = ""
@@ -1124,7 +1174,8 @@ fn generate(program: parser.Node, path: Text, source: Text) gives Part {
         st = made.st
     }
     code = code + declarations + "\n" + definitions
-    code = code + "int main(void) \{\nrt_init(" + c_string(path) + ", nx_source, " + to_text(List.length(lines)) + ");\n"
+    code = code + "int main(int argc, char **argv) \{\nrt_setup(" + c_string(path) + ", " + to_text(List.length(paths))
+    code = code + ", nx_paths, nx_files, nx_counts);\n" + uses_code(program) + "rt_options(argc, argv);\n"
     code = code + "nx_main(0, 0, 0, 0);\nfflush(stdout);\nreturn 0;\n}\n"
     return part(code, "", st)
 }
@@ -1146,10 +1197,6 @@ fn main() {
     }
     let path = List.get(words, 0)
     let loaded = project.load(path)
-    if List.length(loaded.modules) != 1 {
-        print("not supported yet: a program with modules")
-        return
-    }
     for module in loaded.modules {
         if not module.clean {
             print("error: " + path + ": the program has syntax errors; check it first")
@@ -1157,12 +1204,20 @@ fn main() {
         }
     }
     let results = project.check_all(loaded, true)
-    let result = List.get(results, 0)
-    if result.unsupported != "" or has_errors(result.problems) {
-        print("error: " + path + ": the program does not check; run `check` on it first")
-        return
+    var paths: List[Text] = []
+    for result in results {
+        if result.unsupported != "" or has_errors(result.problems) {
+            print("error: " + path + ": the program does not check; run `check` on it first")
+            return
+        }
+        paths = List.append(paths, result.module.path)
     }
-    let made = generate(result.node, path, read_file(path))
+    let last = List.get(results, List.length(results) - 1)
+    var program = last.node
+    if List.length(results) > 1 {
+        program = project.link(results)
+    }
+    let made = generate(program, path, paths)
     if made.st.bad != "" {
         print("not supported yet: " + made.st.bad)
         return

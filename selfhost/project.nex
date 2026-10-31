@@ -486,6 +486,7 @@ pub fn link(results: List[Checked]) gives parser.Node {
     var functions: List[parser.Node] = []
     var records: List[parser.Node] = []
     var types: List[parser.Node] = []
+    var enums: List[parser.Node] = []
     var capabilities: List[parser.Node] = []
     var i = 0
     while i < List.length(results)
@@ -503,12 +504,16 @@ pub fn link(results: List[Checked]) gives parser.Node {
         functions = List.concat(functions, keyed(own, items_of(field(result.node, "functions")), false))
         records = List.concat(records, keyed(own, items_of(field(result.node, "records")), false))
         types = List.concat(types, keyed(own, items_of(field(result.node, "types")), true))
+        enums = List.concat(enums, keyed(own, items_of(field(result.node, "enums")), false))
         capabilities = List.concat(capabilities, items_of(field(result.node, "uses")))
         i = i + 1
     }
     return parser.Node.Obj(
-        "Program", ["functions", "records", "types", "uses"],
-        [parser.Node.Items(functions), parser.Node.Items(records), parser.Node.Items(types), parser.Node.Items(capabilities)]
+        "Program", ["functions", "records", "types", "enums", "uses"],
+        [
+            parser.Node.Items(functions), parser.Node.Items(records), parser.Node.Items(types), parser.Node.Items(enums),
+            parser.Node.Items(capabilities)
+        ]
     )
 }
 
