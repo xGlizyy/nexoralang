@@ -333,6 +333,15 @@ fn builtin(name: Text) gives Sig {
     return make_sig("", [], [], "", false)
 }
 
+// A function of another module is looked up qualified, and shown with its own name, as it is declared.
+fn shown_name(sig: Sig) gives Text {
+    let dot = index_of_char(sig.name, ".")
+    if sig.builtin or dot < 0 {
+        return sig.name
+    }
+    return Text.slice(sig.name, dot + 1, Text.length(sig.name))
+}
+
 fn describe(sig: Sig) gives Text {
     var params = ""
     var i = 0
@@ -350,13 +359,13 @@ fn describe(sig: Sig) gives Text {
         i = i + 1
     }
     if sig.return_type == "Void" {
-        return "fn " + sig.name + "(" + params + ")"
+        return "fn " + shown_name(sig) + "(" + params + ")"
     }
     var given = sig.return_type
     if given == "" {
         given = "?"
     }
-    return "fn " + sig.name + "(" + params + ") gives " + given
+    return "fn " + shown_name(sig) + "(" + params + ") gives " + given
 }
 
 fn user_index(state: State, name: Text) gives Int {
@@ -927,7 +936,7 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
     }
     var sig = builtin(callee)
     let user = user_index(state, callee)
-    if qualifier != "" and not is_builtin(callee) and user < 0 {
+    if qualifier != "" and not is_builtin(callee) and user < 0 and not is_type_name(state, callee) {
         // `Name.function(...)` where Name is no type with that function.
         return checked(node, "", unknown_qualified_call(state, env, node))
     }
@@ -945,6 +954,9 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
     let given = check_arguments(state, env, arguments, expectations_sig)
     let rebuilt = with_field(node, "arguments", parser.Node.Items(given.nodes))
     if is_type_name(state, callee) {
+        if is_private(given.state, callee) {
+            return checked(rebuilt, "", report_private(given.state, callee, callee_span))
+        }
         return refinement_check(given, rebuilt, callee, arguments)
     }
     if state.tables.refining != "" and List.contains(state.tables.fn_names, callee) and not is_builtin(callee) {
@@ -974,6 +986,9 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
             )
         )
     }
+    if not sig.builtin and is_private(given.state, callee) {
+        return checked(rebuilt, "", report_private(given.state, callee, callee_span))
+    }
     let expected_count = List.length(sig.param_types)
     let count = List.length(arguments)
     if count != expected_count {
@@ -993,7 +1008,7 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
             rebuilt, result,
             report(
                 given.state, "E2009",
-                "'" + sig.name + "' takes " + to_text(expected_count) + " argument" + plural + ", but "
+                "'" + shown_name(sig) + "' takes " + to_text(expected_count) + " argument" + plural + ", but "
                 + to_text(count) + " " + verb + " given",
                 "", ["Its signature is: " + describe(sig)], span_of(node)
             )
@@ -1068,7 +1083,7 @@ fn declared_type(state: State, node: parser.Node, what: Text, allow_broken: Bool
     let qualifier = field(node, "qualifier")
     let arguments = items_of(field(node, "arguments"))
     if not is_null(qualifier) {
-        return checked(node, "", unsupported(state, "qualified type"))
+        return qualified_type(state, node, allow_broken)
     }
     if name == "Void" {
         return checked(
@@ -1142,6 +1157,55 @@ fn declared_type(state: State, node: parser.Node, what: Text, allow_broken: Bool
         hint = "Did you mean '" + close + "'?"
     }
     return checked(node, "", report(state, "E2012", "'" + name + "' is not a type", hint, [], span_of(node)))
+}
+
+// `models.Point` written as a type: the record, refined type or enum `Point` of the module `models`.
+fn qualified_type(state: State, node: parser.Node, allow_broken: Bool) gives Checked {
+    let name = text_of(field(node, "name"))
+    let module = text_of(field(node, "qualifier"))
+    let key = module + "." + name
+    if List.length(items_of(field(node, "arguments"))) > 0 {
+        return checked(
+            node, "",
+            report(
+                state, "E2012", "'" + key + "' cannot take type arguments",
+                "Only 'List', 'Option' and 'Result' take type arguments, and they are built-in: a module does not declare them.",
+                [], span_of(node)
+            )
+        )
+    }
+    let is_type = is_type_name(state, key)
+    let is_record = is_declared_record(state, key)
+    let is_enum = is_enum_name(state, key)
+    if is_type or is_record or is_enum {
+        if is_private(state, key) {
+            return checked(node, "", report_private(state, key, span_of(node)))
+        }
+        let usable_type = is_type and ref_index(state, key) >= 0
+        let usable_enum = is_enum and (enum_index(state, key) >= 0 or allow_broken)
+        let usable_record = is_record and (rec_index(state, key) >= 0 or allow_broken)
+        if usable_type or usable_enum or usable_record {
+            return checked(node, key, state)
+        }
+        return checked(node, "", state)
+    }
+    let close = close_match_at(
+        key,
+        List.concat(
+            List.concat(List.concat(known_type_names(), state.tables.type_names), state.tables.declared),
+            state.tables.enum_names
+        ),
+        1, 2
+    )
+    var hint = "The types are Int, Float, Bool, Text and Void, and the types the program declares."
+    if name == "String" {
+        hint = "The text type is called Text."
+    } else if List.contains(known_type_names(), name) {
+        hint = "'" + name + "' is a built-in type: it belongs to no module. Write it as '" + name + "'."
+    } else if close != "" {
+        hint = "Did you mean '" + close + "'?"
+    }
+    return checked(node, "", report(state, "E2012", "'" + key + "' is not a type", hint, [], span_of(node)))
 }
 
 fn check_let(state: State, env: List[Binding], node: parser.Node) gives Flow {
@@ -1922,11 +1986,187 @@ fn initial_state() gives State {
     )
 }
 
-fn check_program(program: parser.Node, require_main: Bool) gives Typed {
-    var current = initial_state()
-    if has_declarations(program) {
-        return Typed(node: program, state: unsupported(current, "declarations"))
+// Modules (decision 0018). A module is checked by itself, with its own names bare. What the modules that import it
+// need from it is its Export: the same tables, with every name qualified with the module, and the names it does not
+// make public listed apart so that using one of them can be told from using a name that does not exist.
+pub type Export = {
+    name: Text, user: List[Sig], declared: List[Text], records: List[Rec], type_names: List[Text],
+    type_decls: List[parser.Node], refined: List[Ref], enum_names: List[Text], enums: List[EnumInfo],
+    private: List[Text]
+}
+
+fn is_word_char(c: Text) gives Bool {
+    return (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9") or c == "_"
+}
+
+// A type as another module sees it: each name the module declares gets the module in front. A name that is already
+// qualified (it comes from a third module) and the built-in ones stay as they are.
+fn qualify_type(ty: Text, names: List[Text], module: Text) gives Text {
+    var result = ""
+    var i = 0
+    while i < Text.length(ty)
+        shrinks Text.length(ty) - i
+    {
+        let c = Text.slice(ty, i, i + 1)
+        if is_word_char(c) {
+            var j = i
+            while j < Text.length(ty) and is_word_char(Text.slice(ty, j, j + 1))
+                shrinks Text.length(ty) - j
+            {
+                j = j + 1
+            }
+            let word = Text.slice(ty, i, j)
+            if List.contains(names, word) and not (i > 0 and Text.slice(ty, i - 1, i) == ".") {
+                result = result + module + "." + word
+            } else {
+                result = result + word
+            }
+            i = j
+        } else {
+            result = result + c
+            i = i + 1
+        }
     }
+    return result
+}
+
+fn qualify_all(types: List[Text], names: List[Text], module: Text) gives List[Text] {
+    var result: List[Text] = []
+    for ty in types {
+        result = List.append(result, qualify_type(ty, names, module))
+    }
+    return result
+}
+
+fn not_public(declarations: List[parser.Node], module: Text) gives List[Text] {
+    var result: List[Text] = []
+    for declaration in declarations {
+        if not flag_of(field(declaration, "public")) {
+            result = List.append(result, module + "." + text_of(field(declaration, "name")))
+        }
+    }
+    return result
+}
+
+fn export_module(state: State, program: parser.Node, module: Text) gives Export {
+    let t = state.tables
+    let local = List.concat(List.concat(t.declared, t.type_names), t.enum_names)
+    var user: List[Sig] = []
+    for sig in state.user {
+        user = List.append(
+            user,
+            Sig(
+                name: module + "." + sig.name, param_names: sig.param_names,
+                param_types: qualify_all(sig.param_types, local, module),
+                return_type: qualify_type(sig.return_type, local, module), builtin: sig.builtin,
+                generic: sig.generic, line: sig.line, column: sig.column
+            )
+        )
+    }
+    var declared: List[Text] = []
+    for name in t.declared {
+        declared = List.append(declared, module + "." + name)
+    }
+    var records: List[Rec] = []
+    for record in t.records {
+        records = List.append(
+            records,
+            Rec(
+                name: module + "." + record.name, field_names: record.field_names,
+                field_types: qualify_all(record.field_types, local, module), line: record.line, column: record.column
+            )
+        )
+    }
+    var type_names: List[Text] = []
+    for name in t.type_names {
+        type_names = List.append(type_names, module + "." + name)
+    }
+    var refined: List[Ref] = []
+    for ref in t.refined {
+        refined = List.append(
+            refined,
+            Ref(
+                name: module + "." + ref.name, base: qualify_type(ref.base, local, module), root: ref.root,
+                chain: qualify_all(ref.chain, local, module)
+            )
+        )
+    }
+    var enum_names: List[Text] = []
+    for name in t.enum_names {
+        enum_names = List.append(enum_names, module + "." + name)
+    }
+    var enums: List[EnumInfo] = []
+    for info in t.enums {
+        var field_types: List[List[Text]] = []
+        for types in info.variant_field_types {
+            field_types = List.append(field_types, qualify_all(types, local, module))
+        }
+        enums = List.append(
+            enums,
+            EnumInfo(
+                name: module + "." + info.name, variant_names: info.variant_names,
+                variant_field_names: info.variant_field_names, variant_field_types: field_types
+            )
+        )
+    }
+    var private: List[Text] = []
+    for function in items_of(field(program, "functions")) {
+        if not flag_of(field(function, "public")) {
+            private = List.append(private, module + "." + text_of(field(function, "name")))
+        }
+    }
+    private = List.concat(private, not_public(items_of(field(program, "records")), module))
+    private = List.concat(private, not_public(items_of(field(program, "types")), module))
+    private = List.concat(private, not_public(items_of(field(program, "enums")), module))
+    return Export(
+        name: module, user: user, declared: declared, records: records, type_names: type_names,
+        type_decls: t.type_decls, refined: refined, enum_names: enum_names, enums: enums, private: private
+    )
+}
+
+fn import_module(state: State, ex: Export) gives State {
+    let t = state.tables
+    let tables = Tables(
+        declared: List.concat(t.declared, ex.declared), records: List.concat(t.records, ex.records),
+        type_names: List.concat(t.type_names, ex.type_names), type_decls: List.concat(t.type_decls, ex.type_decls),
+        refined: List.concat(t.refined, ex.refined), steps: t.steps, refining: t.refining, fn_names: t.fn_names,
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
+        enum_names: List.concat(t.enum_names, ex.enum_names), enums: List.concat(t.enums, ex.enums),
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths, modules: t.modules,
+        private: List.concat(t.private, ex.private)
+    )
+    return with_user(with_tables(state, tables), List.concat(state.user, ex.user))
+}
+
+fn seed_imports(imports: List[Export], modules: List[Text]) gives State {
+    var current = initial_state()
+    for ex in imports {
+        current = import_module(current, ex)
+    }
+    let t = current.tables
+    return with_tables(
+        current,
+        Tables(
+            declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
+            refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
+            reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns, enum_names: t.enum_names,
+            enums: t.enums, cap_kinds: t.cap_kinds, cap_paths: t.cap_paths, modules: modules, private: t.private
+        )
+    )
+}
+
+fn check_program(program: parser.Node, require_main: Bool) gives Typed {
+    if has_declarations(program) {
+        return Typed(node: program, state: unsupported(initial_state(), "declarations"))
+    }
+    return check_with(program, require_main, true, [], [])
+}
+
+// The program with the modules it imports already checked, in the order they were read.
+fn check_with(
+    program: parser.Node, require_main: Bool, warn: Bool, imports: List[Export], modules: List[Text]
+) gives Typed {
+    var current = seed_imports(imports, modules)
     current = declare_type_names(current, program)
     current = declare_types(current)
     current = declare_uses(current, program)
@@ -2000,7 +2240,7 @@ fn check_program(program: parser.Node, require_main: Bool) gives Typed {
         current = done.state
         i = i + 1
     }
-    if List.length(current.problems) == 0 {
+    if warn and List.length(current.problems) == 0 {
         current = with_problems(current, warnings_of(current, program))
     }
     return Typed(
@@ -2415,6 +2655,17 @@ fn split_pair(pair: Text) gives List[Text] {
     return [Text.slice(pair, 0, at), Text.slice(pair, at + 1, Text.length(pair))]
 }
 
+// The names a module declares itself: the ones it imports are qualified with the module that declares them.
+fn own_names(names: List[Text]) gives List[Text] {
+    var own: List[Text] = []
+    for name in names {
+        if index_of_char(name, ".") < 0 {
+            own = List.append(own, name)
+        }
+    }
+    return own
+}
+
 // Resolves the record types the program declares, and decides which ones are valid. The names are
 // already registered, so a record can use another one declared later.
 fn declare_records(state: State, program: parser.Node) gives State {
@@ -2423,7 +2674,7 @@ fn declare_records(state: State, program: parser.Node) gives State {
     var dependencies: List[List[Text]] = []
     var resolved_names: List[Text] = []
     var resolved_fields: List[List[Text]] = []
-    for name in state.tables.declared {
+    for name in own_names(state.tables.declared) {
         let declaration = record_decl(program, name)
         let fields = resolve_fields(current, declaration)
         current = fields.state
@@ -2449,7 +2700,7 @@ fn declare_records(state: State, program: parser.Node) gives State {
     }
     // A record that uses a record that cannot be used is not usable either.
     var invalid = cyclic
-    for name in state.tables.declared {
+    for name in own_names(state.tables.declared) {
         if not List.contains(resolved_names, name) and not List.contains(invalid, name) {
             invalid = List.append(invalid, name)
         }
@@ -2492,18 +2743,27 @@ fn declare_records(state: State, program: parser.Node) gives State {
         }
         index = index + 1
     }
-    return with_tables(current, set_records(current.tables, records))
+    return with_tables(current, set_records(current.tables, List.concat(current.tables.records, records)))
 }
 
 // `Point(x: 1, y: 2)`: builds a record value. Every field is given once, with a value of its type; the
 // order of the text does not matter.
 fn check_record_construction(state: State, env: List[Binding], node: parser.Node) gives Checked {
-    let name = text_of(field(node, "name"))
+    var name = text_of(field(node, "name"))
+    let written_module = text_of(field(node, "qualifier"))
+    if written_module != "" {
+        name = written_module + "." + name
+    }
     let fields = items_of(field(node, "fields"))
     let at = rec_index(state, name)
     var current = state
     var typed: List[parser.Node] = []
-    if at < 0 {
+    if at < 0 and written_module != "" {
+        current = report_unknown_record(current, written_module, text_of(field(node, "name")), span_of(node))
+    } else if at >= 0 and is_private(current, name) {
+        current = report_private(current, name, span_of(node))
+    }
+    if at < 0 or is_private(current, name) {
         // The declaration of the record has an error, already reported where it happens. The values are
         // still checked, so that a mistake inside one of them is not hidden.
         for initializer in fields {
@@ -2564,6 +2824,26 @@ fn check_record_construction(state: State, env: List[Binding], node: parser.Node
         }
     }
     return checked(with_field(node, "fields", parser.Node.Items(typed)), rec.name, current)
+}
+
+// `models.Record(...)` where that module declares no record with that name.
+fn report_unknown_record(state: State, qualifier: Text, name: Text, span: parser.Span) gives State {
+    if not List.contains(state.tables.modules, qualifier) {
+        return report_unknown_module(state, qualifier, span)
+    }
+    let public = public_names(state, qualifier, state.tables.declared)
+    let close = close_match(name, public)
+    var hint = ""
+    if close != "" {
+        hint = "Did you mean '" + qualifier + "." + close + "'?"
+    }
+    var notes: List[Text] = []
+    if List.length(public) > 0 {
+        notes = ["The records '" + qualifier + "' makes public: " + parser.join_texts(public, ", ") + "."]
+    }
+    return report(
+        state, "E2023", "The module '" + qualifier + "' has no record named '" + name + "'", hint, notes, span
+    )
 }
 
 // `p.x`: reads a field of a record value.
@@ -2640,6 +2920,82 @@ fn check_field_assign(state: State, env: List[Binding], node: parser.Node) gives
 }
 
 
+// Modules: the names of another module are private unless it declared them with `pub`.
+
+fn is_private(state: State, key: Text) gives Bool {
+    return List.contains(state.tables.private, key)
+}
+
+fn report_private(state: State, key: Text, span: parser.Span) gives State {
+    let dot = index_of_char(key, ".")
+    let module = Text.slice(key, 0, dot)
+    let own = Text.slice(key, dot + 1, Text.length(key))
+    return report(
+        state, "E2028", "'" + key + "' is private: the module '" + module + "' does not declare it with 'pub'",
+        "Mark it in " + module + ".nex: pub fn " + own + "(...) or pub type " + upper_first(own) + " = ...", [], span
+    )
+}
+
+fn report_unknown_module(state: State, qualifier: Text, span: parser.Span) gives State {
+    let modules = state.tables.modules
+    if List.length(modules) == 0 {
+        return report(
+            state, "E2027", "There is no module named '" + qualifier + "'",
+            "This program imports no modules. Declare one at the top of the file: import \"app/models.nex\"", [], span
+        )
+    }
+    var hint = ""
+    let close = close_match(qualifier, modules)
+    if close != "" {
+        hint = "Did you mean '" + close + "'? "
+    }
+    return report(
+        state, "E2027", "There is no module named '" + qualifier + "'",
+        hint + "The modules this program imports are: " + parser.join_texts(modules, ", ") + ".", [], span
+    )
+}
+
+fn sorted_texts(items: List[Text]) gives List[Text] {
+    var result: List[Text] = []
+    for item in items {
+        var inserted = false
+        var next: List[Text] = []
+        for existing in result {
+            if not inserted and item < existing {
+                next = List.append(next, item)
+                inserted = true
+            }
+            next = List.append(next, existing)
+        }
+        if not inserted {
+            next = List.append(next, item)
+        }
+        result = next
+    }
+    return result
+}
+
+// What a module makes public, without the module in front.
+fn public_names(state: State, module: Text, kinds: List[Text]) gives List[Text] {
+    var result: List[Text] = []
+    for key in kinds {
+        if Text.starts_with(key, module + ".") and not is_private(state, key) {
+            result = List.append(result, Text.slice(key, Text.length(module) + 1, Text.length(key)))
+        }
+    }
+    return sorted_texts(result)
+}
+
+fn module_member_keys(state: State) gives List[Text] {
+    var keys: List[Text] = []
+    for sig in state.user {
+        keys = List.append(keys, sig.name)
+    }
+    return List.concat(
+        List.concat(List.concat(keys, state.tables.declared), state.tables.type_names), state.tables.enum_names
+    )
+}
+
 // `Name.function(...)` where Name is neither a type with that function nor a module that makes one
 // public. The message depends on what Name is.
 fn unknown_qualified_call(state: State, env: List[Binding], node: parser.Node) gives State {
@@ -2651,7 +3007,18 @@ fn unknown_qualified_call(state: State, env: List[Binding], node: parser.Node) g
     var label = ""
     var hint = ""
     var notes: List[Text] = []
-    if List.contains(known_type_names(), qualifier) or qualifier == "List" {
+    if List.contains(state.tables.modules, qualifier) {
+        let public = public_names(state, qualifier, module_member_keys(state))
+        label = "The module '" + qualifier + "' has no function named '" + function + "'"
+        let close = close_match(function, public)
+        if close != "" {
+            hint = "Did you mean '" + qualifier + "." + close + "'?"
+        } else if List.length(public) > 0 {
+            notes = ["The functions '" + qualifier + "' makes public: " + parser.join_texts(public, ", ") + "."]
+        } else {
+            notes = ["The module '" + qualifier + "' makes no function public: it declares none with 'pub'."]
+        }
+    } else if List.contains(known_type_names(), qualifier) or qualifier == "List" {
         label = "'" + qualifier + "' has no function named '" + function + "'"
         let functions = type_functions(qualifier)
         if List.length(functions) > 0 {
@@ -2682,11 +3049,7 @@ fn unknown_qualified_call(state: State, env: List[Binding], node: parser.Node) g
         if first >= "a" and first <= "z" {
             // A type always starts with a capital letter, so a name before the '.' that starts with a
             // lower case one can only be a module.
-            return report(
-                state, "E2027", "There is no module named '" + qualifier + "'",
-                "This program imports no modules. Declare one at the top of the file: import \"app/models.nex\"",
-                [], span
-            )
+            return report_unknown_module(state, qualifier, span)
         }
         label = "There is no type named '" + qualifier + "'"
         let close = close_match(
@@ -2713,14 +3076,14 @@ type Tables = {
     declared: List[Text], records: List[Rec], type_names: List[Text], type_decls: List[parser.Node],
     refined: List[Ref], steps: Int, refining: Text, fn_names: List[Text],
     reg_names: List[Text], reg_lines: List[Int], reg_columns: List[Int], enum_names: List[Text], enums: List[EnumInfo],
-    cap_kinds: List[Text], cap_paths: List[Text]
+    cap_kinds: List[Text], cap_paths: List[Text], modules: List[Text], private: List[Text]
 }
 
 fn empty_tables() gives Tables {
     return Tables(
         declared: [], records: [], type_names: [], type_decls: [], refined: [], steps: 0, refining: "",
         fn_names: [], reg_names: [], reg_lines: [], reg_columns: [], enum_names: [], enums: [],
-        cap_kinds: [], cap_paths: []
+        cap_kinds: [], cap_paths: [], modules: [], private: []
     )
 }
 
@@ -2730,7 +3093,7 @@ fn set_declared(t: Tables, value: List[Text]) gives Tables {
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
         enum_names: t.enum_names, enums: t.enums,
-        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths, modules: t.modules, private: t.private
     )
 }
 
@@ -2740,7 +3103,7 @@ fn set_records(t: Tables, value: List[Rec]) gives Tables {
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
         enum_names: t.enum_names, enums: t.enums,
-        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths, modules: t.modules, private: t.private
     )
 }
 
@@ -2750,7 +3113,7 @@ fn set_type_names(t: Tables, names: List[Text], decls: List[parser.Node]) gives 
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
         enum_names: t.enum_names, enums: t.enums,
-        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths, modules: t.modules, private: t.private
     )
 }
 
@@ -2760,7 +3123,7 @@ fn set_refined(t: Tables, value: List[Ref]) gives Tables {
         refined: value, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
         enum_names: t.enum_names, enums: t.enums,
-        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths, modules: t.modules, private: t.private
     )
 }
 
@@ -2770,7 +3133,7 @@ fn set_steps(t: Tables, value: Int) gives Tables {
         refined: t.refined, steps: value, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
         enum_names: t.enum_names, enums: t.enums,
-        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths, modules: t.modules, private: t.private
     )
 }
 
@@ -2780,7 +3143,7 @@ fn set_refining(t: Tables, value: Text) gives Tables {
         refined: t.refined, steps: t.steps, refining: value, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
         enum_names: t.enum_names, enums: t.enums,
-        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths, modules: t.modules, private: t.private
     )
 }
 
@@ -2790,7 +3153,7 @@ fn set_fn_names(t: Tables, value: List[Text]) gives Tables {
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: value,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
         enum_names: t.enum_names, enums: t.enums,
-        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths, modules: t.modules, private: t.private
     )
 }
 
@@ -2800,7 +3163,7 @@ fn set_registered(t: Tables, names: List[Text], lines: List[Int], columns: List[
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: names, reg_lines: lines, reg_columns: columns,
         enum_names: t.enum_names, enums: t.enums,
-        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths, modules: t.modules, private: t.private
     )
 }
 
@@ -2810,7 +3173,7 @@ fn set_enum_names(t: Tables, value: List[Text]) gives Tables {
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
         enum_names: value, enums: t.enums,
-        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths, modules: t.modules, private: t.private
     )
 }
 
@@ -2819,7 +3182,7 @@ fn set_enums(t: Tables, value: List[EnumInfo]) gives Tables {
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
-        enum_names: t.enum_names, enums: value, cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
+        enum_names: t.enum_names, enums: value, cap_kinds: t.cap_kinds, cap_paths: t.cap_paths, modules: t.modules, private: t.private
     )
 }
 
@@ -3043,7 +3406,7 @@ fn resolve_type(state: State, name: Text, visiting: List[Text]) gives Resolution
 
 fn declare_types(state: State) gives State {
     var current = state
-    for name in state.tables.type_names {
+    for name in own_names(state.tables.type_names) {
         let resolved = resolve_type(current, name, [])
         current = resolved.state
     }
@@ -4813,7 +5176,7 @@ fn set_caps(t: Tables, kinds: List[Text], paths: List[Text]) gives Tables {
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
-        enum_names: t.enum_names, enums: t.enums, cap_kinds: kinds, cap_paths: paths
+        enum_names: t.enum_names, enums: t.enums, cap_kinds: kinds, cap_paths: paths, modules: t.modules, private: t.private
     )
 }
 
@@ -5547,6 +5910,20 @@ fn warnings_of(state: State, program: parser.Node) gives List[parser.Problem] {
 // What the interpreter needs from the analysis of a program: the typed tree, the problems found and, when the
 // checker met something it does not know yet, what it was.
 pub type Analysis = { node: parser.Node, problems: List[parser.Problem], unsupported: Text }
+
+// One module of a project: what analyze gives, and what the modules that import it need.
+pub type ModuleAnalysis = { node: parser.Node, problems: List[parser.Problem], unsupported: Text, export: Export }
+
+// `warn` is false when a module before this one had an error: a warning only helps in a program that is correct.
+pub fn analyze_module(
+    program: parser.Node, name: Text, require_main: Bool, warn: Bool, imports: List[Export], modules: List[Text]
+) gives ModuleAnalysis {
+    let result = check_with(program, require_main, warn, imports, modules)
+    return ModuleAnalysis(
+        node: result.node, problems: result.state.problems, unsupported: result.state.unsupported,
+        export: export_module(result.state, program, name)
+    )
+}
 
 pub fn analyze(program: parser.Node, require_main: Bool) gives Analysis {
     let result = check_program(program, require_main)

@@ -1,0 +1,5 @@
+import "../shared/b.nex"
+
+pub fn value() gives Int {
+    return b.value() + 1
+}

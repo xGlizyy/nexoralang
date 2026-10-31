@@ -21,6 +21,7 @@
 import "lexer.nex"
 import "parser.nex"
 import "checker.nex"
+import "project.nex"
 
 uses read "."
 uses write "."
@@ -88,6 +89,25 @@ type Prog = {
 }
 
 // Reading the tree
+
+// The name a declaration has in the program: the one the linker gave it when it comes from a module, or the one it
+// is written with.
+fn key_of(declaration: parser.Node) gives Text {
+    let key = text_of(field(declaration, "key"))
+    if key != "" {
+        return key
+    }
+    return text_of(field(declaration, "name"))
+}
+
+// What a call, a construction or a check resolves to: the name the linker wrote, or the one written in the call.
+fn target_of(node: parser.Node, written: Text) gives Text {
+    let target = text_of(field(node, "target"))
+    if target != "" {
+        return target
+    }
+    return written
+}
 
 fn kind_of(node: parser.Node) gives Text {
     return match node {
@@ -186,7 +206,7 @@ fn build_prog(program: parser.Node, host: HostCfg) gives Prog {
     var fn_names: List[Text] = []
     var fn_nodes: List[parser.Node] = []
     for function in items_of(field(program, "functions")) {
-        let name = text_of(field(function, "name"))
+        let name = key_of(function)
         if index_of(fn_names, name) < 0 {
             fn_names = List.append(fn_names, name)
             fn_nodes = List.append(fn_nodes, function)
@@ -199,13 +219,13 @@ fn build_prog(program: parser.Node, host: HostCfg) gives Prog {
         for declared in items_of(field(record, "fields")) {
             names = List.append(names, text_of(field(declared, "name")))
         }
-        record_names = List.append(record_names, text_of(field(record, "name")))
+        record_names = List.append(record_names, key_of(record))
         record_fields = List.append(record_fields, names)
     }
     var type_names: List[Text] = []
     var type_nodes: List[parser.Node] = []
     for declaration in items_of(field(program, "types")) {
-        type_names = List.append(type_names, text_of(field(declaration, "name")))
+        type_names = List.append(type_names, key_of(declaration))
         type_nodes = List.append(type_nodes, declaration)
     }
     return Prog(
@@ -1425,7 +1445,7 @@ fn finish_parts(prog: Prog, m: Machine, node: parser.Node, parts: List[Val]) giv
 
 // The record, with its fields in the order of the declaration and not in the order they were written.
 fn build_record(prog: Prog, node: parser.Node, parts: List[Val]) gives Val {
-    let name = text_of(field(node, "name"))
+    let name = target_of(node, text_of(field(node, "name")))
     let declared = List.get(prog.record_fields, index_of(prog.record_names, name))
     let written = items_of(field(node, "fields"))
     var vals: List[Val] = []
@@ -1463,13 +1483,14 @@ fn max_call_depth() gives Int {
 // A call whose arguments have been evaluated: a function of the program, the check of a refined type, a variant
 // of an enum or a built-in.
 fn finish_call(prog: Prog, m: Machine, node: parser.Node, arguments: List[Val]) gives Machine {
-    let callee = text_of(field(node, "callee"))
+    let written = text_of(field(node, "callee"))
+    let callee = target_of(node, written)
     let at = index_of(prog.fn_names, callee)
     if at >= 0 {
         return call_function(note_invoked(m, node), List.get(prog.fn_nodes, at), arguments, node)
     }
     if index_of(prog.type_names, callee) >= 0 {
-        return refine(prog, m, node, callee, List.get(arguments, 0))
+        return refine(prog, m, node, callee, written, List.get(arguments, 0))
     }
     if not checker.is_builtin(callee) {
         // `Shape.Circle(2.0)`: a variant of an enum.
@@ -1685,8 +1706,8 @@ fn refinement_ok() gives Refinement {
 }
 
 // `Percent(x)`: lets a value through only if it satisfies the conditions of the type and of the types it refines.
-fn refine(prog: Prog, m: Machine, node: parser.Node, name: Text, v: Val) gives Machine {
-    let outcome = check_refinement(prog, m, name, v)
+fn refine(prog: Prog, m: Machine, node: parser.Node, key: Text, name: Text, v: Val) gives Machine {
+    let outcome = check_refinement(prog, m, key, v)
     if outcome.errored {
         // The error points into the declaration of the type: say which check led there.
         let site = place_of(node)
@@ -1711,11 +1732,14 @@ fn refine(prog: Prog, m: Machine, node: parser.Node, name: Text, v: Val) gives M
 fn refinement_notes(prog: Prog, kind: Text, broken_name: Text, written: Text) gives List[Text] {
     let broken = List.get(prog.type_nodes, index_of(prog.type_names, broken_name))
     let condition = "where " + checker.unparse(field(broken, "condition"))
+    // The type is shown as it is declared in its module, without the module: that is how the Python implementation
+    // names it, so a type of another module is "m.Small refines Small".
+    let declared = text_of(field(broken, "name"))
     var notes: List[Text] = []
-    if broken_name == kind {
+    if declared == kind {
         notes = ["The condition of '" + kind + "' is false: " + condition]
     } else {
-        let refines = "'" + kind + "' refines '" + broken_name + "', and the condition of '" + broken_name + "' is false: "
+        let refines = "'" + kind + "' refines '" + declared + "', and the condition of '" + declared + "' is false: "
         notes = [refines + condition]
     }
     notes = List.append(notes, "The value: " + written)
@@ -1734,7 +1758,11 @@ fn check_refinement(prog: Prog, m: Machine, name: Text, v: Val) gives Refinement
         return refinement_ok()
     }
     let declaration = List.get(prog.type_nodes, at)
-    let inner = check_refinement(prog, m, text_of(field(field(declaration, "base"), "name")), v)
+    var base = text_of(field(declaration, "base_key"))
+    if base == "" {
+        base = text_of(field(field(declaration, "base"), "name"))
+    }
+    let inner = check_refinement(prog, m, base, v)
     if not inner.ok or inner.errored {
         return inner
     }
@@ -2826,32 +2854,18 @@ fn parse_options(words: List[Text]) gives RunOptions {
 fn run_hosted(words: List[Text]) {
     let options = parse_options(words)
     print("FILE|" + options.path)
-    let lexed = lexer.tokenize(read_file(options.path))
-    if List.length(lexed.diagnostics) > 0 {
-        print("STOP|lexical")
-        return
-    }
-    let outcome = parser.parse_program(lexed.tokens)
-    if List.length(outcome.diagnostics) > 0 {
-        print("STOP|syntax")
-        return
-    }
-    let analysis = checker.analyze(outcome.program, true)
-    if analysis.unsupported != "" {
-        print("STOP|unsupported " + analysis.unsupported)
-        return
-    }
-    if has_errors(analysis.problems) {
-        print("STOP|check")
+    let built = build_project(options.path, true)
+    if built.stop != "" {
+        print("STOP|" + built.stop)
         return
     }
     let host = HostCfg(
-        arguments: options.arguments, declared_kinds: declared_kinds_of(analysis.node),
-        declared_paths: declared_paths_of(analysis.node), grant_kinds: options.grant_kinds,
+        arguments: options.arguments, declared_kinds: declared_kinds_of(built.node),
+        declared_paths: declared_paths_of(built.node), grant_kinds: options.grant_kinds,
         grant_paths: options.grant_paths, cwd: options.cwd,
         max_text: options.max_text, max_output: options.max_output
     )
-    let prog = build_prog(analysis.node, host)
+    let prog = build_prog(built.node, host)
     let start = start_machine(prog, start_fuel())
     let tracing = Tracing(watch: [], invoked: [], skipped: [], inputs: options.stdin)
     let done = run_machine(prog, with_tracing(start, tracing))
@@ -2882,6 +2896,37 @@ fn print_output(done: Machine) {
 // The steps a run may take before it is stopped.
 fn start_fuel() gives Int {
     return 300000000
+}
+
+// A program ready to run, or why it is not: the program that runs, the modules it imports, all checked, and linked into
+// one tree. `stop` is empty when it is ready.
+type Built = { stop: Text, node: parser.Node }
+
+fn build_project(path: Text, require_main: Bool) gives Built {
+    let loaded = project.load(path)
+    for module in loaded.modules {
+        if not module.clean {
+            return Built(stop: module.reason, node: parser.Node.Null())
+        }
+    }
+    let results = project.check_all(loaded, require_main)
+    var broken = false
+    for result in results {
+        if result.unsupported != "" {
+            return Built(stop: "unsupported " + result.unsupported, node: parser.Node.Null())
+        }
+        if has_errors(result.problems) {
+            broken = true
+        }
+    }
+    let last = List.get(results, List.length(results) - 1)
+    if broken {
+        return Built(stop: "check", node: last.node)
+    }
+    if List.length(results) == 1 {
+        return Built(stop: "", node: last.node)
+    }
+    return Built(stop: "", node: project.link(results))
 }
 
 // Whether any of the problems is an error: the warnings of a program do not stop it.
@@ -2915,28 +2960,16 @@ fn run_files() {
     {
         let path = List.get(files, i)
         print("FILE|" + path)
-        let lexed = lexer.tokenize(read_file(path))
-        if List.length(lexed.diagnostics) > 0 {
-            print("STOP|lexical")
+        let built = build_project(path, true)
+        if built.stop != "" {
+            print("STOP|" + built.stop)
         } else {
-            let outcome = parser.parse_program(lexed.tokens)
-            if List.length(outcome.diagnostics) > 0 {
-                print("STOP|syntax")
-            } else {
-                let analysis = checker.analyze(outcome.program, true)
-                if analysis.unsupported != "" {
-                    print("STOP|unsupported " + analysis.unsupported)
-                } else if has_errors(analysis.problems) {
-                    print("STOP|check")
-                } else {
-                    let prog = build_prog(analysis.node, declared_host(analysis.node))
-                    let done = run_machine(prog, start_machine(prog, start_fuel()))
-                    for line in done.out {
-                        print(line)
-                    }
-                    print(stop_text(done))
-                }
+            let prog = build_prog(built.node, declared_host(built.node))
+            let done = run_machine(prog, start_machine(prog, start_fuel()))
+            for line in done.out {
+                print(line)
             }
+            print(stop_text(done))
         }
         i = i + 1
     }
@@ -2973,25 +3006,12 @@ fn run_tests() {
     {
         let path = List.get(files, i)
         print("FILE|" + path)
-        let text = read_file(path)
-        let lexed = lexer.tokenize(text)
-        if List.length(lexed.diagnostics) > 0 {
-            print("STOP|lexical")
+        let built = build_project(path, false)
+        if built.stop != "" {
+            print("STOP|" + built.stop)
         } else {
-            let outcome = parser.parse_program(lexed.tokens)
-            if List.length(outcome.diagnostics) > 0 {
-                print("STOP|syntax")
-            } else {
-                let analysis = checker.analyze(outcome.program, false)
-                if analysis.unsupported != "" {
-                    print("STOP|unsupported " + analysis.unsupported)
-                } else if has_errors(analysis.problems) {
-                    print("STOP|check")
-                } else {
-                    run_examples(build_prog(analysis.node, declared_host(analysis.node)), text, analysis.node)
-                    print("STOP|ok")
-                }
-            }
+            run_examples(build_prog(built.node, declared_host(built.node)), read_file(path), built.node)
+            print("STOP|ok")
         }
         i = i + 1
     }

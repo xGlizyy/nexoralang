@@ -1,0 +1,9 @@
+import "models.nex"
+
+fn show(p: models.Pont) {
+    print(1)
+}
+
+fn main() {
+    print(2)
+}

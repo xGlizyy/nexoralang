@@ -1,0 +1,5 @@
+import "models.nex"
+
+fn main() {
+    print(models.Small(3))
+}

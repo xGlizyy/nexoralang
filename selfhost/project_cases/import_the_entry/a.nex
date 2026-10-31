@@ -1,0 +1,5 @@
+import "main.nex"
+
+pub fn one() gives Int {
+    return 1
+}

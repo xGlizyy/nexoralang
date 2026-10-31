@@ -1,0 +1,7 @@
+import "one.nex"
+import "two.nex"
+
+fn main() {
+    let p: one.Point = two.make()
+    print(p)
+}

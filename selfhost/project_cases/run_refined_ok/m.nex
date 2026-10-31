@@ -1,0 +1,2 @@
+pub type Percent = Int where value >= 0 and value <= 100
+pub type Small = Percent where value < 30

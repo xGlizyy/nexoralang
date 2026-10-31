@@ -1,0 +1,13 @@
+pub type Point = { x: Int, y: Int }
+pub type Percent = Int where value >= 0 and value <= 100
+pub fn area(p: Point) gives Int {
+    return p.x * p.y
+}
+fn helper(n: Int) gives Int {
+    return n * 2
+}
+type Hidden = { a: Int }
+type Small = Int where value < 10
+pub fn make() gives Point {
+    return Point(x: 1, y: 2)
+}

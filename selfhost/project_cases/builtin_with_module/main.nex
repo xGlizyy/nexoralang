@@ -1,0 +1,9 @@
+import "models.nex"
+
+fn show(p: models.Int) {
+    print(1)
+}
+
+fn main() {
+    print(2)
+}

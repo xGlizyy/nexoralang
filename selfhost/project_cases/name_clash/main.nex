@@ -1,0 +1,6 @@
+import "x/util.nex"
+import "y/util.nex"
+
+fn main() {
+    print(util.one())
+}

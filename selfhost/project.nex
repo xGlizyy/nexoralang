@@ -1,0 +1,513 @@
+// A project written in NEXORA: the program that runs and the modules it imports (decision 0018, decision 0024).
+//
+// It follows nexora/src/nexora/modules.py. It reads a file and, before it, the files it imports; each file is read once
+// however many import it; the modules come out in the order they are checked (the imports of a module before it, the
+// program that runs last); and the errors of the loading itself (two modules that import each other, two files with the
+// same name) are reported on the import that causes them. Then it checks the modules one after the other, each with
+// what the ones before it made available.
+//
+// A file that does not exist ends the run of this program instead of becoming a value (there is no way to try a read),
+// so the error of reading an import (E0001) is not reported here.
+
+import "lexer.nex"
+import "parser.nex"
+import "checker.nex"
+
+uses read "."
+
+// One file of the project.
+pub type Module = {
+    path: Text, name: Text, program: parser.Node, imports: List[Text], clean: Bool, reason: Text,
+    pending: List[parser.Problem]
+}
+
+// What has been read so far.
+pub type Project = { modules: List[Module], names: List[Text] }
+
+type Loader = { modules: List[Module], stack: List[Text], keys: List[Text], names: List[Text], name_keys: List[Text] }
+
+// Reading the tree
+
+fn kind_of(node: parser.Node) gives Text {
+    return match node {
+        parser.Node.Obj(kind, names, values) => kind
+        _ => ""
+    }
+}
+
+fn index_of(names: List[Text], name: Text) gives Int {
+    var i = 0
+    while i < List.length(names)
+        shrinks List.length(names) - i
+    {
+        if List.get(names, i) == name {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn field(node: parser.Node, name: Text) gives parser.Node {
+    return match node {
+        parser.Node.Obj(kind, names, values) => field_at(names, values, name)
+        _ => parser.Node.Null()
+    }
+}
+
+fn field_at(names: List[Text], values: List[parser.Node], name: Text) gives parser.Node {
+    let index = index_of(names, name)
+    if index < 0 {
+        return parser.Node.Null()
+    }
+    return List.get(values, index)
+}
+
+fn text_of(node: parser.Node) gives Text {
+    return match node {
+        parser.Node.Str(value) => value
+        _ => ""
+    }
+}
+
+fn items_of(node: parser.Node) gives List[parser.Node] {
+    return match node {
+        parser.Node.Items(items) => items
+        _ => []
+    }
+}
+
+fn span_of(node: parser.Node) gives parser.Span {
+    return match node {
+        parser.Node.Place(line, column, end_line, end_column) => parser.Span(
+            line: line, column: column, end_line: end_line, end_column: end_column
+        )
+        _ => parser.no_span()
+    }
+}
+
+// Paths: the separator is "/", an import is relative to the file that has it, and `.` and `..` are resolved.
+
+fn split_path(path: Text) gives List[Text] {
+    var parts: List[Text] = []
+    var start = 0
+    var i = 0
+    while i < Text.length(path)
+        shrinks Text.length(path) - i
+    {
+        if Text.slice(path, i, i + 1) == "/" {
+            parts = List.append(parts, Text.slice(path, start, i))
+            start = i + 1
+        }
+        i = i + 1
+    }
+    return List.append(parts, Text.slice(path, start, Text.length(path)))
+}
+
+fn join_parts(parts: List[Text]) gives Text {
+    return parser.join_texts(parts, "/")
+}
+
+// The path of the file an import names, from the file that has the import.
+fn resolve_import(importing: Text, written: Text) gives Text {
+    let parts = split_path(importing)
+    var kept: List[Text] = []
+    var i = 0
+    while i < List.length(parts) - 1
+        shrinks List.length(parts) - i
+    {
+        kept = List.append(kept, List.get(parts, i))
+        i = i + 1
+    }
+    for part in split_path(written) {
+        if part == "" or part == "." {
+            kept = kept
+        } else if part == ".." and List.length(kept) > 0 and List.get(kept, List.length(kept) - 1) != ".." {
+            kept = drop_last(kept)
+        } else {
+            kept = List.append(kept, part)
+        }
+    }
+    return join_parts(kept)
+}
+
+fn drop_last(items: List[Text]) gives List[Text] {
+    var result: List[Text] = []
+    var i = 0
+    while i < List.length(items) - 1
+        shrinks List.length(items) - i
+    {
+        result = List.append(result, List.get(items, i))
+        i = i + 1
+    }
+    return result
+}
+
+// The name of a file without the directories in front of it.
+fn leaf(path: Text) gives Text {
+    let parts = split_path(path)
+    return List.get(parts, List.length(parts) - 1)
+}
+
+// The namespace a module binds: the name of its file without its extension.
+fn namespace_of(path: Text) gives Text {
+    let file = leaf(path)
+    var dot = 0 - 1
+    var i = 0
+    while i < Text.length(file)
+        shrinks Text.length(file) - i
+    {
+        if Text.slice(file, i, i + 1) == "." {
+            dot = i
+        }
+        i = i + 1
+    }
+    if dot <= 0 {
+        return file
+    }
+    return Text.slice(file, 0, dot)
+}
+
+fn problem_at(code: Text, label: Text, hint: Text, span: parser.Span) gives parser.Problem {
+    return parser.Problem(
+        code: code, label: label, hint: hint, notes: [], line: span.line, column: span.column,
+        end_line: span.end_line, end_column: span.end_column
+    )
+}
+
+fn leaves(paths: List[Text]) gives List[Text] {
+    var result: List[Text] = []
+    for path in paths {
+        result = List.append(result, leaf(path))
+    }
+    return result
+}
+
+// Reading
+
+fn read_module(loader: Loader, path: Text) gives Loader {
+    if List.contains(loader.keys, path) {
+        return loader
+    }
+    let lexed = lexer.tokenize(read_file(path))
+    var program = parser.Node.Null()
+    var clean = false
+    var reason = "lexical"
+    if List.length(lexed.diagnostics) == 0 {
+        let outcome = parser.parse_program(lexed.tokens)
+        program = outcome.program
+        clean = List.length(outcome.diagnostics) == 0
+        reason = "syntax"
+    }
+    var current = Loader(
+        modules: loader.modules, stack: List.append(loader.stack, path), keys: loader.keys, names: loader.names,
+        name_keys: loader.name_keys
+    )
+    var imports: List[Text] = []
+    var pending: List[parser.Problem] = []
+    if clean {
+        for declaration in items_of(field(program, "imports")) {
+            let written = text_of(field(declaration, "path"))
+            let span = span_of(field(declaration, "path_span"))
+            let target = resolve_import(path, written)
+            let name = namespace_of(target)
+            if List.contains(current.stack, target) {
+                let chain = List.append(current.stack, target)
+                pending = List.append(
+                    pending,
+                    problem_at(
+                        "E2029", "The modules import each other: " + parser.join_texts(leaves(chain), " -> "),
+                        "A module cannot be its own ancestor. Move what the two share into a third module that both of them import.",
+                        span
+                    )
+                )
+            } else if index_of(current.names, name) >= 0 and List.get(current.name_keys, index_of(current.names, name)) != target {
+                let known = List.get(current.name_keys, index_of(current.names, name))
+                pending = List.append(
+                    pending,
+                    problem_at(
+                        "E2030", "Two modules are both called '" + name + "'",
+                        "A module takes its name from its file, and two files cannot share one. Rename one of them: "
+                        + known + " or " + target + ".",
+                        span
+                    )
+                )
+            } else {
+                let registered = Loader(
+                    modules: current.modules, stack: current.stack, keys: current.keys,
+                    names: List.append(current.names, name), name_keys: List.append(current.name_keys, target)
+                )
+                current = read_module(registered, target)
+                imports = List.append(imports, target)
+            }
+        }
+    }
+    let module = Module(
+        path: path, name: namespace_of(path), program: program, imports: imports, clean: clean, reason: reason,
+        pending: pending
+    )
+    return Loader(
+        modules: List.append(current.modules, module), stack: loader.stack, keys: List.append(current.keys, path),
+        names: current.names, name_keys: current.name_keys
+    )
+}
+
+// The modules of a project in the order they are checked.
+pub fn load(entry: Text) gives Project {
+    let start = Loader(modules: [], stack: [], keys: [], names: [], name_keys: [])
+    let done = read_module(start, entry)
+    return Project(modules: done.modules, names: done.names)
+}
+
+// The result of checking one module.
+pub type Checked = { module: Module, node: parser.Node, problems: List[parser.Problem], unsupported: Text }
+
+fn has_errors(problems: List[parser.Problem]) gives Bool {
+    for problem in problems {
+        if not Text.starts_with(problem.code, "W") {
+            return true
+        }
+    }
+    return false
+}
+
+// Checks every module in order, each one with the exports of the modules before it.
+pub fn check_all(project: Project, require_main: Bool) gives List[Checked] {
+    let modules = project.modules
+    var results: List[Checked] = []
+    var exports: List[checker.Export] = []
+    var errors = false
+    var i = 0
+    while i < List.length(modules)
+        shrinks List.length(modules) - i
+    {
+        let module = List.get(modules, i)
+        if not module.clean {
+            results = List.append(results, Checked(module: module, node: module.program, problems: [], unsupported: ""))
+        } else {
+            let last = i == List.length(modules) - 1
+            let analysis = checker.analyze_module(
+                module.program, module.name, last and require_main, not errors, exports, project.names
+            )
+            exports = List.append(exports, analysis.export)
+            errors = errors or has_errors(analysis.problems) or List.length(module.pending) > 0
+            results = List.append(
+                results,
+                Checked(
+                    module: module, node: analysis.node, problems: List.concat(module.pending, analysis.problems),
+                    unsupported: analysis.unsupported
+                )
+            )
+        }
+        i = i + 1
+    }
+    return results
+}
+
+// Linking: the interpreter runs one program, and the modules of a project become one. A module writes the names it
+// declares bare, and the module is what tells `helper` of one file from `helper` of another, so every node that names
+// something of its own module gets a `target` with the name qualified by its module, and every declaration a `key`
+// (the analysis of the Python implementation records the same, decision 0018, 5). The program that runs keeps its
+// names bare; a name written with a module in front (`models.area`) already is the key.
+
+fn names_of(declarations: parser.Node) gives List[Text] {
+    var names: List[Text] = []
+    for declaration in items_of(declarations) {
+        names = List.append(names, text_of(field(declaration, "name")))
+    }
+    return names
+}
+
+fn add_field(node: parser.Node, name: Text, value: parser.Node) gives parser.Node {
+    return match node {
+        parser.Node.Obj(kind, names, values) => parser.Node.Obj(kind, List.append(names, name), List.append(values, value))
+        _ => node
+    }
+}
+
+// What a module declares, to know which bare names are its own.
+type Own = { module: Text, functions: List[Text], types: List[Text], enums: List[Text] }
+
+fn first_segment(callee: Text) gives Text {
+    var i = 0
+    while i < Text.length(callee)
+        shrinks Text.length(callee) - i
+    {
+        if Text.slice(callee, i, i + 1) == "." {
+            return Text.slice(callee, 0, i)
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+fn call_target(own: Own, node: parser.Node) gives Text {
+    let callee = text_of(field(node, "callee"))
+    let segment = first_segment(callee)
+    if segment == "" {
+        if List.contains(own.functions, callee) or List.contains(own.types, callee) {
+            return own.module + "." + callee
+        }
+        return ""
+    }
+    if List.contains(own.enums, segment) {
+        return own.module + "." + callee
+    }
+    return ""
+}
+
+fn record_target(own: Own, node: parser.Node) gives Text {
+    let name = text_of(field(node, "name"))
+    let qualifier = text_of(field(node, "qualifier"))
+    if qualifier != "" {
+        return qualifier + "." + name
+    }
+    if own.module == "" {
+        return ""
+    }
+    return own.module + "." + name
+}
+
+fn annotate(own: Own, node: parser.Node) gives parser.Node {
+    return match node {
+        parser.Node.Obj(kind, names, values) => annotate_object(own, kind, names, values)
+        parser.Node.Items(items) => parser.Node.Items(annotate_all(own, items))
+        _ => node
+    }
+}
+
+fn annotate_all(own: Own, items: List[parser.Node]) gives List[parser.Node] {
+    var result: List[parser.Node] = []
+    for item in items {
+        result = List.append(result, annotate(own, item))
+    }
+    return result
+}
+
+fn annotate_object(own: Own, kind: Text, names: List[Text], values: List[parser.Node]) gives parser.Node {
+    let rebuilt = parser.Node.Obj(kind, names, annotate_all(own, values))
+    if kind == "Call" and own.module != "" {
+        let target = call_target(own, rebuilt)
+        if target != "" {
+            return add_field(rebuilt, "target", parser.Node.Str(target))
+        }
+        return rebuilt
+    }
+    if kind == "RecordConstruction" {
+        let target = record_target(own, rebuilt)
+        if target != "" {
+            return add_field(rebuilt, "target", parser.Node.Str(target))
+        }
+    }
+    return rebuilt
+}
+
+// The declarations of a module with their key, and the base of a refined type with its key.
+fn keyed(own: Own, declarations: List[parser.Node], refined: Bool) gives List[parser.Node] {
+    var result: List[parser.Node] = []
+    for declaration in declarations {
+        var done = annotate(own, declaration)
+        if own.module != "" {
+            done = add_field(done, "key", parser.Node.Str(own.module + "." + text_of(field(declaration, "name"))))
+        }
+        if refined {
+            let base = field(declaration, "base")
+            let qualifier = text_of(field(base, "qualifier"))
+            let name = text_of(field(base, "name"))
+            if qualifier != "" {
+                done = add_field(done, "base_key", parser.Node.Str(qualifier + "." + name))
+            } else if List.contains(own.types, name) and own.module != "" {
+                done = add_field(done, "base_key", parser.Node.Str(own.module + "." + name))
+            }
+        }
+        result = List.append(result, done)
+    }
+    return result
+}
+
+// One program from the modules of a project, in the order they are checked.
+pub fn link(results: List[Checked]) gives parser.Node {
+    var functions: List[parser.Node] = []
+    var records: List[parser.Node] = []
+    var types: List[parser.Node] = []
+    var capabilities: List[parser.Node] = []
+    var i = 0
+    while i < List.length(results)
+        shrinks List.length(results) - i
+    {
+        let result = List.get(results, i)
+        var module = result.module.name
+        if i == List.length(results) - 1 {
+            module = ""
+        }
+        let own = Own(
+            module: module, functions: names_of(field(result.node, "functions")),
+            types: names_of(field(result.node, "types")), enums: names_of(field(result.node, "enums"))
+        )
+        functions = List.concat(functions, keyed(own, items_of(field(result.node, "functions")), false))
+        records = List.concat(records, keyed(own, items_of(field(result.node, "records")), false))
+        types = List.concat(types, keyed(own, items_of(field(result.node, "types")), true))
+        capabilities = List.concat(capabilities, items_of(field(result.node, "uses")))
+        i = i + 1
+    }
+    return parser.Node.Obj(
+        "Program", ["functions", "records", "types", "uses"],
+        [parser.Node.Items(functions), parser.Node.Items(records), parser.Node.Items(types), parser.Node.Items(capabilities)]
+    )
+}
+
+// Test driver: `--check ENTRY...`. For each entry prints `FILE|entry`, then `SKIP|` when a module has lexical or
+// syntax errors or `UNSUPPORTED|` when the checker does not know something yet; otherwise, the name of each module as
+// `MODULE|name`, the typed tree of the program that runs as `CHECKED|` and each problem as `D|`.
+fn run_checks() {
+    let files = args()
+    var i = 1
+    while i < List.length(files)
+        shrinks List.length(files) - i
+    {
+        let entry = List.get(files, i)
+        print("FILE|" + entry)
+        let project = load(entry)
+        var clean = true
+        for module in project.modules {
+            if not module.clean {
+                clean = false
+            }
+        }
+        if not clean {
+            print("SKIP|syntax")
+        } else {
+            let results = check_all(project, true)
+            var unsupported_reason = ""
+            for result in results {
+                if result.unsupported != "" and unsupported_reason == "" {
+                    unsupported_reason = result.unsupported
+                }
+            }
+            if unsupported_reason != "" {
+                print("UNSUPPORTED|" + unsupported_reason)
+            } else {
+                for result in results {
+                    print("MODULE|" + result.module.name)
+                    for problem in result.problems {
+                        var place_text = ""
+                        if problem.line > 0 {
+                            place_text = parser.span_text(problem.line, problem.column, problem.end_line, problem.end_column)
+                        }
+                        print(
+                            "D|" + problem.code + "|" + problem.label + "|" + problem.hint + "|"
+                            + parser.join_texts(problem.notes, "~~") + "|" + place_text
+                        )
+                    }
+                }
+                let last = List.get(results, List.length(results) - 1)
+                print("CHECKED|" + parser.to_json(last.node))
+            }
+        }
+        i = i + 1
+    }
+}
+
+fn main() {
+    run_checks()
+}

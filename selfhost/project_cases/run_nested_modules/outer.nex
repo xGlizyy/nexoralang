@@ -1,0 +1,8 @@
+import "inner.nex"
+
+pub fn twice(n: Int) gives Int {
+    return inner.double(n)
+}
+pub fn make() gives inner.Box {
+    return inner.Box(v: 7)
+}

@@ -1,0 +1,5 @@
+import "b.nex"
+
+pub fn one() gives Int {
+    return b.two()
+}

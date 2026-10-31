@@ -1,0 +1,5 @@
+import "w.nex"
+
+fn main() {
+    print(w.one())
+}

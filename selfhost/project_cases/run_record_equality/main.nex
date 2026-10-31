@@ -1,0 +1,6 @@
+import "m.nex"
+
+fn main() {
+    print(m.make(1) == m.make(1))
+    print(m.make(1) == m.make(2))
+}

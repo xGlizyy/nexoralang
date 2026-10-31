@@ -1,0 +1,6 @@
+import "models.nex"
+
+fn main() {
+    let h = models.Hidden(a: 1)
+    print(h)
+}

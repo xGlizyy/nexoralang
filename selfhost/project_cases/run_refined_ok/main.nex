@@ -1,0 +1,6 @@
+import "m.nex"
+
+fn main() {
+    print(m.Percent(50) + 1)
+    print(m.Small(20) + 1)
+}

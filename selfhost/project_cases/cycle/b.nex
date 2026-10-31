@@ -1,0 +1,5 @@
+import "a.nex"
+
+pub fn two() gives Int {
+    return 2
+}

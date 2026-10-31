@@ -1,0 +1,6 @@
+fn helper() gives Int {
+    return 1
+}
+pub fn value() gives Int {
+    return helper()
+}

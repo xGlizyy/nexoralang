@@ -1,0 +1,6 @@
+import "left.nex"
+import "right.nex"
+
+fn main() {
+    print(left.value() + right.value())
+}

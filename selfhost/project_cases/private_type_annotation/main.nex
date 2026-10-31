@@ -1,0 +1,9 @@
+import "models.nex"
+
+fn show(h: models.Hidden) {
+    print(1)
+}
+
+fn main() {
+    print(2)
+}

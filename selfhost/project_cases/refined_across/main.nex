@@ -1,0 +1,7 @@
+import "models.nex"
+
+fn main() {
+    let a = models.Percent(75)
+    let b = models.Percent(175)
+    print(a + b)
+}

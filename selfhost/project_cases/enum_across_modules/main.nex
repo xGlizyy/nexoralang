@@ -1,0 +1,6 @@
+import "shapes.nex"
+
+fn main() {
+    let s = shapes.Shape.Circle(2.0)
+    print(shapes.area(s))
+}
