@@ -1,0 +1,11 @@
+fn main() {
+    var total = 0
+    var i = 1
+    while i <= 100
+        shrinks 101 - i
+    {
+        total = total + i
+        i = i + 1
+    }
+    print(total)
+}

@@ -23,9 +23,11 @@ executable that needs neither Python nor the interpreter. Python stays only as t
 bootstrap: once the generator exists, it compiles itself, and from then on the compiler of NEXORA
 is an executable made from NEXORA.
 
-The code that is written is NEXORA. C is an output format, like the text a formatter writes; the
-project keeps no hand-written C: the small runtime the generated programs need is also produced
-by the generator, from text that lives in a `.nex` file.
+The code that is written is NEXORA. C is an output format, like the text a formatter writes. The
+one piece of C the project keeps by hand is the runtime of the generated programs, a single header
+(`selfhost/runtime/nexora_rt.h`) that the generator puts at the top of every file it writes; it is
+embedded in the generator as data (`runtime_text.nex`, generated from the header) so that the
+generator needs no file at run time.
 
 ## 1. Purpose and status
 
@@ -62,6 +64,11 @@ program.c ── the system's C compiler (cc) ──▶ executable
 
 Everything up to the typed tree already exists in NEXORA and is checked against the Python
 implementation. The new part is the generator and the runtime it emits.
+
+**Status (2026-10-31).** Stage 1 below is written and checked: `selfhost/cgen.nex`, the runtime and
+`selfhost/compare_cgen.py`, which builds 22 programs (arithmetic and its overflows, text, logic, recursion, loops with
+`shrinks`, `needs`, `promises`, and each way of failing) and finds the same output, the same diagnostics and the same
+exit status as `nex run`. The C compiler used to build them was `zig cc`, from a virtual environment.
 
 ### 3.2 What the generated program must do
 

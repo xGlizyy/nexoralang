@@ -1,0 +1,9 @@
+fn check(n: Int)
+    promises big_enough: n > 100, "never"
+{
+    print(n)
+}
+
+fn main() {
+    check(3)
+}

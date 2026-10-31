@@ -1,0 +1,13 @@
+fn grade(n: Int) gives Text {
+    if n >= 90 {
+        return "A"
+    } else if n >= 80 {
+        return "B"
+    } else {
+        return "C"
+    }
+}
+
+fn main() {
+    print(grade(95) + grade(85) + grade(10))
+}

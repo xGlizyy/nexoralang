@@ -1,0 +1,11 @@
+fn loud(n: Int) gives Bool {
+    print("loud " + to_text(n))
+    return n > 0
+}
+
+fn main() {
+    print(loud(1) and loud(0) and loud(2))
+    print(loud(0) or loud(3) or loud(4))
+    print(not loud(5))
+    print(true == false)
+}

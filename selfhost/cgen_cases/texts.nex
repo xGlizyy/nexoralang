@@ -1,0 +1,10 @@
+fn main() {
+    let name = "NEXORA"
+    let greeting = "hello " + name + "!"
+    print(greeting)
+    print(Text.length(greeting))
+    print(Text.length("áé ü"))
+    print(to_text(12) + to_text(true))
+    print("a" < "b")
+    print("ab" == "a" + "b")
+}

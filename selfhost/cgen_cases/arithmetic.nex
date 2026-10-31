@@ -1,0 +1,9 @@
+fn main() {
+    print(7 / 2)
+    print(0 - 7 / 2)
+    print(3 * 4 - 5)
+    print(-9 / 2)
+    let a = 9223372036854775807
+    print(a)
+    print(0 - a - 1)
+}

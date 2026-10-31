@@ -1,0 +1,9 @@
+fn main() {
+    var i = 3
+    while i >= 0
+        shrinks i + 1
+    {
+        print(10 / i)
+        i = i - 1
+    }
+}

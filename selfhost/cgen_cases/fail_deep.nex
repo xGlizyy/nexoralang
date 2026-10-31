@@ -1,0 +1,7 @@
+fn down(n: Int) gives Int {
+    return down(n + 1) + 1
+}
+
+fn main() {
+    print(down(0))
+}

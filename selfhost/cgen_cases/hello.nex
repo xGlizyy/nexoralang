@@ -1,0 +1,5 @@
+fn main() {
+    print("hello")
+    print(40 + 2)
+    print(1 < 2)
+}

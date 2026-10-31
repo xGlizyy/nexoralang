@@ -1,0 +1,12 @@
+fn divide(a: Int, b: Int) gives Int {
+    return a / b
+}
+
+fn middle(n: Int) gives Int {
+    return divide(10, n)
+}
+
+fn main() {
+    print("before")
+    print(middle(0))
+}

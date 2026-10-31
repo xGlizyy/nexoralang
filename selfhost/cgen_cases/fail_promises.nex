@@ -1,0 +1,10 @@
+fn double(n: Int) gives Int
+    promises result > n
+{
+    return n * 2
+}
+
+fn main() {
+    print(double(5))
+    print(double(0 - 5))
+}
