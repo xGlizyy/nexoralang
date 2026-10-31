@@ -3,8 +3,7 @@
     python selfhost/compare_checker.py FILE.nex [FILE.nex ...]
 
 For every file that has no lexical or syntax errors, both checkers read the program. The tree with the
-type of every expression (what `nex inspect` shows) and the errors are compared; warnings are not
-produced by the NEXORA checker yet, so they are left out. A program that uses something the NEXORA
+type of every expression (what `nex inspect` shows), the errors and the warnings are compared. A program that uses something the NEXORA
 checker does not know yet is reported as unsupported by it, and skipped. Exit status 1 when any
 checked file differs.
 
@@ -41,7 +40,8 @@ def python_result(path: Path) -> list[str]:
         return ["SKIP|syntax"]
     checked, diagnostics = check(program)
     lines = ["CHECKED|" + json.dumps(ast.to_dict(program, checked.types), ensure_ascii=False)]
-    for d in [d for d in diagnostics if d.severity == ERROR][:100]:
+    errors = [d for d in diagnostics if d.severity == ERROR][:100]
+    for d in errors + [d for d in diagnostics if d.severity != ERROR]:
         s = d.span
         where = "" if s is None else f"{s.line}:{s.column}-{s.end_line}:{s.end_column}"
         lines.append(f"D|{d.code}|{d.label}|{d.hint or ''}|{'~~'.join(d.notes)}|{where}")

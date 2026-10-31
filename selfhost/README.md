@@ -8,7 +8,7 @@ runs it for now; it is the bootstrap, not the goal.
 |------|------|-------|
 | Lexer | [`lexer.nex`](lexer.nex) | Done. Same tokens and lexical errors as `lexer.py` on every program of the repository and on the cases in [`lexer_cases/`](lexer_cases/), with the gaps below |
 | Parser | [`parser.nex`](parser.nex) | Done. Same tree and same syntax errors as `parser.py` on every program of the repository and on the cases in [`parser_cases/`](parser_cases/), including error recovery, the limit of 100 errors and the nesting and depth limits |
-| Checker | [`checker.nex`](checker.nex) | In progress. Everything of a single file: functions, variables, loops, `if`, operators, lists, records, refined types (with an evaluator of conditions written in NEXORA), enums, `Option` and `Result`, `match` and `if let` (with the exhaustiveness and reachability of patterns), contracts, examples, `uses` and the capabilities of the built-ins (paths compared by segments, HTTPS origins) and the "did you mean" hints. Same typed tree and same errors as `checker.py` on the programs it supports; modules and warnings are next |
+| Checker | [`checker.nex`](checker.nex) | In progress. Everything of a single file, warnings included: functions, variables, loops, `if`, operators, lists, records, refined types (with an evaluator of conditions written in NEXORA), enums, `Option` and `Result`, `match` and `if let`, contracts, examples, `uses` and the capabilities of the built-ins, the "did you mean" hints and the warnings `W2001` to `W2003`. Same typed tree, errors and warnings as `checker.py` on the programs it supports; modules are next |
 | Interpreter | | Not started |
 
 ## Checking a part against the Python implementation
@@ -44,9 +44,9 @@ For the checker:
 PYTHONPATH=nexora/src python selfhost/compare_checker.py FILE.nex [FILE.nex ...]
 ```
 
-Both checkers read the program and the typed tree (what `nex inspect` shows) and the errors are
-compared. A program that uses something the NEXORA checker does not know yet is reported as
-*unsupported* by it and skipped, and the summary says why. Warnings are not produced yet.
+Both checkers read the program and the typed tree (what `nex inspect` shows), the errors and the
+warnings are compared. A program that uses something the NEXORA checker does not know yet is reported as
+*unsupported* by it and skipped, and the summary says why.
 `checker_cases/` holds programs with type errors that exercise each error path of this slice.
 
 On Windows, give `PYTHONPATH` a single entry: its separator is `;`, and `nexora/src:selfhost` is read as
