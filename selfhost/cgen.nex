@@ -1174,7 +1174,7 @@ fn generate(program: parser.Node, path: Text, paths: List[Text]) gives Part {
         st = made.st
     }
     code = code + declarations + "\n" + definitions
-    code = code + "int main(int argc, char **argv) \{\nrt_setup(" + c_string(path) + ", " + to_text(List.length(paths))
+    code = code + "int main(int argc, char **argv) \{\nrt_gc_start(&argc);\nrt_setup(" + c_string(path) + ", " + to_text(List.length(paths))
     code = code + ", nx_paths, nx_files, nx_counts);\n" + uses_code(program) + "rt_options(argc, argv);\n"
     code = code + "nx_main(0, 0, 0, 0);\nfflush(stdout);\nreturn 0;\n}\n"
     return part(code, "", st)
