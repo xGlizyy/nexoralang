@@ -1,0 +1,9 @@
+fn positive(n: Int) gives Bool
+    example positive(1) or positive(2)
+    example positive(-1) and positive(5)
+    example positive(5) and positive(6) and positive(-7)
+    example positive(-1) or positive(-2) or positive(3)
+    example not positive(-1) or positive(9)
+{
+    return n > 0
+}

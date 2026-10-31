@@ -1,0 +1,19 @@
+type Point = { x: Int, y: Int }
+
+fn origin_shift(dx: Int) gives Point
+    example origin_shift(2) == Point(x: 2, y: 0)
+    example origin_shift(1) == Point(y: 5, x: 1)
+{
+    return Point(x: dx, y: 0)
+}
+
+fn first(xs: List[Int]) gives Option[Int]
+    example first([4, 5]) == Some(4)
+    example first([]) == None
+    example first([1]) == None
+{
+    if List.length(xs) == 0 {
+        return None
+    }
+    return Some(List.get(xs, 0))
+}

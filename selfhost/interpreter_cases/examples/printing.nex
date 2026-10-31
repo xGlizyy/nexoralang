@@ -1,0 +1,7 @@
+fn shout(text: Text) gives Text
+    example shout("a") == "A!"
+{
+    print("shouting " + text)
+    print(text + "?")
+    return text + "!"
+}

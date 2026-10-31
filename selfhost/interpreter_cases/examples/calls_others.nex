@@ -1,0 +1,10 @@
+fn helper(n: Int) gives Int {
+    return n * 10
+}
+
+fn combine(a: Int, b: Int) gives Int
+    example combine(1, 2) == 21
+    example combine(helper(1), 2) == 102
+{
+    return helper(a) + b
+}

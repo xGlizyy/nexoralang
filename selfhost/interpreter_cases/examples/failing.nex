@@ -1,0 +1,7 @@
+fn double(n: Int) gives Int
+    example double(2) == 5, "A wrong expectation"
+    example double(1) == 2
+    example double(3) == 7
+{
+    return n * 2
+}

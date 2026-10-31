@@ -1,0 +1,7 @@
+fn inc(n: Int) gives Int
+    example inc(inc(inc(1))) == 4
+    example inc(1) + inc(2) == 5, "Two own calls"
+    example inc(inc(1)) == 9
+{
+    return n + 1
+}

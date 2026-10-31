@@ -75,7 +75,7 @@ type Kont = enum {
 type Stk = enum { Nil, Cons(top: Kont, rest: Stk) }
 
 type Machine = {
-    control: Control, env: List[Frame], stack: Stk, out: List[Text], depth: Int, fuel: Int
+    control: Control, env: List[Frame], stack: Stk, out: List[Text], depth: Int, fuel: Int, tracing: Tracing
 }
 
 // What the program declares, indexed once.
@@ -562,15 +562,21 @@ fn stack_rest(stack: Stk) gives Stk {
 
 // The machine after one more step: the fuel always goes down, which is what makes the loop end.
 fn mk(m: Machine, control: Control, env: List[Frame], stack: Stk) gives Machine {
-    return Machine(control: control, env: env, stack: stack, out: m.out, depth: m.depth, fuel: m.fuel - 1)
+    return Machine(
+        control: control, env: env, stack: stack, out: m.out, depth: m.depth, fuel: m.fuel - 1, tracing: m.tracing
+    )
 }
 
 fn mk_depth(m: Machine, control: Control, env: List[Frame], stack: Stk, depth: Int) gives Machine {
-    return Machine(control: control, env: env, stack: stack, out: m.out, depth: depth, fuel: m.fuel - 1)
+    return Machine(
+        control: control, env: env, stack: stack, out: m.out, depth: depth, fuel: m.fuel - 1, tracing: m.tracing
+    )
 }
 
 fn mk_out(m: Machine, control: Control, stack: Stk, out: List[Text]) gives Machine {
-    return Machine(control: control, env: m.env, stack: stack, out: out, depth: m.depth, fuel: m.fuel - 1)
+    return Machine(
+        control: control, env: m.env, stack: stack, out: out, depth: m.depth, fuel: m.fuel - 1, tracing: m.tracing
+    )
 }
 
 // Failures: the diagnostic, with the chain of calls and the loops that led to it as notes
@@ -1366,7 +1372,7 @@ fn finish_call(prog: Prog, m: Machine, node: parser.Node, arguments: List[Val]) 
     let callee = text_of(field(node, "callee"))
     let at = index_of(prog.fn_names, callee)
     if at >= 0 {
-        return call_function(m, List.get(prog.fn_nodes, at), arguments, node)
+        return call_function(note_invoked(m, node), List.get(prog.fn_nodes, at), arguments, node)
     }
     if index_of(prog.type_names, callee) >= 0 {
         return refine(prog, m, node, callee, List.get(arguments, 0))
@@ -1492,7 +1498,7 @@ fn finish_function(
 ) gives Machine {
     let guarantees = clauses_of(function, "promises")
     if List.length(guarantees) == 0 {
-        return mk_depth(m, Control.CValue(returned), saved, rest, m.depth - 1)
+        return mk_depth(with_returned(m, site, returned), Control.CValue(returned), saved, rest, m.depth - 1)
     }
     return mk(
         m, Control.CEval(field(List.get(guarantees, 0), "condition")), promise_env(function, frame, returned),
@@ -1591,7 +1597,7 @@ fn check_refinement(prog: Prog, m: Machine, name: Text, v: Val) gives Refinement
     }
     let machine = Machine(
         control: Control.CEval(field(declaration, "condition")), env: [Frame(names: ["value"], vals: [v])],
-        stack: push(Kont.KHalt(), m.stack), out: [], depth: m.depth, fuel: 1000000
+        stack: push(Kont.KHalt(), m.stack), out: [], depth: m.depth, fuel: 1000000, tracing: no_tracing()
     )
     let done = run_machine(prog, machine)
     return match done.control {
@@ -1653,7 +1659,7 @@ fn handle_value(prog: Prog, m: Machine, top: Kont, rest: Stk, v: Val) gives Mach
         Kont.KNeeds(function, frame, site, index) => needs_value(m, function, frame, site, index, rest, v)
         Kont.KCall(saved, name, site, function, frame) => finish_function(m, saved, name, site, function, frame, rest, v)
         Kont.KPromise(function, frame, returned, index) => promise_value(m, function, frame, returned, index, rest, v)
-        Kont.KRet(saved, name, site) => mk_depth(m, Control.CValue(v), saved, rest, m.depth - 1)
+        Kont.KRet(saved, name, site) => mk_depth(with_returned(m, site, v), Control.CValue(v), saved, rest, m.depth - 1)
         Kont.KHalt => mk(m, Control.CDone(v), m.env, rest)
     }
 }
@@ -1682,7 +1688,7 @@ fn binary_left(m: Machine, node: parser.Node, rest: Stk, left: Val) gives Machin
         // The right side is evaluated only when it can change the result.
         let decided = truth(left)
         if (operator == "or" and decided) or (operator == "and" and not decided) {
-            return mk(m, Control.CValue(left), m.env, rest)
+            return mk(note_skipped(m, field(node, "right")), Control.CValue(left), m.env, rest)
         }
         return mk(m, Control.CEval(field(node, "right")), m.env, rest)
     }
@@ -1707,7 +1713,9 @@ fn next_part(prog: Prog, m: Machine, node: parser.Node, rest: Stk, done: List[Va
             push(Kont.KArgs(node, parts), rest)
         )
     }
-    let next = Machine(control: m.control, env: m.env, stack: rest, out: m.out, depth: m.depth, fuel: m.fuel)
+    let next = Machine(
+        control: m.control, env: m.env, stack: rest, out: m.out, depth: m.depth, fuel: m.fuel, tracing: m.tracing
+    )
     return finish_parts(prog, next, node, parts)
 }
 
@@ -1941,7 +1949,10 @@ fn for_keep_value(
 
 // The machine with the innermost scope of the environment left out.
 fn without_frame(m: Machine) gives Machine {
-    return Machine(control: m.control, env: drop_frame(m.env), stack: m.stack, out: m.out, depth: m.depth, fuel: m.fuel)
+    return Machine(
+        control: m.control, env: drop_frame(m.env), stack: m.stack, out: m.out, depth: m.depth, fuel: m.fuel,
+        tracing: m.tracing
+    )
 }
 
 // A return unwinds the stack up to the call that is returning.
@@ -2002,8 +2013,342 @@ fn start_machine(prog: Prog, fuel: Int) gives Machine {
         stack: push(
             Kont.KCall([], "main", parser.no_span(), function, empty_frame()), push(Kont.KHalt(), nil_stack())
         ),
-        out: [], depth: 1, fuel: fuel
+        out: [], depth: 1, fuel: fuel, tracing: no_tracing()
     )
+}
+
+// Examples (`nex test`)
+
+// An own call of an example that was invoked: it stays "stopped" unless the function returns a value.
+type Seen = { key: Text, status: Text, val: Val }
+
+// What is observed about the own calls of the example being evaluated.
+type Tracing = { watch: List[Text], invoked: List[Seen], skipped: List[Text] }
+
+fn no_tracing() gives Tracing {
+    return Tracing(watch: [], invoked: [], skipped: [])
+}
+
+fn span_key(span: parser.Span) gives Text {
+    return to_text(span.line) + ":" + to_text(span.column)
+}
+
+fn with_tracing(m: Machine, tracing: Tracing) gives Machine {
+    return Machine(
+        control: m.control, env: m.env, stack: m.stack, out: m.out, depth: m.depth, fuel: m.fuel, tracing: tracing
+    )
+}
+
+// An own call is about to be invoked: it is recorded, even if the function never starts.
+fn note_invoked(m: Machine, node: parser.Node) gives Machine {
+    let key = span_key(place_of(node))
+    if not List.contains(m.tracing.watch, key) {
+        return m
+    }
+    return with_tracing(
+        m,
+        Tracing(
+            watch: m.tracing.watch,
+            invoked: List.append(m.tracing.invoked, Seen(key: key, status: "stopped", val: Val.VUnit())),
+            skipped: m.tracing.skipped
+        )
+    )
+}
+
+// The function of an own call has returned `value`.
+fn with_returned(m: Machine, site: parser.Span, value: Val) gives Machine {
+    if List.length(m.tracing.watch) == 0 {
+        return m
+    }
+    let key = span_key(site)
+    var invoked: List[Seen] = []
+    for seen in m.tracing.invoked {
+        if seen.key == key and seen.status == "stopped" {
+            invoked = List.append(invoked, Seen(key: key, status: "returned", val: value))
+        } else {
+            invoked = List.append(invoked, seen)
+        }
+    }
+    return with_tracing(m, Tracing(watch: m.tracing.watch, invoked: invoked, skipped: m.tracing.skipped))
+}
+
+// The own calls inside an operand that `and` or `or` did not need to evaluate.
+fn skipped_calls(node: parser.Node, watch: List[Text]) gives List[Text] {
+    let kind = kind_of(node)
+    var found: List[Text] = []
+    if kind == "Call" {
+        let key = span_key(place_of(node))
+        if List.contains(watch, key) {
+            found = List.append(found, key)
+        }
+        for argument in items_of(field(node, "arguments")) {
+            found = List.concat(found, skipped_calls(argument, watch))
+        }
+    } else if kind == "Binary" {
+        found = List.concat(skipped_calls(field(node, "left"), watch), skipped_calls(field(node, "right"), watch))
+    } else if kind == "Unary" {
+        found = skipped_calls(field(node, "operand"), watch)
+    } else if kind == "Group" {
+        found = skipped_calls(field(node, "expression"), watch)
+    } else if kind == "ListLiteral" {
+        for element in items_of(field(node, "elements")) {
+            found = List.concat(found, skipped_calls(element, watch))
+        }
+    } else if kind == "RecordConstruction" {
+        for initializer in items_of(field(node, "fields")) {
+            found = List.concat(found, skipped_calls(field(initializer, "value"), watch))
+        }
+    } else if kind == "FieldAccess" {
+        found = skipped_calls(field(node, "target"), watch)
+    }
+    return found
+}
+
+fn note_skipped(m: Machine, operand: parser.Node) gives Machine {
+    if List.length(m.tracing.watch) == 0 {
+        return m
+    }
+    return with_tracing(
+        m,
+        Tracing(
+            watch: m.tracing.watch, invoked: m.tracing.invoked,
+            skipped: List.concat(m.tracing.skipped, skipped_calls(operand, m.tracing.watch))
+        )
+    )
+}
+
+// The calls to `function` written in an expression, in the order they start in the text.
+fn calls_to(node: parser.Node, function: Text) gives List[parser.Node] {
+    return match node {
+        parser.Node.Obj(kind, names, values) => object_calls_to(node, kind, values, function)
+        parser.Node.Items(items) => all_calls_to(items, function)
+        _ => []
+    }
+}
+
+fn object_calls_to(node: parser.Node, kind: Text, values: List[parser.Node], function: Text) gives List[parser.Node] {
+    var found: List[parser.Node] = []
+    if kind == "Call" and text_of(field(node, "callee")) == function {
+        found = [node]
+    }
+    return List.concat(found, all_calls_to(values, function))
+}
+
+fn all_calls_to(nodes: List[parser.Node], function: Text) gives List[parser.Node] {
+    var found: List[parser.Node] = []
+    for node in nodes {
+        found = List.concat(found, calls_to(node, function))
+    }
+    return found
+}
+
+fn call_before(a: parser.Node, b: parser.Node) gives Bool {
+    let first = place_of(a)
+    let second = place_of(b)
+    return first.line < second.line or (first.line == second.line and first.column < second.column)
+}
+
+fn sort_calls(calls: List[parser.Node]) gives List[parser.Node] {
+    var sorted: List[parser.Node] = []
+    for call in calls {
+        var result: List[parser.Node] = []
+        var placed = false
+        for existing in sorted {
+            if not placed and call_before(call, existing) {
+                result = List.append(result, call)
+                placed = true
+            }
+            result = List.append(result, existing)
+        }
+        if not placed {
+            result = List.append(result, call)
+        }
+        sorted = result
+    }
+    return sorted
+}
+
+// The text a span covers, exactly as it was written.
+fn source_lines(text: Text) gives List[Text] {
+    var lines: List[Text] = []
+    var start = 0
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.slice(text, i, i + 1) == "\n" {
+            lines = List.append(lines, Text.slice(text, start, i))
+            start = i + 1
+        }
+        i = i + 1
+    }
+    return List.append(lines, Text.slice(text, start, Text.length(text)))
+}
+
+fn line_part(lines: List[Text], number: Int, from: Int, to: Int) gives Text {
+    if number < 1 or number > List.length(lines) {
+        return ""
+    }
+    let line = List.get(lines, number - 1)
+    var start = from
+    var end = to
+    if end > Text.length(line) {
+        end = Text.length(line)
+    }
+    if start > end {
+        start = end
+    }
+    return Text.slice(line, start, end)
+}
+
+fn text_of_span(lines: List[Text], span: parser.Span) gives Text {
+    if span.line == span.end_line {
+        return line_part(lines, span.line, span.column - 1, span.end_column - 1)
+    }
+    var parts = [line_part(lines, span.line, span.column - 1, 1000000)]
+    var number = span.line + 1
+    while number < span.end_line
+        shrinks span.end_line - number
+    {
+        parts = List.append(parts, line_part(lines, number, 0, 1000000))
+        number = number + 1
+    }
+    parts = List.append(parts, line_part(lines, span.end_line, 0, span.end_column - 1))
+    return parser.join_texts(parts, "\n")
+}
+
+fn call_for_key(calls: List[parser.Node], key: Text) gives parser.Node {
+    for call in calls {
+        if span_key(place_of(call)) == key {
+            return call
+        }
+    }
+    return parser.Node.Null()
+}
+
+fn type_text(node: parser.Node) gives Text {
+    return text_of(field(node, "type"))
+}
+
+fn show_status_value(seen: Seen) gives Text {
+    if seen.status == "returned" {
+        return show_val(seen.val)
+    }
+    return ""
+}
+
+fn span_line(span: parser.Span) gives Text {
+    return parser.span_text(span.line, span.column, span.end_line, span.end_column)
+}
+
+fn diagnostic_line(problem: parser.Problem) gives Text {
+    return (
+        "DIAG|" + problem.code + "|" + problem.label + "|" + problem.hint + "|"
+        + parser.join_texts(problem.notes, "~~") + "|"
+        + parser.span_text(problem.line, problem.column, problem.end_line, problem.end_column)
+    )
+}
+
+// Evaluates the examples of a program, each in a new machine, in the order of the file, and prints for each one what
+// `nex test` reports: its status, the own calls that were and were not evaluated, the diagnostic and what it printed.
+fn run_examples(prog: Prog, text: Text, program: parser.Node) {
+    let lines = source_lines(text)
+    for function in items_of(field(program, "functions")) {
+        let name = text_of(field(function, "name"))
+        var index = 0
+        for item in items_of(field(function, "header")) {
+            if kind_of(item) == "Example" {
+                index = index + 1
+                run_example(prog, lines, name, index, item)
+            }
+        }
+    }
+}
+
+fn run_example(prog: Prog, lines: List[Text], name: Text, index: Int, item: parser.Node) {
+    let condition = field(item, "condition")
+    let calls = sort_calls(calls_to(condition, name))
+    var watch: List[Text] = []
+    for call in calls {
+        watch = List.append(watch, span_key(place_of(call)))
+    }
+    let machine = Machine(
+        control: Control.CEval(condition), env: [], stack: push(Kont.KHalt(), nil_stack()), out: [], depth: 0,
+        fuel: start_fuel(), tracing: Tracing(watch: watch, invoked: [], skipped: [])
+    )
+    let done = run_machine(prog, machine)
+    let at = place_of(condition)
+    var status = "failed"
+    var problem = problem_at("", "", "", [], parser.no_span())
+    var has_problem = false
+    match done.control {
+        Control.CFail(raised) => {
+            status = "error"
+            has_problem = true
+            problem = parser.Problem(
+                code: raised.code, label: raised.label, hint: raised.hint,
+                notes: List.append(
+                    raised.notes,
+                    "While evaluating example " + to_text(index) + " of '" + name + "', at line " + to_text(at.line) + "."
+                ),
+                line: raised.line, column: raised.column, end_line: raised.end_line, end_column: raised.end_column
+            )
+        }
+        Control.CDone(outcome) => {
+            if truth(outcome) {
+                status = "passed"
+            }
+        }
+        _ => {
+            status = "failed"
+        }
+    }
+    var message = ""
+    if not is_null(field(item, "message")) {
+        message = text_of(field(item, "message"))
+    }
+    print("EX|" + name + "|" + to_text(index) + "|" + status + "|" + span_line(at) + "|" + text_of_span(lines, at) + "|" + message)
+    var notes: List[Text] = []
+    for seen in done.tracing.invoked {
+        let call = call_for_key(calls, seen.key)
+        let call_span = place_of(call)
+        let written = text_of_span(lines, call_span)
+        print(
+            "VAL|" + written + "|" + span_line(call_span) + "|" + type_text(call) + "|" + seen.status + "|"
+            + show_status_value(seen)
+        )
+        var shown = "None"
+        if seen.status == "returned" {
+            shown = show_val(seen.val)
+        }
+        notes = List.append(notes, written + " returned " + shown)
+    }
+    var invoked_keys: List[Text] = []
+    for seen in done.tracing.invoked {
+        invoked_keys = List.append(invoked_keys, seen.key)
+    }
+    for call in calls {
+        let key = span_key(place_of(call))
+        if not List.contains(invoked_keys, key) {
+            var reason = "stopped_before"
+            if List.contains(done.tracing.skipped, key) {
+                reason = "short_circuit"
+            }
+            let call_span = place_of(call)
+            print("NOT|" + text_of_span(lines, call_span) + "|" + span_line(call_span) + "|" + type_text(call) + "|" + reason)
+        }
+    }
+    if status == "failed" {
+        if message != "" {
+            notes = List.append(notes, "Reason: " + message)
+        }
+        print(diagnostic_line(problem_at("E4004", "This example of '" + name + "' is false", "", notes, at)))
+    } else if has_problem {
+        print(diagnostic_line(problem))
+    }
+    for line in done.out {
+        print("OUT|" + line)
+    }
 }
 
 // The steps a run may take before it is stopped.
@@ -2047,7 +2392,7 @@ fn run_files() {
             if List.length(outcome.diagnostics) > 0 {
                 print("STOP|syntax")
             } else {
-                let analysis = checker.analyze(outcome.program)
+                let analysis = checker.analyze(outcome.program, true)
                 if analysis.unsupported != "" {
                     print("STOP|unsupported " + analysis.unsupported)
                 } else if has_errors(analysis.problems) {
@@ -2075,6 +2420,44 @@ fn stop_text(m: Machine) gives Text {
     }
 }
 
+// Test driver for the examples: every argument after `--test` is a file. For each one prints `FILE|path`, what `nex test`
+// reports of each example, and `STOP|`.
+fn run_tests() {
+    let files = args()
+    var i = 1
+    while i < List.length(files)
+        shrinks List.length(files) - i
+    {
+        let path = List.get(files, i)
+        print("FILE|" + path)
+        let text = read_file(path)
+        let lexed = lexer.tokenize(text)
+        if List.length(lexed.diagnostics) > 0 {
+            print("STOP|lexical")
+        } else {
+            let outcome = parser.parse_program(lexed.tokens)
+            if List.length(outcome.diagnostics) > 0 {
+                print("STOP|syntax")
+            } else {
+                let analysis = checker.analyze(outcome.program, false)
+                if analysis.unsupported != "" {
+                    print("STOP|unsupported " + analysis.unsupported)
+                } else if has_errors(analysis.problems) {
+                    print("STOP|check")
+                } else {
+                    run_examples(build_prog(analysis.node), text, analysis.node)
+                    print("STOP|ok")
+                }
+            }
+        }
+        i = i + 1
+    }
+}
+
 fn main() {
-    run_files()
+    if List.length(args()) > 0 and List.get(args(), 0) == "--test" {
+        run_tests()
+    } else {
+        run_files()
+    }
 }

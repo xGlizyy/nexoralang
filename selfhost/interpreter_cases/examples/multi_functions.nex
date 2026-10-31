@@ -1,0 +1,16 @@
+fn a(n: Int) gives Int
+    example a(1) == 2
+{
+    return n + 1
+}
+
+fn no_examples(n: Int) gives Int {
+    return n
+}
+
+fn b(n: Int) gives Int
+    example b(1) == 1
+    example b(2) == 0
+{
+    return n
+}

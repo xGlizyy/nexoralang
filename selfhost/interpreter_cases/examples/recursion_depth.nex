@@ -1,0 +1,9 @@
+fn count(n: Int) gives Int
+    example count(10) == 10
+    example count(1500) == 1500
+{
+    if n == 0 {
+        return 0
+    }
+    return 1 + count(n - 1)
+}
