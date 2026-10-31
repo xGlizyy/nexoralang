@@ -1,0 +1,39 @@
+type Percent = Int where value >= 0 and value <= 100, "A percentage is between 0 and 100"
+type Small = Percent where value < 10
+type Name = Text where Text.length(value) > 0, "A name is not empty"
+type Ratio = Float where value >= 0.0 and value <= 1.0
+type Flag = Bool where value == true
+type Even = Int where value / 2 * 2 == value
+
+fn double(p: Percent) gives Int {
+    return p * 2
+}
+
+fn widen(s: Small) gives Percent {
+    return s
+}
+
+fn to_int_percent(x: Int) gives Percent {
+    return Percent(x)
+}
+
+fn main() {
+    let a: Percent = 50
+    let b = Percent(75)
+    let c: Small = 5
+    let d: Int = a
+    let e: Int = a + b
+    let n: Name = "Ada"
+    let r: Ratio = 0.5
+    let f: Flag = true
+    let g: Even = 4
+    let xs: List[Percent] = [10, 20]
+    print(double(a))
+    print(widen(c))
+    print(a == 50)
+    print(a < b)
+    print(-a)
+    print(d + e)
+    print(List.get(xs, 0) + 1)
+    print(to_int_percent(30))
+}

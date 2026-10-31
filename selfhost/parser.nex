@@ -2640,7 +2640,7 @@ pub fn parse_program(tokens: List[lexer.Token]) gives Outcome {
 
 // JSON
 
-fn quote(text: Text) gives Text {
+pub fn quote(text: Text) gives Text {
     var result = "\""
     var i = 0
     while i < Text.length(text)

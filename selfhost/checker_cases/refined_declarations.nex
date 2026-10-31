@@ -1,0 +1,29 @@
+type Percent = Int where value >= 0
+type Percent = Int where value >= 1
+type percent = Int where value >= 0
+type Int = Int where value > 0
+type A = B where value > 0
+type B = A where value > 0
+type C = C where value > 0
+type D = Strange where value > 0
+type E = Void where true
+type F = List[Int] where true
+type G = Point where true
+type Point = { x: Int }
+type H = Int where missing > 0
+type I = Int where value
+type J = Int where helper(value) > 0
+type K = Int where Percent(value) > 0
+type L = Int where K(value)
+type M = Int where value > 0
+type N = M where value < "x"
+type O = N where value < 10
+fn helper(x: Int) gives Bool {
+    return true
+}
+fn Percent() {
+}
+fn main() {
+    let a: N = 5
+    let b: O = 5
+}

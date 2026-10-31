@@ -1,0 +1,29 @@
+type Percent = Int where value >= 0 and value <= 100, "A percentage is between 0 and 100"
+type Small = Percent where value < 10
+type Name = Text where Text.length(value) > 0, "A name is not empty"
+type Ratio = Float where value >= 0.0 and value <= 1.0
+type Odd = Int where value / 0 == 1
+type Big = Int where value * value > 0
+type Neg = Int where -value < 0
+type Conv = Float where to_int(value) > 0
+type Flag = Bool where value == true
+
+fn main() {
+    let a: Percent = 150
+    let b: Percent = -1
+    let c: Small = 50
+    let d: Small = 5
+    let e: Name = ""
+    let f: Ratio = 1.5
+    let g: Odd = 3
+    let h: Big = 3037000500
+    let i: Neg = 5
+    let j: Conv = 5.5
+    let k: Conv = 100000.5
+    let l: Flag = false
+    let m = Percent(101)
+    let n = Small(20)
+    let o = Percent(-(1))
+    let p = Percent((200))
+    let q: Ratio = -0.5
+}
