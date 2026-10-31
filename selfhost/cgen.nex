@@ -211,7 +211,10 @@ fn bool_value(value: Bool) gives Text {
 
 fn gen_expr(st: St, node: parser.Node) gives Part {
     let kind = kind_of(node)
-    if kind == "IntLiteral" or kind == "TextLiteral" or kind == "BoolLiteral" or kind == "FloatLiteral" {
+    if kind == "TextLiteral" {
+        return part("", "rt_str_at(" + c_string(text_of(field(node, "value"))) + ", " + node_span(node) + ")", st)
+    }
+    if kind == "IntLiteral" or kind == "BoolLiteral" or kind == "FloatLiteral" {
         return part("", literal_value(field(node, "value")), st)
     }
     if kind == "Name" {
@@ -408,13 +411,19 @@ fn callee_of(node: parser.Node) gives Text {
 
 fn builtin_expression(callee: Text, values: List[Text], here: Text, node: parser.Node) gives Text {
     if callee == "args" {
-        return "rt_args()"
+        return "rt_args(" + here + ")"
     }
     if callee == "input" {
         return "rt_input(" + here + ")"
     }
     if List.length(values) == 0 {
         return ""
+    }
+    if callee == "Net.get" {
+        return "rt_net_get(" + List.get(values, 0) + ", " + node_span(arg_node(node, 0)) + ")"
+    }
+    if callee == "Process.run" {
+        return "rt_process_run(" + List.get(values, 0) + ", " + node_span(arg_node(node, 0)) + ")"
     }
     if callee == "read_file" {
         return "rt_read_file(" + List.get(values, 0) + ", " + node_span(arg_node(node, 0)) + ")"
@@ -424,7 +433,7 @@ fn builtin_expression(callee: Text, values: List[Text], here: Text, node: parser
     }
     let first = List.get(values, 0)
     if callee == "to_text" {
-        return "rt_txt(rt_format_value(" + first + "))"
+        return "rt_to_text(" + first + ", " + here + ")"
     }
     if callee == "to_float" {
         return "rt_to_float(" + first + ")"

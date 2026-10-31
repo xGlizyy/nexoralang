@@ -5,8 +5,8 @@
 - **Decision owner:** NEXORA maintainer.
 - **Affects:** stage 4 of decision 0025 (leaving Python), the meaning of "the reference
   implementation", the tools a user needs to build a NEXORA program into an executable.
-- **Related to:** [0025](0025-interprete-autoalojado.md) (the self-hosted interpreter, in stages; this
-  decision takes its stage 4; it is proposed in [PR #42](https://github.com/xGlizyy/nexoralang/pull/42)),
+- **Related to:** 0025 (the self-hosted interpreter, in stages; this decision takes its stage 4; it is
+  proposed in [PR #42](https://github.com/xGlizyy/nexoralang/pull/42)),
   [0002](0002-el-interprete-solo-ejecuta-programas-comprobados.md) (only what has been checked runs),
   [0015](0015-entrada-argumentos-archivos-y-permisos.md) (capabilities and limits).
 

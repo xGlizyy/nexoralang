@@ -661,10 +661,40 @@ static rt_text rt_format_value(rv v) { return rt_show(v, false); }
 
 static void rt_buf_val(rt_buf *b, const char *name, rv v) { rt_buf_pair(b, name, rt_show(v, true)); }
 
+/* The limits of resources the user may give (`--max-text`, `--max-output`, `--max-input`); zero is no limit. */
+static int64_t rt_max_text = 0, rt_max_output = 0, rt_max_input = 0;
+static int64_t rt_written = 0, rt_input_bytes = 0;
+
+/* The program stopped by a limit of the environment: the diagnostic has no position, and `nex run` ends with it alone. */
+static void rt_limit_fail(const char *label) {
+    fflush(stdout);
+    rt_notes none = {{0}, 0};
+    rt_path = rt_entry;
+    rt_render("runtime", "error", "E3015", "Resource limit exceeded", label, "", &none, 0, 0, 0, 0);
+    exit(3);
+}
+
+static void rt_emit(const char *data, size_t n) {
+    if (rt_max_output > 0) {
+        int64_t room = rt_max_output - rt_written;
+        if ((int64_t)n > room) {
+            /* What fits is printed, without cutting a character in two, and then the program stops. */
+            size_t keep = (size_t)(room > 0 ? room : 0);
+            while (keep > 0 && keep < n && (((unsigned char)data[keep]) & 0xC0) == 0x80) keep--;
+            fwrite(data, 1, keep, stdout);
+            rt_limit_fail(rt_format("output limit exceeded (%lld)", (long long)rt_max_output));
+        }
+        rt_written += (int64_t)n;
+    }
+    fwrite(data, 1, n, stdout);
+}
+
 static void rt_print(rv v) {
     rt_text t = rt_show(v, false);
-    fwrite(t.p, 1, (size_t)t.bytes, stdout);
-    fputc('\n', stdout);
+    rt_buf b = {0, 0, 0, 0};
+    rt_buf_add(&b, t.p, (size_t)t.bytes);
+    rt_buf_add(&b, "\n", 1);
+    rt_emit(b.p, b.n);
 }
 
 /* Equality and order, as the interpreter has them. */
@@ -728,6 +758,19 @@ static rv rt_float_checked(double r, RT_SPAN) {
     return rt_float(r);
 }
 
+/* A Text longer than the limit of the environment stops the program, wherever it was made. */
+static rv rt_check_text(rv v, RT_SPAN) {
+    if (rt_max_text > 0 && v.tag == RT_TEXT && v.u.t.len > rt_max_text) {
+        rt_runtime("E3006", "Text too long",
+                   rt_format("This Text is longer than the environment limit of %lld characters", (long long)rt_max_text),
+                   "Use a smaller Text value or increase the environment's text limit.", l, c, el, ec);
+    }
+    return v;
+}
+
+static rv rt_str_at(const char *s, RT_SPAN) { return rt_check_text(rt_str(s), l, c, el, ec); }
+static rv rt_to_text(rv v, RT_SPAN) { return rt_check_text(rt_txt(rt_format_value(v)), l, c, el, ec); }
+
 static rv rt_add(rv a, rv b, RT_SPAN) {
     if (a.tag == RT_INT) {
         int64_t r;
@@ -735,7 +778,7 @@ static rv rt_add(rv a, rv b, RT_SPAN) {
         return rt_int(r);
     }
     if (a.tag == RT_FLOAT) return rt_float_checked(a.u.f + b.u.f, l, c, el, ec);
-    return rt_txt(rt_concat(a.u.t, b.u.t));
+    return rt_check_text(rt_txt(rt_concat(a.u.t, b.u.t)), l, c, el, ec);
 }
 
 static rv rt_sub(rv a, rv b, RT_SPAN) {
@@ -1245,7 +1288,7 @@ static rv rt_read_file(rv path, RT_SPAN) {
                    "NEXORA reads text files: the file has to be saved as UTF-8.", l, c, el, ec);
     }
     rt_text t = {(const char *)data, (int64_t)out, rt_count_points((const char *)data, (int64_t)out)};
-    return rt_txt(t);
+    return rt_check_text(rt_txt(t), l, c, el, ec);
 }
 
 static rv rt_write_file(rv path, rv text, RT_SPAN) {
@@ -1266,8 +1309,17 @@ static rv rt_input(RT_SPAN) {
     char *line = (char *)rt_alloc_raw(cap);
     int ch;
     bool any = false;
-    while ((ch = fgetc(stdin)) != EOF) {
+    /* The line is read in one piece of at most the room left in the input, or of what a Text may be (four bytes a character). */
+    int64_t remaining = rt_max_input > 0 ? rt_max_input - rt_input_bytes : -1;
+    int64_t piece = remaining >= 0 ? remaining + 1 : -1;
+    if (rt_max_text > 0) {
+        int64_t text_piece = 4 * (rt_max_text + 1) + 1;
+        if (piece < 0 || text_piece < piece) piece = text_piece;
+    }
+    int64_t raw = 0;
+    while ((piece < 0 || raw < piece) && (ch = fgetc(stdin)) != EOF) {
         any = true;
+        raw++;
         if (ch == '\n') break;
         if (n + 1 >= cap) {
             cap *= 2;
@@ -1275,6 +1327,10 @@ static rv rt_input(RT_SPAN) {
         }
         line[n++] = (char)ch;
     }
+    if (any && remaining >= 0 && raw > remaining) {
+        rt_limit_fail(rt_format("input limit exceeded (%lld)", (long long)rt_max_input));
+    }
+    if (any) rt_input_bytes += raw;
     if (!any) {
         rt_runtime("E3009", "No more input", "There is no more input to read", "The standard input ended. Check it before reading again.",
                    l, c, el, ec);
@@ -1282,13 +1338,126 @@ static rv rt_input(RT_SPAN) {
     if (n > 0 && line[n - 1] == '\r') n--;
     line[n] = 0;
     rt_text t = {line, (int64_t)n, rt_count_points(line, (int64_t)n)};
-    return rt_txt(t);
+    return rt_check_text(rt_txt(t), l, c, el, ec);
 }
 
-static rv rt_args(void) {
+/* `Net.get` and `Process.run`. The decisions are the ones of the Python host (an HTTPS URL without credentials and on port 443;
+ * what the program declares and what the user allowed). Doing the request or starting the process needs a TLS library and a
+ * process supervisor that these executables do not have yet, so when every rule allows the operation the program stops with a
+ * diagnostic that says so, instead of pretending. */
+
+/* The origin an HTTPS URL goes to, as urlsplit and the idna codec read it, or 0 when it is not one this host admits. */
+static const char *rt_origin(const char *url, int *port_out) {
+    size_t n = strlen(url);
+    if (n < 8 || (url[0] | 32) != 'h' || (url[1] | 32) != 't' || (url[2] | 32) != 't' || (url[3] | 32) != 'p' ||
+        (url[4] | 32) != 's' || url[5] != ':' || url[6] != '/' || url[7] != '/') return 0;
+    const char *authority = url + 8;
+    size_t end = 0;
+    while (authority[end] && authority[end] != '/' && authority[end] != '?' && authority[end] != '#') end++;
+    char *text = (char *)rt_alloc_raw(end + 1);
+    memcpy(text, authority, end);
+    text[end] = 0;
+    char *at = strrchr(text, '@');
+    char *hostport = text;
+    if (at) {
+        for (char *c = text; c < at; c++) {
+            if (*c != ':') return 0;
+        }
+        hostport = at + 1;
+    }
+    for (char *c = hostport; *c; c++) {
+        if ((unsigned char)*c < 0x21 || (unsigned char)*c > 0x7e || *c == '[' || *c == ']') return 0;
+    }
+    char *colon = strrchr(hostport, ':');
+    int port = 443;
+    if (colon) {
+        *colon = 0;
+        const char *digits = colon + 1;
+        if (digits[0]) {
+            long value = 0;
+            for (const char *c = digits; *c; c++) {
+                if (*c < '0' || *c > '9') return 0;
+                value = value * 10 + (*c - '0');
+                if (value > 65535) return 0;
+            }
+            port = (int)value;
+        }
+    }
+    if (port != 443 || hostport[0] == 0) return 0;
+    size_t length = strlen(hostport);
+    size_t label = 0;
+    for (size_t i = 0; i <= length; i++) {
+        if (i == length || hostport[i] == '.') {
+            if ((label < 1 && !(i == length && length > 0 && hostport[length - 1] == '.')) || label > 63) return 0;
+            label = 0;
+        } else {
+            label++;
+        }
+    }
+    for (size_t i = 0; i < length; i++) {
+        if (hostport[i] >= 'A' && hostport[i] <= 'Z') hostport[i] = (char)(hostport[i] + 32);
+    }
+    *port_out = port;
+    return rt_format("https://%s", hostport);
+}
+
+static bool rt_scope_allows_origin(const char *scope, const char *origin) {
+    int a, b;
+    const char *declared = rt_origin(scope, &a);
+    const char *wanted = rt_origin(origin, &b);
+    return declared && wanted && strcmp(declared, wanted) == 0;
+}
+
+static bool rt_has_scope(const char *const *kinds, const char *const *paths, int count, const char *kind, const char *origin) {
+    for (int i = 0; i < count; i++) {
+        if (strcmp(kinds[i], kind) == 0 && rt_scope_allows_origin(paths[i], origin)) return true;
+    }
+    return false;
+}
+
+static rv rt_net_get(rv url, RT_SPAN) {
+    int port;
+    const char *origin = rt_origin(url.u.t.p, &port);
+    static const char *hint = "A program needs 'uses network' and the matching --allow-network origin; the environment may still deny network access.";
+    if (!origin) {
+        rt_runtime("E3014", "External operation failed", "only HTTPS URLs without credentials and on port 443 are allowed", "", l, c, el, ec);
+    }
+    if (!rt_has_scope(rt_declared_kind, rt_declared_path, rt_declared, "network", origin)) {
+        rt_runtime("E3008", "Permission denied", rt_format("this program does not declare network access to '%s'", origin), hint, l, c, el, ec);
+    }
+    if (!rt_has_scope(rt_granted_kind, rt_granted_path, rt_granted, "network", origin)) {
+        rt_runtime("E3008", "Permission denied", rt_format("'%s' is not among the network origins the user allowed", origin), hint, l, c, el, ec);
+    }
+    rt_runtime("E3014", "External operation failed", "HTTPS requests are not available in a program built by the C generator yet",
+               "Run the program with `nex run`, which can make them.", l, c, el, ec);
+    return rt_unit();
+}
+
+static bool rt_has_command(const char *const *kinds, const char *const *paths, int count, const char *command) {
+    for (int i = 0; i < count; i++) {
+        if (strcmp(kinds[i], "process") == 0 && strcmp(paths[i], command) == 0) return true;
+    }
+    return false;
+}
+
+static rv rt_process_run(rv command, RT_SPAN) {
+    const char *name = command.u.t.p;
+    static const char *hint = "A program needs 'uses process' and the matching --allow-process command; the environment may still deny external processes.";
+    if (!rt_has_command(rt_declared_kind, rt_declared_path, rt_declared, name)) {
+        rt_runtime("E3008", "Permission denied", rt_format("this program does not declare permission to run '%s'", name), hint, l, c, el, ec);
+    }
+    if (!rt_has_command(rt_granted_kind, rt_granted_path, rt_granted, name)) {
+        rt_runtime("E3008", "Permission denied", rt_format("'%s' is not among the commands the user allowed", name), hint, l, c, el, ec);
+    }
+    rt_runtime("E3014", "External operation failed", "external processes are not available in a program built by the C generator yet",
+               "Run the program with `nex run`, which can start them.", l, c, el, ec);
+    return rt_unit();
+}
+
+static rv rt_args(RT_SPAN) {
     rv *items = (rv *)rt_alloc((size_t)(rt_args_count > 0 ? rt_args_count : 1) * sizeof(rv));
-    for (int i = 0; i < rt_args_count; i++) items[i] = rt_str(rt_args_list[i]);
-    return rt_list_from(items, rt_args_count);
+    for (int i = 0; i < rt_args_count; i++) items[i] = rt_check_text(rt_str(rt_args_list[i]), l, c, el, ec);
+    return rt_list_take(items, rt_args_count);
 }
 
 /* The command line of an executable is the one of `nex run`: the options of the user, then `--`, then the arguments of the
@@ -1298,6 +1467,18 @@ static void rt_options(int argc, char **argv) {
     for (; i < argc; i++) {
         const char *a = argv[i];
         if (strcmp(a, "--") == 0) { i++; break; }
+        if ((strcmp(a, "--max-text") == 0 || strcmp(a, "--max-output") == 0 || strcmp(a, "--max-input") == 0) && i + 1 < argc) {
+            int64_t value = (int64_t)atoll(argv[i + 1]);
+            if (value <= 0) {
+                fprintf(stderr, "error: %s must be greater than zero\n", a);
+                exit(2);
+            }
+            if (strcmp(a, "--max-text") == 0) rt_max_text = value;
+            else if (strcmp(a, "--max-output") == 0) rt_max_output = value;
+            else rt_max_input = value;
+            i++;
+            continue;
+        }
         const char *kind = strcmp(a, "--allow-read") == 0 ? "read" : strcmp(a, "--allow-write") == 0 ? "write"
                          : strcmp(a, "--allow-network") == 0 ? "network" : strcmp(a, "--allow-process") == 0 ? "process" : 0;
         if (kind && i + 1 < argc) {

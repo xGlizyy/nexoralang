@@ -5,7 +5,8 @@
     1. generation 0: Python runs cgen.nex on its own source and writes C        (minutes; skipped with --seed)
     2. the C compiler turns that C into an executable, the first compiler
     3. generation 1: that executable compiles cgen.nex and writes C             (no Python)
-    4. the C of generation 1 is the same text as the C of generation 0           (the fixed point)
+    4. the C of generation 1 is the same text as the C of generation 0           (the fixed point; from a seed that is
+       older than the source, generation 1 is the new seed and the fixed point is generation 2 against generation 1)
     5. the C compiler turns it into the second compiler, which has to give the same C again
 
 `--seed` starts from a C file written before (the one of a previous run, or one kept in a repository), so the build needs a C
@@ -55,10 +56,15 @@ def main(arguments: list[str]) -> int:
     generation1 = BUILD / "generation1.c"
     step("generation 1 (the first compiler compiles itself)",
          [first.as_posix(), "--allow-read", ".", "--allow-write", ".", "--", SOURCE, generation1.relative_to(HERE.parent).as_posix()])
-    if generation0.read_bytes() != generation1.read_bytes():
-        print("DIFFERENT: the compiler does not produce the C it was built from")
-        return 1
-    print("fixed point: generation 1 is the same C as generation 0")
+    if seed is None:
+        if generation0.read_bytes() != generation1.read_bytes():
+            print("DIFFERENT: the compiler does not produce the C it was built from")
+            return 1
+        print("fixed point: generation 1 is the same C as generation 0")
+    elif generation0.read_bytes() == generation1.read_bytes():
+        print("the seed is current: generation 1 is the same C as the seed")
+    else:
+        print("the seed is older than the source (it built a compiler that writes different C); it can be replaced with generation 1")
     second = BUILD / f"compiler2{exe}"
     step("the C compiler builds the second compiler", [*compiler, "-std=c11", "-O1", generation1.as_posix(), "-o", second.as_posix()])
     generation2 = BUILD / "generation2.c"
