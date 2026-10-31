@@ -2,6 +2,8 @@
 
     NEXORA_CC="python -m ziglang cc" python selfhost/compare_cgen.py FILE.nex [FILE.nex ...]
 
+With NEXORA_CGEN set to the path of the generator compiled by itself, that executable writes the C instead of Python.
+
 Each program is run by `nex run` and, compiled by cgen.nex and the C compiler, as an executable. What they write to the
 standard output and to the standard error and the exit status are compared. NEXORA_CC is the command of a C compiler (default:
 `cc`); the program is built with `-std=c11`.
@@ -36,6 +38,11 @@ def python_result(path: str) -> tuple[str, str, int]:
 
 
 def generate(path: str, output: str) -> str:
+    native = os.environ.get("NEXORA_CGEN")
+    if native:
+        # The generator as an executable (selfhost/cgen.nex compiled by itself): no Python in the way.
+        done = run([native, "--allow-read", ".", "--allow-write", ".", "--", path, output])
+        return text(done.stdout) + text(done.stderr)
     done = run([sys.executable, "-m", "nexora", "run", (HERE / "cgen.nex").as_posix(), "--allow-read", ".",
                 "--allow-write", ".", "--max-output", "1000000000", "--", path, output])
     return text(done.stdout) + text(done.stderr)

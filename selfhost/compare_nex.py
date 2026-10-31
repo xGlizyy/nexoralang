@@ -13,6 +13,7 @@ This is a test tool for the self-hosted work of decision 0025; it is not part of
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -29,6 +30,14 @@ def command_python(command: str, path: str) -> str:
 
 
 def command_nexora(command: str, path: str) -> str:
+    native = os.environ.get("NEXORA_NEX")
+    if native:
+        # nex.nex compiled to an executable by selfhost/cgen.nex: no Python in the way.
+        run = subprocess.run(
+            [native, "--allow-read", ".", "--allow-write", ".", "--", command, path],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, input=b"",
+        )
+        return run.stdout.decode("utf-8").replace("\r\n", "\n")
     run = subprocess.run(
         [sys.executable, "-m", "nexora", "run", (HERE / "nex.nex").as_posix(), "--allow-read", ".", "--allow-write", ".",
          "--max-output", "1000000000", "--", command, path],
