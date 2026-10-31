@@ -571,6 +571,9 @@ fn check_expression(state: State, env: List[Binding], node: parser.Node, expecte
     if kind == "FieldAccess" {
         return check_field_access(state, env, node)
     }
+    if kind == "MatchExpr" {
+        return check_match_expression(state, env, node, expected)
+    }
     return checked(node, "", unsupported(state, kind))
 }
 
@@ -581,7 +584,7 @@ fn check_name(state: State, env: List[Binding], node: parser.Node) gives Checked
         let binding = List.get(env, index)
         return checked(node, binding.ty, state)
     }
-    if is_type_name(state, name) {
+    if is_type_name(state, name) or is_enum_name(state, name) {
         return checked(
             node, "",
             report(
@@ -696,8 +699,8 @@ fn check_binary(state: State, env: List[Binding], node: parser.Node) gives Check
         return checked(rebuilt, "", right.state)
     }
     var result = binary_result(operator, root_of(right.state, left.ty), root_of(right.state, right.ty))
-    if left.ty == right.ty and rec_index(right.state, left.ty) >= 0 {
-        // A record is a value type: two values of the same record are compared by value.
+    if left.ty == right.ty and (rec_index(right.state, left.ty) >= 0 or enum_index(right.state, left.ty) >= 0) {
+        // A record or an enum is a value type: two values of the same type are compared by value.
         result = ""
         if operator == "==" or operator == "!=" {
             result = "Bool"
@@ -846,6 +849,15 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
     let callee_span = place_span(field(node, "callee_span"))
     let arguments = items_of(field(node, "arguments"))
     let qualifier = text_of(field(node, "qualifier"))
+    if qualifier != "" {
+        var enum_key = qualifier
+        if last_dot(callee) != index_of_char(callee, ".") {
+            enum_key = Text.slice(callee, 0, last_dot(callee))
+        }
+        if is_enum_name(state, enum_key) {
+            return check_enum_construction(state, env, node, enum_key)
+        }
+    }
     var sig = builtin(callee)
     let user = user_index(state, callee)
     if qualifier != "" and not is_builtin(callee) and user < 0 {
@@ -1099,6 +1111,13 @@ fn declared_type(state: State, node: parser.Node, what: Text, allow_broken: Bool
         }
         return checked(node, "", state)
     }
+    if is_enum_name(state, name) {
+        // An enum whose own declaration has an error is already reported there: it is no type here.
+        if enum_index(state, name) >= 0 or allow_broken {
+            return checked(node, name, state)
+        }
+        return checked(node, "", state)
+    }
     if is_declared_record(state, name) {
         // A record whose own declaration has an error is already reported there: it is no type here.
         if rec_index(state, name) >= 0 or allow_broken {
@@ -1106,8 +1125,13 @@ fn declared_type(state: State, node: parser.Node, what: Text, allow_broken: Bool
         }
         return checked(node, "", state)
     }
-    let close = close_match(
-        name, List.concat(List.concat(known_type_names(), state.tables.type_names), state.tables.declared)
+    let close = close_match_at(
+        name,
+        List.concat(
+            List.concat(List.concat(known_type_names(), state.tables.type_names), state.tables.declared),
+            state.tables.enum_names
+        ),
+        1, 2
     )
     var hint = "The types are Int, Float, Bool, Text and Void, and the types the program declares."
     if name == "String" {
@@ -1277,6 +1301,9 @@ fn check_expression_statement(state: State, env: List[Binding], node: parser.Nod
         return Typed(node: rebuilt, state: found.state)
     }
     let hint = "Store it with 'let name = ...' or pass it to a function."
+    if kind_of(expression) == "MatchExpr" and found.ty == "Void" {
+        return Typed(node: rebuilt, state: found.state)
+    }
     if kind_of(expression) != "Call" {
         return Typed(
             node: rebuilt,
@@ -1356,6 +1383,9 @@ fn check_statement(state: State, env: List[Binding], node: parser.Node) gives Fl
     if kind == "FieldAssign" {
         return check_field_assign(state, env, node)
     }
+    if kind == "IfLet" {
+        return check_if_let(state, env, node)
+    }
     if kind == "ExprStatement" {
         let done = check_expression_statement(state, env, node)
         return flow(done.node, done.state, env, false)
@@ -1376,7 +1406,7 @@ fn check_if(state: State, env: List[Binding], node: parser.Node) gives Flow {
     if kind_of(else_node) == "If" {
         else_flow = check_if(then_flow.state, env, else_node)
     } else if kind_of(else_node) == "IfLet" {
-        return flow(head, unsupported(then_flow.state, "IfLet"), env, false)
+        else_flow = check_if_let(then_flow.state, env, else_node)
     }
     return flow(
         with_field(head, "else_branch", else_flow.node), else_flow.state, env, then_flow.returns and else_flow.returns
@@ -1834,7 +1864,7 @@ fn check_main(state: State, entry: parser.Node, found: Bool, sig: Sig) gives Sta
 
 fn has_declarations(program: parser.Node) gives Bool {
     return (
-        List.length(items_of(field(program, "enums"))) > 0 or List.length(items_of(field(program, "uses"))) > 0
+        List.length(items_of(field(program, "uses"))) > 0
         or List.length(items_of(field(program, "imports"))) > 0
     )
 }
@@ -1904,6 +1934,7 @@ fn check_program(program: parser.Node) gives Typed {
         typed_types = List.append(typed_types, done.node)
         current = done.state
     }
+    current = declare_enums(current, program)
     current = declare_records(current, program)
     var signatures: List[Sig] = []
     var main_node = parser.Node.Null()
@@ -1921,7 +1952,7 @@ fn check_program(program: parser.Node) gives Typed {
                 current, "E2002", "'" + sig.name + "' is a built-in function and cannot be declared again",
                 "Choose a different name for this function.", [], name_span
             )
-        } else if is_declared_record(current, sig.name) or is_type_name(current, sig.name) {
+        } else if is_declared_record(current, sig.name) or is_type_name(current, sig.name) or is_enum_name(current, sig.name) {
             var meaning = sig.name + "(x) already means: check that x is a valid " + sig.name + "."
             if is_declared_record(current, sig.name) {
                 meaning = sig.name + "(x) already means: build one: " + sig.name + "(field: value)"
@@ -2028,6 +2059,11 @@ fn matched(a: Text, b: Text, alo: Int, ahi: Int, blo: Int, bhi: Int) gives Int {
 // The best possibility for `word`, or the empty text when none is close enough: the highest ratio
 // (2 * matched / total length) of at least 0.6, and the greatest text among equal ratios.
 fn close_match(word: Text, possibilities: List[Text]) gives Text {
+    return close_match_at(word, possibilities, 3, 5)
+}
+
+// The same with another cutoff, written as a fraction: numerator / denominator.
+fn close_match_at(word: Text, possibilities: List[Text], numerator: Int, denominator: Int) gives Text {
     var best = ""
     var best_matched = 0 - 1
     var best_total = 1
@@ -2035,7 +2071,7 @@ fn close_match(word: Text, possibilities: List[Text]) gives Text {
         let total = Text.length(candidate) + Text.length(word)
         if total > 0 {
             let common = matched(candidate, word, 0, Text.length(candidate), 0, Text.length(word))
-            if 10 * common >= 3 * total {
+            if 2 * common * denominator >= numerator * total {
                 // Compare common / total with best_matched / best_total without dividing.
                 let left = common * best_total
                 let right = best_matched * total
@@ -2612,7 +2648,7 @@ fn unknown_qualified_call(state: State, env: List[Binding], node: parser.Node) g
         } else {
             notes = [qualifier + " has no functions yet."]
         }
-    } else if is_declared_record(state, qualifier) or is_type_name(state, qualifier) {
+    } else if is_declared_record(state, qualifier) or is_type_name(state, qualifier) or is_enum_name(state, qualifier) {
         label = "'" + qualifier + "' has no functions of its own"
         let base = root_of(state, qualifier)
         if List.length(type_functions(base)) > 0 {
@@ -2640,7 +2676,10 @@ fn unknown_qualified_call(state: State, env: List[Binding], node: parser.Node) g
         label = "There is no type named '" + qualifier + "'"
         let close = close_match(
             qualifier,
-            List.concat(List.concat(List.append(known_type_names(), "List"), state.tables.type_names), state.tables.declared)
+            List.concat(
+                List.concat(List.concat(List.append(known_type_names(), "List"), state.tables.type_names), state.tables.declared),
+                state.tables.enum_names
+            )
         )
         if close != "" {
             hint = "Did you mean '" + close + "'?"
@@ -2658,13 +2697,13 @@ type Ref = { name: Text, base: Text, root: Text, chain: List[Text] }
 type Tables = {
     declared: List[Text], records: List[Rec], type_names: List[Text], type_decls: List[parser.Node],
     refined: List[Ref], steps: Int, refining: Text, fn_names: List[Text],
-    reg_names: List[Text], reg_lines: List[Int], reg_columns: List[Int]
+    reg_names: List[Text], reg_lines: List[Int], reg_columns: List[Int], enum_names: List[Text], enums: List[EnumInfo]
 }
 
 fn empty_tables() gives Tables {
     return Tables(
         declared: [], records: [], type_names: [], type_decls: [], refined: [], steps: 0, refining: "",
-        fn_names: [], reg_names: [], reg_lines: [], reg_columns: []
+        fn_names: [], reg_names: [], reg_lines: [], reg_columns: [], enum_names: [], enums: []
     )
 }
 
@@ -2672,7 +2711,8 @@ fn set_declared(t: Tables, value: List[Text]) gives Tables {
     return Tables(
         declared: value, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
-        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
+        enum_names: t.enum_names, enums: t.enums
     )
 }
 
@@ -2680,7 +2720,8 @@ fn set_records(t: Tables, value: List[Rec]) gives Tables {
     return Tables(
         declared: t.declared, records: value, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
-        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
+        enum_names: t.enum_names, enums: t.enums
     )
 }
 
@@ -2688,7 +2729,8 @@ fn set_type_names(t: Tables, names: List[Text], decls: List[parser.Node]) gives 
     return Tables(
         declared: t.declared, records: t.records, type_names: names, type_decls: decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
-        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
+        enum_names: t.enum_names, enums: t.enums
     )
 }
 
@@ -2696,7 +2738,8 @@ fn set_refined(t: Tables, value: List[Ref]) gives Tables {
     return Tables(
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: value, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
-        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
+        enum_names: t.enum_names, enums: t.enums
     )
 }
 
@@ -2704,7 +2747,8 @@ fn set_steps(t: Tables, value: Int) gives Tables {
     return Tables(
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: value, refining: t.refining, fn_names: t.fn_names,
-        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
+        enum_names: t.enum_names, enums: t.enums
     )
 }
 
@@ -2712,7 +2756,8 @@ fn set_refining(t: Tables, value: Text) gives Tables {
     return Tables(
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: value, fn_names: t.fn_names,
-        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
+        enum_names: t.enum_names, enums: t.enums
     )
 }
 
@@ -2720,7 +2765,8 @@ fn set_fn_names(t: Tables, value: List[Text]) gives Tables {
     return Tables(
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: value,
-        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
+        enum_names: t.enum_names, enums: t.enums
     )
 }
 
@@ -2728,7 +2774,26 @@ fn set_registered(t: Tables, names: List[Text], lines: List[Int], columns: List[
     return Tables(
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
-        reg_names: names, reg_lines: lines, reg_columns: columns
+        reg_names: names, reg_lines: lines, reg_columns: columns,
+        enum_names: t.enum_names, enums: t.enums
+    )
+}
+
+fn set_enum_names(t: Tables, value: List[Text]) gives Tables {
+    return Tables(
+        declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
+        refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
+        enum_names: value, enums: t.enums
+    )
+}
+
+fn set_enums(t: Tables, value: List[EnumInfo]) gives Tables {
+    return Tables(
+        declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
+        refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
+        enum_names: t.enum_names, enums: value
     )
 }
 
@@ -2805,12 +2870,16 @@ fn accepts(state: State, expected: Text, found: Text) gives Bool {
 fn declare_type_names(state: State, program: parser.Node) gives State {
     var current = state
     let ordered = sort_by_position(
-        List.concat(items_of(field(program, "records")), items_of(field(program, "types")))
+        List.concat(
+            List.concat(items_of(field(program, "records")), items_of(field(program, "types"))),
+            items_of(field(program, "enums"))
+        )
     )
     for declaration in ordered {
         let name = text_of(field(declaration, "name"))
         let span = place_span(field(declaration, "name_span"))
         let is_record = kind_of(declaration) == "RecordDecl"
+        let is_enum = kind_of(declaration) == "EnumDecl"
         let registered = index_of(current.tables.reg_names, name)
         if List.contains(known_type_names(), name) or (is_record and name == "List") {
             current = report(
@@ -2838,6 +2907,8 @@ fn declare_type_names(state: State, program: parser.Node) gives State {
             )
             if is_record {
                 tables = set_declared(tables, List.append(tables.declared, name))
+            } else if is_enum {
+                tables = set_enum_names(tables, List.append(tables.enum_names, name))
             } else {
                 tables = set_type_names(
                     tables, List.append(tables.type_names, name), List.append(tables.type_decls, declaration)
@@ -3618,6 +3689,776 @@ fn refinement_check(given: ArgList, node: parser.Node, name: Text, arguments: Li
         )
     }
     return checked(node, name, check_constant(state, argument, name))
+}
+
+// Enums
+
+type EnumInfo = {
+    name: Text, variant_names: List[Text], variant_field_names: List[List[Text]],
+    variant_field_types: List[List[Text]]
+}
+
+fn is_enum_name(state: State, name: Text) gives Bool {
+    return List.contains(state.tables.enum_names, name)
+}
+
+fn enum_index(state: State, name: Text) gives Int {
+    var i = 0
+    while i < List.length(state.tables.enums)
+        shrinks List.length(state.tables.enums) - i
+    {
+        let info = List.get(state.tables.enums, i)
+        if info.name == name {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn enum_decl(program: parser.Node, name: Text, nth: Int) gives parser.Node {
+    var seen = 0
+    for declaration in items_of(field(program, "enums")) {
+        if text_of(field(declaration, "name")) == name {
+            if seen == nth {
+                return declaration
+            }
+            seen = seen + 1
+        }
+    }
+    return parser.Node.Null()
+}
+
+// Resolves every closed enum and the types of its variant payloads. As in Python, a declaration whose name
+// was registered is processed, so a repeated one is processed again.
+fn declare_enums(state: State, program: parser.Node) gives State {
+    var current = state
+    for declaration in items_of(field(program, "enums")) {
+        let name = text_of(field(declaration, "name"))
+        if is_enum_name(current, name) {
+            var seen_names: List[Text] = []
+            var seen_lines: List[Int] = []
+            var seen_columns: List[Int] = []
+            var variant_names: List[Text] = []
+            var field_names: List[List[Text]] = []
+            var field_types: List[List[Text]] = []
+            var broken = false
+            for variant in items_of(field(declaration, "variants")) {
+                let variant_name = text_of(field(variant, "name"))
+                let variant_span = place_span(field(variant, "name_span"))
+                let seen = index_of(seen_names, variant_name)
+                if seen >= 0 {
+                    current = report(
+                        current, "E2016", "The variant '" + variant_name + "' is declared more than once in '" + name + "'", "",
+                        [
+                            "It was first declared at line " + to_text(List.get(seen_lines, seen)) + ", column "
+                            + to_text(List.get(seen_columns, seen)) + "."
+                        ],
+                        variant_span
+                    )
+                    broken = true
+                } else {
+                    seen_names = List.append(seen_names, variant_name)
+                    seen_lines = List.append(seen_lines, variant_span.line)
+                    seen_columns = List.append(seen_columns, variant_span.column)
+                    var names: List[Text] = []
+                    var kinds: List[Text] = []
+                    for payload in items_of(field(variant, "fields")) {
+                        let payload_name = text_of(field(payload, "name"))
+                        if List.contains(names, payload_name) {
+                            current = report(
+                                current, "E2016",
+                                "The field '" + payload_name + "' is declared more than once in '" + name + "." + variant_name + "'",
+                                "", [], place_span(field(payload, "name_span"))
+                            )
+                            broken = true
+                        } else {
+                            names = List.append(names, payload_name)
+                            let resolved = declared_type(
+                                current, field(payload, "type"),
+                                "The field '" + payload_name + "' of '" + name + "." + variant_name + "'", true
+                            )
+                            current = resolved.state
+                            if resolved.ty == "" {
+                                broken = true
+                            } else {
+                                kinds = List.append(kinds, resolved.ty)
+                            }
+                        }
+                    }
+                    variant_names = List.append(variant_names, variant_name)
+                    field_names = List.append(field_names, names)
+                    field_types = List.append(field_types, kinds)
+                }
+            }
+            if List.length(variant_names) > 0 and not broken {
+                let info = EnumInfo(
+                    name: name, variant_names: variant_names, variant_field_names: field_names,
+                    variant_field_types: field_types
+                )
+                var kept: List[EnumInfo] = []
+                var replaced = false
+                for existing in current.tables.enums {
+                    if existing.name == name {
+                        kept = List.append(kept, info)
+                        replaced = true
+                    } else {
+                        kept = List.append(kept, existing)
+                    }
+                }
+                if not replaced {
+                    kept = List.append(kept, info)
+                }
+                current = with_tables(current, set_enums(current.tables, kept))
+            }
+        }
+    }
+    return current
+}
+
+// `Shape.Circle(2.0)`: builds a variant of a closed enum. The Checked holds the enum type, or nothing after
+// an error; the arguments are checked only when the variant exists.
+fn check_enum_construction(state: State, env: List[Binding], node: parser.Node, enum_name: Text) gives Checked {
+    let at = enum_index(state, enum_name)
+    if at < 0 {
+        return checked(node, "", state)
+    }
+    let info = List.get(state.tables.enums, at)
+    let callee = text_of(field(node, "callee"))
+    let variant_name = Text.slice(callee, last_dot(callee) + 1, Text.length(callee))
+    let position = index_of(info.variant_names, variant_name)
+    if position < 0 {
+        return checked(
+            node, "",
+            report(
+                state, "E2035", "'" + variant_name + "' is not a variant of " + enum_name,
+                "The variants are: " + parser.join_texts(info.variant_names, ", ") + ".", [],
+                place_span(field(node, "callee_span"))
+            )
+        )
+    }
+    var current = state
+    let arguments = items_of(field(node, "arguments"))
+    let field_types = List.get(info.variant_field_types, position)
+    if List.length(arguments) != List.length(field_types) {
+        current = report(
+            current, "E2035",
+            "'" + enum_name + "." + variant_name + "' takes " + to_text(List.length(field_types))
+            + " argument(s), but " + to_text(List.length(arguments)) + " were given",
+            "", [], span_of(node)
+        )
+    }
+    var typed: List[parser.Node] = []
+    var index = 0
+    while index < List.length(arguments)
+        shrinks List.length(arguments) - index
+    {
+        var kind = ""
+        if index < List.length(field_types) {
+            kind = List.get(field_types, index)
+        }
+        let argument = List.get(arguments, index)
+        let found = check_expression(current, env, argument, kind)
+        typed = List.append(typed, found.node)
+        current = found.state
+        if found.ty != "" and kind != "" {
+            current = expect_type(
+                current, kind, found.ty, argument,
+                ["This is the payload for '" + enum_name + "." + variant_name + "'."]
+            )
+        }
+        index = index + 1
+    }
+    return checked(with_field(node, "arguments", parser.Node.Items(typed)), enum_name, current)
+}
+
+fn last_dot(text: Text) gives Int {
+    var i = Text.length(text) - 1
+    while i >= 0
+        shrinks i + 1
+    {
+        if Text.slice(text, i, i + 1) == "." {
+            return i
+        }
+        i = i - 1
+    }
+    return 0 - 1
+}
+
+// Option and Result, as the strings that name them
+
+fn is_option_type(ty: Text) gives Bool {
+    return Text.starts_with(ty, "Option[") and Text.ends_with(ty, "]")
+}
+
+fn option_item(ty: Text) gives Text {
+    return Text.slice(ty, 7, Text.length(ty) - 1)
+}
+
+fn is_result_type(ty: Text) gives Bool {
+    return Text.starts_with(ty, "Result[") and Text.ends_with(ty, "]")
+}
+
+// The two types inside `Result[T, E]`, split at the comma that is not inside brackets.
+fn result_parts(ty: Text) gives List[Text] {
+    let inner = Text.slice(ty, 7, Text.length(ty) - 1)
+    var depth = 0
+    var i = 0
+    while i < Text.length(inner)
+        shrinks Text.length(inner) - i
+    {
+        let c = Text.slice(inner, i, i + 1)
+        if c == "[" {
+            depth = depth + 1
+        } else if c == "]" {
+            depth = depth - 1
+        } else if c == "," and depth == 0 {
+            return [Text.slice(inner, 0, i), Text.slice(inner, i + 2, Text.length(inner))]
+        }
+        i = i + 1
+    }
+    return [inner, ""]
+}
+
+// Patterns, once they have been checked
+
+type Pat = enum { PAny, PLit(key: Text), PVar(key: Text, args: List[Pat]) }
+
+type PatOut = { pat: Pat, env: List[Binding], state: State }
+
+type Ctor = { key: Text, display: Text, field_types: List[Text] }
+
+type PatternInfo = { state: State, ok: Bool, key: Text, field_types: List[Text] }
+
+// The variants of a closed type, as (name, field types): an enum, an Option or a Result.
+type Variants = { enum_name: Text, names: List[Text], fields: List[List[Text]], known: Bool }
+
+fn variants_of(state: State, expected: Text) gives Variants {
+    if is_option_type(expected) {
+        return Variants(
+            enum_name: "Option", names: ["None", "Some"], fields: [[], [option_item(expected)]], known: true
+        )
+    }
+    if is_result_type(expected) {
+        let parts = result_parts(expected)
+        return Variants(
+            enum_name: "Result", names: ["Ok", "Err"], fields: [[List.get(parts, 0)], [List.get(parts, 1)]],
+            known: true
+        )
+    }
+    let at = enum_index(state, expected)
+    if at >= 0 {
+        let info = List.get(state.tables.enums, at)
+        return Variants(
+            enum_name: expected, names: info.variant_names, fields: info.variant_field_types, known: true
+        )
+    }
+    return Variants(enum_name: expected, names: [], fields: [], known: false)
+}
+
+fn pattern_failure(state: State) gives PatternInfo {
+    return PatternInfo(state: state, ok: false, key: "", field_types: [])
+}
+
+// Resolves a variant pattern against the closed type of the scrutinee.
+fn pattern_info(state: State, pattern: parser.Node, expected: Text) gives PatternInfo {
+    let variants = variants_of(state, expected)
+    let name = text_of(field(pattern, "name"))
+    if not variants.known {
+        return pattern_failure(
+            report(
+                state, "E2033", "A variant pattern cannot match a value of type " + expected,
+                "Match a value whose type is an enum, Option, or Result.", [], span_of(pattern)
+            )
+        )
+    }
+    let qualifier = field(pattern, "qualifier")
+    if not is_null(qualifier) and text_of(qualifier) != variants.enum_name {
+        return pattern_failure(
+            report(
+                state, "E2033", "'" + text_of(qualifier) + "." + name + "' is not a variant of " + expected, "", [],
+                span_of(pattern)
+            )
+        )
+    }
+    let position = index_of(variants.names, name)
+    if position < 0 {
+        return pattern_failure(
+            report(
+                state, "E2033", "'" + name + "' is not a variant of " + expected,
+                "The variants are: " + parser.join_texts(variants.names, ", ") + ".", [],
+                place_span(field(pattern, "name_span"))
+            )
+        )
+    }
+    let field_types = List.get(variants.fields, position)
+    let arguments = items_of(field(pattern, "arguments"))
+    if List.length(arguments) != List.length(field_types) {
+        return pattern_failure(
+            report(
+                state, "E2033",
+                "'" + name + "' takes " + to_text(List.length(field_types)) + " pattern argument(s), but "
+                + to_text(List.length(arguments)) + " were given",
+                "", [], span_of(pattern)
+            )
+        )
+    }
+    return PatternInfo(state: state, ok: true, key: variants.enum_name + "." + name, field_types: field_types)
+}
+
+fn literal_key(expected: Text, value: parser.Node) gives Text {
+    return match value {
+        parser.Node.Flag(b) => "Bool." + to_text(b)
+        parser.Node.Whole(n) => expected + "::" + to_text(n)
+        parser.Node.Real(text) => expected + "::" + to_text(Float.parse(text))
+        parser.Node.Str(text) => expected + "::" + parser.quote(text)
+        _ => expected + "::"
+    }
+}
+
+fn literal_type(value: parser.Node) gives Text {
+    return match value {
+        parser.Node.Flag(b) => "Bool"
+        parser.Node.Whole(n) => "Int"
+        parser.Node.Real(text) => "Float"
+        _ => "Text"
+    }
+}
+
+// Type-checks a pattern and binds its names in the scope of the arm.
+fn check_pattern(state: State, env: List[Binding], pattern: parser.Node, expected: Text) gives PatOut {
+    let kind = kind_of(pattern)
+    if kind == "WildcardPattern" {
+        return PatOut(pat: Pat.PAny(), env: env, state: state)
+    }
+    if kind == "BindingPattern" {
+        let name = text_of(field(pattern, "name"))
+        let free = name_is_free(state, env, name, place_span(field(pattern, "name_span")))
+        var next_env = env
+        if free.free {
+            next_env = List.append(
+                env, make_binding(name, "pattern variable", expected, false, false, place_span(field(pattern, "name_span")))
+            )
+        }
+        return PatOut(pat: Pat.PAny(), env: next_env, state: free.state)
+    }
+    if kind == "LiteralPattern" {
+        let value = field(pattern, "value")
+        let found = literal_type(value)
+        var current = state
+        if not accepts(state, expected, found) {
+            current = report(
+                state, "E2011", "Expected " + expected + ", found " + found, "", [], span_of(pattern)
+            )
+        }
+        return PatOut(pat: Pat.PLit(literal_key(expected, value)), env: env, state: current)
+    }
+    let info = pattern_info(state, pattern, expected)
+    if not info.ok {
+        return PatOut(pat: Pat.PVar("", []), env: env, state: info.state)
+    }
+    var current = info.state
+    var scope = env
+    var children: List[Pat] = []
+    let arguments = items_of(field(pattern, "arguments"))
+    var index = 0
+    while index < List.length(arguments)
+        shrinks List.length(arguments) - index
+    {
+        let child = check_pattern(current, scope, List.get(arguments, index), List.get(info.field_types, index))
+        children = List.append(children, child.pat)
+        current = child.state
+        scope = child.env
+        index = index + 1
+    }
+    return PatOut(pat: Pat.PVar(info.key, children), env: scope, state: current)
+}
+
+// Exhaustiveness and usefulness of patterns
+
+fn is_catchall(p: Pat) gives Bool {
+    return match p {
+        Pat.PAny => true
+        _ => false
+    }
+}
+
+fn pat_key(p: Pat) gives Text {
+    return match p {
+        Pat.PVar(key, children) => key
+        Pat.PLit(key) => key
+        _ => ""
+    }
+}
+
+fn pat_args(p: Pat) gives List[Pat] {
+    return match p {
+        Pat.PVar(key, children) => children
+        _ => []
+    }
+}
+
+fn drop_first_pats(items: List[Pat]) gives List[Pat] {
+    var rest: List[Pat] = []
+    var i = 1
+    while i < List.length(items)
+        shrinks List.length(items) - i
+    {
+        rest = List.append(rest, List.get(items, i))
+        i = i + 1
+    }
+    return rest
+}
+
+fn drop_first_texts(items: List[Text]) gives List[Text] {
+    var rest: List[Text] = []
+    var i = 1
+    while i < List.length(items)
+        shrinks List.length(items) - i
+    {
+        rest = List.append(rest, List.get(items, i))
+        i = i + 1
+    }
+    return rest
+}
+
+fn any_patterns(count: Int) gives List[Pat] {
+    var result: List[Pat] = []
+    var i = 0
+    while i < count
+        shrinks count - i
+    {
+        result = List.append(result, Pat.PAny())
+        i = i + 1
+    }
+    return result
+}
+
+// The finite constructors of a type. Open domains deliberately return none.
+fn finite_constructors(state: State, kind: Text) gives List[Ctor] {
+    if root_of(state, kind) == "Bool" {
+        return [Ctor(key: "Bool.true", display: "true", field_types: []), Ctor(key: "Bool.false", display: "false", field_types: [])]
+    }
+    if is_option_type(kind) {
+        return (
+            [
+                Ctor(key: "Option.None", display: "None", field_types: []),
+                Ctor(key: "Option.Some", display: "Some", field_types: [option_item(kind)])
+            ]
+        )
+    }
+    if is_result_type(kind) {
+        let parts = result_parts(kind)
+        return (
+            [
+                Ctor(key: "Result.Ok", display: "Ok", field_types: [List.get(parts, 0)]),
+                Ctor(key: "Result.Err", display: "Err", field_types: [List.get(parts, 1)])
+            ]
+        )
+    }
+    let at = enum_index(state, kind)
+    if at >= 0 {
+        let info = List.get(state.tables.enums, at)
+        var constructors: List[Ctor] = []
+        var i = 0
+        while i < List.length(info.variant_names)
+            shrinks List.length(info.variant_names) - i
+        {
+            let variant = List.get(info.variant_names, i)
+            constructors = List.append(
+                constructors,
+                Ctor(key: kind + "." + variant, display: variant, field_types: List.get(info.variant_field_types, i))
+            )
+            i = i + 1
+        }
+        return constructors
+    }
+    return []
+}
+
+// The position, among `constructors`, of the one a pattern stands for; -1 when it stands for none.
+fn ctor_position(constructors: List[Ctor], p: Pat) gives Int {
+    let key = pat_key(p)
+    if key == "" {
+        return 0 - 1
+    }
+    var i = 0
+    while i < List.length(constructors)
+        shrinks List.length(constructors) - i
+    {
+        let constructor = List.get(constructors, i)
+        if constructor.key == key {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn specialize(state: State, matrix: List[List[Pat]], key: Text, arity: Int, kind: Text) gives List[List[Pat]] {
+    var rows: List[List[Pat]] = []
+    let constructors = finite_constructors(state, kind)
+    for row in matrix {
+        let head = List.get(row, 0)
+        let tail = drop_first_pats(row)
+        if is_catchall(head) {
+            rows = List.append(rows, List.concat(any_patterns(arity), tail))
+        } else {
+            let position = ctor_position(constructors, head)
+            if position >= 0 {
+                let constructor = List.get(constructors, position)
+                if constructor.key == key {
+                    rows = List.append(rows, List.concat(pat_args(head), tail))
+                }
+            }
+        }
+    }
+    return rows
+}
+
+fn present_keys(state: State, matrix: List[List[Pat]], constructors: List[Ctor]) gives List[Text] {
+    var present: List[Text] = []
+    for row in matrix {
+        let position = ctor_position(constructors, List.get(row, 0))
+        if position >= 0 {
+            let constructor = List.get(constructors, position)
+            present = List.append(present, constructor.key)
+        }
+    }
+    return present
+}
+
+fn all_present(constructors: List[Ctor], present: List[Text]) gives Bool {
+    for constructor in constructors {
+        if not List.contains(present, constructor.key) {
+            return false
+        }
+    }
+    return true
+}
+
+fn default_rows(matrix: List[List[Pat]]) gives List[List[Pat]] {
+    var rows: List[List[Pat]] = []
+    for row in matrix {
+        if is_catchall(List.get(row, 0)) {
+            rows = List.append(rows, drop_first_pats(row))
+        }
+    }
+    return rows
+}
+
+fn is_exhaustive(state: State, matrix: List[List[Pat]], kinds: List[Text]) gives Bool {
+    if List.length(kinds) == 0 {
+        return List.length(matrix) > 0
+    }
+    let kind = List.get(kinds, 0)
+    let tail_kinds = drop_first_texts(kinds)
+    let constructors = finite_constructors(state, kind)
+    if List.length(constructors) > 0 {
+        if all_present(constructors, present_keys(state, matrix, constructors)) {
+            for constructor in constructors {
+                let specialized = specialize(state, matrix, constructor.key, List.length(constructor.field_types), kind)
+                if not is_exhaustive(state, specialized, List.concat(constructor.field_types, tail_kinds)) {
+                    return false
+                }
+            }
+            return true
+        }
+    }
+    return is_exhaustive(state, default_rows(matrix), tail_kinds)
+}
+
+fn useful_pattern(state: State, matrix: List[List[Pat]], vector: List[Pat], kinds: List[Text]) gives Bool {
+    if List.length(kinds) == 0 {
+        return List.length(matrix) == 0
+    }
+    let kind = List.get(kinds, 0)
+    let tail_kinds = drop_first_texts(kinds)
+    let pattern = List.get(vector, 0)
+    let tail = drop_first_pats(vector)
+    let constructors = finite_constructors(state, kind)
+    if is_catchall(pattern) {
+        let present = present_keys(state, matrix, constructors)
+        if List.length(constructors) > 0 and all_present(constructors, present) {
+            for constructor in constructors {
+                let specialized = specialize(state, matrix, constructor.key, List.length(constructor.field_types), kind)
+                if useful_pattern(
+                    state, specialized, List.concat(any_patterns(List.length(constructor.field_types)), tail),
+                    List.concat(constructor.field_types, tail_kinds)
+                ) {
+                    return true
+                }
+            }
+            return false
+        }
+        return useful_pattern(state, default_rows(matrix), tail, tail_kinds)
+    }
+    let position = ctor_position(constructors, pattern)
+    if position >= 0 {
+        let constructor = List.get(constructors, position)
+        let specialized = specialize(state, matrix, constructor.key, List.length(constructor.field_types), kind)
+        return useful_pattern(
+            state, specialized, List.concat(pat_args(pattern), tail),
+            List.concat(constructor.field_types, tail_kinds)
+        )
+    }
+    // Literal patterns over open types are useful unless that exact literal or a wildcard was already covered.
+    // They never make an infinite domain exhaustive.
+    let literal = pat_key(pattern)
+    var rows: List[List[Pat]] = []
+    for row in matrix {
+        let head = List.get(row, 0)
+        if is_catchall(head) or pat_key(head) == literal {
+            rows = List.append(rows, drop_first_pats(row))
+        }
+    }
+    return useful_pattern(state, rows, tail, tail_kinds)
+}
+
+// What a match does not cover, written as patterns; the empty list when it covers everything.
+type Witness = { found: Bool, patterns: List[Text] }
+
+fn missing_pattern(state: State, matrix: List[List[Pat]], kinds: List[Text]) gives Witness {
+    if List.length(kinds) == 0 {
+        return Witness(found: List.length(matrix) == 0, patterns: [])
+    }
+    let kind = List.get(kinds, 0)
+    let tail_kinds = drop_first_texts(kinds)
+    let constructors = finite_constructors(state, kind)
+    if List.length(constructors) > 0 {
+        for constructor in constructors {
+            let specialized = specialize(state, matrix, constructor.key, List.length(constructor.field_types), kind)
+            let witness = missing_pattern(state, specialized, List.concat(constructor.field_types, tail_kinds))
+            if witness.found {
+                let count = List.length(constructor.field_types)
+                var arguments: List[Text] = []
+                var rest: List[Text] = []
+                var i = 0
+                while i < List.length(witness.patterns)
+                    shrinks List.length(witness.patterns) - i
+                {
+                    if i < count {
+                        arguments = List.append(arguments, List.get(witness.patterns, i))
+                    } else {
+                        rest = List.append(rest, List.get(witness.patterns, i))
+                    }
+                    i = i + 1
+                }
+                var head = constructor.display
+                if count > 0 {
+                    head = constructor.display + "(" + parser.join_texts(arguments, ", ") + ")"
+                }
+                return Witness(found: true, patterns: List.concat([head], rest))
+            }
+        }
+        return Witness(found: false, patterns: [])
+    }
+    let witness = missing_pattern(state, default_rows(matrix), tail_kinds)
+    if not witness.found {
+        return Witness(found: false, patterns: [])
+    }
+    return Witness(found: true, patterns: List.concat(["_"], witness.patterns))
+}
+
+// Match
+
+// A match arm body that is a block checks its statements and gives nothing.
+fn check_match_expression(state: State, env: List[Binding], node: parser.Node, expected: Text) gives Checked {
+    let scrutinee = check_expression(state, env, field(node, "value"), "")
+    let arms = items_of(field(node, "arms"))
+    var current = scrutinee.state
+    if scrutinee.ty == "" {
+        for arm in arms {
+            let unknown_pattern = check_pattern(current, env, field(arm, "pattern"), "<unknown>")
+            current = unknown_pattern.state
+        }
+        return checked(with_field(node, "value", scrutinee.node), "", current)
+    }
+    var matrix: List[List[Pat]] = []
+    var result_type = expected
+    var failed = false
+    var typed_arms: List[parser.Node] = []
+    for arm in arms {
+        let pattern = check_pattern(current, env, field(arm, "pattern"), scrutinee.ty)
+        current = pattern.state
+        if not useful_pattern(current, matrix, [pattern.pat], [scrutinee.ty]) {
+            current = report(
+                current, "E2034", "This arm can never be reached", "", [], span_of(field(arm, "pattern"))
+            )
+        }
+        matrix = List.append(matrix, [pattern.pat])
+        let body = field(arm, "body")
+        var found = ""
+        if kind_of(body) == "Block" {
+            let block = check_block(current, pattern.env, body)
+            typed_arms = List.append(typed_arms, with_field(arm, "body", block.node))
+            current = block.state
+            found = "Void"
+        } else {
+            var arm_expected = result_type
+            if result_type == "" {
+                arm_expected = expected
+            }
+            let value = check_expression(current, pattern.env, body, arm_expected)
+            typed_arms = List.append(typed_arms, with_field(arm, "body", value.node))
+            current = value.state
+            found = value.ty
+        }
+        if found == "" {
+            failed = true
+        } else if result_type == "" {
+            result_type = found
+        } else if not accepts(current, result_type, found) {
+            current = report(
+                current, "E2011", "Expected " + result_type + ", found " + found, "",
+                ["Every arm of a match expression must produce the same type."], span_of(body)
+            )
+            failed = true
+        }
+    }
+    if not is_exhaustive(current, matrix, [scrutinee.ty]) {
+        let witness = missing_pattern(current, matrix, [scrutinee.ty])
+        var shown = ["_"]
+        if witness.found and List.length(witness.patterns) > 0 {
+            shown = witness.patterns
+        }
+        current = report(
+            current, "E2032", "This match does not cover: " + parser.join_texts(shown, ", "),
+            "Add an arm for the missing pattern, or a final '_' arm.", [], span_of(node)
+        )
+    }
+    let rebuilt = with_field(with_field(node, "value", scrutinee.node), "arms", parser.Node.Items(typed_arms))
+    if failed {
+        return checked(rebuilt, "", current)
+    }
+    return checked(rebuilt, result_type, current)
+}
+
+// `if let pattern = value { ... } else { ... }`
+fn check_if_let(state: State, env: List[Binding], node: parser.Node) gives Flow {
+    let value = check_expression(state, env, field(node, "value"), "")
+    var current = value.state
+    var then_env = env
+    if value.ty != "" {
+        let pattern = check_pattern(current, env, field(node, "pattern"), value.ty)
+        current = pattern.state
+        then_env = pattern.env
+    }
+    let then_flow = check_block(current, then_env, field(node, "then_block"))
+    let else_node = field(node, "else_branch")
+    let head = with_field(with_field(node, "value", value.node), "then_block", then_flow.node)
+    if is_null(else_node) {
+        return flow(head, then_flow.state, env, false)
+    }
+    var else_flow = check_block(then_flow.state, env, else_node)
+    if kind_of(else_node) == "If" {
+        else_flow = check_if(then_flow.state, env, else_node)
+    } else if kind_of(else_node) == "IfLet" {
+        else_flow = check_if_let(then_flow.state, env, else_node)
+    }
+    return flow(
+        with_field(head, "else_branch", else_flow.node), else_flow.state, env, then_flow.returns and else_flow.returns
+    )
 }
 
 // Test driver: every argument after the first is a file. For each one prints `FILE|path` and then

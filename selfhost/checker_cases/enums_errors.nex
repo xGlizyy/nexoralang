@@ -1,0 +1,90 @@
+type Shape = enum { Circle(radius: Float), Dot }
+type Color = enum { Red, Green, Blue }
+
+fn a(c: Color) gives Int {
+    return match c {
+        Color.Red => 1
+        Color.Green => 2
+    }
+}
+
+fn b(c: Color) gives Int {
+    return match c {
+        Color.Red => 1
+        Color.Red => 2
+        _ => 3
+        Color.Blue => 4
+    }
+}
+
+fn c(s: Shape) gives Int {
+    return match s {
+        Shape.Circle(r) => 1
+        Shape.Dot => "x"
+    }
+}
+
+fn d(x: Int) gives Int {
+    return match x {
+        0 => 1
+    }
+}
+
+fn e(x: Int) gives Int {
+    return match x {
+        "s" => 1
+        1.5 => 2
+        true => 3
+        _ => 4
+    }
+}
+
+fn f(s: Shape) gives Int {
+    return match s {
+        Shape.Square => 1
+        Shape.Circle => 2
+        Shape.Circle(r, q) => 3
+        Color.Red => 4
+        Other.Thing => 5
+        Circle(r) => 6
+        _ => 7
+    }
+}
+
+fn g(x: Int) gives Int {
+    return match x {
+        Shape.Dot => 1
+        _ => 2
+    }
+}
+
+fn h(b: Bool) gives Int {
+    return match b {
+        true => 1
+    }
+}
+
+fn main() {
+    let a = Shape.Square(1)
+    let b = Shape.Circle()
+    let c = Shape.Circle(1.0, 2.0)
+    let d = Shape.Circle("x")
+    let e = Color.Red(1)
+    let f = Strange.Thing(1)
+    let g = Shape
+    print(Color)
+    let h: Color = Color.Red()
+    if let Shape.Circle(r) = 5 {
+    }
+    if let Shape.Circle(r) = Shape.Dot() {
+        print(r)
+    }
+    match missing {
+        Shape.Dot => 1
+        other => 2
+    }
+    let i = match Color.Red() {
+        Color.Red => 1
+        _ => "x"
+    }
+}

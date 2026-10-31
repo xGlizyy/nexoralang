@@ -1,0 +1,93 @@
+type Shape = enum { Circle(radius: Float), Rect(width: Float, height: Float), Dot }
+type Color = enum { Red, Green, Blue }
+type Tree = enum { Leaf(value: Int), Node(left: Tree, right: Tree) }
+type Pair = { shape: Shape, color: Color }
+type Percent = Int where value >= 0 and value <= 100
+
+fn area(shape: Shape) gives Float {
+    return match shape {
+        Shape.Circle(r) => r * r * 3.0
+        Shape.Rect(w, h) => w * h
+        Shape.Dot => 0.0
+    }
+}
+
+fn name(color: Color) gives Text {
+    return match color {
+        Color.Red => "red"
+        Color.Green => "green"
+        Color.Blue => "blue"
+    }
+}
+
+fn depth(tree: Tree) gives Int {
+    return match tree {
+        Tree.Leaf(v) => 1
+        Tree.Node(l, r) => 1 + depth(l) + depth(r)
+    }
+}
+
+fn flag(b: Bool) gives Int {
+    return match b {
+        true => 1
+        false => 0
+    }
+}
+
+fn size(n: Int) gives Text {
+    return match n {
+        0 => "zero"
+        1 => "one"
+        other => "many"
+    }
+}
+
+fn describe(shape: Shape) gives Int {
+    if let Shape.Circle(r) = shape {
+        return 1
+    } else if let Shape.Rect(w, h) = shape {
+        return 2
+    } else {
+        return 3
+    }
+}
+
+fn nested(p: Pair) gives Text {
+    return match p.shape {
+        Shape.Dot => "dot"
+        _ => name(p.color)
+    }
+}
+
+fn blocks(color: Color) {
+    match color {
+        Color.Red => {
+            print("r")
+        }
+        _ => {
+            print("other")
+        }
+    }
+}
+
+fn main() {
+    let s = Shape.Circle(2.0)
+    let c = Color.Green()
+    let t = Tree.Node(Tree.Leaf(1), Tree.Leaf(2))
+    print(area(s))
+    print(name(c))
+    print(depth(t))
+    print(c == Color.Red())
+    print(s != Shape.Dot())
+    print(flag(true))
+    print(size(5))
+    print(describe(s))
+    print(nested(Pair(shape: s, color: c)))
+    blocks(c)
+    let n = match c {
+        Color.Red => 1
+        Color.Green => 2
+        Color.Blue => 3
+    }
+    print(n)
+}
