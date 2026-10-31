@@ -1,4 +1,4 @@
-// Stage 1 measurement (decision 0024): how deep can plain recursion go, and what does it cost?
+// Stage 1 measurement (decision 0025): how deep can plain recursion go, and what does it cost?
 type Expr = enum { Num(value: Int), Add(left: Expr, right: Expr), Neg(inner: Expr) }
 
 fn build(depth: Int) gives Expr {

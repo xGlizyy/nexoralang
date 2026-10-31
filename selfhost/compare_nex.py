@@ -8,7 +8,7 @@ Each file is given to the same command in both implementations and the text they
 to the standard output and to the standard error, in order, against everything nex.nex writes to its standard output. The exit
 status is not compared, because a NEXORA program has none to set.
 
-This is a test tool for the self-hosted work of decision 0024; it is not part of the language.
+This is a test tool for the self-hosted work of decision 0025; it is not part of the language.
 """
 
 from __future__ import annotations

@@ -7,7 +7,7 @@ Each case is a program with the options a user would give (--allow-read, --allow
 (selfhost/interpreter.nex --run), and what it prints and the diagnostic it stops with are compared.
 
 The cases write their files under selfhost/host_cases/. Paths are given relative to the repository root, which
-is where this script has to be run from. This is a test tool for the self-hosted work of decision 0024; it is
+is where this script has to be run from. This is a test tool for the self-hosted work of decision 0025; it is
 not part of the language.
 """
 

@@ -1,4 +1,4 @@
-// `nex`, written in NEXORA: check, run and test a program and the modules it imports (decision 0024).
+// `nex`, written in NEXORA: check, run and test a program and the modules it imports (decision 0025).
 //
 //     nex run selfhost/nex.nex --allow-read . --allow-write . -- check  FILE
 //     nex run selfhost/nex.nex --allow-read . --allow-write . -- run    [OPTIONS] FILE [ARGUMENTS]

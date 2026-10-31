@@ -8,7 +8,7 @@ status, the own calls that were evaluated with their type and value, the ones th
 diagnostic and what it printed. A program without examples, or that `nex test` does not run because of a static
 error, is skipped, and so is one the NEXORA checker does not know yet. Exit status 1 when one differs.
 
-This is a test tool for the self-hosted work of decision 0024; it is not part of the language.
+This is a test tool for the self-hosted work of decision 0025; it is not part of the language.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-// A project written in NEXORA: the program that runs and the modules it imports (decision 0018, decision 0024).
+// A project written in NEXORA: the program that runs and the modules it imports (decision 0018, decision 0025).
 //
 // It follows nexora/src/nexora/modules.py. It reads a file and, before it, the files it imports; each file is read once
 // however many import it; the modules come out in the order they are checked (the imports of a module before it, the
