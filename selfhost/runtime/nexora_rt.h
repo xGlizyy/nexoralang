@@ -28,12 +28,128 @@ static const char *const *rt_file_path = 0;
 static const char *const *const *rt_file_lines = 0;
 static const int *rt_file_count = 0;
 
-static void *rt_alloc(size_t n) {
-    void *p = malloc(n ? n : 1);
-    if (!p) {
-        fputs("error: out of memory\n", stderr);
-        exit(3);
+/* Memory. Every block is kept in a table, and when a good deal has been allocated the stack is searched for what still points into
+ * a block (any word that does, whatever it is: the search is conservative), what those blocks point to is searched in turn, and
+ * the rest is freed. A block of text bytes is `raw`: it points to nothing, so it is not searched. */
+
+#include <setjmp.h>
+
+typedef struct {
+    char *p;
+    size_t size;
+    unsigned char raw, mark;
+} rt_block;
+
+static rt_block *rt_blocks = 0;
+static size_t rt_nblocks = 0, rt_cap_blocks = 0;
+static size_t rt_since_gc = 0, rt_threshold = (size_t)256 << 20, rt_floor = (size_t)128 << 20;
+static void *rt_stack_base = 0;
+static size_t *rt_mark_stack = 0;
+static size_t rt_mark_count = 0, rt_mark_cap = 0;
+
+static int rt_block_order(const void *x, const void *y) {
+    const rt_block *a = (const rt_block *)x, *b = (const rt_block *)y;
+    return a->p < b->p ? -1 : (a->p > b->p ? 1 : 0);
+}
+
+/* The block that holds an address, or -1. The table is sorted while a collection runs. */
+static long rt_find_block(const char *address) {
+    long lo = 0, hi = (long)rt_nblocks - 1, found = -1;
+    while (lo <= hi) {
+        long mid = (lo + hi) / 2;
+        if (rt_blocks[mid].p <= address) { found = mid; lo = mid + 1; } else { hi = mid - 1; }
     }
+    if (found >= 0 && address < rt_blocks[found].p + rt_blocks[found].size) return found;
+    return -1;
+}
+
+static void rt_mark_push(size_t index) {
+    if (rt_mark_count == rt_mark_cap) {
+        rt_mark_cap = rt_mark_cap ? rt_mark_cap * 2 : 4096;
+        rt_mark_stack = (size_t *)realloc(rt_mark_stack, rt_mark_cap * sizeof(size_t));
+        if (!rt_mark_stack) { fputs("error: out of memory\n", stderr); exit(3); }
+    }
+    rt_mark_stack[rt_mark_count++] = index;
+}
+
+static void rt_mark_words(const char *lo, const char *hi) {
+    uintptr_t start = ((uintptr_t)lo + sizeof(void *) - 1) & ~(uintptr_t)(sizeof(void *) - 1);
+    for (uintptr_t at = start; at + sizeof(void *) <= (uintptr_t)hi; at += sizeof(void *)) {
+        long found = rt_find_block(*(const char *const *)at);
+        if (found >= 0 && !rt_blocks[found].mark) {
+            rt_blocks[found].mark = 1;
+            if (!rt_blocks[found].raw) rt_mark_push((size_t)found);
+        }
+    }
+}
+
+static void rt_collect(void) {
+    if (!rt_stack_base || rt_nblocks == 0) { rt_since_gc = 0; return; }
+    qsort(rt_blocks, rt_nblocks, sizeof(rt_block), rt_block_order);
+    for (size_t i = 0; i < rt_nblocks; i++) rt_blocks[i].mark = 0;
+    jmp_buf registers;
+    setjmp(registers);
+    const char *here = (const char *)&registers;
+    const char *base = (const char *)rt_stack_base;
+    if (here < base) rt_mark_words(here, base + sizeof(void *)); else rt_mark_words(base, here + sizeof registers);
+    while (rt_mark_count > 0) {
+        size_t index = rt_mark_stack[--rt_mark_count];
+        rt_mark_words(rt_blocks[index].p, rt_blocks[index].p + rt_blocks[index].size);
+    }
+    size_t kept = 0, live = 0;
+    for (size_t i = 0; i < rt_nblocks; i++) {
+        if (rt_blocks[i].mark) {
+            live += rt_blocks[i].size;
+            rt_blocks[kept++] = rt_blocks[i];
+        } else {
+            free(rt_blocks[i].p);
+        }
+    }
+    rt_nblocks = kept;
+    rt_since_gc = 0;
+    rt_threshold = live > rt_floor ? live : rt_floor;
+}
+
+/* NEXORA_GC_FLOOR=<bytes> makes it collect much more often, which is how the collector is tested. */
+static void rt_gc_start(void *stack_base) {
+    rt_stack_base = stack_base;
+    const char *floor = getenv("NEXORA_GC_FLOOR");
+    if (floor) {
+        rt_floor = (size_t)atol(floor);
+        rt_threshold = rt_floor;
+    }
+}
+
+static void *rt_alloc_kind(size_t n, int raw, int zero) {
+    if (n == 0) n = 1;
+    if (rt_since_gc > rt_threshold) rt_collect();
+    char *p = (char *)(zero ? calloc(1, n) : malloc(n));
+    if (!p) {
+        rt_collect();
+        p = (char *)(zero ? calloc(1, n) : malloc(n));
+        if (!p) { fputs("error: out of memory\n", stderr); exit(3); }
+    }
+    if (rt_nblocks == rt_cap_blocks) {
+        rt_cap_blocks = rt_cap_blocks ? rt_cap_blocks * 2 : 65536;
+        rt_blocks = (rt_block *)realloc(rt_blocks, rt_cap_blocks * sizeof(rt_block));
+        if (!rt_blocks) { fputs("error: out of memory\n", stderr); exit(3); }
+    }
+    rt_block *block = &rt_blocks[rt_nblocks++];
+    block->p = p;
+    block->size = n;
+    block->raw = (unsigned char)raw;
+    block->mark = 0;
+    rt_since_gc += n;
+    return p;
+}
+
+static void *rt_alloc(size_t n) { return rt_alloc_kind(n, 0, 1); }
+static void *rt_alloc_raw(size_t n) { return rt_alloc_kind(n, 1, 0); }
+
+/* A raw block that grows: the new one is a copy, and the old one is left for the collector. */
+static void *rt_grow_raw(void *old, size_t old_size, size_t size) {
+    void *p = rt_alloc_raw(size);
+    if (old) memcpy(p, old, old_size < size ? old_size : size);
     return p;
 }
 
@@ -57,7 +173,7 @@ static rt_text rt_lit(const char *s) {
 
 static rt_text rt_concat(rt_text a, rt_text b) {
     rt_text t;
-    char *p = (char *)rt_alloc((size_t)(a.bytes + b.bytes + 1));
+    char *p = (char *)rt_alloc_raw((size_t)(a.bytes + b.bytes + 1));
     memcpy(p, a.p, (size_t)a.bytes);
     memcpy(p + a.bytes, b.p, (size_t)b.bytes);
     p[a.bytes + b.bytes] = 0;
@@ -77,7 +193,7 @@ static int rt_text_compare(rt_text a, rt_text b) {
 static rt_text rt_int_text(int64_t n) {
     char buffer[32];
     int len = snprintf(buffer, sizeof buffer, "%lld", (long long)n);
-    char *p = (char *)rt_alloc((size_t)len + 1);
+    char *p = (char *)rt_alloc_raw((size_t)len + 1);
     memcpy(p, buffer, (size_t)len + 1);
     rt_text t = {p, len, len};
     return t;
@@ -89,7 +205,7 @@ static rt_text rt_bool_text(bool b) {
 
 /* The text of a value as a diagnostic shows it: a Text is quoted and escaped (parser.quote). */
 static rt_text rt_quote(rt_text s) {
-    char *p = (char *)rt_alloc((size_t)(s.bytes * 2 + 3));
+    char *p = (char *)rt_alloc_raw((size_t)(s.bytes * 2 + 3));
     int64_t n = 0;
     p[n++] = '"';
     for (int64_t i = 0; i < s.bytes; i++) {
@@ -148,7 +264,7 @@ static char *rt_format(const char *format, ...) {
     va_copy(again, args);
     int n = vsnprintf(0, 0, format, args);
     va_end(args);
-    char *p = (char *)rt_alloc((size_t)n + 1);
+    char *p = (char *)rt_alloc_raw((size_t)n + 1);
     vsnprintf(p, (size_t)n + 1, format, again);
     va_end(again);
     return p;
@@ -164,9 +280,9 @@ typedef struct {
 
 static void rt_buf_add(rt_buf *b, const char *s, size_t n) {
     if (b->n + n + 1 > b->cap) {
-        b->cap = (b->n + n + 1) * 2;
-        b->p = (char *)realloc(b->p, b->cap);
-        if (!b->p) exit(3);
+        size_t cap = (b->n + n + 1) * 2;
+        b->p = (char *)rt_grow_raw(b->p, b->cap, cap);
+        b->cap = cap;
     }
     memcpy(b->p + b->n, s, n);
     b->n += n;
@@ -377,15 +493,17 @@ static rv *rt_copy_values(const rv *items, int64_t n) {
     return copy;
 }
 
-static rv rt_list_from(const rv *items, int64_t n) {
+static rv rt_list_take(rv *items, int64_t n) {
     rt_list *l = (rt_list *)rt_alloc(sizeof(rt_list));
     l->n = n;
-    l->items = rt_copy_values(items, n);
+    l->items = items;
     rv v;
     v.tag = RT_LIST;
     v.u.o = l;
     return v;
 }
+
+static rv rt_list_from(const rv *items, int64_t n) { return rt_list_take(rt_copy_values(items, n), n); }
 
 static rv rt_record_new(const char *name, const char *const *names, int n, const rv *fields) {
     rt_record *r = (rt_record *)rt_alloc(sizeof(rt_record));
@@ -460,7 +578,7 @@ static rt_text rt_float_text(double x) {
         n += snprintf(out + n, sizeof out - (size_t)n, "e%c%02d", exponent < 0 ? '-' : '+', abs(exponent));
     }
     out[n] = 0;
-    char *copy = (char *)rt_alloc((size_t)n + 1);
+    char *copy = (char *)rt_alloc_raw((size_t)n + 1);
     memcpy(copy, out, (size_t)n + 1);
     rt_text t = {copy, n, n};
     return t;
@@ -716,7 +834,7 @@ static rv rt_text_slice(rv text, rv start, rv end, RT_SPAN) {
         rt_builtin_needs("Text.slice", "end <= Text.length(text)", "A slice cannot end after the last character", 3, names, args, "", l, c, el, ec);
     }
     int64_t from = rt_byte_of_point(t, start.u.i), to = rt_byte_of_point(t, end.u.i);
-    char *p = (char *)rt_alloc((size_t)(to - from) + 1);
+    char *p = (char *)rt_alloc_raw((size_t)(to - from) + 1);
     memcpy(p, t.p + from, (size_t)(to - from));
     p[to - from] = 0;
     rt_text out = {p, to - from, end.u.i - start.u.i};
@@ -794,7 +912,7 @@ static bool rt_is_decimal_text(rt_text t) {
 
 static bool rt_float_value(rt_text t, double *out) {
     if (!rt_is_decimal_text(t)) return false;
-    char *copy = (char *)rt_alloc((size_t)t.bytes + 1);
+    char *copy = (char *)rt_alloc_raw((size_t)t.bytes + 1);
     memcpy(copy, t.p, (size_t)t.bytes);
     copy[t.bytes] = 0;
     double x = strtod(copy, 0);
@@ -862,8 +980,7 @@ static rv rt_list_append(rv list, rv item) {
     rv *items = (rv *)rt_alloc((size_t)(x->n + 1) * sizeof(rv));
     for (int64_t i = 0; i < x->n; i++) items[i] = x->items[i];
     items[x->n] = item;
-    rv out = rt_list_from(items, x->n + 1);
-    return out;
+    return rt_list_take(items, x->n + 1);
 }
 
 static rv rt_list_concat(rv a, rv b) {
@@ -871,7 +988,7 @@ static rv rt_list_concat(rv a, rv b) {
     rv *items = (rv *)rt_alloc((size_t)(x->n + y->n + 1) * sizeof(rv));
     for (int64_t i = 0; i < x->n; i++) items[i] = x->items[i];
     for (int64_t i = 0; i < y->n; i++) items[x->n + i] = y->items[i];
-    return rt_list_from(items, x->n + y->n);
+    return rt_list_take(items, x->n + y->n);
 }
 
 static rv rt_list_contains(rv list, rv item) {
@@ -1004,7 +1121,7 @@ typedef struct {
 
 static void rt_split(const char *path, rt_parts *p) {
     size_t len = strlen(path);
-    char *text = (char *)rt_alloc(len + 1);
+    char *text = (char *)rt_alloc_raw(len + 1);
     for (size_t i = 0; i <= len; i++) text[i] = path[i] == '\\' ? '/' : path[i];
     p->root[0] = 0;
     p->n = 0;
@@ -1102,13 +1219,12 @@ static rv rt_read_file(rv path, RT_SPAN) {
         rt_runtime("E3010", "File error", rt_format("The file '%s' could not be read: %s", name, strerror(errno)), "", l, c, el, ec);
     }
     size_t cap = 4096, n = 0;
-    unsigned char *data = (unsigned char *)rt_alloc(cap);
+    unsigned char *data = (unsigned char *)rt_alloc_raw(cap);
     int ch;
     while ((ch = fgetc(f)) != EOF) {
         if (n + 1 >= cap) {
             cap *= 2;
-            data = (unsigned char *)realloc(data, cap);
-            if (!data) exit(3);
+            data = (unsigned char *)rt_grow_raw(data, cap / 2, cap);
         }
         data[n++] = (unsigned char)ch;
     }
@@ -1147,7 +1263,7 @@ static rv rt_write_file(rv path, rv text, RT_SPAN) {
 
 static rv rt_input(RT_SPAN) {
     size_t cap = 128, n = 0;
-    char *line = (char *)rt_alloc(cap);
+    char *line = (char *)rt_alloc_raw(cap);
     int ch;
     bool any = false;
     while ((ch = fgetc(stdin)) != EOF) {
@@ -1155,8 +1271,7 @@ static rv rt_input(RT_SPAN) {
         if (ch == '\n') break;
         if (n + 1 >= cap) {
             cap *= 2;
-            line = (char *)realloc(line, cap);
-            if (!line) exit(3);
+            line = (char *)rt_grow_raw(line, cap / 2, cap);
         }
         line[n++] = (char)ch;
     }
