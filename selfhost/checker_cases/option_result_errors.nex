@@ -1,0 +1,95 @@
+type Point = { x: Int, y: Int }
+
+fn bad_return() gives Option[Int] {
+    return 5
+}
+
+fn bad_none() gives Int {
+    return None
+}
+
+fn a() {
+    let x = None
+    let y = Ok(1)
+    let z = Err("e")
+    let w = Some()
+    let v = Some(1, 2)
+    let u: Option[Int] = Some("s")
+    let t: Result[Int, Text] = Ok("s")
+    let s: Result[Int, Text] = Err(5)
+    let r: Option[Text] = Ok(1)
+    let q: Result[Int, Text] = None
+    let p: Option[Int] = Err("x")
+}
+
+fn b(o: Option[Int], r: Result[Int, Text]) {
+    print(o == 1)
+    print(o == r)
+    print(None == None)
+    print(Option.value(r))
+    print(Result.value(o))
+    print(Option.value_or(o, "s"))
+    print(Option.is_some(5))
+    print(Option.value())
+    print(o < o)
+    print(Option.foo(o))
+    print(o + 1)
+}
+
+fn c(o: Option[Int], r: Result[Int, Text]) gives Int {
+    let m1 = match o {
+        Some(x) => x
+    }
+    let m2 = match o {
+        None => 0
+    }
+    let m3 = match r {
+        Ok(v) => v
+    }
+    let m4 = match r {
+        Err(e) => 0
+    }
+    let m5 = match o {
+        Ok(v) => 1
+        _ => 0
+    }
+    let m6 = match o {
+        Some(a, b) => 1
+        Some => 2
+        None(x) => 3
+        Other => 4
+        _ => 0
+    }
+    let m7 = match o {
+        Option.Some(x) => 1
+        Result.Ok(x) => 2
+        Option.None => 3
+        None => 4
+    }
+    let m8 = match r {
+        Ok(v) => v
+        Err(e) => "text"
+    }
+    return 0
+}
+
+fn d(o: Option[Result[Int, Text]]) gives Int {
+    return match o {
+        None => 0
+        Some(Ok(v)) => v
+    }
+}
+
+fn e(x: Option[Strange], y: Result[Int, Strange], z: Option[Option[Foo]]) {
+}
+
+fn f() {
+    if let Some(x) = None {
+    }
+    if let Some(x) = Ok(1) {
+    }
+    let t: Option[Int] = Some(Some(1))
+    var u: Option[Int] = None
+    u = Some("x")
+    u = None
+}

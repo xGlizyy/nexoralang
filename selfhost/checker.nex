@@ -287,6 +287,36 @@ fn builtin(name: Text) gives Sig {
     if name == "List.contains" {
         return make_sig(name, ["xs", "x"], ["List[T]", "T"], "Bool", true)
     }
+    if name == "Some" {
+        return make_sig(name, ["value"], ["T"], "Option[T]", true)
+    }
+    if name == "Ok" {
+        return make_sig(name, ["value"], ["T"], "Result[T, E]", true)
+    }
+    if name == "Err" {
+        return make_sig(name, ["error"], ["E"], "Result[T, E]", true)
+    }
+    if name == "Option.is_some" or name == "Option.is_none" {
+        return make_sig(name, ["value"], ["Option[T]"], "Bool", true)
+    }
+    if name == "Option.value_or" {
+        return make_sig(name, ["value", "fallback"], ["Option[T]", "T"], "T", true)
+    }
+    if name == "Option.value" {
+        return make_sig(name, ["value"], ["Option[T]"], "T", true)
+    }
+    if name == "Result.is_ok" or name == "Result.is_err" {
+        return make_sig(name, ["value"], ["Result[T, E]"], "Bool", true)
+    }
+    if name == "Result.value_or" {
+        return make_sig(name, ["value", "fallback"], ["Result[T, E]", "T"], "T", true)
+    }
+    if name == "Result.value" {
+        return make_sig(name, ["value"], ["Result[T, E]"], "T", true)
+    }
+    if name == "Result.error" {
+        return make_sig(name, ["value"], ["Result[T, E]"], "E", true)
+    }
     return make_sig("", [], [], "", false)
 }
 
@@ -333,7 +363,7 @@ fn user_index(state: State, name: Text) gives Int {
 // Types
 
 fn is_value_type(ty: Text) gives Bool {
-    return ty == "Int" or ty == "Float" or ty == "Bool" or ty == "Text" or is_list(ty)
+    return ty != "Void" and ty != ""
 }
 
 fn is_list(ty: Text) gives Bool {
@@ -554,7 +584,7 @@ fn check_expression(state: State, env: List[Binding], node: parser.Node, expecte
         return checked(with_field(node, "expression", inner.node), inner.ty, inner.state)
     }
     if kind == "Name" {
-        return check_name(state, env, node)
+        return check_name(state, env, node, expected)
     }
     if kind == "Unary" {
         return check_unary(state, env, node)
@@ -577,7 +607,7 @@ fn check_expression(state: State, env: List[Binding], node: parser.Node, expecte
     return checked(node, "", unsupported(state, kind))
 }
 
-fn check_name(state: State, env: List[Binding], node: parser.Node) gives Checked {
+fn check_name(state: State, env: List[Binding], node: parser.Node, expected: Text) gives Checked {
     let name = text_of(field(node, "name"))
     let index = binding_index(env, name)
     if index >= 0 {
@@ -613,7 +643,7 @@ fn check_name(state: State, env: List[Binding], node: parser.Node) gives Checked
         )
     }
     if name == "None" {
-        return checked(node, "", unsupported(state, "None"))
+        return none_type(state, node, expected)
     }
     return checked(node, "", check_unknown_variable(state, env, name, span_of(node)))
 }
@@ -685,15 +715,39 @@ fn is_empty_list_literal(node: parser.Node) gives Bool {
     return kind_of(node) == "ListLiteral" and List.length(items_of(field(node, "elements"))) == 0
 }
 
-fn check_binary(state: State, env: List[Binding], node: parser.Node) gives Checked {
-    let operator = text_of(field(node, "operator"))
-    let left = check_expression(state, env, field(node, "left"), "")
+type Operands = { left: Checked, right: Checked }
+
+// Checks both sides of a binary operator. The `right` holds the state after both sides. `None` takes its
+// type from the other side of a comparison, and an empty list on the right takes it from the left.
+fn check_operands(state: State, env: List[Binding], node: parser.Node, operator: Text) gives Operands {
+    let equality = operator == "==" or operator == "!="
+    let left_node = field(node, "left")
+    let right_node = field(node, "right")
+    if equality and is_none_constant(env, right_node) {
+        let left = check_expression(state, env, left_node, "")
+        let right = check_expression(left.state, env, right_node, left.ty)
+        return Operands(left: left, right: right)
+    }
+    if equality and is_none_constant(env, left_node) {
+        let right = check_expression(state, env, right_node, "")
+        let left = check_expression(right.state, env, left_node, right.ty)
+        return Operands(left: left, right: Checked(node: right.node, ty: right.ty, state: left.state))
+    }
+    let left = check_expression(state, env, left_node, "")
     // The left side is an expected type for an empty list on the right: `[1] == []`.
     var right_expected = ""
-    if is_empty_list_literal(field(node, "right")) {
+    if is_empty_list_literal(right_node) {
         right_expected = left.ty
     }
-    let right = check_expression(left.state, env, field(node, "right"), right_expected)
+    let right = check_expression(left.state, env, right_node, right_expected)
+    return Operands(left: left, right: right)
+}
+
+fn check_binary(state: State, env: List[Binding], node: parser.Node) gives Checked {
+    let operator = text_of(field(node, "operator"))
+    let operands = check_operands(state, env, node, operator)
+    let left = operands.left
+    let right = operands.right
     let rebuilt = with_field(with_field(node, "left", left.node), "right", right.node)
     if left.ty == "" or right.ty == "" {
         return checked(rebuilt, "", right.state)
@@ -933,7 +987,7 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
         )
     }
     if sig.generic {
-        return check_generic_call(given, rebuilt, sig, arguments)
+        return check_generic_call(given, rebuilt, sig, arguments, expected)
     }
     var current = given.state
     var i = 0
@@ -960,88 +1014,6 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
         i = i + 1
     }
     return checked(rebuilt, sig.return_type, current)
-}
-
-// Substitutes the type variable T in a type written with it.
-fn has_variable(ty: Text) gives Bool {
-    return ty == "T" or Text.contains(ty, "[T]")
-}
-
-fn substitute(ty: Text, bound: Text) gives Text {
-    if bound == "" {
-        return ty
-    }
-    if ty == "T" {
-        return bound
-    }
-    if ty == "List[T]" {
-        return "List[" + bound + "]"
-    }
-    return ty
-}
-
-// A call to a built-in of List: each argument is unified, in order, with its parameter type, and the
-// result is the return type after the same substitution.
-fn check_generic_call(given: ArgList, node: parser.Node, sig: Sig, arguments: List[parser.Node]) gives Checked {
-    var current = given.state
-    var bound = ""
-    var invalid = false
-    var i = 0
-    while i < List.length(arguments)
-        shrinks List.length(arguments) - i
-    {
-        let found = List.get(given.types, i)
-        let declared = List.get(sig.param_types, i)
-        let argument = List.get(arguments, i)
-        let notes = ["This is the argument for '" + List.get(sig.param_names, i) + "' in: " + describe(sig)]
-        if found == "" {
-            invalid = true
-        } else if found == "Void" {
-            current = report(
-                current, "E2011", "This call does not produce a value to pass as an argument", "", [],
-                span_of(argument)
-            )
-            invalid = true
-        } else {
-            let wanted = substitute(declared, bound)
-            if has_variable(wanted) {
-                // Still mentions the variable: unify.
-                if wanted == "T" {
-                    bound = found
-                } else if is_list(found) {
-                    bound = list_item(found)
-                } else {
-                    current = report(
-                        current, "E2011", "Expected " + wanted + ", found " + found,
-                        "A list accepts only one element type: List[Int] and List[Text] are different types.",
-                        notes, span_of(argument)
-                    )
-                    invalid = true
-                }
-            } else {
-                let problems_before = List.length(current.problems)
-                current = expect_type(current, wanted, found, argument, notes)
-                if List.length(current.problems) != problems_before {
-                    invalid = true
-                }
-            }
-        }
-        i = i + 1
-    }
-    if invalid {
-        return checked(node, "", current)
-    }
-    let result = substitute(sig.return_type, bound)
-    if has_variable(result) {
-        return checked(
-            node, "",
-            report(
-                current, "E2011", "Cannot infer the type of the elements of this list",
-                "Write the type of the list explicitly, for example: let xs: List[Int] = [].", [], span_of(node)
-            )
-        )
-    }
-    return checked(node, result, current)
 }
 
 // Conditions
@@ -1097,6 +1069,19 @@ fn declared_type(state: State, node: parser.Node, what: Text, allow_broken: Bool
             return checked(node, "", item.state)
         }
         return checked(node, "List[" + item.ty + "]", item.state)
+    }
+    if (name == "Option" and List.length(arguments) == 1) or (name == "Result" and List.length(arguments) == 2) {
+        var current = state
+        var shown: List[Text] = []
+        for argument in arguments {
+            let resolved = declared_type(current, argument, "An argument of '" + name + "'", allow_broken)
+            current = resolved.state
+            if resolved.ty == "" {
+                return checked(node, "", current)
+            }
+            shown = List.append(shown, resolved.ty)
+        }
+        return checked(node, name + "[" + parser.join_texts(shown, ", ") + "]", current)
     }
     if List.length(arguments) > 0 {
         return checked(node, "", unsupported(state, "generic type " + name))
@@ -3922,7 +3907,7 @@ fn result_parts(ty: Text) gives List[Text] {
 
 // Patterns, once they have been checked
 
-type Pat = enum { PAny, PLit(key: Text), PVar(key: Text, args: List[Pat]) }
+type Pat = enum { PAny, PLit(key: Text), PVar(key: Text, children: List[Pat]) }
 
 type PatOut = { pat: Pat, env: List[Binding], state: State }
 
@@ -4086,6 +4071,14 @@ fn is_catchall(p: Pat) gives Bool {
 fn pat_key(p: Pat) gives Text {
     return match p {
         Pat.PVar(key, children) => key
+        Pat.PLit(key) => key
+        _ => ""
+    }
+}
+
+// The key of a literal pattern, or nothing for a variant: only literals tell themselves apart by it.
+fn lit_key(p: Pat) gives Text {
+    return match p {
         Pat.PLit(key) => key
         _ => ""
     }
@@ -4304,11 +4297,11 @@ fn useful_pattern(state: State, matrix: List[List[Pat]], vector: List[Pat], kind
     }
     // Literal patterns over open types are useful unless that exact literal or a wildcard was already covered.
     // They never make an infinite domain exhaustive.
-    let literal = pat_key(pattern)
+    let literal = lit_key(pattern)
     var rows: List[List[Pat]] = []
     for row in matrix {
         let head = List.get(row, 0)
-        if is_catchall(head) or pat_key(head) == literal {
+        if is_catchall(head) or lit_key(head) == literal {
             rows = List.append(rows, drop_first_pats(row))
         }
     }
@@ -4459,6 +4452,316 @@ fn check_if_let(state: State, env: List[Binding], node: parser.Node) gives Flow 
     return flow(
         with_field(head, "else_branch", else_flow.node), else_flow.state, env, then_flow.returns and else_flow.returns
     )
+}
+
+// Generic types: parsing, substitution and unification of the types of the built-ins that mention T and E
+
+type Ty = enum { TyName(name: Text, children: List[Ty]) }
+
+type TyAt = { ty: Ty, next: Int }
+
+fn is_space(c: Text) gives Bool {
+    return c == " "
+}
+
+fn is_delimiter(c: Text) gives Bool {
+    return c == "[" or c == "]" or c == ","
+}
+
+// Reads one type written as text, starting at `start`: `Name`, or `Name[Type, Type]`.
+fn parse_ty_at(text: Text, start: Int) gives TyAt {
+    var end = start
+    while end < Text.length(text) and not is_delimiter(Text.slice(text, end, end + 1))
+        shrinks Text.length(text) - end
+    {
+        end = end + 1
+    }
+    let name = Text.slice(text, start, end)
+    if end < Text.length(text) and Text.slice(text, end, end + 1) == "[" {
+        var children: List[Ty] = []
+        var at = end + 1
+        var more = true
+        while more
+            shrinks Text.length(text) + 1 - at
+        {
+            while at < Text.length(text) and is_space(Text.slice(text, at, at + 1))
+                shrinks Text.length(text) - at
+            {
+                at = at + 1
+            }
+            let parsed = parse_ty_at(text, at)
+            children = List.append(children, parsed.ty)
+            at = parsed.next
+            if at < Text.length(text) and Text.slice(text, at, at + 1) == "," {
+                at = at + 1
+            } else {
+                more = false
+                at = at + 1
+            }
+        }
+        return TyAt(ty: Ty.TyName(name, children), next: at)
+    }
+    return TyAt(ty: Ty.TyName(name, []), next: end)
+}
+
+fn parse_ty(text: Text) gives Ty {
+    let parsed = parse_ty_at(text, 0)
+    return parsed.ty
+}
+
+fn show_ty(t: Ty) gives Text {
+    return match t {
+        Ty.TyName(name, children) => show_named(name, children)
+    }
+}
+
+fn show_named(name: Text, children: List[Ty]) gives Text {
+    if List.length(children) == 0 {
+        return name
+    }
+    var shown: List[Text] = []
+    for arg in children {
+        shown = List.append(shown, show_ty(arg))
+    }
+    return name + "[" + parser.join_texts(shown, ", ") + "]"
+}
+
+fn is_variable(t: Ty) gives Bool {
+    return match t {
+        Ty.TyName(name, children) => List.length(children) == 0 and (name == "T" or name == "E")
+    }
+}
+
+fn ty_name(t: Ty) gives Text {
+    return match t {
+        Ty.TyName(name, children) => name
+    }
+}
+
+fn ty_args(t: Ty) gives List[Ty] {
+    return match t {
+        Ty.TyName(name, children) => children
+    }
+}
+
+// What the variables T and E are bound to; the empty text means not bound yet.
+type Bind = { t: Text, e: Text }
+
+type Unified = { ok: Bool, bind: Bind }
+
+fn bound_value(t: Ty, bind: Bind) gives Text {
+    if ty_name(t) == "T" {
+        return bind.t
+    }
+    return bind.e
+}
+
+fn substitute_ty(t: Ty, bind: Bind) gives Ty {
+    if is_variable(t) {
+        let value = bound_value(t, bind)
+        if value == "" {
+            return t
+        }
+        return parse_ty(value)
+    }
+    var children: List[Ty] = []
+    for arg in ty_args(t) {
+        children = List.append(children, substitute_ty(arg, bind))
+    }
+    return Ty.TyName(ty_name(t), children)
+}
+
+// The text of a type with every bound variable replaced by what it is bound to.
+fn substitute(ty: Text, bind: Bind) gives Text {
+    return show_ty(substitute_ty(parse_ty(ty), bind))
+}
+
+fn has_variable_ty(t: Ty) gives Bool {
+    if is_variable(t) {
+        return true
+    }
+    for arg in ty_args(t) {
+        if has_variable_ty(arg) {
+            return true
+        }
+    }
+    return false
+}
+
+fn has_variable(ty: Text) gives Bool {
+    return has_variable_ty(parse_ty(ty))
+}
+
+fn bind_variable(t: Ty, value: Text, bind: Bind) gives Bind {
+    if ty_name(t) == "T" {
+        return Bind(t: value, e: bind.e)
+    }
+    return Bind(t: bind.t, e: value)
+}
+
+// First-order unification: makes `left` (which may have variables) equal to `right`.
+fn unify_ty(left: Ty, right: Ty, bind: Bind) gives Unified {
+    var l = left
+    var r = right
+    if is_variable(l) and bound_value(l, bind) != "" {
+        l = parse_ty(bound_value(l, bind))
+    }
+    if is_variable(r) and bound_value(r, bind) != "" {
+        r = parse_ty(bound_value(r, bind))
+    }
+    if show_ty(l) == show_ty(r) {
+        return Unified(ok: true, bind: bind)
+    }
+    if is_variable(l) {
+        return Unified(ok: true, bind: bind_variable(l, show_ty(r), bind))
+    }
+    if is_variable(r) {
+        return Unified(ok: true, bind: bind_variable(r, show_ty(l), bind))
+    }
+    let left_args = ty_args(l)
+    let right_args = ty_args(r)
+    if ty_name(l) != ty_name(r) or List.length(left_args) != List.length(right_args) or List.length(left_args) == 0 {
+        return Unified(ok: false, bind: bind)
+    }
+    var current = bind
+    var i = 0
+    while i < List.length(left_args)
+        shrinks List.length(left_args) - i
+    {
+        let inner = unify_ty(List.get(left_args, i), List.get(right_args, i), current)
+        if not inner.ok {
+            return Unified(ok: false, bind: bind)
+        }
+        current = inner.bind
+        i = i + 1
+    }
+    return Unified(ok: true, bind: current)
+}
+
+// What a call cannot infer by itself, and how to say it.
+fn uninferable_label(name: Text) gives Text {
+    if name == "Ok" {
+        return "Cannot infer the error type of this Result"
+    }
+    if name == "Err" {
+        return "Cannot infer the item type of this Result"
+    }
+    return "Cannot infer the type of the elements of this list"
+}
+
+fn uninferable_hint(name: Text) gives Text {
+    if name == "Ok" {
+        return "Write the type of the result explicitly, for example: let r: Result[Int, Text] = Ok(1)."
+    }
+    if name == "Err" {
+        return "Write the type of the result explicitly, for example: let r: Result[Int, Text] = Err(\"boom\")."
+    }
+    return "Write the type of the list explicitly, for example: let xs: List[Int] = []."
+}
+
+// A call to a built-in whose signature mentions type variables. Each argument is unified, in order, with its
+// parameter type, and the result is the return type after the same substitution. The type the context expects
+// is unified last: it fixes the variables that no argument can, such as the error type of an `Ok`.
+fn check_generic_call(
+    given: ArgList, node: parser.Node, sig: Sig, arguments: List[parser.Node], expected_result: Text
+) gives Checked {
+    var current = given.state
+    var bind = Bind(t: "", e: "")
+    var invalid = false
+    var i = 0
+    while i < List.length(arguments)
+        shrinks List.length(arguments) - i
+    {
+        let found = List.get(given.types, i)
+        let declared = List.get(sig.param_types, i)
+        let argument = List.get(arguments, i)
+        let notes = ["This is the argument for '" + List.get(sig.param_names, i) + "' in: " + describe(sig)]
+        if found == "" {
+            invalid = true
+        } else if found == "Void" {
+            current = report(
+                current, "E2011", "This call does not produce a value to pass as an argument", "", [],
+                span_of(argument)
+            )
+            invalid = true
+        } else {
+            let wanted = substitute(declared, bind)
+            if has_variable(wanted) {
+                let unified = unify_ty(parse_ty(wanted), parse_ty(found), bind)
+                if unified.ok {
+                    bind = unified.bind
+                } else {
+                    current = report(
+                        current, "E2011", "Expected " + wanted + ", found " + found,
+                        "A list accepts only one element type: List[Int] and List[Text] are different types.",
+                        notes, span_of(argument)
+                    )
+                    invalid = true
+                }
+            } else {
+                let problems_before = List.length(current.problems)
+                current = expect_type(current, wanted, found, argument, notes)
+                if List.length(current.problems) != problems_before {
+                    invalid = true
+                }
+            }
+        }
+        i = i + 1
+    }
+    if invalid {
+        return checked(node, "", current)
+    }
+    var result = substitute(sig.return_type, bind)
+    if expected_result != "" and has_variable(result) {
+        let unified = unify_ty(parse_ty(result), parse_ty(expected_result), bind)
+        if not unified.ok {
+            return checked(
+                node, "",
+                report(
+                    current, "E2011", "Expected " + expected_result + ", found " + result,
+                    "This is the result of: " + describe(sig), [], span_of(node)
+                )
+            )
+        }
+        bind = unified.bind
+        result = substitute(sig.return_type, bind)
+    }
+    if has_variable(result) {
+        return checked(
+            node, "",
+            report(current, "E2011", uninferable_label(sig.name), uninferable_hint(sig.name), [], span_of(node))
+        )
+    }
+    return checked(node, result, current)
+}
+
+// `None` is the absence of a value: an Option without a payload. The type of its item comes from the context
+// that expects it.
+fn none_type(state: State, node: parser.Node, expected: Text) gives Checked {
+    if expected == "" {
+        return checked(
+            node, "",
+            report(
+                state, "E2011", "Cannot infer the type of None without an expected type",
+                "Write the type of the option explicitly, for example: let x: Option[Int] = None.", [], span_of(node)
+            )
+        )
+    }
+    if is_option_type(expected) {
+        return checked(node, expected, state)
+    }
+    return checked(
+        node, "",
+        report(
+            state, "E2011", "Expected " + expected + ", found None",
+            "None is an Option without a value: it needs a type of the form Option[Text].", [], span_of(node)
+        )
+    )
+}
+
+// Whether the expression is the `None` constant and not a variable of the program.
+fn is_none_constant(env: List[Binding], node: parser.Node) gives Bool {
+    return kind_of(node) == "Name" and text_of(field(node, "name")) == "None" and binding_index(env, "None") < 0
 }
 
 // Test driver: every argument after the first is a file. For each one prints `FILE|path` and then
