@@ -1,0 +1,91 @@
+type Percent = Int where value >= 0 and value <= 100
+type Point = { x: Int, y: Int }
+
+fn find(xs: List[Int], target: Int) gives Option[Int] {
+    var i = 0
+    while i < List.length(xs)
+        shrinks List.length(xs) - i
+    {
+        if List.get(xs, i) == target {
+            return Some(i)
+        }
+        i = i + 1
+    }
+    return None
+}
+
+fn parse(text: Text) gives Result[Int, Text] {
+    if Int.can_parse(text) {
+        return Ok(Int.parse(text))
+    }
+    return Err("not a number: " + text)
+}
+
+fn first(xs: List[Text]) gives Option[Text] {
+    if List.length(xs) == 0 {
+        return None
+    }
+    return Some(List.get(xs, 0))
+}
+
+fn describe(o: Option[Int]) gives Text {
+    return match o {
+        None => "nothing"
+        Some(0) => "zero"
+        Some(n) => to_text(n)
+    }
+}
+
+fn unwrap(r: Result[Int, Text]) gives Int {
+    return match r {
+        Ok(v) => v
+        Err(e) => 0
+    }
+}
+
+fn nested(o: Option[Result[Int, Text]]) gives Int {
+    return match o {
+        None => 0
+        Some(Ok(v)) => v
+        Some(Err(e)) => 1
+    }
+}
+
+fn main() {
+    let a = find([1, 2, 3], 2)
+    let b: Option[Int] = None
+    let c = Some(5)
+    let d: Result[Int, Text] = Ok(1)
+    let e: Result[Int, Text] = Err("bad")
+    let f = parse("12")
+    print(describe(a))
+    print(unwrap(f))
+    print(a == None)
+    print(None != a)
+    print(c == Some(5))
+    print(Option.is_some(a))
+    print(Option.is_none(b))
+    print(Option.value_or(b, 7))
+    print(Option.value(c))
+    print(Result.is_ok(d))
+    print(Result.is_err(e))
+    print(Result.value_or(e, 0))
+    print(Result.value(d))
+    print(Result.error(e))
+    if let Some(v) = a {
+        print(v)
+    } else {
+        print("none")
+    }
+    if let Ok(v) = f {
+        print(v)
+    }
+    let xs: List[Option[Int]] = [Some(1), None, Some(3)]
+    print(List.length(xs))
+    let p: Option[Point] = Some(Point(x: 1, y: 2))
+    let q: Option[Percent] = Some(50)
+    print(nested(Some(Ok(3))))
+    print(first(["a"]))
+    let r = Some(Some(1))
+    print(r)
+}
