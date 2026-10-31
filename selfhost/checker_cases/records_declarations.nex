@@ -1,0 +1,21 @@
+type point = { x: Int }
+type Int = { x: Int }
+type List = { x: Int }
+type Dup = { x: Int }
+type Dup = { y: Int }
+type Self = { me: Self }
+type A = { b: B }
+type B = { a: A }
+type Chain = { c: Chain2 }
+type Chain2 = { d: Self }
+type Repeated = { x: Int, x: Text }
+type Bad = { x: Strange }
+type BadUser = { bad: Bad }
+type Listy = { items: List[Listy] }
+type Void2 = { v: Void }
+fn Dup() {
+}
+fn main() {
+    let x: Self = 1
+    let y: Bad = 1
+}

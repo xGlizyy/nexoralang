@@ -8,7 +8,7 @@ runs it for now; it is the bootstrap, not the goal.
 |------|------|-------|
 | Lexer | [`lexer.nex`](lexer.nex) | Done. Same tokens and lexical errors as `lexer.py` on every program of the repository and on the cases in [`lexer_cases/`](lexer_cases/), with the gaps below |
 | Parser | [`parser.nex`](parser.nex) | Done. Same tree and same syntax errors as `parser.py` on every program of the repository and on the cases in [`parser_cases/`](parser_cases/), including error recovery, the limit of 100 errors and the nesting and depth limits |
-| Checker | [`checker.nex`](checker.nex) | In progress, first slice. Functions, variables, loops, `if`, operators, lists, calls to the functions of the program and the built-in ones, contracts and examples. Same typed tree and same errors as `checker.py` on the programs it supports (see below); records, enums, refined types, `Option`/`Result`, `match`, `if let`, modules, `uses`, warnings and the "did you mean" hints are next |
+| Checker | [`checker.nex`](checker.nex) | In progress. Functions, variables, loops, `if`, operators, lists, records (declaration, cycles, construction, fields), calls to the functions of the program and the built-in ones, contracts, examples and the "did you mean" hints (`difflib` ported). Same typed tree and same errors as `checker.py` on the programs it supports; refined types, enums, `Option`/`Result`, `match`, `if let`, modules, `uses` and warnings are next |
 | Interpreter | | Not started |
 
 ## Checking a part against the Python implementation
