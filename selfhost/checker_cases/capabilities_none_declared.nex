@@ -1,0 +1,9 @@
+fn main() {
+    print(read_file("a.txt"))
+    write_file("b.txt", "x")
+    print(Net.get("https://example.com"))
+    print(Process.run("ls", []))
+    let path = "c.txt"
+    print(read_file(path))
+    print(read_file("d" + ".txt"))
+}
