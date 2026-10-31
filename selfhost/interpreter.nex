@@ -228,9 +228,22 @@ fn build_prog(program: parser.Node, host: HostCfg) gives Prog {
         type_names = List.append(type_names, key_of(declaration))
         type_nodes = List.append(type_nodes, declaration)
     }
-    return Prog(
+    let plain = Prog(
         fn_names: fn_names, fn_nodes: fn_nodes, record_names: record_names, record_fields: record_fields,
         type_names: type_names, type_nodes: type_nodes, host: host
+    )
+    // The expressions that need no function of the program are marked, so the machine can work them out in one step.
+    var marked_functions: List[parser.Node] = []
+    for function in fn_nodes {
+        marked_functions = List.append(marked_functions, mark_pure(plain, function))
+    }
+    var marked_types: List[parser.Node] = []
+    for declaration in type_nodes {
+        marked_types = List.append(marked_types, mark_pure(plain, declaration))
+    }
+    return Prog(
+        fn_names: fn_names, fn_nodes: marked_functions, record_names: record_names, record_fields: record_fields,
+        type_names: type_names, type_nodes: marked_types, host: host
     )
 }
 
@@ -1367,6 +1380,241 @@ fn option_result(callee: Text, a: List[Val]) gives Res {
 
 // Expressions
 
+// Expressions that call no function of the program (and no host function) are worked out in one step, by plain recursion: the
+// machine would spend several steps and several allocations on each node of them. `pure` is a flag that `mark_pure` wrote on
+// the nodes of the program before it ran. Anything that would fail gives None, and the machine runs the expression the long way,
+// which is where every error and its notes come from: the fast way never has to explain a failure.
+
+fn pure_all(prog: Prog, env: List[Frame], nodes: List[parser.Node]) gives Option[List[Val]] {
+    var vals: List[Val] = []
+    for node in nodes {
+        match pure_eval(prog, env, node) {
+            Some(v) => {
+                vals = List.append(vals, v)
+            }
+            None => {
+                return None
+            }
+        }
+    }
+    return Some(vals)
+}
+
+fn pure_eval(prog: Prog, env: List[Frame], node: parser.Node) gives Option[Val] {
+    let kind = kind_of(node)
+    if kind == "IntLiteral" {
+        return Some(Val.VInt(int_of(field(node, "value"))))
+    }
+    if kind == "Name" {
+        let name = text_of(field(node, "name"))
+        if name == "None" and not has_name(env, name) {
+            return Some(none_val())
+        }
+        return Some(lookup(env, name))
+    }
+    if kind == "Binary" {
+        return pure_binary(prog, env, node)
+    }
+    if kind == "BoolLiteral" {
+        return Some(Val.VBool(flag_of(field(node, "value"))))
+    }
+    if kind == "TextLiteral" {
+        let literal = text_of(field(node, "value"))
+        if text_too_long(prog.host.max_text, literal) {
+            return None
+        }
+        return Some(Val.VText(literal))
+    }
+    if kind == "FloatLiteral" {
+        return Some(Val.VFloat(Float.parse(real_of(field(node, "value")))))
+    }
+    if kind == "Group" {
+        return pure_eval(prog, env, field(node, "expression"))
+    }
+    if kind == "Unary" {
+        return pure_unary(prog, env, node)
+    }
+    if kind == "FieldAccess" {
+        return match pure_eval(prog, env, field(node, "target")) {
+            Some(target) => Some(field_of_record(target, text_of(field(node, "name"))))
+            None => None
+        }
+    }
+    if kind == "ListLiteral" {
+        return match pure_all(prog, env, items_of(field(node, "elements"))) {
+            Some(items) => Some(Val.VList(items))
+            None => None
+        }
+    }
+    if kind == "RecordConstruction" {
+        var values: List[parser.Node] = []
+        for initializer in items_of(field(node, "fields")) {
+            values = List.append(values, field(initializer, "value"))
+        }
+        return match pure_all(prog, env, values) {
+            Some(parts) => Some(build_record(prog, node, parts))
+            None => None
+        }
+    }
+    return pure_call(prog, env, node)
+}
+
+fn pure_unary(prog: Prog, env: List[Frame], node: parser.Node) gives Option[Val] {
+    return match pure_eval(prog, env, field(node, "operand")) {
+        Some(v) => pure_unary_value(node, v)
+        None => None
+    }
+}
+
+fn pure_unary_value(node: parser.Node, v: Val) gives Option[Val] {
+    if text_of(field(node, "operator")) == "not" {
+        return Some(Val.VBool(not truth(v)))
+    }
+    return match v {
+        Val.VInt(n) => pure_negated(n)
+        Val.VFloat(x) => Some(Val.VFloat(0.0 - x))
+        _ => Some(v)
+    }
+}
+
+fn pure_negated(n: Int) gives Option[Val] {
+    if n == int_min() {
+        return None
+    }
+    return Some(Val.VInt(0 - n))
+}
+
+fn pure_binary(prog: Prog, env: List[Frame], node: parser.Node) gives Option[Val] {
+    let operator = text_of(field(node, "operator"))
+    return match pure_eval(prog, env, field(node, "left")) {
+        Some(a) => pure_binary_right(prog, env, node, operator, a)
+        None => None
+    }
+}
+
+fn pure_binary_right(prog: Prog, env: List[Frame], node: parser.Node, operator: Text, a: Val) gives Option[Val] {
+    if operator == "or" or operator == "and" {
+        let decided = truth(a)
+        if (operator == "or" and decided) or (operator == "and" and not decided) {
+            return Some(a)
+        }
+        return pure_eval(prog, env, field(node, "right"))
+    }
+    return match pure_eval(prog, env, field(node, "right")) {
+        Some(b) => pure_operation(prog, operator, a, b)
+        None => None
+    }
+}
+
+fn pure_operation(prog: Prog, operator: Text, a: Val, b: Val) gives Option[Val] {
+    let res = binary_value(operator, a, b)
+    if not res.ok or val_too_long(prog.host.max_text, res.val) {
+        return None
+    }
+    return Some(res.val)
+}
+
+// A built-in function or a variant of an enum: the functions of the program were left to the machine.
+fn pure_call(prog: Prog, env: List[Frame], node: parser.Node) gives Option[Val] {
+    let written = text_of(field(node, "callee"))
+    return match pure_all(prog, env, items_of(field(node, "arguments"))) {
+        Some(arguments) => pure_call_with(prog, node, written, arguments)
+        None => None
+    }
+}
+
+fn pure_call_with(prog: Prog, node: parser.Node, written: Text, arguments: List[Val]) gives Option[Val] {
+    if checker.is_builtin(written) {
+        let res = apply_builtin(written, arguments)
+        if not res.ok or (written == "to_text" and val_too_long(prog.host.max_text, res.val)) {
+            return None
+        }
+        return Some(res.val)
+    }
+    let callee = target_of(node, written)
+    let dot = last_dot_index(callee)
+    return Some(Val.VVariant(Text.slice(callee, 0, dot), Text.slice(callee, dot + 1, Text.length(callee)), arguments))
+}
+
+// Marking the tree: every expression gets `pure` when it can be worked out by pure_eval.
+
+fn is_expression(kind: Text) gives Bool {
+    return (
+        kind == "IntLiteral" or kind == "FloatLiteral" or kind == "TextLiteral" or kind == "BoolLiteral" or kind == "Name"
+        or kind == "Group" or kind == "Unary" or kind == "Binary" or kind == "Call" or kind == "ListLiteral"
+        or kind == "RecordConstruction" or kind == "FieldAccess"
+    )
+}
+
+fn children_pure(node: parser.Node) gives Bool {
+    for item in items_of(field(node, "arguments")) {
+        if not flag_of(field(item, "pure")) {
+            return false
+        }
+    }
+    for item in items_of(field(node, "elements")) {
+        if not flag_of(field(item, "pure")) {
+            return false
+        }
+    }
+    for initializer in items_of(field(node, "fields")) {
+        if not flag_of(field(field(initializer, "value"), "pure")) {
+            return false
+        }
+    }
+    for name in ["expression", "operand", "left", "right", "target"] {
+        let child = field(node, name)
+        if not is_null(child) and not flag_of(field(child, "pure")) {
+            return false
+        }
+    }
+    return true
+}
+
+// Whether a call is to something pure_call can do: not a function of the program, a refined type, the host or `print`.
+fn call_is_pure(prog: Prog, node: parser.Node) gives Bool {
+    let written = text_of(field(node, "callee"))
+    let key = target_of(node, written)
+    if index_of(prog.fn_names, key) >= 0 or index_of(prog.type_names, key) >= 0 {
+        return false
+    }
+    if written == "print" or is_host_function(written) {
+        return false
+    }
+    return true
+}
+
+fn mark_pure(prog: Prog, node: parser.Node) gives parser.Node {
+    return match node {
+        parser.Node.Obj(kind, names, values) => mark_object(prog, kind, names, values)
+        parser.Node.Items(items) => parser.Node.Items(mark_all(prog, items))
+        _ => node
+    }
+}
+
+fn mark_all(prog: Prog, items: List[parser.Node]) gives List[parser.Node] {
+    var done: List[parser.Node] = []
+    for item in items {
+        done = List.append(done, mark_pure(prog, item))
+    }
+    return done
+}
+
+fn mark_object(prog: Prog, kind: Text, names: List[Text], values: List[parser.Node]) gives parser.Node {
+    let rebuilt = parser.Node.Obj(kind, names, mark_all(prog, values))
+    if not is_expression(kind) {
+        return rebuilt
+    }
+    var pure = children_pure(rebuilt)
+    if kind == "Call" and pure {
+        pure = call_is_pure(prog, rebuilt)
+    }
+    return match rebuilt {
+        parser.Node.Obj(k, n, v) => parser.Node.Obj(k, List.append(n, "pure"), List.append(v, parser.Node.Flag(pure)))
+        _ => rebuilt
+    }
+}
+
 fn call_children(node: parser.Node) gives List[parser.Node] {
     let kind = kind_of(node)
     if kind == "Call" {
@@ -1384,6 +1632,12 @@ fn call_children(node: parser.Node) gives List[parser.Node] {
 
 // Starts to evaluate an expression.
 fn step_eval(prog: Prog, m: Machine, node: parser.Node) gives Machine {
+    if flag_of(field(node, "pure")) {
+        let evaluated = pure_eval(prog, m.env, node)
+        if Option.is_some(evaluated) {
+            return mk(m, Control.CValue(Option.value(evaluated)), m.env, m.stack)
+        }
+    }
     let kind = kind_of(node)
     if kind == "IntLiteral" {
         return mk(m, Control.CValue(Val.VInt(int_of(field(node, "value")))), m.env, m.stack)
