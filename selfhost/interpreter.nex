@@ -76,7 +76,8 @@ type Kont = enum {
 type Stk = enum { Nil, Cons(top: Kont, rest: Stk) }
 
 type Machine = {
-    control: Control, env: List[Frame], stack: Stk, out: List[Text], depth: Int, fuel: Int, tracing: Tracing
+    control: Control, env: List[Frame], stack: Stk, out: List[Text], written: Int, depth: Int, fuel: Int,
+    tracing: Tracing
 }
 
 // What the program declares, indexed once.
@@ -406,6 +407,25 @@ fn bad_at(code: Text, label: Text, hint: Text, notes: List[Text], points_at: Tex
     return Res(ok: false, val: Val.VUnit(), code: code, label: label, hint: hint, notes: notes, points_at: points_at)
 }
 
+// E3006: a Text longer than the limit of the environment (--max-text), 0 when there is none.
+fn text_too_long(limit: Int, text: Text) gives Bool {
+    return limit > 0 and Text.length(text) > limit
+}
+
+fn val_too_long(limit: Int, v: Val) gives Bool {
+    return match v {
+        Val.VText(text) => text_too_long(limit, text)
+        _ => false
+    }
+}
+
+fn text_limit_res(limit: Int, points_at: Text) gives Res {
+    return bad_at(
+        "E3006", "This Text is longer than the environment limit of " + to_text(limit) + " characters",
+        "Use a smaller Text value or increase the environment's text limit.", [], points_at
+    )
+}
+
 fn int_max() gives Int {
     return 9223372036854775807
 }
@@ -474,18 +494,84 @@ fn int_operation(operator: Text, a: Int, b: Int) gives Res {
     return good(Val.VInt(a / b))
 }
 
+// E3003: whether a Float operation would not fit. The result is never computed to find out (on this
+// interpreter an overflow would stop the interpreter itself), so each test brings the operands to a scale where the
+// rounding of the real operation can be decided: 2^1023, 2^512 and 2^-512 are exact.
+fn float_abs(x: Float) gives Float {
+    if x < 0.0 {
+        return 0.0 - x
+    }
+    return x
+}
+
+fn float_two_1023() gives Float {
+    return Float.parse("8.98846567431158e307")
+}
+
+fn float_two_512() gives Float {
+    return Float.parse("1.3407807929942597e154")
+}
+
+fn float_two_minus_512() gives Float {
+    return Float.parse("7.458340731200207e-155")
+}
+
+// a + b with operands of the same sign: half of each is exact, and the sum rounds to infinity from 2^1023 on.
+fn sum_overflows(a: Float, b: Float) gives Bool {
+    return float_abs(a) / 2.0 + float_abs(b) / 2.0 >= float_two_1023()
+}
+
+fn product_overflows(a: Float, b: Float) gives Bool {
+    let x = float_abs(a) * float_two_minus_512()
+    let y = float_abs(b) * float_two_minus_512()
+    if x >= 1.0 and y >= 1.0 {
+        return true
+    }
+    return x * y >= 1.0
+}
+
+// b is not zero.
+fn quotient_overflows(a: Float, b: Float) gives Bool {
+    if float_abs(b) >= 1.0 {
+        return false
+    }
+    let x = float_abs(a) * float_two_minus_512()
+    let y = float_abs(b) * float_two_512()
+    if x >= y {
+        return true
+    }
+    return x / y >= 1.0
+}
+
+fn float_overflow() gives Res {
+    return bad_at("E3003", "The result of this operation is too large for a Float", "", [], "node")
+}
+
 fn float_operation(operator: Text, a: Float, b: Float) gives Res {
+    let same_sign = (a >= 0.0) == (b >= 0.0)
     if operator == "+" {
+        if same_sign and sum_overflows(a, b) {
+            return float_overflow()
+        }
         return good(Val.VFloat(a + b))
     }
     if operator == "-" {
+        if not same_sign and sum_overflows(a, b) {
+            return float_overflow()
+        }
         return good(Val.VFloat(a - b))
     }
     if operator == "*" {
+        if product_overflows(a, b) {
+            return float_overflow()
+        }
         return good(Val.VFloat(a * b))
     }
     if b == 0.0 {
         return bad_at("E3001", "The right-hand side of this division is zero", "", [], "right")
+    }
+    if quotient_overflows(a, b) {
+        return float_overflow()
     }
     return good(Val.VFloat(a / b))
 }
@@ -564,19 +650,22 @@ fn stack_rest(stack: Stk) gives Stk {
 // The machine after one more step: the fuel always goes down, which is what makes the loop end.
 fn mk(m: Machine, control: Control, env: List[Frame], stack: Stk) gives Machine {
     return Machine(
-        control: control, env: env, stack: stack, out: m.out, depth: m.depth, fuel: m.fuel - 1, tracing: m.tracing
+        control: control, env: env, stack: stack, out: m.out, written: m.written, depth: m.depth, fuel: m.fuel - 1,
+        tracing: m.tracing
     )
 }
 
 fn mk_depth(m: Machine, control: Control, env: List[Frame], stack: Stk, depth: Int) gives Machine {
     return Machine(
-        control: control, env: env, stack: stack, out: m.out, depth: depth, fuel: m.fuel - 1, tracing: m.tracing
+        control: control, env: env, stack: stack, out: m.out, written: m.written, depth: depth, fuel: m.fuel - 1,
+        tracing: m.tracing
     )
 }
 
 fn mk_out(m: Machine, control: Control, stack: Stk, out: List[Text]) gives Machine {
     return Machine(
-        control: control, env: m.env, stack: stack, out: out, depth: m.depth, fuel: m.fuel - 1, tracing: m.tracing
+        control: control, env: m.env, stack: stack, out: out, written: m.written, depth: m.depth,
+        fuel: m.fuel - 1, tracing: m.tracing
     )
 }
 
@@ -1283,7 +1372,11 @@ fn step_eval(prog: Prog, m: Machine, node: parser.Node) gives Machine {
         return mk(m, Control.CValue(Val.VFloat(Float.parse(real_of(field(node, "value"))))), m.env, m.stack)
     }
     if kind == "TextLiteral" {
-        return mk(m, Control.CValue(Val.VText(text_of(field(node, "value")))), m.env, m.stack)
+        let literal = text_of(field(node, "value"))
+        if text_too_long(prog.host.max_text, literal) {
+            return failed(m, text_limit_res(prog.host.max_text, "node"), node)
+        }
+        return mk(m, Control.CValue(Val.VText(literal)), m.env, m.stack)
     }
     if kind == "BoolLiteral" {
         return mk(m, Control.CValue(Val.VBool(flag_of(field(node, "value")))), m.env, m.stack)
@@ -1389,14 +1482,60 @@ fn finish_call(prog: Prog, m: Machine, node: parser.Node, arguments: List[Val]) 
         return host_call(prog, m, node, callee, arguments)
     }
     if callee == "print" {
-        let line = format_val(List.get(arguments, 0))
-        return mk_out(m, Control.CValue(Val.VUnit()), m.stack, List.append(m.out, line))
+        return print_line(prog, m, format_val(List.get(arguments, 0)))
     }
     let res = apply_builtin(callee, arguments)
     if not res.ok {
         return failed(m, res, node)
     }
+    if callee == "to_text" and val_too_long(prog.host.max_text, res.val) {
+        return failed(m, text_limit_res(prog.host.max_text, "node"), node)
+    }
     return mk(m, Control.CValue(res.val), m.env, m.stack)
+}
+
+// Whether a Text is made of ASCII characters only, which is the only case where its bytes can be counted.
+fn is_ascii_text(text: Text) gives Bool {
+    let ascii = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz\{|}~\t"
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if not Text.contains(ascii, Text.slice(text, i, i + 1)) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// E3015: the output of the program is limited (--max-output) in UTF-8 bytes, and the line break counts.
+// What fits is printed first. There is no way to count the bytes of a character that is not ASCII, so the run
+// stops with E0000 when the output has one.
+fn print_line(prog: Prog, m: Machine, line: Text) gives Machine {
+    let limit = prog.host.max_output
+    if limit <= 0 {
+        return mk_out(m, Control.CValue(Val.VUnit()), m.stack, List.append(m.out, line))
+    }
+    if not is_ascii_text(line) {
+        return fail_at(m, "E0000", "the bytes of a line with characters that are not ASCII cannot be counted", parser.no_span())
+    }
+    let size = Text.length(line) + 1
+    let room = limit - m.written
+    if size > room {
+        let shown = Text.slice(line, 0, room)
+        let stopped = Machine(
+            control: Control.CFail(problem_at("E3015", "output limit exceeded (" + to_text(limit) + ")", "", [], parser.no_span())),
+            env: m.env, stack: m.stack, out: List.append(m.out, shown), written: limit, depth: m.depth,
+            fuel: m.fuel - 1, tracing: m.tracing
+        )
+        return stopped
+    }
+    let printed = mk_out(m, Control.CValue(Val.VUnit()), m.stack, List.append(m.out, line))
+    return Machine(
+        control: printed.control, env: printed.env, stack: printed.stack, out: printed.out, written: m.written + size,
+        depth: printed.depth, fuel: printed.fuel, tracing: printed.tracing
+    )
 }
 
 // How a diagnostic names a clause: by its name when it has one.
@@ -1601,7 +1740,8 @@ fn check_refinement(prog: Prog, m: Machine, name: Text, v: Val) gives Refinement
     }
     let machine = Machine(
         control: Control.CEval(field(declaration, "condition")), env: [Frame(names: ["value"], vals: [v])],
-        stack: push(Kont.KHalt(), m.stack), out: [], depth: m.depth, fuel: 1000000, tracing: no_tracing()
+        stack: push(Kont.KHalt(), m.stack), out: [], written: 0, depth: m.depth, fuel: 1000000,
+        tracing: no_tracing()
     )
     let done = run_machine(prog, machine)
     return match done.control {
@@ -1637,7 +1777,7 @@ fn handle_value(prog: Prog, m: Machine, top: Kont, rest: Stk, v: Val) gives Mach
     return match top {
         Kont.KUnary(node) => unary_value(m, node, rest, v)
         Kont.KBinLeft(node) => binary_left(m, node, rest, v)
-        Kont.KBinRight(node, left) => binary_right(m, node, rest, left, v)
+        Kont.KBinRight(node, left) => binary_right(prog, m, node, rest, left, v)
         Kont.KArgs(node, done) => next_part(prog, m, node, rest, done, v)
         Kont.KField(node) => mk(m, Control.CValue(field_of_record(v, text_of(field(node, "name")))), m.env, rest)
         Kont.KMatch(node) => match_value(m, node, rest, v)
@@ -1699,10 +1839,13 @@ fn binary_left(m: Machine, node: parser.Node, rest: Stk, left: Val) gives Machin
     return mk(m, Control.CEval(field(node, "right")), m.env, push(Kont.KBinRight(node, left), rest))
 }
 
-fn binary_right(m: Machine, node: parser.Node, rest: Stk, left: Val, right: Val) gives Machine {
+fn binary_right(prog: Prog, m: Machine, node: parser.Node, rest: Stk, left: Val, right: Val) gives Machine {
     let res = binary_value(text_of(field(node, "operator")), left, right)
     if not res.ok {
         return failed(m, res, node)
+    }
+    if val_too_long(prog.host.max_text, res.val) {
+        return failed(m, text_limit_res(prog.host.max_text, "node"), node)
     }
     return mk(m, Control.CValue(res.val), m.env, rest)
 }
@@ -1718,7 +1861,8 @@ fn next_part(prog: Prog, m: Machine, node: parser.Node, rest: Stk, done: List[Va
         )
     }
     let next = Machine(
-        control: m.control, env: m.env, stack: rest, out: m.out, depth: m.depth, fuel: m.fuel, tracing: m.tracing
+        control: m.control, env: m.env, stack: rest, out: m.out, written: m.written, depth: m.depth, fuel: m.fuel,
+        tracing: m.tracing
     )
     return finish_parts(prog, next, node, parts)
 }
@@ -1954,8 +2098,8 @@ fn for_keep_value(
 // The machine with the innermost scope of the environment left out.
 fn without_frame(m: Machine) gives Machine {
     return Machine(
-        control: m.control, env: drop_frame(m.env), stack: m.stack, out: m.out, depth: m.depth, fuel: m.fuel,
-        tracing: m.tracing
+        control: m.control, env: drop_frame(m.env), stack: m.stack, out: m.out, written: m.written,
+        depth: m.depth, fuel: m.fuel, tracing: m.tracing
     )
 }
 
@@ -2017,7 +2161,7 @@ fn start_machine(prog: Prog, fuel: Int) gives Machine {
         stack: push(
             Kont.KCall([], "main", parser.no_span(), function, empty_frame()), push(Kont.KHalt(), nil_stack())
         ),
-        out: [], depth: 1, fuel: fuel, tracing: no_tracing()
+        out: [], written: 0, depth: 1, fuel: fuel, tracing: no_tracing()
     )
 }
 
@@ -2039,7 +2183,8 @@ fn span_key(span: parser.Span) gives Text {
 
 fn with_tracing(m: Machine, tracing: Tracing) gives Machine {
     return Machine(
-        control: m.control, env: m.env, stack: m.stack, out: m.out, depth: m.depth, fuel: m.fuel, tracing: tracing
+        control: m.control, env: m.env, stack: m.stack, out: m.out, written: m.written, depth: m.depth,
+        fuel: m.fuel, tracing: tracing
     )
 }
 
@@ -2280,7 +2425,7 @@ fn run_example(prog: Prog, lines: List[Text], name: Text, index: Int, item: pars
         watch = List.append(watch, span_key(place_of(call)))
     }
     let machine = Machine(
-        control: Control.CEval(condition), env: [], stack: push(Kont.KHalt(), nil_stack()), out: [], depth: 0,
+        control: Control.CEval(condition), env: [], stack: push(Kont.KHalt(), nil_stack()), out: [], written: 0, depth: 0,
         fuel: start_fuel(), tracing: Tracing(watch: watch, invoked: [], skipped: [], inputs: [])
     )
     let done = run_machine(prog, machine)
@@ -2376,20 +2521,22 @@ fn run_example(prog: Prog, lines: List[Text], name: Text, index: Int, item: pars
 // The host a program runs with.
 type HostCfg = {
     arguments: List[Text], declared_kinds: List[Text], declared_paths: List[Text],
-    grant_kinds: List[Text], grant_paths: List[Text], cwd: Text
+    grant_kinds: List[Text], grant_paths: List[Text], cwd: Text,
+    max_text: Int, max_output: Int
 }
 
 // The host of a run where the user has allowed nothing: the program has declared what it needs, and that is all.
 fn declared_host(program: parser.Node) gives HostCfg {
     return HostCfg(
         arguments: [], declared_kinds: declared_kinds_of(program), declared_paths: declared_paths_of(program),
-        grant_kinds: [], grant_paths: [], cwd: ""
+        grant_kinds: [], grant_paths: [], cwd: "", max_text: 0, max_output: 0
     )
 }
 
 fn no_host() gives HostCfg {
     return HostCfg(
-        arguments: [], declared_kinds: [], declared_paths: [], grant_kinds: [], grant_paths: [], cwd: ""
+        arguments: [], declared_kinds: [], declared_paths: [], grant_kinds: [], grant_paths: [], cwd: "",
+        max_text: 0, max_output: 0
     )
 }
 
@@ -2500,7 +2647,7 @@ fn origin_declared(host: HostCfg, kinds: List[Text], paths: List[Text], origin: 
 }
 
 // The standard input has ended: the program has to know that there is nothing more to read.
-fn read_input_line(m: Machine, node: parser.Node) gives Machine {
+fn read_input_line(host: HostCfg, m: Machine, node: parser.Node) gives Machine {
     let inputs = m.tracing.inputs
     if List.length(inputs) == 0 {
         return stop_with(
@@ -2509,6 +2656,9 @@ fn read_input_line(m: Machine, node: parser.Node) gives Machine {
         )
     }
     let line = List.get(inputs, 0)
+    if text_too_long(host.max_text, line) {
+        return failed(m, text_limit_res(host.max_text, "node"), node)
+    }
     var rest: List[Text] = []
     var i = 1
     while i < List.length(inputs)
@@ -2539,12 +2689,15 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
     if callee == "args" {
         var shown: List[Val] = []
         for argument in host.arguments {
+            if text_too_long(host.max_text, argument) {
+                return failed(m, text_limit_res(host.max_text, "node"), node)
+            }
             shown = List.append(shown, Val.VText(argument))
         }
         return mk(m, Control.CValue(Val.VList(shown)), m.env, m.stack)
     }
     if callee == "input" {
-        return read_input_line(m, node)
+        return read_input_line(host, m, node)
     }
     let first = text_val(List.get(a, 0))
     if callee == "read_file" {
@@ -2552,7 +2705,11 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
         if denied != "" {
             return denied_machine(m, denied, read_hint(), node)
         }
-        return mk(m, Control.CValue(Val.VText(read_file(first))), m.env, m.stack)
+        let contents = read_file(first)
+        if text_too_long(host.max_text, contents) {
+            return failed(m, text_limit_res(host.max_text, "arg0"), node)
+        }
+        return mk(m, Control.CValue(Val.VText(contents)), m.env, m.stack)
     }
     if callee == "write_file" {
         let denied = file_denied(host, "write", first)
@@ -2594,7 +2751,7 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
 // Reads what the command line gives a run: the grants, the input, the working directory and the arguments.
 type RunOptions = {
     grant_kinds: List[Text], grant_paths: List[Text], stdin: List[Text], cwd: Text, path: Text,
-    arguments: List[Text]
+    arguments: List[Text], max_text: Int, max_output: Int
 }
 
 fn input_lines(text: Text) gives List[Text] {
@@ -2627,6 +2784,8 @@ fn parse_options(words: List[Text]) gives RunOptions {
     var cwd = ""
     var path = ""
     var arguments: List[Text] = []
+    var max_text = 0
+    var max_output = 0
     var i = 0
     while i < List.length(words)
         shrinks List.length(words) - i
@@ -2642,6 +2801,12 @@ fn parse_options(words: List[Text]) gives RunOptions {
         } else if word == "--stdin" {
             stdin = input_lines(read_file(List.get(words, i + 1)))
             i = i + 2
+        } else if word == "--max-text" {
+            max_text = Int.parse(List.get(words, i + 1))
+            i = i + 2
+        } else if word == "--max-output" {
+            max_output = Int.parse(List.get(words, i + 1))
+            i = i + 2
         } else if word == "--cwd" {
             cwd = List.get(words, i + 1)
             i = i + 2
@@ -2650,7 +2815,9 @@ fn parse_options(words: List[Text]) gives RunOptions {
             i = i + 1
         }
     }
-    return RunOptions(grant_kinds: kinds, grant_paths: paths, stdin: stdin, cwd: cwd, path: path, arguments: arguments)
+    return RunOptions(grant_kinds: kinds, grant_paths: paths, stdin: stdin, cwd: cwd, path: path, arguments: arguments,
+        max_text: max_text, max_output: max_output
+    )
 }
 
 // Test driver for one program with the host: `--run [options] FILE [arguments]`. The options are --allow-read,
@@ -2681,16 +2848,35 @@ fn run_hosted(words: List[Text]) {
     let host = HostCfg(
         arguments: options.arguments, declared_kinds: declared_kinds_of(analysis.node),
         declared_paths: declared_paths_of(analysis.node), grant_kinds: options.grant_kinds,
-        grant_paths: options.grant_paths, cwd: options.cwd
+        grant_paths: options.grant_paths, cwd: options.cwd,
+        max_text: options.max_text, max_output: options.max_output
     )
     let prog = build_prog(analysis.node, host)
     let start = start_machine(prog, start_fuel())
     let tracing = Tracing(watch: [], invoked: [], skipped: [], inputs: options.stdin)
     let done = run_machine(prog, with_tracing(start, tracing))
-    for line in done.out {
-        print(line)
-    }
+    print_output(done)
     print(stop_text(done))
+}
+
+// What the program printed. When it was stopped by the limit of the output, the last item is what fit of its last
+// line, and it is shown as `PARTIAL|` because it has no line break.
+fn print_output(done: Machine) {
+    let cut = match done.control {
+        Control.CFail(problem) => problem.code == "E3015"
+        _ => false
+    }
+    var i = 0
+    while i < List.length(done.out)
+        shrinks List.length(done.out) - i
+    {
+        if cut and i == List.length(done.out) - 1 {
+            print("PARTIAL|" + List.get(done.out, i))
+        } else {
+            print(List.get(done.out, i))
+        }
+        i = i + 1
+    }
 }
 
 // The steps a run may take before it is stopped.
@@ -2709,6 +2895,9 @@ fn has_errors(problems: List[parser.Problem]) gives Bool {
 }
 
 fn problem_line(problem: parser.Problem) gives Text {
+    if problem.code == "E3015" {
+        return "FAIL|E3015|" + problem.label + "|||None:None-None:None"
+    }
     return (
         "FAIL|" + problem.code + "|" + problem.label + "|" + problem.hint + "|"
         + parser.join_texts(problem.notes, "~~") + "|"

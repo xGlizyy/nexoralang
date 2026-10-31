@@ -1,0 +1,5 @@
+fn main() {
+    let a = Float.parse("1e200")
+    let b = Float.parse("1e200")
+    print(a * b)
+}
