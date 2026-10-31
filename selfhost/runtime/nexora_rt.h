@@ -11,6 +11,23 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* With -DRT_STATS the runtime counts what it does and prints the counts when the program ends (a tool for tuning it). */
+#ifdef RT_STATS
+static unsigned long long rt_stat[16];
+static const char *const rt_stat_names[16] = {"allocations", "bytes", "collections", "field", "is_kind", "eq", "record_new",
+                                              "variant_new", "list_new", "list_append", "calls", "text_compare", "", "", "", ""};
+#define RT_COUNT(i) (rt_stat[i]++)
+#define RT_COUNT_BY(i, n) (rt_stat[i] += (unsigned long long)(n))
+static void rt_print_stats(void) {
+    for (int i = 0; i < 16; i++) {
+        if (rt_stat_names[i][0]) fprintf(stderr, "stat %-14s %llu\n", rt_stat_names[i], rt_stat[i]);
+    }
+}
+#else
+#define RT_COUNT(i) ((void)0)
+#define RT_COUNT_BY(i, n) ((void)0)
+#endif
+
 typedef struct {
     const char *p;
     int64_t bytes;
@@ -84,6 +101,7 @@ static void rt_mark_words(const char *lo, const char *hi) {
 }
 
 static void rt_collect(void) {
+    RT_COUNT(2);
     if (!rt_stack_base || rt_nblocks == 0) { rt_since_gc = 0; return; }
     qsort(rt_blocks, rt_nblocks, sizeof(rt_block), rt_block_order);
     for (size_t i = 0; i < rt_nblocks; i++) rt_blocks[i].mark = 0;
@@ -113,6 +131,9 @@ static void rt_collect(void) {
 /* NEXORA_GC_FLOOR=<bytes> makes it collect much more often, which is how the collector is tested. */
 static void rt_gc_start(void *stack_base) {
     rt_stack_base = stack_base;
+#ifdef RT_STATS
+    atexit(rt_print_stats);
+#endif
     const char *floor = getenv("NEXORA_GC_FLOOR");
     if (floor) {
         rt_floor = (size_t)atol(floor);
@@ -140,10 +161,14 @@ static void *rt_alloc_kind(size_t n, int raw, int zero) {
     block->raw = (unsigned char)raw;
     block->mark = 0;
     rt_since_gc += n;
+    RT_COUNT(0);
+    RT_COUNT_BY(1, n);
     return p;
 }
 
 static void *rt_alloc(size_t n) { return rt_alloc_kind(n, 0, 1); }
+/* A block that its caller fills at once: it is not cleared. */
+static void *rt_alloc_scan(size_t n) { return rt_alloc_kind(n, 0, 0); }
 static void *rt_alloc_raw(size_t n) { return rt_alloc_kind(n, 1, 0); }
 
 /* A raw block that grows: the new one is a copy, and the old one is left for the collector. */
@@ -184,6 +209,8 @@ static rt_text rt_concat(rt_text a, rt_text b) {
 }
 
 static int rt_text_compare(rt_text a, rt_text b) {
+    RT_COUNT(11);
+    if (a.p == b.p && a.bytes == b.bytes) return 0;
     int64_t n = a.bytes < b.bytes ? a.bytes : b.bytes;
     int c = memcmp(a.p, b.p, (size_t)n);
     if (c != 0) return c < 0 ? -1 : 1;
@@ -475,9 +502,9 @@ typedef struct rv {
 } rv;
 
 typedef struct { int64_t n; rv *items; } rt_list;
-typedef struct { const char *name; int n; const char *const *names; rv *f; } rt_record;
+typedef struct { const char *name; int n; const char *const *names; rv f[]; } rt_record;
 /* `owner` is the enum a variant belongs to, or "" for the variants of Option and Result. */
-typedef struct { const char *owner; const char *kind; int n; rv *a; } rt_variant;
+typedef struct { const char *owner; const char *kind; int n; rv a[]; } rt_variant;
 
 static rv rt_unit(void) { rv v; v.tag = RT_UNIT; v.u.i = 0; return v; }
 static rv rt_int(int64_t n) { rv v; v.tag = RT_INT; v.u.i = n; return v; }
@@ -494,6 +521,7 @@ static rv *rt_copy_values(const rv *items, int64_t n) {
 }
 
 static rv rt_list_take(rv *items, int64_t n) {
+    RT_COUNT(8);
     rt_list *l = (rt_list *)rt_alloc(sizeof(rt_list));
     l->n = n;
     l->items = items;
@@ -506,11 +534,12 @@ static rv rt_list_take(rv *items, int64_t n) {
 static rv rt_list_from(const rv *items, int64_t n) { return rt_list_take(rt_copy_values(items, n), n); }
 
 static rv rt_record_new(const char *name, const char *const *names, int n, const rv *fields) {
-    rt_record *r = (rt_record *)rt_alloc(sizeof(rt_record));
+    RT_COUNT(6);
+    rt_record *r = (rt_record *)rt_alloc_scan(sizeof(rt_record) + (size_t)n * sizeof(rv));
     r->name = name;
     r->n = n;
     r->names = names;
-    r->f = rt_copy_values(fields, n);
+    for (int i = 0; i < n; i++) r->f[i] = fields[i];
     rv v;
     v.tag = RT_RECORD;
     v.u.o = r;
@@ -518,11 +547,12 @@ static rv rt_record_new(const char *name, const char *const *names, int n, const
 }
 
 static rv rt_variant_new(const char *owner, const char *kind, int n, const rv *args) {
-    rt_variant *x = (rt_variant *)rt_alloc(sizeof(rt_variant));
+    RT_COUNT(7);
+    rt_variant *x = (rt_variant *)rt_alloc_scan(sizeof(rt_variant) + (size_t)n * sizeof(rv));
     x->owner = owner;
     x->kind = kind;
     x->n = n;
-    x->a = rt_copy_values(args, n);
+    for (int i = 0; i < n; i++) x->a[i] = args[i];
     rv v;
     v.tag = RT_VARIANT;
     v.u.o = x;
@@ -700,13 +730,14 @@ static void rt_print(rv v) {
 /* Equality and order, as the interpreter has them. */
 
 static bool rt_eq(rv a, rv b) {
+    RT_COUNT(5);
     if (a.tag != b.tag) return false;
     switch (a.tag) {
     case RT_UNIT: return true;
     case RT_INT: return a.u.i == b.u.i;
     case RT_FLOAT: return a.u.f == b.u.f;
     case RT_BOOL: return a.u.b == b.u.b;
-    case RT_TEXT: return rt_text_compare(a.u.t, b.u.t) == 0;
+    case RT_TEXT: return a.u.t.bytes == b.u.t.bytes && (a.u.t.p == b.u.t.p || memcmp(a.u.t.p, b.u.t.p, (size_t)a.u.t.bytes) == 0);
     case RT_LIST: {
         rt_list *x = rt_as_list(a), *y = rt_as_list(b);
         if (x->n != y->n) return false;
@@ -819,13 +850,20 @@ static rv rt_neg(rv a, RT_SPAN) {
 /* Patterns, fields and loops over lists. */
 
 static bool rt_is_kind(rv v, const char *kind) {
-    return v.tag == RT_VARIANT && strcmp(rt_as_variant(v)->kind, kind) == 0;
+    RT_COUNT(4);
+    if (v.tag != RT_VARIANT) return false;
+    const char *own = rt_as_variant(v)->kind;
+    return own == kind || strcmp(own, kind) == 0;
 }
 
 static rv rt_arg(rv v, int i) { return rt_as_variant(v)->a[i]; }
 
 static rv rt_field(rv v, const char *name) {
+    RT_COUNT(3);
     rt_record *r = rt_as_record(v);
+    for (int i = 0; i < r->n; i++) {
+        if (r->names[i] == name) return r->f[i];
+    }
     for (int i = 0; i < r->n; i++) {
         if (strcmp(r->names[i], name) == 0) return r->f[i];
     }
@@ -1019,6 +1057,7 @@ static rv rt_list_get(rv list, rv index, RT_SPAN) {
 }
 
 static rv rt_list_append(rv list, rv item) {
+    RT_COUNT(9);
     rt_list *x = rt_as_list(list);
     rv *items = (rv *)rt_alloc((size_t)(x->n + 1) * sizeof(rv));
     for (int64_t i = 0; i < x->n; i++) items[i] = x->items[i];
@@ -1092,6 +1131,7 @@ static void rt_refine_fail(const char *written, const char *declared, const char
 /* Entering and leaving a function. The call that would be the 1,001st nested stops the program. */
 
 static int rt_enter(const char *name, int file, int64_t line, int64_t column, int64_t end_line, int64_t end_column) {
+    RT_COUNT(10);
     if (rt_calls >= RT_MAX_CALLS) {
         rt_notes own = {{0}, 0};
         rt_fail("runtime", "E3004", "Too many nested calls", "The program nested more than 1000 calls",
