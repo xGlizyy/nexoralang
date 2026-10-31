@@ -287,6 +287,18 @@ fn builtin(name: Text) gives Sig {
     if name == "List.contains" {
         return make_sig(name, ["xs", "x"], ["List[T]", "T"], "Bool", true)
     }
+    if name == "read_file" {
+        return make_sig(name, ["path"], ["Text"], "Text", false)
+    }
+    if name == "write_file" {
+        return make_sig(name, ["path", "text"], ["Text", "Text"], "Void", false)
+    }
+    if name == "Net.get" {
+        return make_sig(name, ["url"], ["Text"], "Text", false)
+    }
+    if name == "Process.run" {
+        return make_sig(name, ["command", "arguments"], ["Text", "List[Text]"], "Text", true)
+    }
     if name == "Some" {
         return make_sig(name, ["value"], ["T"], "Option[T]", true)
     }
@@ -986,10 +998,14 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
             )
         )
     }
-    if sig.generic {
-        return check_generic_call(given, rebuilt, sig, arguments, expected)
+    var after_caps = given
+    if capability_of(callee) != "" {
+        after_caps = ArgList(nodes: given.nodes, types: given.types, state: check_capability(given.state, node))
     }
-    var current = given.state
+    if sig.generic {
+        return check_generic_call(after_caps, rebuilt, sig, arguments, expected)
+    }
+    var current = after_caps.state
     var i = 0
     while i < count
         shrinks count - i
@@ -1849,8 +1865,7 @@ fn check_main(state: State, entry: parser.Node, found: Bool, sig: Sig) gives Sta
 
 fn has_declarations(program: parser.Node) gives Bool {
     return (
-        List.length(items_of(field(program, "uses"))) > 0
-        or List.length(items_of(field(program, "imports"))) > 0
+        List.length(items_of(field(program, "imports"))) > 0
     )
 }
 
@@ -1905,6 +1920,7 @@ fn check_program(program: parser.Node) gives Typed {
     }
     current = declare_type_names(current, program)
     current = declare_types(current)
+    current = declare_uses(current, program)
     let functions = items_of(field(program, "functions"))
     var function_names: List[Text] = []
     for function in functions {
@@ -2682,13 +2698,15 @@ type Ref = { name: Text, base: Text, root: Text, chain: List[Text] }
 type Tables = {
     declared: List[Text], records: List[Rec], type_names: List[Text], type_decls: List[parser.Node],
     refined: List[Ref], steps: Int, refining: Text, fn_names: List[Text],
-    reg_names: List[Text], reg_lines: List[Int], reg_columns: List[Int], enum_names: List[Text], enums: List[EnumInfo]
+    reg_names: List[Text], reg_lines: List[Int], reg_columns: List[Int], enum_names: List[Text], enums: List[EnumInfo],
+    cap_kinds: List[Text], cap_paths: List[Text]
 }
 
 fn empty_tables() gives Tables {
     return Tables(
         declared: [], records: [], type_names: [], type_decls: [], refined: [], steps: 0, refining: "",
-        fn_names: [], reg_names: [], reg_lines: [], reg_columns: [], enum_names: [], enums: []
+        fn_names: [], reg_names: [], reg_lines: [], reg_columns: [], enum_names: [], enums: [],
+        cap_kinds: [], cap_paths: []
     )
 }
 
@@ -2697,7 +2715,8 @@ fn set_declared(t: Tables, value: List[Text]) gives Tables {
         declared: value, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
-        enum_names: t.enum_names, enums: t.enums
+        enum_names: t.enum_names, enums: t.enums,
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
     )
 }
 
@@ -2706,7 +2725,8 @@ fn set_records(t: Tables, value: List[Rec]) gives Tables {
         declared: t.declared, records: value, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
-        enum_names: t.enum_names, enums: t.enums
+        enum_names: t.enum_names, enums: t.enums,
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
     )
 }
 
@@ -2715,7 +2735,8 @@ fn set_type_names(t: Tables, names: List[Text], decls: List[parser.Node]) gives 
         declared: t.declared, records: t.records, type_names: names, type_decls: decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
-        enum_names: t.enum_names, enums: t.enums
+        enum_names: t.enum_names, enums: t.enums,
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
     )
 }
 
@@ -2724,7 +2745,8 @@ fn set_refined(t: Tables, value: List[Ref]) gives Tables {
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: value, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
-        enum_names: t.enum_names, enums: t.enums
+        enum_names: t.enum_names, enums: t.enums,
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
     )
 }
 
@@ -2733,7 +2755,8 @@ fn set_steps(t: Tables, value: Int) gives Tables {
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: value, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
-        enum_names: t.enum_names, enums: t.enums
+        enum_names: t.enum_names, enums: t.enums,
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
     )
 }
 
@@ -2742,7 +2765,8 @@ fn set_refining(t: Tables, value: Text) gives Tables {
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: value, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
-        enum_names: t.enum_names, enums: t.enums
+        enum_names: t.enum_names, enums: t.enums,
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
     )
 }
 
@@ -2751,7 +2775,8 @@ fn set_fn_names(t: Tables, value: List[Text]) gives Tables {
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: value,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
-        enum_names: t.enum_names, enums: t.enums
+        enum_names: t.enum_names, enums: t.enums,
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
     )
 }
 
@@ -2760,7 +2785,8 @@ fn set_registered(t: Tables, names: List[Text], lines: List[Int], columns: List[
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: names, reg_lines: lines, reg_columns: columns,
-        enum_names: t.enum_names, enums: t.enums
+        enum_names: t.enum_names, enums: t.enums,
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
     )
 }
 
@@ -2769,7 +2795,8 @@ fn set_enum_names(t: Tables, value: List[Text]) gives Tables {
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
-        enum_names: value, enums: t.enums
+        enum_names: value, enums: t.enums,
+        cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
     )
 }
 
@@ -2778,7 +2805,7 @@ fn set_enums(t: Tables, value: List[EnumInfo]) gives Tables {
         declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
         refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
         reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
-        enum_names: t.enum_names, enums: value
+        enum_names: t.enum_names, enums: value, cap_kinds: t.cap_kinds, cap_paths: t.cap_paths
     )
 }
 
@@ -4762,6 +4789,442 @@ fn none_type(state: State, node: parser.Node, expected: Text) gives Checked {
 // Whether the expression is the `None` constant and not a variable of the program.
 fn is_none_constant(env: List[Binding], node: parser.Node) gives Bool {
     return kind_of(node) == "Name" and text_of(field(node, "name")) == "None" and binding_index(env, "None") < 0
+}
+
+// Capabilities: what a program declares that it needs
+
+fn set_caps(t: Tables, kinds: List[Text], paths: List[Text]) gives Tables {
+    return Tables(
+        declared: t.declared, records: t.records, type_names: t.type_names, type_decls: t.type_decls,
+        refined: t.refined, steps: t.steps, refining: t.refining, fn_names: t.fn_names,
+        reg_names: t.reg_names, reg_lines: t.reg_lines, reg_columns: t.reg_columns,
+        enum_names: t.enum_names, enums: t.enums, cap_kinds: kinds, cap_paths: paths
+    )
+}
+
+// The capability a built-in needs: "read", "write", "network" or "process"; the empty text for the others.
+fn capability_of(callee: Text) gives Text {
+    if callee == "read_file" {
+        return "read"
+    }
+    if callee == "write_file" {
+        return "write"
+    }
+    if callee == "Net.get" {
+        return "network"
+    }
+    if callee == "Process.run" {
+        return "process"
+    }
+    return ""
+}
+
+// The capabilities the program declares, once each: declaring is not granting.
+fn declare_uses(state: State, program: parser.Node) gives State {
+    var kinds: List[Text] = []
+    var paths: List[Text] = []
+    for declaration in items_of(field(program, "uses")) {
+        let kind = text_of(field(declaration, "capability"))
+        let path = text_of(field(declaration, "path"))
+        var present = false
+        var i = 0
+        while i < List.length(kinds)
+            shrinks List.length(kinds) - i
+        {
+            if List.get(kinds, i) == kind and List.get(paths, i) == path {
+                present = true
+            }
+            i = i + 1
+        }
+        if not present {
+            kinds = List.append(kinds, kind)
+            paths = List.append(paths, path)
+        }
+    }
+    return with_tables(state, set_caps(state.tables, kinds, paths))
+}
+
+fn declared_scopes(state: State, kind: Text) gives List[Text] {
+    var scopes: List[Text] = []
+    var i = 0
+    while i < List.length(state.tables.cap_kinds)
+        shrinks List.length(state.tables.cap_kinds) - i
+    {
+        if List.get(state.tables.cap_kinds, i) == kind {
+            scopes = List.append(scopes, List.get(state.tables.cap_paths, i))
+        }
+        i = i + 1
+    }
+    return scopes
+}
+
+// Paths, compared by segments
+
+type PathParts = { root: Text, segments: List[Text] }
+
+fn slashes(path: Text) gives Text {
+    var text = ""
+    var i = 0
+    while i < Text.length(path)
+        shrinks Text.length(path) - i
+    {
+        let c = Text.slice(path, i, i + 1)
+        if c == "\\" {
+            text = text + "/"
+        } else {
+            text = text + c
+        }
+        i = i + 1
+    }
+    return text
+}
+
+// The root of a path and its segments, with `.` and `..` resolved, without touching the file system. A `..`
+// that would leave a relative path is kept, and one that would leave the root is dropped.
+fn split_path(path: Text) gives PathParts {
+    var text = slashes(path)
+    var root = ""
+    if Text.starts_with(text, "/") {
+        root = "/"
+        text = Text.slice(text, 1, Text.length(text))
+    } else if Text.length(text) > 1 and Text.slice(text, 1, 2) == ":" {
+        root = upper_first(Text.slice(text, 0, 1)) + ":"
+        text = Text.slice(text, 2, Text.length(text))
+    }
+    var segments: List[Text] = []
+    var start = 0
+    var i = 0
+    while i <= Text.length(text)
+        shrinks Text.length(text) + 1 - i
+    {
+        if i == Text.length(text) or Text.slice(text, i, i + 1) == "/" {
+            let part = Text.slice(text, start, i)
+            start = i + 1
+            if part != "" and part != "." {
+                if part == ".." {
+                    let last = List.length(segments) - 1
+                    if last >= 0 and List.get(segments, last) != ".." {
+                        segments = drop_last(segments)
+                    } else if root == "" {
+                        segments = List.append(segments, "..")
+                    }
+                } else {
+                    segments = List.append(segments, part)
+                }
+            }
+        }
+        i = i + 1
+    }
+    return PathParts(root: root, segments: segments)
+}
+
+fn drop_last(items: List[Text]) gives List[Text] {
+    var result: List[Text] = []
+    var i = 0
+    while i < List.length(items) - 1
+        shrinks List.length(items) - i
+    {
+        result = List.append(result, List.get(items, i))
+        i = i + 1
+    }
+    return result
+}
+
+// Whether `path` is `scope` itself or is inside it. Both are compared by segments and their roots have to be
+// the same: `data2` is not inside `data`, and a relative path is never inside an absolute one.
+fn is_inside(scope: Text, path: Text) gives Bool {
+    if scope == "" {
+        return false
+    }
+    let inner = split_path(scope)
+    let outer = split_path(path)
+    if inner.root != outer.root or List.length(outer.segments) < List.length(inner.segments) {
+        return false
+    }
+    var i = 0
+    while i < List.length(inner.segments)
+        shrinks List.length(inner.segments) - i
+    {
+        if List.get(inner.segments, i) != List.get(outer.segments, i) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+fn same_root(first: Text, second: Text) gives Bool {
+    let a = split_path(first)
+    let b = split_path(second)
+    return a.root == b.root
+}
+
+// HTTPS origins
+
+type Origin = { ok: Bool, host: Text, port: Int, unsupported: Text }
+
+fn bad_origin() gives Origin {
+    return Origin(ok: false, host: "", port: 0, unsupported: "")
+}
+
+fn lower_ascii(text: Text) gives Text {
+    return parser.lower_text(text)
+}
+
+fn is_digits(text: Text) gives Bool {
+    if Text.length(text) == 0 {
+        return false
+    }
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c < "0" or c > "9" {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+fn is_ascii_text(text: Text) gives Bool {
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c < " " or c > "~" {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// Whether every label of an ASCII host is between 1 and 63 characters, as the idna codec requires. One
+// trailing dot is allowed.
+fn labels_valid(host: Text) gives Bool {
+    var text = host
+    if Text.ends_with(text, ".") {
+        text = Text.slice(text, 0, Text.length(text) - 1)
+    }
+    var start = 0
+    var i = 0
+    while i <= Text.length(text)
+        shrinks Text.length(text) + 1 - i
+    {
+        if i == Text.length(text) or Text.slice(text, i, i + 1) == "." {
+            let size = i - start
+            if size < 1 or size > 63 {
+                return false
+            }
+            start = i + 1
+        }
+        i = i + 1
+    }
+    return true
+}
+
+fn first_index_of_any(text: Text, chars: Text) gives Int {
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.contains(chars, Text.slice(text, i, i + 1)) {
+            return i
+        }
+        i = i + 1
+    }
+    return Text.length(text)
+}
+
+// The scheme of a URL as urlsplit reads it: the text before the first ':' when it is a valid scheme.
+fn url_scheme(url: Text) gives Text {
+    let colon = index_of_char(url, ":")
+    if colon <= 0 {
+        return ""
+    }
+    let candidate = Text.slice(url, 0, colon)
+    let first = Text.slice(candidate, 0, 1)
+    if not ((first >= "a" and first <= "z") or (first >= "A" and first <= "Z")) {
+        return ""
+    }
+    var i = 0
+    while i < Text.length(candidate)
+        shrinks Text.length(candidate) - i
+    {
+        let c = Text.slice(candidate, i, i + 1)
+        let valid = (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9") or c == "+" or c == "-" or c == "."
+        if not valid {
+            return ""
+        }
+        i = i + 1
+    }
+    return parser.lower_text(candidate)
+}
+
+// The origin of an HTTPS URL: its lowercase host and its port. Not valid when the scheme is not https, when
+// there is no host, when there are credentials or when the port is not a number.
+fn url_origin(url: Text) gives Origin {
+    if url_scheme(url) != "https" {
+        return bad_origin()
+    }
+    let rest = Text.slice(url, index_of_char(url, ":") + 1, Text.length(url))
+    if not Text.starts_with(rest, "//") {
+        return bad_origin()
+    }
+    let after = Text.slice(rest, 2, Text.length(rest))
+    let netloc = Text.slice(after, 0, first_index_of_any(after, "/?#"))
+    var hostinfo = netloc
+    let at = last_index_of_char(netloc, "@")
+    if at >= 0 {
+        let userinfo = Text.slice(netloc, 0, at)
+        hostinfo = Text.slice(netloc, at + 1, Text.length(netloc))
+        let colon = index_of_char(userinfo, ":")
+        var username = userinfo
+        var password = ""
+        if colon >= 0 {
+            username = Text.slice(userinfo, 0, colon)
+            password = Text.slice(userinfo, colon + 1, Text.length(userinfo))
+        }
+        if username != "" or password != "" {
+            return bad_origin()
+        }
+    }
+    if Text.starts_with(hostinfo, "[") {
+        return Origin(ok: false, host: "", port: 0, unsupported: "ipv6 origin")
+    }
+    var host = hostinfo
+    var port_text = ""
+    var has_port = false
+    let port_at = index_of_char(hostinfo, ":")
+    if port_at >= 0 {
+        host = Text.slice(hostinfo, 0, port_at)
+        port_text = Text.slice(hostinfo, port_at + 1, Text.length(hostinfo))
+        has_port = true
+    }
+    if host == "" {
+        return bad_origin()
+    }
+    var port = 443
+    if has_port {
+        if not is_digits(port_text) or not Int.can_parse(port_text) {
+            return bad_origin()
+        }
+        let number = Int.parse(port_text)
+        if number > 65535 {
+            return bad_origin()
+        }
+        if number != 0 {
+            port = number
+        }
+    }
+    if not is_ascii_text(host) {
+        return Origin(ok: false, host: "", port: 0, unsupported: "idna host")
+    }
+    if not labels_valid(host) {
+        return bad_origin()
+    }
+    return Origin(ok: true, host: parser.lower_text(host), port: port, unsupported: "")
+}
+
+fn last_index_of_char(text: Text, c: Text) gives Int {
+    return last_dot_of(text, c)
+}
+
+fn last_dot_of(text: Text, c: Text) gives Int {
+    var i = Text.length(text) - 1
+    while i >= 0
+        shrinks i + 1
+    {
+        if Text.slice(text, i, i + 1) == c {
+            return i
+        }
+        i = i - 1
+    }
+    return 0 - 1
+}
+
+// Whether a declaration covers a file path, an HTTPS origin or an executable. The paths are compared as they
+// were written.
+type Covers = { covered: Bool, unsupported: Text }
+
+fn covers(state: State, kind: Text, path: Text) gives Covers {
+    let scopes = declared_scopes(state, kind)
+    if kind == "network" {
+        let target = url_origin(path)
+        if target.unsupported != "" {
+            return Covers(covered: false, unsupported: target.unsupported)
+        }
+        if not target.ok {
+            return Covers(covered: false, unsupported: "")
+        }
+        for scope in scopes {
+            let declared = url_origin(scope)
+            if declared.unsupported != "" {
+                return Covers(covered: false, unsupported: declared.unsupported)
+            }
+            if declared.ok and declared.host == target.host and declared.port == target.port {
+                return Covers(covered: true, unsupported: "")
+            }
+        }
+        return Covers(covered: false, unsupported: "")
+    }
+    if kind == "process" {
+        return Covers(covered: path != "" and List.contains(scopes, path), unsupported: "")
+    }
+    for scope in scopes {
+        if is_inside(scope, path) {
+            return Covers(covered: true, unsupported: "")
+        }
+    }
+    return Covers(covered: false, unsupported: "")
+}
+
+// Whether a declared path and `path` can be compared at all: with nothing declared the answer is that the
+// path is not covered; a declaration of another root cannot be compared without the working directory.
+fn comparable(state: State, kind: Text, path: Text) gives Bool {
+    if kind == "network" or kind == "process" {
+        return true
+    }
+    let scopes = declared_scopes(state, kind)
+    if List.length(scopes) == 0 {
+        return true
+    }
+    for scope in scopes {
+        if same_root(scope, path) {
+            return true
+        }
+    }
+    return false
+}
+
+// A host operation needs a declaration that covers its target. This is a help, not the security: the
+// interpreter checks the permissions again when the program runs.
+fn check_capability(state: State, node: parser.Node) gives State {
+    let kind = capability_of(text_of(field(node, "callee")))
+    let arguments = items_of(field(node, "arguments"))
+    if List.length(arguments) == 0 {
+        return state
+    }
+    let path = List.get(arguments, 0)
+    if kind_of(path) != "TextLiteral" {
+        // The path is computed: only the interpreter can tell whether it is allowed.
+        return state
+    }
+    let text = text_of(field(path, "value"))
+    let found = covers(state, kind, text)
+    if found.unsupported != "" {
+        return unsupported(state, found.unsupported)
+    }
+    if found.covered or not comparable(state, kind, text) {
+        return state
+    }
+    return report(
+        state, "E2026", "This program does not declare that it needs to " + kind + " '" + text + "'",
+        "Declare it at the top level of the file: uses " + kind + " \"" + text + "\"", [], span_of(path)
+    )
 }
 
 // Test driver: every argument after the first is a file. For each one prints `FILE|path` and then

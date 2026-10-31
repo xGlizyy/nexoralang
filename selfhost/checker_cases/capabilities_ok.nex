@@ -1,0 +1,29 @@
+uses read "data"
+uses read "data"
+uses read "./config/app.txt"
+uses write "out/result.txt"
+uses write "C:/work"
+uses network "https://api.example.com"
+uses network "https://Other.Example.com:8443/base"
+uses process "python"
+
+fn load(name: Text) gives Text {
+    return read_file(name)
+}
+
+fn main() {
+    print(read_file("data/inputs.txt"))
+    print(read_file("data/sub/../inputs.txt"))
+    print(read_file("./data/x"))
+    print(read_file("config/app.txt"))
+    print(read_file("data"))
+    write_file("out/result.txt", "x")
+    write_file("C:\\work\\file.txt", "x")
+    write_file("c:/work/a/b", "x")
+    print(Net.get("https://api.example.com"))
+    print(Net.get("https://API.example.com/status?q=1"))
+    print(Net.get("https://api.example.com:443/x"))
+    print(Net.get("https://other.example.com:8443/anything"))
+    print(Process.run("python", ["--version"]))
+    print(load("anything"))
+}

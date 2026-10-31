@@ -1232,7 +1232,7 @@ fn parse_match_expression(p: Parser) gives Step {
 
 // Clauses
 
-fn lower_text(text: Text) gives Text {
+pub fn lower_text(text: Text) gives Text {
     let upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     let lower = "abcdefghijklmnopqrstuvwxyz"
     var result = ""

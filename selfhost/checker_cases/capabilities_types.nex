@@ -1,0 +1,17 @@
+uses read "."
+uses process "python"
+
+fn main() {
+    print(read_file(5))
+    print(read_file("a", "b"))
+    print(read_file())
+    write_file("a")
+    write_file(1, 2)
+    print(Net.get(true))
+    print(Process.run("python"))
+    print(Process.run("python", "x"))
+    print(Process.run(1, ["a"]))
+    print(Process.run("python", [1, 2]))
+    let text: Int = read_file("a")
+    let nothing = write_file("a", "b")
+}

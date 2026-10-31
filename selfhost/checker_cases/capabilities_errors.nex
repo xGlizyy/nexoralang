@@ -1,0 +1,28 @@
+uses read "data"
+uses write "out"
+uses network "https://api.example.com"
+uses process "python"
+
+fn main() {
+    print(read_file("other/file.txt"))
+    print(read_file("data2/file.txt"))
+    print(read_file("../data/file.txt"))
+    print(read_file("data/../secret.txt"))
+    print(read_file("/etc/passwd"))
+    print(read_file("C:/data/x"))
+    write_file("data/x", "y")
+    write_file("out/../x", "y")
+    print(Net.get("https://other.example.com"))
+    print(Net.get("http://api.example.com"))
+    print(Net.get("https://api.example.com:8443"))
+    print(Net.get("https://user@api.example.com"))
+    print(Net.get("https://api.example.com:abc"))
+    print(Net.get("https://api.example.com:99999"))
+    print(Net.get("https://a..b"))
+    print(Net.get("https:///path"))
+    print(Net.get("api.example.com"))
+    print(Net.get(""))
+    print(Process.run("ruby", ["-v"]))
+    print(Process.run("", []))
+    print(Process.run("Python", []))
+}
