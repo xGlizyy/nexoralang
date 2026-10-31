@@ -18,7 +18,7 @@ uses read "."
 // One file of the project.
 pub type Module = {
     path: Text, name: Text, program: parser.Node, imports: List[Text], clean: Bool, reason: Text,
-    pending: List[parser.Problem]
+    pending: List[parser.Problem], problems: List[parser.Problem]
 }
 
 // What has been read so far.
@@ -228,11 +228,23 @@ fn read_module(loader: Loader, path: Text) gives Loader {
     var program = parser.Node.Null()
     var clean = false
     var reason = "lexical"
+    var found: List[parser.Problem] = []
+    for diagnostic in lexed.diagnostics {
+        found = List.append(
+            found,
+            parser.Problem(
+                code: diagnostic.code, label: diagnostic.label, hint: diagnostic.hint, notes: [],
+                line: diagnostic.line, column: diagnostic.column, end_line: diagnostic.end_line,
+                end_column: diagnostic.end_column
+            )
+        )
+    }
     if List.length(lexed.diagnostics) == 0 {
         let outcome = parser.parse_program(lexed.tokens)
         program = outcome.program
         clean = List.length(outcome.diagnostics) == 0
         reason = "syntax"
+        found = outcome.diagnostics
     }
     var current = Loader(
         modules: loader.modules, stack: List.append(loader.stack, path), keys: loader.keys, names: loader.names,
@@ -280,7 +292,7 @@ fn read_module(loader: Loader, path: Text) gives Loader {
     }
     let module = Module(
         path: path, name: namespace_of(path), program: program, imports: imports, clean: clean, reason: reason,
-        pending: pending
+        pending: pending, problems: found
     )
     return Loader(
         modules: List.append(current.modules, module), stack: loader.stack, keys: List.append(current.keys, path),
@@ -324,7 +336,10 @@ pub fn check_all(project: Project, require_main: Bool) gives List[Checked] {
     {
         let module = List.get(modules, i)
         if not module.clean {
-            results = List.append(results, Checked(module: module, node: module.program, problems: [], unsupported: ""))
+            results = List.append(
+                results,
+                Checked(module: module, node: module.program, problems: module.problems, unsupported: "")
+            )
         } else {
             let last = i == List.length(modules) - 1
             let analysis = checker.analyze_module(
@@ -367,7 +382,7 @@ fn add_field(node: parser.Node, name: Text, value: parser.Node) gives parser.Nod
 }
 
 // What a module declares, to know which bare names are its own.
-type Own = { module: Text, functions: List[Text], types: List[Text], enums: List[Text] }
+type Own = { module: Text, file: Text, functions: List[Text], types: List[Text], enums: List[Text] }
 
 fn first_segment(callee: Text) gives Text {
     var i = 0
@@ -447,7 +462,7 @@ fn annotate_object(own: Own, kind: Text, names: List[Text], values: List[parser.
 fn keyed(own: Own, declarations: List[parser.Node], refined: Bool) gives List[parser.Node] {
     var result: List[parser.Node] = []
     for declaration in declarations {
-        var done = annotate(own, declaration)
+        var done = add_field(annotate(own, declaration), "file", parser.Node.Str(own.file))
         if own.module != "" {
             done = add_field(done, "key", parser.Node.Str(own.module + "." + text_of(field(declaration, "name"))))
         }
@@ -482,7 +497,7 @@ pub fn link(results: List[Checked]) gives parser.Node {
             module = ""
         }
         let own = Own(
-            module: module, functions: names_of(field(result.node, "functions")),
+            module: module, file: result.module.path, functions: names_of(field(result.node, "functions")),
             types: names_of(field(result.node, "types")), enums: names_of(field(result.node, "enums"))
         )
         functions = List.concat(functions, keyed(own, items_of(field(result.node, "functions")), false))

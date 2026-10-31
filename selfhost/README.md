@@ -109,6 +109,30 @@ The host has limits that come from the language and are not fixed here:
 | `--max-input` and `--max-source` with a file that is not ASCII, or that has CRLF | Bytes are counted from the text: exact for ASCII, and the text is read with its line breaks normalised, so a CRLF file counts as if it had LF. A file with a character that is not ASCII stops the run with `E0000`. |
 | Symbolic links are not followed | Paths are resolved by their text, there is no `realpath`. A link that points outside what is allowed is not noticed. |
 
+## The command: `nex.nex`
+
+[`nex.nex`](nex.nex) is `nex check`, `nex run` and `nex test` written in NEXORA, on top of the files of this directory, with the
+messages of `nex`: [`render.nex`](render.nex) draws a diagnostic as `diagnostics.py` does, and [`titles.nex`](titles.nex) holds the
+title and category of each code (generated from the Python table by `make_titles.py`; run it again when a code is added).
+
+```bash
+nex run selfhost/nex.nex --allow-read . --allow-write . -- check selfhost/project_cases/private_function/main.nex
+nex run selfhost/nex.nex --allow-read . --allow-write . -- run [--allow-read PATH ...] [--stdin FILE] FILE [ARGUMENTS]
+nex run selfhost/nex.nex --allow-read . --allow-write . -- test FILE [--function NAME]
+PYTHONPATH=nexora/src python selfhost/compare_nex.py check|run|test FILE [FILE ...]
+```
+
+`compare_nex.py` joins what `nex` writes to the standard output and the standard error and compares it with what `nex.nex` writes:
+the same text on 41 projects and programs for `check`, on 44 for `run` (two differ on purpose, below) and on 15 for `test`.
+
+| Limit | Why |
+|---|---|
+| No exit status, no standard error | A program has neither. Everything goes to the standard output, in the order `nex` writes it, and the process ends with status 0. |
+| The input of `run` comes from `--stdin FILE` | A program cannot read the standard input without stopping at its end. |
+| The output limit stops in the middle of a line | `print` writes whole lines, so what fit of that line is printed with a line break. |
+| A runtime error inside an imported module | `nex.nex` shows that module's file and line; `nex run` shows the file that runs, with an empty line, because it does not keep the file of the error (a bug of the Python implementation). |
+| A file with syntax errors | Only its lexical and syntax errors are shown, as for the file that runs. `nex check` also checks the partial tree of an imported module. |
+
 ## Projects of modules
 
 [`project.nex`](project.nex) follows `modules.py` (decision 0018): it reads the program that runs and, before it, the files it

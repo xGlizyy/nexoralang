@@ -1,0 +1,117 @@
+// A diagnostic as `nex` shows it in a terminal, quoting the line it points at (diagnostics.py, `render`):
+//
+//     syntax error[E1101]: Unexpected token
+//      --> hello.nex:3:9
+//       |
+//     3 |     let = "Hello"
+//       |         ^ Expected a variable name after 'let', found '='
+
+import "parser.nex"
+import "titles.nex"
+
+// The lines of a text, split at the line breaks.
+pub fn lines_of(text: Text) gives List[Text] {
+    var lines: List[Text] = []
+    var start = 0
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.slice(text, i, i + 1) == "\n" {
+            lines = List.append(lines, Text.slice(text, start, i))
+            start = i + 1
+        }
+        i = i + 1
+    }
+    return List.append(lines, Text.slice(text, start, Text.length(text)))
+}
+
+fn spaces(count: Int) gives Text {
+    var result = ""
+    var i = 0
+    while i < count
+        shrinks count - i
+    {
+        result = result + " "
+        i = i + 1
+    }
+    return result
+}
+
+fn carets(count: Int) gives Text {
+    var result = ""
+    var i = 0
+    while i < count
+        shrinks count - i
+    {
+        result = result + "^"
+        i = i + 1
+    }
+    return result
+}
+
+// The space in front of the carets: a tab stays a tab so the carets line up however wide the terminal draws it.
+fn padding_of(text: Text, column: Int) gives Text {
+    var result = ""
+    var i = 0
+    while i < column - 1
+        shrinks column - i
+    {
+        if i < Text.length(text) and Text.slice(text, i, i + 1) == "\t" {
+            result = result + "\t"
+        } else {
+            result = result + " "
+        }
+        i = i + 1
+    }
+    return result
+}
+
+pub fn severity_of(code: Text) gives Text {
+    if Text.starts_with(code, "W") {
+        return "warning"
+    }
+    return "error"
+}
+
+pub fn render(problem: parser.Problem, file: Text, lines: List[Text]) gives Text {
+    var title = titles.title_of(problem.code)
+    if title == "" {
+        title = "Not supported by this implementation yet"
+    }
+    var out = titles.category_of(problem.code) + " " + severity_of(problem.code) + "[" + problem.code + "]: " + title
+    if problem.line <= 0 {
+        out = out + "\n --> " + file + "\n  = " + problem.label
+        for note in problem.notes {
+            out = out + "\n  = note: " + note
+        }
+        if problem.hint != "" {
+            out = out + "\n  = hint: " + problem.hint
+        }
+        return out
+    }
+    var text = ""
+    if problem.line <= List.length(lines) {
+        text = List.get(lines, problem.line - 1)
+    }
+    let number = to_text(problem.line)
+    let gutter = spaces(Text.length(number))
+    var width = problem.end_column - problem.column
+    if problem.end_line != problem.line {
+        width = Text.length(text) - problem.column + 1
+    }
+    if width < 1 {
+        width = 1
+    }
+    out = out + "\n" + gutter + "--> " + file + ":" + number + ":" + to_text(problem.column)
+    out = out + "\n" + gutter + " |"
+    out = out + "\n" + number + " | " + text
+    out = out + "\n" + gutter + " | " + padding_of(text, problem.column) + carets(width) + " " + problem.label
+    for note in problem.notes {
+        out = out + "\n" + gutter + " = note: " + note
+    }
+    if problem.hint != "" {
+        out = out + "\n" + gutter + " = hint: " + problem.hint
+    }
+    return out
+}

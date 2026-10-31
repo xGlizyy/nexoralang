@@ -2436,8 +2436,11 @@ fn run_examples(prog: Prog, text: Text, program: parser.Node) {
     for function in items_of(field(program, "functions")) {
         let name = text_of(field(function, "name"))
         var index = 0
+        if text_of(field(function, "key")) != "" {
+            index = 1000000
+        }
         for item in items_of(field(function, "header")) {
-            if kind_of(item) == "Example" {
+            if kind_of(item) == "Example" and index < 1000000 {
                 index = index + 1
                 run_example(prog, lines, name, index, item)
             }
@@ -2824,7 +2827,7 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
 }
 
 // Reads what the command line gives a run: the grants, the input, the working directory and the arguments.
-type RunOptions = {
+pub type RunOptions = {
     grant_kinds: List[Text], grant_paths: List[Text], stdin: List[Text], cwd: Text, path: Text,
     arguments: List[Text], max_text: Int, max_output: Int, max_input: Int, max_source: Int, stdin_text: Text
 }
@@ -2873,7 +2876,7 @@ fn drop_last_text(items: List[Text]) gives List[Text] {
     return result
 }
 
-fn parse_options(words: List[Text]) gives RunOptions {
+pub fn parse_options(words: List[Text]) gives RunOptions {
     var kinds: List[Text] = []
     var paths: List[Text] = []
     var stdin: List[Text] = []
@@ -3111,6 +3114,143 @@ fn run_tests() {
         }
         i = i + 1
     }
+}
+
+// The public side: what a command written in NEXORA (nex.nex) needs to run a program that is checked and linked.
+
+// How a run ended. `printed` is what the program printed; when the output limit stopped it, `partial` is what fit of the
+// last line, which has no line break. `file` is the file of the function that was running when it failed.
+pub type Execution = {
+    printed: List[Text], partial: Text, failed: Bool, problem: parser.Problem, file: Text, out_of_fuel: Bool
+}
+
+// The file of the innermost function that is running, from the calls on the stack.
+fn running_file(stack: Stk) gives Text {
+    return match stack {
+        Stk.Nil => ""
+        Stk.Cons(top, rest) => match top {
+            Kont.KCall(saved, name, site, function, frame) => text_of(field(function, "file"))
+            _ => running_file(rest)
+        }
+    }
+}
+
+pub fn execute(node: parser.Node, options: RunOptions) gives Execution {
+    let host = HostCfg(
+        arguments: options.arguments, declared_kinds: declared_kinds_of(node),
+        declared_paths: declared_paths_of(node), grant_kinds: options.grant_kinds,
+        grant_paths: options.grant_paths, cwd: options.cwd,
+        max_text: options.max_text, max_output: options.max_output, max_input: options.max_input,
+        input_sizes: input_sizes_of(options.stdin_text, options.stdin)
+    )
+    let prog = build_prog(node, host)
+    let start = start_machine(prog, start_fuel())
+    let tracing = Tracing(watch: [], invoked: [], skipped: [], inputs: options.stdin)
+    let done = run_machine(prog, with_tracing(start, tracing))
+    let printed = done.out
+    let nothing = problem_at("", "", "", [], parser.no_span())
+    return match done.control {
+        Control.CFail(problem) => cut_execution(done, problem)
+        Control.CHalt => Execution(printed: printed, partial: "", failed: false, problem: nothing, file: "", out_of_fuel: false)
+        Control.CDone(v) => Execution(printed: printed, partial: "", failed: false, problem: nothing, file: "", out_of_fuel: false)
+        _ => Execution(printed: printed, partial: "", failed: false, problem: nothing, file: "", out_of_fuel: true)
+    }
+}
+
+fn cut_execution(done: Machine, problem: parser.Problem) gives Execution {
+    var printed = done.out
+    var partial = ""
+    if problem.code == "E3015" and Text.starts_with(problem.label, "output") and List.length(done.out) > 0 {
+        partial = List.get(done.out, List.length(done.out) - 1)
+        printed = drop_last_text(done.out)
+    }
+    return Execution(
+        printed: printed, partial: partial, failed: true, problem: problem, file: running_file(done.stack),
+        out_of_fuel: false
+    )
+}
+
+// What an example gave: "passed", "failed" (the condition was false) or "error" (it stopped with a diagnostic).
+pub type ExampleResult = { function: Text, index: Int, status: Text, problem: parser.Problem, out: List[Text] }
+
+pub fn evaluate_examples(node: parser.Node, text: Text, only: Text) gives List[ExampleResult] {
+    let prog = build_prog(node, declared_host(node))
+    let lines = source_lines(text)
+    var results: List[ExampleResult] = []
+    for function in items_of(field(node, "functions")) {
+        let name = text_of(field(function, "name"))
+        if text_of(field(function, "key")) == "" and (only == "" or only == name) {
+            var index = 0
+            for item in items_of(field(function, "header")) {
+                if kind_of(item) == "Example" {
+                    index = index + 1
+                    results = List.append(results, evaluate_example(prog, lines, name, index, item))
+                }
+            }
+        }
+    }
+    return results
+}
+
+fn evaluate_example(prog: Prog, lines: List[Text], name: Text, index: Int, item: parser.Node) gives ExampleResult {
+    let condition = field(item, "condition")
+    let calls = sort_calls(calls_to(condition, name))
+    var watch: List[Text] = []
+    for call in calls {
+        watch = List.append(watch, span_key(place_of(call)))
+    }
+    let machine = Machine(
+        control: Control.CEval(condition), env: [], stack: push(Kont.KHalt(), nil_stack()), out: [], written: 0, depth: 0,
+        fuel: start_fuel(), tracing: Tracing(watch: watch, invoked: [], skipped: [], inputs: [])
+    )
+    let done = run_machine(prog, machine)
+    let at = place_of(condition)
+    var message = ""
+    if not is_null(field(item, "message")) {
+        message = text_of(field(item, "message"))
+    }
+    let none = problem_at("", "", "", [], parser.no_span())
+    return match done.control {
+        Control.CFail(raised) => ExampleResult(
+            function: name, index: index, status: "error",
+            problem: parser.Problem(
+                code: raised.code, label: raised.label, hint: raised.hint,
+                notes: List.append(
+                    raised.notes,
+                    "While evaluating example " + to_text(index) + " of '" + name + "', at line " + to_text(at.line) + "."
+                ),
+                line: raised.line, column: raised.column, end_line: raised.end_line, end_column: raised.end_column
+            ),
+            out: done.out
+        )
+        Control.CDone(outcome) => finished_example(name, index, truth(outcome), done, calls, lines, message, at)
+        _ => finished_example(name, index, false, done, calls, lines, message, at)
+    }
+}
+
+fn finished_example(
+    name: Text, index: Int, passed: Bool, done: Machine, calls: List[parser.Node], lines: List[Text], message: Text,
+    at: parser.Span
+) gives ExampleResult {
+    let none = problem_at("", "", "", [], parser.no_span())
+    if passed {
+        return ExampleResult(function: name, index: index, status: "passed", problem: none, out: done.out)
+    }
+    var notes: List[Text] = []
+    for seen in done.tracing.invoked {
+        var shown = "None"
+        if seen.status == "returned" {
+            shown = show_val(seen.val)
+        }
+        notes = List.append(notes, text_of_span(lines, place_of(call_for_key(calls, seen.key))) + " returned " + shown)
+    }
+    if message != "" {
+        notes = List.append(notes, "Reason: " + message)
+    }
+    return ExampleResult(
+        function: name, index: index, status: "failed",
+        problem: problem_at("E4004", "This example of '" + name + "' is false", "", notes, at), out: done.out
+    )
 }
 
 fn main() {
