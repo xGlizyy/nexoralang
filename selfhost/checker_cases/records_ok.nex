@@ -1,0 +1,26 @@
+type Point = { x: Int, y: Int }
+type Line = { from: Point, to: Point }
+type Named = { name: Text, tags: List[Text], points: List[Point] }
+
+fn length_squared(line: Line) gives Int {
+    let dx = line.to.x - line.from.x
+    let dy = line.to.y - line.from.y
+    return dx * dx + dy * dy
+}
+
+fn origin() gives Point {
+    return Point(x: 0, y: 0)
+}
+
+fn main() {
+    let a = Point(y: 2, x: 1)
+    let line = Line(from: origin(), to: a)
+    print(length_squared(line))
+    print(a == origin())
+    print(a != origin())
+    let n = Named(name: "n", tags: ["a"], points: [a, origin()])
+    print(List.length(n.points))
+    print(List.get(n.points, 0).x)
+    let p: Point = a
+    print(p)
+}

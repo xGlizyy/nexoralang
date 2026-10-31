@@ -1,0 +1,30 @@
+type Shape = { size: Int }
+
+fn compute(value: Int) gives Int {
+    return value
+}
+
+fn main() {
+    let counter = 1
+    print(counte)
+    print(countr + 1)
+    print(zzz)
+    print(compte(1))
+    print(lenght("abc"))
+    print(length("abc"))
+    print(get([1], 0))
+    print(Text.lenght("abc"))
+    print(Text.xyz("abc"))
+    print(Bool.foo(1))
+    print(Int.pars("1"))
+    print(Shape.foo(1))
+    print(counter.foo(1))
+    print(compute.foo(1))
+    print(Shpe.foo(1))
+    print(shape.foo(1))
+    print(print.foo(1))
+    let a: Strng = 1
+    let b: String = 1
+    let c: Shap = 1
+    let d: Lst = 1
+}

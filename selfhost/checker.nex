@@ -30,7 +30,7 @@ type Sig = {
 
 type State = {
     problems: List[parser.Problem], user: List[Sig], function: Text, return_type: Text,
-    in_example: Text, unsupported: Text
+    in_example: Text, unsupported: Text, declared: List[Text], records: List[Rec]
 }
 
 type Checked = { node: parser.Node, ty: Text, state: State }
@@ -152,28 +152,39 @@ fn with_type(node: parser.Node, ty: Text) gives parser.Node {
 fn with_problems(state: State, problems: List[parser.Problem]) gives State {
     return State(
         problems: problems, user: state.user, function: state.function, return_type: state.return_type,
-        in_example: state.in_example, unsupported: state.unsupported
+        in_example: state.in_example, unsupported: state.unsupported,
+        declared: state.declared, records: state.records
     )
 }
 
 fn with_user(state: State, user: List[Sig]) gives State {
     return State(
         problems: state.problems, user: user, function: state.function, return_type: state.return_type,
-        in_example: state.in_example, unsupported: state.unsupported
+        in_example: state.in_example, unsupported: state.unsupported,
+        declared: state.declared, records: state.records
+    )
+}
+
+fn with_types(state: State, declared: List[Text], records: List[Rec]) gives State {
+    return State(
+        problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
+        in_example: state.in_example, unsupported: state.unsupported, declared: declared, records: records
     )
 }
 
 fn with_function(state: State, function: Text, return_type: Text) gives State {
     return State(
         problems: state.problems, user: state.user, function: function, return_type: return_type,
-        in_example: state.in_example, unsupported: state.unsupported
+        in_example: state.in_example, unsupported: state.unsupported,
+        declared: state.declared, records: state.records
     )
 }
 
 fn with_example(state: State, in_example: Text) gives State {
     return State(
         problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
-        in_example: in_example, unsupported: state.unsupported
+        in_example: in_example, unsupported: state.unsupported,
+        declared: state.declared, records: state.records
     )
 }
 
@@ -184,7 +195,7 @@ fn unsupported(state: State, reason: Text) gives State {
     }
     return State(
         problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
-        in_example: state.in_example, unsupported: reason
+        in_example: state.in_example, unsupported: reason, declared: state.declared, records: state.records
     )
 }
 
@@ -351,7 +362,7 @@ fn conversion_hint(found: Text, expected: Text) gives Text {
     if found == "Float" and expected == "Int" {
         return "Convert the Float explicitly with to_int(...), which drops the fractional part."
     }
-    if expected == "Text" and is_value_type(found) {
+    if expected == "Text" and (found == "Int" or found == "Float" or found == "Bool" or found == "Text") {
         return "Convert the value explicitly with to_text(...)."
     }
     return ""
@@ -461,6 +472,15 @@ fn make_binding(name: Text, category: Text, ty: Text, mutable: Bool, loop_variab
 // Reports E2006 and says that `name` cannot be declared when it is a built-in, a function or already
 // visible: functions, parameters and variables share one namespace.
 fn name_is_free(state: State, env: List[Binding], name: Text, span: parser.Span) gives Free {
+    if is_declared_record(state, name) {
+        return Free(
+            state: report(
+                state, "E2006", "'" + name + "' is the name of a type and cannot be used for something else",
+                "Choose a different name. Types start with a capital letter; values usually do not.", [], span
+            ),
+            free: false
+        )
+    }
     if is_builtin(name) or user_index(state, name) >= 0 {
         var what = "a function"
         if is_builtin(name) {
@@ -535,6 +555,12 @@ fn check_expression(state: State, env: List[Binding], node: parser.Node, expecte
     if kind == "Call" {
         return check_call(state, env, node, expected)
     }
+    if kind == "RecordConstruction" {
+        return check_record_construction(state, env, node)
+    }
+    if kind == "FieldAccess" {
+        return check_field_access(state, env, node)
+    }
     return checked(node, "", unsupported(state, kind))
 }
 
@@ -544,6 +570,15 @@ fn check_name(state: State, env: List[Binding], node: parser.Node) gives Checked
     if index >= 0 {
         let binding = List.get(env, index)
         return checked(node, binding.ty, state)
+    }
+    if is_declared_record(state, name) {
+        return checked(
+            node, "",
+            report(
+                state, "E2011", "'" + name + "' is a type, not a value",
+                "To build one, write it: " + name + "(field: value)", [], span_of(node)
+            )
+        )
     }
     if is_builtin(name) or user_index(state, name) >= 0 {
         return checked(
@@ -574,12 +609,12 @@ fn check_unknown_variable(state: State, env: List[Binding], name: Text, span: pa
             "'result' only exists inside a 'promises' clause of a function that gives a value.", [], span
         )
     }
-    if List.length(env) == 0 {
-        return report(
-            state, "E2005", "There is no variable named '" + name + "' here", "Declare it first with 'let'.", [], span
-        )
+    let close = close_match(name, binding_names(env))
+    var hint = "Declare it first with 'let'."
+    if close != "" {
+        hint = "Did you mean '" + close + "'?"
     }
-    return unsupported(state, "close matches")
+    return report(state, "E2005", "There is no variable named '" + name + "' here", hint, [], span)
 }
 
 fn check_unary(state: State, env: List[Binding], node: parser.Node) gives Checked {
@@ -631,7 +666,14 @@ fn check_binary(state: State, env: List[Binding], node: parser.Node) gives Check
     if left.ty == "" or right.ty == "" {
         return checked(rebuilt, "", right.state)
     }
-    let result = binary_result(operator, left.ty, right.ty)
+    var result = binary_result(operator, left.ty, right.ty)
+    if left.ty == right.ty and rec_index(right.state, left.ty) >= 0 {
+        // A record is a value type: two values of the same record are compared by value.
+        result = ""
+        if operator == "==" or operator == "!=" {
+            result = "Bool"
+        }
+    }
     if result == "" {
         return checked(
             rebuilt, "",
@@ -777,9 +819,9 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
     let qualifier = text_of(field(node, "qualifier"))
     var sig = builtin(callee)
     let user = user_index(state, callee)
-    if qualifier != "" and sig.name == "" and user < 0 {
-        // `Name.function(...)` with no such function: it needs a suggestion.
-        return checked(node, "", unsupported(state, "qualified call"))
+    if qualifier != "" and not is_builtin(callee) and user < 0 {
+        // `Name.function(...)` where Name is no type with that function.
+        return checked(node, "", unknown_qualified_call(state, env, node))
     }
     if is_builtin(callee) and sig.name == "" {
         return checked(node, "", unsupported(state, "built-in " + callee))
@@ -801,7 +843,13 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
                 report(given.state, "E2008", "'" + callee + "' is a variable, not a function", "", [], callee_span)
             )
         }
-        return checked(rebuilt, "", unsupported(given.state, "function hint"))
+        return checked(
+            rebuilt, "",
+            report(
+                given.state, "E2008", "There is no function named '" + callee + "'", function_hint(given.state, callee),
+                [], callee_span
+            )
+        )
     }
     let expected_count = List.length(sig.param_types)
     let count = List.length(arguments)
@@ -969,7 +1017,7 @@ fn flow(node: parser.Node, state: State, env: List[Binding], returns: Bool) give
     return Flow(node: node, state: state, env: env, returns: returns)
 }
 
-fn declared_type(state: State, node: parser.Node, what: Text) gives Checked {
+fn declared_type(state: State, node: parser.Node, what: Text, allow_broken: Bool) gives Checked {
     // The type a TypeRef names. The empty type stands for a type written wrong.
     let name = text_of(field(node, "name"))
     let qualifier = field(node, "qualifier")
@@ -987,17 +1035,34 @@ fn declared_type(state: State, node: parser.Node, what: Text) gives Checked {
             )
         )
     }
-    if name == "Int" or name == "Float" or name == "Bool" or name == "Text" {
-        return checked(node, name, state)
-    }
     if name == "List" and List.length(arguments) == 1 {
-        let item = declared_type(state, List.get(arguments, 0), "A list element")
+        let item = declared_type(state, List.get(arguments, 0), "A list element", allow_broken)
         if item.ty == "" {
             return checked(node, "", item.state)
         }
         return checked(node, "List[" + item.ty + "]", item.state)
     }
-    return checked(node, "", unsupported(state, "type " + name))
+    if List.length(arguments) > 0 {
+        return checked(node, "", unsupported(state, "generic type " + name))
+    }
+    if name == "Int" or name == "Float" or name == "Bool" or name == "Text" {
+        return checked(node, name, state)
+    }
+    if is_declared_record(state, name) {
+        // A record whose own declaration has an error is already reported there: it is no type here.
+        if rec_index(state, name) >= 0 or allow_broken {
+            return checked(node, name, state)
+        }
+        return checked(node, "", state)
+    }
+    let close = close_match(name, List.concat(known_type_names(), state.declared))
+    var hint = "The types are Int, Float, Bool, Text and Void, and the types the program declares."
+    if name == "String" {
+        hint = "The text type is called Text."
+    } else if close != "" {
+        hint = "Did you mean '" + close + "'?"
+    }
+    return checked(node, "", report(state, "E2012", "'" + name + "' is not a type", hint, [], span_of(node)))
 }
 
 fn check_let(state: State, env: List[Binding], node: parser.Node) gives Flow {
@@ -1007,7 +1072,7 @@ fn check_let(state: State, env: List[Binding], node: parser.Node) gives Flow {
     var declared = ""
     var current = state
     if not is_null(declared_node) {
-        let resolved = declared_type(current, declared_node, "The variable '" + name + "'")
+        let resolved = declared_type(current, declared_node, "The variable '" + name + "'", false)
         declared = resolved.ty
         current = resolved.state
     }
@@ -1235,6 +1300,9 @@ fn check_statement(state: State, env: List[Binding], node: parser.Node) gives Fl
     if kind == "Assign" {
         return check_assign(state, env, node)
     }
+    if kind == "FieldAssign" {
+        return check_field_assign(state, env, node)
+    }
     if kind == "ExprStatement" {
         let done = check_expression_statement(state, env, node)
         return flow(done.node, done.state, env, false)
@@ -1439,7 +1507,7 @@ fn make_signature(state: State, node: parser.Node) gives SigResult {
     {
         let param = List.get(params, i)
         let name = text_of(field(param, "name"))
-        let resolved = declared_type(current, field(param, "type"), "The parameter '" + name + "'")
+        let resolved = declared_type(current, field(param, "type"), "The parameter '" + name + "'", false)
         current = resolved.state
         names = List.append(names, name)
         types = List.append(types, resolved.ty)
@@ -1456,7 +1524,7 @@ fn make_signature(state: State, node: parser.Node) gives SigResult {
                 "A function that gives nothing has no 'gives'", [], span_of(return_node)
             )
         } else {
-            let resolved = declared_type(current, return_node, "")
+            let resolved = declared_type(current, return_node, "", false)
             current = resolved.state
             return_type = resolved.ty
         }
@@ -1713,7 +1781,7 @@ fn check_main(state: State, entry: parser.Node, found: Bool, sig: Sig) gives Sta
 
 fn has_declarations(program: parser.Node) gives Bool {
     return (
-        List.length(items_of(field(program, "types"))) > 0 or List.length(items_of(field(program, "records"))) > 0
+        List.length(items_of(field(program, "types"))) > 0
         or List.length(items_of(field(program, "enums"))) > 0 or List.length(items_of(field(program, "uses"))) > 0
         or List.length(items_of(field(program, "imports"))) > 0
     )
@@ -1757,7 +1825,10 @@ fn fill_object(kind: Text, names: List[Text], values: List[parser.Node]) gives p
 }
 
 fn initial_state() gives State {
-    return State(problems: [], user: [], function: "", return_type: "", in_example: "", unsupported: "")
+    return State(
+        problems: [], user: [], function: "", return_type: "", in_example: "", unsupported: "",
+        declared: [], records: []
+    )
 }
 
 fn check_program(program: parser.Node) gives Typed {
@@ -1765,6 +1836,8 @@ fn check_program(program: parser.Node) gives Typed {
     if has_declarations(program) {
         return Typed(node: program, state: unsupported(current, "declarations"))
     }
+    current = declare_record_names(current, program)
+    current = declare_records(current, program)
     let functions = items_of(field(program, "functions"))
     var signatures: List[Sig] = []
     var main_node = parser.Node.Null()
@@ -1781,6 +1854,11 @@ fn check_program(program: parser.Node) gives Typed {
             current = report(
                 current, "E2002", "'" + sig.name + "' is a built-in function and cannot be declared again",
                 "Choose a different name for this function.", [], name_span
+            )
+        } else if is_declared_record(current, sig.name) {
+            current = report(
+                current, "E2006", "'" + sig.name + "' is the name of a type and cannot be used for a function",
+                sig.name + "(x) already means: build one: " + sig.name + "(field: value)", [], name_span
             )
         } else if user_index(current, sig.name) >= 0 {
             let first = List.get(current.user, user_index(current, sig.name))
@@ -1812,6 +1890,721 @@ fn check_program(program: parser.Node) gives Typed {
     return Typed(
         node: fill_types(with_field(program, "functions", parser.Node.Items(typed_functions))), state: current
     )
+}
+
+// Close matches (difflib.get_close_matches with n=1 and a cutoff of 0.6)
+
+type Block = { i: Int, j: Int, k: Int }
+
+// The longest run of equal characters of a[alo:ahi] and b[blo:bhi]. Among runs of the same length, the
+// one that starts first in `a`, and then first in `b`, as difflib picks it.
+fn longest_block(a: Text, b: Text, alo: Int, ahi: Int, blo: Int, bhi: Int) gives Block {
+    var best_i = alo
+    var best_j = blo
+    var best_k = 0
+    var previous: List[Int] = []
+    var fill = 0
+    while fill < bhi - blo + 1
+        shrinks bhi - blo + 1 - fill
+    {
+        previous = List.append(previous, 0)
+        fill = fill + 1
+    }
+    var i = alo
+    while i < ahi
+        shrinks ahi - i
+    {
+        var current: List[Int] = [0]
+        var j = blo
+        while j < bhi
+            shrinks bhi - j
+        {
+            var run = 0
+            if Text.slice(a, i, i + 1) == Text.slice(b, j, j + 1) {
+                run = List.get(previous, j - blo) + 1
+            }
+            current = List.append(current, run)
+            if run > best_k {
+                best_i = i - run + 1
+                best_j = j - run + 1
+                best_k = run
+            }
+            j = j + 1
+        }
+        previous = current
+        i = i + 1
+    }
+    return Block(i: best_i, j: best_j, k: best_k)
+}
+
+// How many characters the matching blocks of a[alo:ahi] and b[blo:bhi] cover.
+fn matched(a: Text, b: Text, alo: Int, ahi: Int, blo: Int, bhi: Int) gives Int {
+    if alo >= ahi or blo >= bhi {
+        return 0
+    }
+    let block = longest_block(a, b, alo, ahi, blo, bhi)
+    if block.k == 0 {
+        return 0
+    }
+    return (
+        block.k + matched(a, b, alo, block.i, blo, block.j)
+        + matched(a, b, block.i + block.k, ahi, block.j + block.k, bhi)
+    )
+}
+
+// The best possibility for `word`, or the empty text when none is close enough: the highest ratio
+// (2 * matched / total length) of at least 0.6, and the greatest text among equal ratios.
+fn close_match(word: Text, possibilities: List[Text]) gives Text {
+    var best = ""
+    var best_matched = 0 - 1
+    var best_total = 1
+    for candidate in possibilities {
+        let total = Text.length(candidate) + Text.length(word)
+        if total > 0 {
+            let common = matched(candidate, word, 0, Text.length(candidate), 0, Text.length(word))
+            if 10 * common >= 3 * total {
+                // Compare common / total with best_matched / best_total without dividing.
+                let left = common * best_total
+                let right = best_matched * total
+                if best_matched < 0 or left > right or (left == right and candidate > best) {
+                    best = candidate
+                    best_matched = common
+                    best_total = total
+                }
+            }
+        }
+    }
+    return best
+}
+
+fn sort_texts(items: List[Text]) gives List[Text] {
+    var sorted: List[Text] = []
+    for item in items {
+        var result: List[Text] = []
+        var placed = false
+        for existing in sorted {
+            if not placed and item < existing {
+                result = List.append(result, item)
+                placed = true
+            }
+            result = List.append(result, existing)
+        }
+        if not placed {
+            result = List.append(result, item)
+        }
+        sorted = result
+    }
+    return sorted
+}
+
+fn binding_names(env: List[Binding]) gives List[Text] {
+    var names: List[Text] = []
+    for binding in env {
+        names = List.append(names, binding.name)
+    }
+    return names
+}
+
+fn upper_first(name: Text) gives Text {
+    let lower = "abcdefghijklmnopqrstuvwxyz"
+    let upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    if Text.length(name) == 0 {
+        return name
+    }
+    let first = Text.slice(name, 0, 1)
+    var mapped = first
+    var i = 0
+    while i < 26
+        shrinks 26 - i
+    {
+        if first == Text.slice(lower, i, i + 1) {
+            mapped = Text.slice(upper, i, i + 1)
+        }
+        i = i + 1
+    }
+    return mapped + Text.slice(name, 1, Text.length(name))
+}
+
+fn starts_upper(name: Text) gives Bool {
+    if Text.length(name) == 0 {
+        return false
+    }
+    let first = Text.slice(name, 0, 1)
+    return first >= "A" and first <= "Z"
+}
+
+// The functions of each built-in type, as they are listed in hints.
+fn type_functions(name: Text) gives List[Text] {
+    if name == "Text" {
+        return ["contains", "ends_with", "length", "slice", "starts_with"]
+    }
+    if name == "Int" or name == "Float" {
+        return ["can_parse", "parse"]
+    }
+    if name == "List" {
+        return ["append", "concat", "contains", "get", "length"]
+    }
+    if name == "Option" {
+        return ["is_none", "is_some", "value", "value_or"]
+    }
+    if name == "Result" {
+        return ["error", "is_err", "is_ok", "value", "value_or"]
+    }
+    return []
+}
+
+fn dotted_member(name: Text) gives Text {
+    let at = index_of_char(name, ".")
+    if at < 0 {
+        return ""
+    }
+    return Text.slice(name, at + 1, Text.length(name))
+}
+
+fn index_of_char(text: Text, c: Text) gives Int {
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.slice(text, i, i + 1) == c {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn qualified_names(member: Text) gives List[Text] {
+    var found: List[Text] = []
+    for name in builtin_names() {
+        if index_of_char(name, ".") >= 0 and dotted_member(name) == member {
+            found = List.append(found, name)
+        }
+    }
+    return sort_texts(found)
+}
+
+fn suggest(names: List[Text]) gives Text {
+    var quoted: List[Text] = []
+    for name in names {
+        quoted = List.append(quoted, "'" + name + "'")
+    }
+    return "Did you mean " + parser.join_texts(quoted, " or ") + "?"
+}
+
+// The suggestion for a call to a function that does not exist. A name that is a function of a type,
+// written without it ("length"), suggests the qualified name first.
+fn function_hint(state: State, callee: Text) gives Text {
+    if List.length(qualified_names(callee)) > 0 {
+        return suggest(qualified_names(callee))
+    }
+    var plain: List[Text] = []
+    for sig in state.user {
+        plain = List.append(plain, sig.name)
+    }
+    for name in builtin_names() {
+        if index_of_char(name, ".") < 0 {
+            plain = List.append(plain, name)
+        }
+    }
+    let close = close_match(callee, plain)
+    if close != "" {
+        return suggest([close])
+    }
+    var members: List[Text] = []
+    for name in builtin_names() {
+        let member = dotted_member(name)
+        if member != "" and not List.contains(members, member) {
+            members = List.append(members, member)
+        }
+    }
+    let close_member = close_match(callee, sort_texts(members))
+    if close_member != "" {
+        return suggest(qualified_names(close_member))
+    }
+    return ""
+}
+
+fn known_type_names() gives List[Text] {
+    return ["Void", "Int", "Float", "Bool", "Text"]
+}
+
+// Records
+
+type Rec = { name: Text, field_names: List[Text], field_types: List[Text], line: Int, column: Int }
+
+fn rec_index(state: State, name: Text) gives Int {
+    var i = 0
+    while i < List.length(state.records)
+        shrinks List.length(state.records) - i
+    {
+        let rec = List.get(state.records, i)
+        if rec.name == name {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn rec_field_type(rec: Rec, name: Text) gives Text {
+    let at = index_of(rec.field_names, name)
+    if at < 0 {
+        return ""
+    }
+    return List.get(rec.field_types, at)
+}
+
+fn is_declared_record(state: State, name: Text) gives Bool {
+    return List.contains(state.declared, name)
+}
+
+fn record_decl(program: parser.Node, name: Text) gives parser.Node {
+    for declaration in items_of(field(program, "records")) {
+        if text_of(field(declaration, "name")) == name {
+            return declaration
+        }
+    }
+    return parser.Node.Null()
+}
+
+// Registers the name of every record the program declares, in the order they appear. A name belongs
+// to one type: it cannot be declared twice.
+fn declare_record_names(state: State, program: parser.Node) gives State {
+    var current = state
+    var first_lines: List[Int] = []
+    var first_columns: List[Int] = []
+    for declaration in items_of(field(program, "records")) {
+        let name = text_of(field(declaration, "name"))
+        let span = place_span(field(declaration, "name_span"))
+        if List.contains(known_type_names(), name) or name == "List" {
+            current = report(
+                current, "E2016", "'" + name + "' is a built-in type and cannot be declared again",
+                "Choose a different name for this type.", [], span
+            )
+        } else if not starts_upper(name) {
+            current = report(
+                current, "E2016", "The type name '" + name + "' must start with a capital letter",
+                "Write it as: " + upper_first(name), [], span
+            )
+        } else if is_declared_record(current, name) {
+            let at = index_of(current.declared, name)
+            current = report(
+                current, "E2016", "The type '" + name + "' is declared more than once", "",
+                [
+                    "It was first declared at line " + to_text(List.get(first_lines, at)) + ", column "
+                    + to_text(List.get(first_columns, at)) + "."
+                ],
+                span
+            )
+        } else {
+            current = with_types(current, List.append(current.declared, name), current.records)
+            first_lines = List.append(first_lines, span.line)
+            first_columns = List.append(first_columns, span.column)
+        }
+    }
+    return current
+}
+
+// The record types a type reference depends on, looking inside `List[...]` too.
+fn type_dependencies(state: State, reference: parser.Node) gives List[Text] {
+    var found: List[Text] = []
+    let name = text_of(field(reference, "name"))
+    if is_null(field(reference, "qualifier")) and is_declared_record(state, name) {
+        found = List.append(found, name)
+    }
+    for argument in items_of(field(reference, "arguments")) {
+        found = List.concat(found, type_dependencies(state, argument))
+    }
+    return found
+}
+
+type Fields = { names: List[Text], references: List[parser.Node], ok: Bool, state: State }
+
+// The fields of a record: their names and the types they were written with. A field repeated, or a
+// type that is not a type, makes the declaration unusable; the error is reported once, here.
+fn resolve_fields(state: State, declaration: parser.Node) gives Fields {
+    let name = text_of(field(declaration, "name"))
+    let declared_at = place_span(field(declaration, "name_span"))
+    var current = state
+    var names: List[Text] = []
+    var kinds: List[Text] = []
+    var references: List[parser.Node] = []
+    var ok = true
+    for declared in items_of(field(declaration, "fields")) {
+        let field_name = text_of(field(declared, "name"))
+        if List.contains(names, field_name) {
+            current = report(
+                current, "E2016", "The field '" + field_name + "' is declared more than once in '" + name + "'", "",
+                [note_line("'" + name + "' is declared at line ", declared_at.line)],
+                place_span(field(declared, "name_span"))
+            )
+            ok = false
+        } else {
+            names = List.append(names, field_name)
+            let resolved = declared_type(
+                current, field(declared, "type"), "The field '" + field_name + "' of '" + name + "'", true
+            )
+            current = resolved.state
+            if resolved.ty == "" {
+                ok = false
+            } else {
+                kinds = List.append(kinds, resolved.ty)
+                references = List.append(references, field(declared, "type"))
+            }
+        }
+    }
+    return Fields(names: kinds_names(names, kinds, ok), references: references, ok: ok, state: current)
+}
+
+fn note_line(prefix: Text, line: Int) gives Text {
+    return prefix + to_text(line) + "."
+}
+
+// The names of the fields that resolved, paired by position with their types, in one list of
+// "name:type" texts, so a valid record can be rebuilt from them.
+fn kinds_names(names: List[Text], kinds: List[Text], ok: Bool) gives List[Text] {
+    var joined: List[Text] = []
+    if ok {
+        var i = 0
+        while i < List.length(names)
+            shrinks List.length(names) - i
+        {
+            joined = List.append(joined, List.get(names, i) + ":" + List.get(kinds, i))
+            i = i + 1
+        }
+    }
+    return joined
+}
+
+type Walk = { state: State, done: List[Text], cyclic: List[Text] }
+
+// Reports every cycle of record types, once, where the cycle starts.
+fn walk_record(
+    state: State, program: parser.Node, graph: List[Text], dependencies: List[List[Text]], name: Text,
+    visiting: List[Text], done: List[Text], cyclic: List[Text]
+) gives Walk {
+    if List.contains(done, name) {
+        return Walk(state: state, done: done, cyclic: cyclic)
+    }
+    let at = index_of(visiting, name)
+    if at >= 0 {
+        var cycle: List[Text] = []
+        var i = at
+        while i < List.length(visiting)
+            shrinks List.length(visiting) - i
+        {
+            cycle = List.append(cycle, List.get(visiting, i))
+            i = i + 1
+        }
+        cycle = List.append(cycle, name)
+        let start = List.get(cycle, 0)
+        let declaration = record_decl(program, start)
+        let reported = report(
+            state, "E2016", "The record '" + start + "' cannot contain itself",
+            "A record cannot hold a value of its own type, directly or through another record.",
+            ["The cycle is: " + parser.join_texts(cycle, " -> ")], place_span(field(declaration, "name_span"))
+        )
+        return Walk(state: reported, done: done, cyclic: List.concat(cyclic, cycle))
+    }
+    var current = state
+    var finished = done
+    var marked = cyclic
+    let position = index_of(graph, name)
+    if position >= 0 {
+        for dependency in List.get(dependencies, position) {
+            let walked = walk_record(
+                current, program, graph, dependencies, dependency, List.append(visiting, name), finished, marked
+            )
+            current = walked.state
+            finished = walked.done
+            marked = walked.cyclic
+        }
+    }
+    return Walk(state: current, done: List.append(finished, name), cyclic: marked)
+}
+
+fn split_pair(pair: Text) gives List[Text] {
+    let at = index_of_char(pair, ":")
+    return [Text.slice(pair, 0, at), Text.slice(pair, at + 1, Text.length(pair))]
+}
+
+// Resolves the record types the program declares, and decides which ones are valid. The names are
+// already registered, so a record can use another one declared later.
+fn declare_records(state: State, program: parser.Node) gives State {
+    var current = state
+    var graph: List[Text] = []
+    var dependencies: List[List[Text]] = []
+    var resolved_names: List[Text] = []
+    var resolved_fields: List[List[Text]] = []
+    for name in state.declared {
+        let declaration = record_decl(program, name)
+        let fields = resolve_fields(current, declaration)
+        current = fields.state
+        if fields.ok {
+            var deps: List[Text] = []
+            for reference in fields.references {
+                deps = List.concat(deps, type_dependencies(current, reference))
+            }
+            graph = List.append(graph, name)
+            dependencies = List.append(dependencies, deps)
+            resolved_names = List.append(resolved_names, name)
+            resolved_fields = List.append(resolved_fields, fields.names)
+        }
+    }
+    // The cycles: a record cannot contain itself, directly or through another one.
+    var done: List[Text] = []
+    var cyclic: List[Text] = []
+    for name in graph {
+        let walked = walk_record(current, program, graph, dependencies, name, [], done, cyclic)
+        current = walked.state
+        done = walked.done
+        cyclic = walked.cyclic
+    }
+    // A record that uses a record that cannot be used is not usable either.
+    var invalid = cyclic
+    for name in state.declared {
+        if not List.contains(resolved_names, name) and not List.contains(invalid, name) {
+            invalid = List.append(invalid, name)
+        }
+    }
+    // One pass per record is enough for any chain of dependencies.
+    for round in graph {
+        var position = 0
+        while position < List.length(graph)
+            shrinks List.length(graph) - position
+        {
+            let name = List.get(graph, position)
+            if not List.contains(invalid, name) {
+                for dependency in List.get(dependencies, position) {
+                    if List.contains(invalid, dependency) and not List.contains(invalid, name) {
+                        invalid = List.append(invalid, name)
+                    }
+                }
+            }
+            position = position + 1
+        }
+    }
+    var records: List[Rec] = []
+    var index = 0
+    while index < List.length(resolved_names)
+        shrinks List.length(resolved_names) - index
+    {
+        let name = List.get(resolved_names, index)
+        if not List.contains(invalid, name) {
+            var names: List[Text] = []
+            var kinds: List[Text] = []
+            for pair in List.get(resolved_fields, index) {
+                let parts = split_pair(pair)
+                names = List.append(names, List.get(parts, 0))
+                kinds = List.append(kinds, List.get(parts, 1))
+            }
+            let at = place_span(field(record_decl(program, name), "name_span"))
+            records = List.append(
+                records, Rec(name: name, field_names: names, field_types: kinds, line: at.line, column: at.column)
+            )
+        }
+        index = index + 1
+    }
+    return with_types(current, current.declared, records)
+}
+
+// `Point(x: 1, y: 2)`: builds a record value. Every field is given once, with a value of its type; the
+// order of the text does not matter.
+fn check_record_construction(state: State, env: List[Binding], node: parser.Node) gives Checked {
+    let name = text_of(field(node, "name"))
+    let fields = items_of(field(node, "fields"))
+    let at = rec_index(state, name)
+    var current = state
+    var typed: List[parser.Node] = []
+    if at < 0 {
+        // The declaration of the record has an error, already reported where it happens. The values are
+        // still checked, so that a mistake inside one of them is not hidden.
+        for initializer in fields {
+            let value = check_expression(current, env, field(initializer, "value"), "")
+            typed = List.append(typed, with_field(initializer, "value", value.node))
+            current = value.state
+        }
+        return checked(with_field(node, "fields", parser.Node.Items(typed)), "", current)
+    }
+    let rec = List.get(current.records, at)
+    var given: List[Text] = []
+    var repeated: List[parser.Node] = []
+    var unknown: List[parser.Node] = []
+    for initializer in fields {
+        let field_name = text_of(field(initializer, "name"))
+        if rec_field_type(rec, field_name) == "" {
+            unknown = List.append(unknown, initializer)
+        } else if List.contains(given, field_name) {
+            repeated = List.append(repeated, initializer)
+        } else {
+            given = List.append(given, field_name)
+        }
+    }
+    for initializer in unknown {
+        current = report(
+            current, "E2023",
+            "The record '" + rec.name + "' has no field named '" + text_of(field(initializer, "name")) + "'",
+            "The fields of " + rec.name + " are: " + parser.join_texts(rec.field_names, ", ") + ".", [],
+            place_span(field(initializer, "name_span"))
+        )
+    }
+    for initializer in repeated {
+        current = report(
+            current, "E2023", "The field '" + text_of(field(initializer, "name")) + "' is given twice", "", [],
+            place_span(field(initializer, "name_span"))
+        )
+    }
+    for expected_name in rec.field_names {
+        if not List.contains(given, expected_name) {
+            current = report(
+                current, "E2023", "The field '" + expected_name + "' of '" + rec.name + "' is missing",
+                "Give it a value: " + rec.name + "(" + expected_name + ": ...)", [],
+                place_span(field(node, "name_span"))
+            )
+        }
+    }
+    for initializer in fields {
+        let field_name = text_of(field(initializer, "name"))
+        let wanted = rec_field_type(rec, field_name)
+        let value = check_expression(current, env, field(initializer, "value"), wanted)
+        typed = List.append(typed, with_field(initializer, "value", value.node))
+        current = value.state
+        if value.ty != "" and wanted != "" {
+            current = expect_type(
+                current, wanted, value.ty, span_of(field(initializer, "value")),
+                ["The field '" + field_name + "' of '" + rec.name + "' is " + wanted + "."]
+            )
+        }
+    }
+    return checked(with_field(node, "fields", parser.Node.Items(typed)), rec.name, current)
+}
+
+// `p.x`: reads a field of a record value.
+fn check_field_access(state: State, env: List[Binding], node: parser.Node) gives Checked {
+    let target = check_expression(state, env, field(node, "target"), "")
+    let rebuilt = with_field(node, "target", target.node)
+    if target.ty == "" {
+        return checked(rebuilt, "", target.state)
+    }
+    let at = rec_index(target.state, target.ty)
+    if at < 0 {
+        return checked(
+            rebuilt, "",
+            report(
+                target.state, "E2024", "A value of type " + target.ty + " is not a record, so it has no fields",
+                "Only a record has fields.", [], span_of(field(node, "target"))
+            )
+        )
+    }
+    let rec = List.get(target.state.records, at)
+    let field_name = text_of(field(node, "name"))
+    let kind = rec_field_type(rec, field_name)
+    if kind == "" {
+        return checked(
+            rebuilt, "",
+            report(
+                target.state, "E2024", "The record '" + target.ty + "' has no field named '" + field_name + "'",
+                "The fields of " + target.ty + " are: " + parser.join_texts(rec.field_names, ", ") + ".", [],
+                place_span(field(node, "name_span"))
+            )
+        )
+    }
+    return checked(rebuilt, kind, target.state)
+}
+
+// `p.x = value`: a record is immutable, so its fields never change.
+fn check_field_assign(state: State, env: List[Binding], node: parser.Node) gives Flow {
+    let target = check_expression(state, env, field(node, "target"), "")
+    let rebuilt = with_field(node, "target", target.node)
+    if target.ty == "" {
+        return flow(rebuilt, target.state, env, false)
+    }
+    let at = rec_index(target.state, target.ty)
+    if at < 0 {
+        return flow(
+            rebuilt,
+            report(
+                target.state, "E2024", "A value of type " + target.ty + " is not a record, so it has no fields",
+                "Only a record has fields.", [], span_of(field(node, "target"))
+            ),
+            env, false
+        )
+    }
+    let rec = List.get(target.state.records, at)
+    let field_name = text_of(field(node, "name"))
+    if rec_field_type(rec, field_name) == "" {
+        return flow(
+            rebuilt,
+            report(
+                target.state, "E2024", "The record '" + target.ty + "' has no field named '" + field_name + "'",
+                "The fields of " + target.ty + " are: " + parser.join_texts(rec.field_names, ", ") + ".", [],
+                place_span(field(node, "name_span"))
+            ),
+            env, false
+        )
+    }
+    let reported = report(
+        target.state, "E2025", "The field '" + field_name + "' of '" + target.ty + "' cannot be given a new value",
+        "A record is immutable: build another one with the value you want.", [], place_span(field(node, "name_span"))
+    )
+    // The value is checked, but its type is not compared with the type of the field.
+    let value = check_expression(reported, env, field(node, "value"), "")
+    return flow(with_field(rebuilt, "value", value.node), value.state, env, false)
+}
+
+
+// `Name.function(...)` where Name is neither a type with that function nor a module that makes one
+// public. The message depends on what Name is.
+fn unknown_qualified_call(state: State, env: List[Binding], node: parser.Node) gives State {
+    let qualifier = text_of(field(node, "qualifier"))
+    let callee = text_of(field(node, "callee"))
+    let function = Text.slice(callee, index_of_char(callee, ".") + 1, Text.length(callee))
+    let span = place_span(field(node, "callee_span"))
+    let symbol = binding_index(env, qualifier)
+    var label = ""
+    var hint = ""
+    var notes: List[Text] = []
+    if List.contains(known_type_names(), qualifier) or qualifier == "List" {
+        label = "'" + qualifier + "' has no function named '" + function + "'"
+        let functions = type_functions(qualifier)
+        if List.length(functions) > 0 {
+            let close = close_match(function, functions)
+            if close != "" {
+                hint = "Did you mean '" + qualifier + "." + close + "'?"
+            }
+            notes = ["The functions of " + qualifier + ": " + parser.join_texts(functions, ", ") + "."]
+        } else {
+            notes = [qualifier + " has no functions yet."]
+        }
+    } else if is_declared_record(state, qualifier) {
+        label = "'" + qualifier + "' has no functions of its own"
+    } else if symbol >= 0 {
+        let binding = List.get(env, symbol)
+        label = "'" + qualifier + "' is a " + binding.category + ": values have no functions of their own"
+        if binding.ty != "" and List.contains(type_functions(binding.ty), function) {
+            hint = "Call the function of its type: " + binding.ty + "." + function + "(" + qualifier + ")"
+        }
+    } else if is_builtin(qualifier) or user_index(state, qualifier) >= 0 {
+        label = "'" + qualifier + "' is a function, not a type"
+    } else {
+        let first = Text.slice(qualifier, 0, 1)
+        if first >= "a" and first <= "z" {
+            // A type always starts with a capital letter, so a name before the '.' that starts with a
+            // lower case one can only be a module.
+            return report(
+                state, "E2027", "There is no module named '" + qualifier + "'",
+                "This program imports no modules. Declare one at the top of the file: import \"app/models.nex\"",
+                [], span
+            )
+        }
+        label = "There is no type named '" + qualifier + "'"
+        let close = close_match(qualifier, List.concat(List.append(known_type_names(), "List"), state.declared))
+        if close != "" {
+            hint = "Did you mean '" + close + "'?"
+        }
+    }
+    return report(state, "E2008", label, hint, notes, span)
 }
 
 // Test driver: every argument after the first is a file. For each one prints `FILE|path` and then

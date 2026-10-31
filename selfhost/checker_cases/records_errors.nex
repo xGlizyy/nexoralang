@@ -1,0 +1,29 @@
+type Point = { x: Int, y: Int }
+type Other = { x: Int, y: Int }
+
+fn main() {
+    let a = Point(x: 1)
+    let b = Point(x: 1, y: 2, z: 3)
+    let c = Point(x: 1, x: 2, y: 3)
+    let d = Point(x: "s", y: 2.5)
+    let e: Other = Point(x: 1, y: 2)
+    let f = Point(x: 1, y: 2)
+    print(f.z)
+    print(f.x.y)
+    f.x = 5
+    f.z = 6
+    print(f < f)
+    print(f + f)
+    print(f == 1)
+    print(f == Other(x: 1, y: 2))
+    let g = Point
+    print(Point)
+    let Point = 1
+    print(-f)
+    print(not f)
+    if f {
+    }
+    var h = f
+    h = Other(x: 1, y: 2)
+    print(Point.x(1))
+}
