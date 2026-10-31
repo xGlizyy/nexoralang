@@ -2379,6 +2379,14 @@ type HostCfg = {
     grant_kinds: List[Text], grant_paths: List[Text], cwd: Text
 }
 
+// The host of a run where the user has allowed nothing: the program has declared what it needs, and that is all.
+fn declared_host(program: parser.Node) gives HostCfg {
+    return HostCfg(
+        arguments: [], declared_kinds: declared_kinds_of(program), declared_paths: declared_paths_of(program),
+        grant_kinds: [], grant_paths: [], cwd: ""
+    )
+}
+
 fn no_host() gives HostCfg {
     return HostCfg(
         arguments: [], declared_kinds: [], declared_paths: [], grant_kinds: [], grant_paths: [], cwd: ""
@@ -2732,7 +2740,7 @@ fn run_files() {
                 } else if has_errors(analysis.problems) {
                     print("STOP|check")
                 } else {
-                    let prog = build_prog(analysis.node, no_host())
+                    let prog = build_prog(analysis.node, declared_host(analysis.node))
                     let done = run_machine(prog, start_machine(prog, start_fuel()))
                     for line in done.out {
                         print(line)
@@ -2791,7 +2799,7 @@ fn run_tests() {
                 } else if has_errors(analysis.problems) {
                     print("STOP|check")
                 } else {
-                    run_examples(build_prog(analysis.node, no_host()), text, analysis.node)
+                    run_examples(build_prog(analysis.node, declared_host(analysis.node)), text, analysis.node)
                     print("STOP|ok")
                 }
             }
