@@ -66,7 +66,7 @@ Everything up to the typed tree already exists in NEXORA and is checked against 
 implementation. The new part is the generator and the runtime it emits.
 
 **Status (2026-10-31).** Stages 1 to 5 and 6 below are written and checked in `selfhost/`: the generator `cgen.nex`, the runtime
-(with a conservative garbage collector), `compare_cgen.py` and `bootstrap.py`. 46 programs, 14 of the 16 examples of the repository,
+(with a conservative garbage collector), `compare_cgen.py` and `bootstrap.py`. 46 programs, the 16 examples of the repository,
 13 projects of modules and 18 cases of the host build with a C compiler and give the same output, diagnostics and exit status as
 `nex run`. The compiler compiles itself: the executable built from the C that Python wrote compiles `cgen.nex` into byte-identical C,
 and the same generator builds `nex.nex` as a native `nex check`, `nex run` and `nex test`. Not done: `Net.get`, `Process.run`, the
