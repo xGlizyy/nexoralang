@@ -234,6 +234,16 @@ def test_run_input_budget_counts_all_lines_and_accepts_the_exact_limit(program, 
     assert capsys.readouterr().out == "a\nb\n"
 
 
+def test_run_stops_with_e3009_when_the_standard_input_has_ended(program, monkeypatch, capsys):
+    # Without any limit the command used to give the program an empty line instead of stopping (section 8.3).
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"a\n"), encoding="utf-8"))
+    source = 'fn main() {\n    print(input())\n    print(input())\n}\n'
+    assert cli.main(["run", program(source)]) == 3
+    captured = capsys.readouterr()
+    assert captured.out == "a\n"
+    assert "E3009" in captured.err
+
+
 @pytest.mark.skipif(os.name == "nt", reason="CLI wall-clock cancellation uses POSIX interval timers")
 def test_run_timeout_stops_execution_with_a_clear_diagnostic(program, capsys):
     source = '''fn fib(n: Int) gives Int {
