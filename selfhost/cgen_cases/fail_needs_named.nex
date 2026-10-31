@@ -1,0 +1,9 @@
+fn positive(n: Int) gives Int
+    needs big: n > 100, "it has to be big"
+{
+    return n
+}
+
+fn main() {
+    print(positive(5))
+}

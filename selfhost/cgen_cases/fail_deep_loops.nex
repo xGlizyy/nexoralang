@@ -1,0 +1,17 @@
+fn visit(n: Int) gives Int {
+    var i = 0
+    while i < 1
+        shrinks 1 - i
+    {
+        i = i + 1
+        if n > 0 {
+            return visit(n - 1) + 1
+        }
+        return 100 / n
+    }
+    return 0
+}
+
+fn main() {
+    print(visit(8))
+}

@@ -1,0 +1,798 @@
+// The code generator to C, written in NEXORA (decision 0026, stage 1).
+//
+//     nex run selfhost/cgen.nex --allow-read . --allow-write . -- PROGRAM.nex OUTPUT.c
+//
+// It reads and checks a program (and the modules it imports) with the lexer, parser and checker of this directory, and writes
+// the C of an executable that does what `nex run` does: the same output and, when the program fails, the same diagnostic with
+// the same notes and exit status. The runtime of those programs is selfhost/runtime/nexora_rt.h, put at the top of the file.
+//
+// Stage 1 compiles Int, Bool and Text, functions with `needs` and `promises`, `let`, `var`, assignment, `if`, `while` with its
+// `shrinks`, `return`, `print`, `to_text` and `Text.length`. Anything else is reported as not supported yet and nothing is
+// written.
+//
+// Every expression is flattened into statements that evaluate its parts in the order the language says (left to right), so the
+// order never depends on how a C compiler orders the arguments of a call.
+
+import "parser.nex"
+import "project.nex"
+import "checker.nex"
+import "render.nex"
+import "titles.nex"
+import "runtime_text.nex"
+
+uses read "."
+uses write "."
+
+// Reading the tree
+
+fn kind_of(node: parser.Node) gives Text {
+    return match node {
+        parser.Node.Obj(kind, names, values) => kind
+        _ => ""
+    }
+}
+
+fn index_of(names: List[Text], name: Text) gives Int {
+    var i = 0
+    while i < List.length(names)
+        shrinks List.length(names) - i
+    {
+        if List.get(names, i) == name {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn field(node: parser.Node, name: Text) gives parser.Node {
+    return match node {
+        parser.Node.Obj(kind, names, values) => field_at(names, values, name)
+        _ => parser.Node.Null()
+    }
+}
+
+fn field_at(names: List[Text], values: List[parser.Node], name: Text) gives parser.Node {
+    let index = index_of(names, name)
+    if index < 0 {
+        return parser.Node.Null()
+    }
+    return List.get(values, index)
+}
+
+fn text_of(node: parser.Node) gives Text {
+    return match node {
+        parser.Node.Str(value) => value
+        _ => ""
+    }
+}
+
+fn int_of(node: parser.Node) gives Int {
+    return match node {
+        parser.Node.Whole(value) => value
+        _ => 0
+    }
+}
+
+fn flag_of(node: parser.Node) gives Bool {
+    return match node {
+        parser.Node.Flag(value) => value
+        _ => false
+    }
+}
+
+fn items_of(node: parser.Node) gives List[parser.Node] {
+    return match node {
+        parser.Node.Items(items) => items
+        _ => []
+    }
+}
+
+fn is_null(node: parser.Node) gives Bool {
+    return match node {
+        parser.Node.Null => true
+        _ => false
+    }
+}
+
+fn place_of(node: parser.Node) gives parser.Span {
+    return match field(node, "span") {
+        parser.Node.Place(line, column, end_line, end_column) => parser.Span(
+            line: line, column: column, end_line: end_line, end_column: end_column
+        )
+        _ => parser.no_span()
+    }
+}
+
+fn type_of(node: parser.Node) gives Text {
+    return text_of(field(node, "type"))
+}
+
+// Writing C
+
+// A text as a C string literal: the quote, the backslash and the control characters are escaped. A character that is not ASCII
+// is written as it is, in UTF-8, which every C compiler of today reads in a string.
+fn c_string(text: Text) gives Text {
+    var out = "\""
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c == "\\" {
+            out = out + "\\\\"
+        } else if c == "\"" {
+            out = out + "\\\""
+        } else if c == "\n" {
+            out = out + "\\n"
+        } else if c == "\t" {
+            out = out + "\\t"
+        } else if c == "?" {
+            out = out + "\\?"
+        } else {
+            out = out + c
+        }
+        i = i + 1
+    }
+    return out + "\""
+}
+
+fn span4(span: parser.Span) gives Text {
+    return to_text(span.line) + ", " + to_text(span.column) + ", " + to_text(span.end_line) + ", " + to_text(span.end_column)
+}
+
+fn c_type(ty: Text) gives Text {
+    if ty == "Int" {
+        return "int64_t"
+    }
+    if ty == "Bool" {
+        return "bool"
+    }
+    if ty == "Text" {
+        return "rt_text"
+    }
+    return ""
+}
+
+// What the generator keeps while it writes: the number of the next temporary, and the first thing it cannot do yet.
+type St = { next: Int, bad: Text, fns: List[Text] }
+
+// A piece of C: the statements that compute something, and the name or literal that holds it.
+type Part = { code: Text, value: Text, st: St }
+
+fn refuse(st: St, reason: Text) gives St {
+    if st.bad != "" {
+        return st
+    }
+    return St(next: st.next, bad: reason, fns: st.fns)
+}
+
+fn part(code: Text, value: Text, st: St) gives Part {
+    return Part(code: code, value: value, st: st)
+}
+
+// A new temporary holding `expression`.
+fn temporary(st: St, ty: Text, expression: Text) gives Part {
+    let name = "t" + to_text(st.next)
+    return part(c_type(ty) + " " + name + " = " + expression + ";\n", name, St(next: st.next + 1, bad: st.bad, fns: st.fns))
+}
+
+fn show_expr(ty: Text, name: Text, value: Text) gives Text {
+    if ty == "Int" {
+        return "rt_buf_int(&b, " + c_string(name) + ", " + value + ");\n"
+    }
+    if ty == "Bool" {
+        return "rt_buf_bool(&b, " + c_string(name) + ", " + value + ");\n"
+    }
+    return "rt_buf_text(&b, " + c_string(name) + ", " + value + ");\n"
+}
+
+// Expressions
+
+fn gen_expr(st: St, node: parser.Node) gives Part {
+    let kind = kind_of(node)
+    if kind == "IntLiteral" {
+        return part("", "INT64_C(" + to_text(int_of(field(node, "value"))) + ")", st)
+    }
+    if kind == "BoolLiteral" {
+        if flag_of(field(node, "value")) {
+            return part("", "true", st)
+        }
+        return part("", "false", st)
+    }
+    if kind == "TextLiteral" {
+        return part("", "rt_lit(" + c_string(text_of(field(node, "value"))) + ")", st)
+    }
+    if kind == "Name" {
+        return part("", "v_" + text_of(field(node, "name")), st)
+    }
+    if kind == "Group" {
+        return gen_expr(st, field(node, "expression"))
+    }
+    if kind == "Unary" {
+        return gen_unary(st, node)
+    }
+    if kind == "Binary" {
+        return gen_binary(st, node)
+    }
+    if kind == "Call" {
+        return gen_call(st, node)
+    }
+    return part("", "0", refuse(st, "the expression " + kind))
+}
+
+fn gen_unary(st: St, node: parser.Node) gives Part {
+    let operand = gen_expr(st, field(node, "operand"))
+    if text_of(field(node, "operator")) == "not" {
+        let made = temporary(operand.st, "Bool", "!" + operand.value)
+        return part(operand.code + made.code, made.value, made.st)
+    }
+    if type_of(node) != "Int" {
+        return part("", "0", refuse(operand.st, "the operator - on " + type_of(node)))
+    }
+    let made = temporary(operand.st, "Int", "rt_neg(" + operand.value + ", " + span4(place_of(node)) + ")")
+    return part(operand.code + made.code, made.value, made.st)
+}
+
+fn gen_binary(st: St, node: parser.Node) gives Part {
+    let operator = text_of(field(node, "operator"))
+    let left = gen_expr(st, field(node, "left"))
+    if operator == "and" or operator == "or" {
+        return gen_logic(left, node, operator)
+    }
+    let right = gen_expr(left.st, field(node, "right"))
+    let code = left.code + right.code
+    let operand_type = type_of(field(node, "left"))
+    var made = temporary(right.st, "Bool", "false")
+    if operand_type == "Int" {
+        made = gen_int_operation(right, left.value, right.value, operator, node)
+    } else if operand_type == "Text" {
+        made = gen_text_operation(right.st, left.value, right.value, operator)
+    } else if operand_type == "Bool" and (operator == "==" or operator == "!=") {
+        made = temporary(right.st, "Bool", "(" + left.value + " " + operator + " " + right.value + ")")
+    } else {
+        return part("", "0", refuse(right.st, "the operator " + operator + " on " + operand_type))
+    }
+    return part(code + made.code, made.value, made.st)
+}
+
+fn gen_int_operation(right: Part, a: Text, b: Text, operator: Text, node: parser.Node) gives Part {
+    let here = span4(place_of(node))
+    if operator == "+" {
+        return temporary(right.st, "Int", "rt_add(" + a + ", " + b + ", " + here + ")")
+    }
+    if operator == "-" {
+        return temporary(right.st, "Int", "rt_sub(" + a + ", " + b + ", " + here + ")")
+    }
+    if operator == "*" {
+        return temporary(right.st, "Int", "rt_mul(" + a + ", " + b + ", " + here + ")")
+    }
+    if operator == "/" {
+        let there = span4(place_of(field(node, "right")))
+        return temporary(right.st, "Int", "rt_div(" + a + ", " + b + ", " + here + ", " + there + ")")
+    }
+    return temporary(right.st, "Bool", "(" + a + " " + operator + " " + b + ")")
+}
+
+fn gen_text_operation(st: St, a: Text, b: Text, operator: Text) gives Part {
+    if operator == "+" {
+        return temporary(st, "Text", "rt_concat(" + a + ", " + b + ")")
+    }
+    return temporary(st, "Bool", "(rt_text_compare(" + a + ", " + b + ") " + operator + " 0)")
+}
+
+// `a and b`, `a or b`: the right side runs only when it can change the result.
+fn gen_logic(left: Part, node: parser.Node, operator: Text) gives Part {
+    let made = temporary(left.st, "Bool", left.value)
+    let right = gen_expr(made.st, field(node, "right"))
+    var condition = made.value
+    if operator == "or" {
+        condition = "!" + made.value
+    }
+    let code = (
+        left.code + made.code + "if (" + condition + ") \{\n" + right.code + made.value + " = " + right.value + ";\n}\n"
+    )
+    return part(code, made.value, right.st)
+}
+
+fn gen_args(st: St, nodes: List[parser.Node]) gives ArgParts {
+    var code = ""
+    var values: List[Text] = []
+    var current = st
+    for node in nodes {
+        let made = gen_expr(current, node)
+        code = code + made.code
+        values = List.append(values, made.value)
+        current = made.st
+    }
+    return ArgParts(code: code, values: values, st: current)
+}
+
+type ArgParts = { code: Text, values: List[Text], st: St }
+
+fn gen_call(st: St, node: parser.Node) gives Part {
+    let callee = text_of(field(node, "callee"))
+    let arguments = gen_args(st, items_of(field(node, "arguments")))
+    if callee == "print" {
+        return gen_print(arguments, field(List.get(items_of(field(node, "arguments")), 0), "type"))
+    }
+    if callee == "to_text" {
+        return gen_to_text(arguments, type_of(List.get(items_of(field(node, "arguments")), 0)))
+    }
+    if callee == "Text.length" {
+        let made = temporary(arguments.st, "Int", List.get(arguments.values, 0) + ".len")
+        return part(arguments.code + made.code, made.value, made.st)
+    }
+    if not List.contains(st.fns, callee) {
+        return part("", "0", refuse(arguments.st, "the call to " + callee))
+    }
+    let site = place_of(node)
+    var passed = span4(site)
+    for value in arguments.values {
+        passed = passed + ", " + value
+    }
+    let ty = type_of(node)
+    if ty == "Void" or ty == "" {
+        return part(arguments.code + "nx_" + callee + "(" + passed + ");\n", "", arguments.st)
+    }
+    let made = temporary(arguments.st, ty, "nx_" + callee + "(" + passed + ")")
+    return part(arguments.code + made.code, made.value, made.st)
+}
+
+fn index_of_dot(text: Text) gives Int {
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.slice(text, i, i + 1) == "." {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn gen_print(arguments: ArgParts, ty: parser.Node) gives Part {
+    let argument_type = text_of(ty)
+    let value = List.get(arguments.values, 0)
+    if argument_type == "Int" {
+        return part(arguments.code + "rt_print(rt_int_text(" + value + "));\n", "", arguments.st)
+    }
+    if argument_type == "Bool" {
+        return part(arguments.code + "rt_print(rt_bool_text(" + value + "));\n", "", arguments.st)
+    }
+    if argument_type == "Text" {
+        return part(arguments.code + "rt_print(" + value + ");\n", "", arguments.st)
+    }
+    return part("", "", refuse(arguments.st, "print of a " + argument_type))
+}
+
+fn gen_to_text(arguments: ArgParts, argument_type: Text) gives Part {
+    let value = List.get(arguments.values, 0)
+    if argument_type == "Int" {
+        let made = temporary(arguments.st, "Text", "rt_int_text(" + value + ")")
+        return part(arguments.code + made.code, made.value, made.st)
+    }
+    if argument_type == "Bool" {
+        let made = temporary(arguments.st, "Text", "rt_bool_text(" + value + ")")
+        return part(arguments.code + made.code, made.value, made.st)
+    }
+    if argument_type == "Text" {
+        return part(arguments.code, value, arguments.st)
+    }
+    return part("", "0", refuse(arguments.st, "to_text of a " + argument_type))
+}
+
+// Statements. A variable is known by its name and type, in the order it was declared: that is what an error lists as "The
+// values".
+
+type Var = { name: Text, ty: Text }
+
+type Block = { code: Text, st: St, returns: Bool }
+
+// What the code of a function needs to know while it is written.
+type Fn = { name: Text, params: List[Var], returns: Text, afters: List[parser.Node] }
+
+fn values_code(vars: List[Var]) gives Text {
+    var out = ""
+    for variable in vars {
+        out = out + show_expr(variable.ty, variable.name, "v_" + variable.name)
+    }
+    return out
+}
+
+fn gen_block(st: St, scope: Fn, env: List[Var], block: parser.Node) gives Block {
+    var code = ""
+    var current = st
+    var visible = env
+    var returns = false
+    for statement in items_of(field(block, "statements")) {
+        let done = gen_statement(current, scope, visible, statement)
+        code = code + done.code
+        current = done.st
+        let kind = kind_of(statement)
+        if kind == "Let" or kind == "Var" {
+            visible = List.append(
+                visible, Var(name: text_of(field(statement, "name")), ty: type_of(field(statement, "value")))
+            )
+        }
+        if done.returns {
+            returns = true
+        }
+    }
+    return Block(code: code, st: current, returns: returns)
+}
+
+fn gen_statement(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Block {
+    let kind = kind_of(node)
+    if kind == "Let" or kind == "Var" {
+        let value = gen_expr(st, field(node, "value"))
+        let ty = type_of(field(node, "value"))
+        if c_type(ty) == "" {
+            return Block(code: "", st: refuse(value.st, "a variable of type " + ty), returns: false)
+        }
+        let declared = value.code + c_type(ty) + " v_" + text_of(field(node, "name")) + " = " + value.value + ";\n"
+        return Block(code: declared, st: value.st, returns: false)
+    }
+    if kind == "Assign" {
+        let value = gen_expr(st, field(node, "value"))
+        return Block(
+            code: value.code + "v_" + text_of(field(node, "name")) + " = " + value.value + ";\n", st: value.st,
+            returns: false
+        )
+    }
+    if kind == "ExprStatement" {
+        let value = gen_expr(st, field(node, "expression"))
+        return Block(code: value.code, st: value.st, returns: false)
+    }
+    if kind == "Return" {
+        return gen_return(st, scope, node)
+    }
+    if kind == "If" {
+        return gen_if(st, scope, env, node)
+    }
+    if kind == "While" {
+        return gen_while(st, scope, env, node)
+    }
+    if kind == "Block" {
+        let inner = gen_block(st, scope, env, node)
+        return Block(code: "\{\n" + inner.code + "}\n", st: inner.st, returns: inner.returns)
+    }
+    return Block(code: "", st: refuse(st, "the statement " + kind), returns: false)
+}
+
+fn gen_if(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Block {
+    let condition = gen_expr(st, field(node, "condition"))
+    let then_block = gen_block(condition.st, scope, env, field(node, "then_block"))
+    var code = condition.code + "if (" + condition.value + ") \{\n" + then_block.code + "}"
+    var current = then_block.st
+    var returns = then_block.returns
+    let otherwise = field(node, "else_branch")
+    if not is_null(otherwise) {
+        var other = Block(code: "", st: current, returns: false)
+        if kind_of(otherwise) == "If" {
+            other = gen_if(current, scope, env, otherwise)
+        } else {
+            other = gen_block(current, scope, env, otherwise)
+        }
+        code = code + " else \{\n" + other.code + "}"
+        current = other.st
+        returns = returns and other.returns
+    } else {
+        returns = false
+    }
+    return Block(code: code + "\n", st: current, returns: returns)
+}
+
+fn clause_of(node: parser.Node, clause: Text) gives parser.Node {
+    for item in items_of(field(node, "clauses")) {
+        if text_of(field(item, "clause")) == clause {
+            return item
+        }
+    }
+    return parser.Node.Null()
+}
+
+fn gen_while(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Block {
+    if not is_null(clause_of(node, "keeps")) {
+        return Block(code: "", st: refuse(st, "a loop with `keeps`"), returns: false)
+    }
+    let loop_at = place_of(node)
+    let line = to_text(loop_at.line)
+    let measure = clause_of(node, "shrinks")
+    let measured = gen_expr(st, field(measure, "condition"))
+    let condition = gen_expr(measured.st, field(node, "condition"))
+    let body = gen_block(condition.st, scope, env, field(node, "body"))
+    let measure_span = place_of(measure)
+    let shown_measure = "shrinks " + checker.unparse(field(measure, "condition"))
+    var reason = ""
+    if not is_null(field(measure, "message")) {
+        reason = "rt_note(&own, rt_format(\"Reason: %s\", " + c_string(text_of(field(measure, "message"))) + "));\n"
+    }
+    let broken = (
+        "if ((turn_has_before && m >= before) || m < 0) \{\n"
+        + "rt_notes own = \{\{0}, 0};\n"
+        + "rt_note(&own, rt_format(\"The measure at line %d: %s\", " + to_text(measure_span.line) + ", " + c_string(shown_measure) + "));\n"
+        + reason
+        + "rt_note(&own, rt_format(\"Before turn %lld of the loop at line " + line + ".\", (long long)turn));\n"
+        + "rt_buf b = \{0, 0, 0, 0};\n" + values_code(env) + "rt_buf_note(&own, \"The values: \", &b);\n"
+        + "char *label = m < 0 ? rt_format(\"The measure is %lld; it must be 0 or more\", (long long)m)\n"
+        + "    : (m == before ? rt_format(\"The measure was %lld and is still %lld\", (long long)before, (long long)m)\n"
+        + "    : rt_format(\"The measure was %lld and is now %lld\", (long long)before, (long long)m));\n"
+        + "rt_fail(\"contract\", \"E4006\", \"Loop measure did not decrease\", label, \"\", &own, 0, "
+        + span4(place_of(field(measure, "condition"))) + ");\n}\n"
+    )
+    let code = (
+        "\{\nint64_t turn = 0;\nbool turn_has_before = false;\nint64_t before = 0;\nfor (;;) \{\n"
+        + "rt_push_loop(RT_COND, " + line + ", turn);\n"
+        + condition.code + "bool go = " + condition.value + ";\nrt_pop();\nif (!go) break;\nturn++;\n"
+        + "rt_push_loop(RT_MEASURE, " + line + ", turn);\n"
+        + measured.code + "int64_t m = " + measured.value + ";\nrt_pop();\n"
+        + broken
+        + "turn_has_before = true;\nbefore = m;\n"
+        + "rt_push_loop(RT_BODY, " + line + ", turn);\n"
+        + body.code + "rt_pop();\n}\n}\n"
+    )
+    return Block(code: code, st: body.st, returns: false)
+}
+
+// `return`: the value is computed, the `promises` of the function are checked with it as `result`, and the frames of the
+// function (and of the loops it was in) are left.
+fn gen_return(st: St, scope: Fn, node: parser.Node) gives Block {
+    let value_node = field(node, "value")
+    var computed = part("", "", st)
+    if not is_null(value_node) {
+        computed = gen_expr(st, value_node)
+    }
+    var code = computed.code
+    var result = ""
+    if not is_null(value_node) {
+        result = "r" + to_text(computed.st.next)
+        code = code + c_type(scope.returns) + " " + result + " = " + computed.value + ";\n"
+    }
+    let next = St(next: computed.st.next + 1, bad: computed.st.bad, fns: computed.st.fns)
+    let promised = promise_code(next, scope, result)
+    code = code + "rt_top = rt_saved + 1;\n" + promised.code + "rt_leave(rt_saved);\n"
+    if result != "" {
+        code = code + "return " + result + ";\n"
+    } else {
+        code = code + "return;\n"
+    }
+    return Block(code: code, st: promised.st, returns: true)
+}
+
+// The `promises` of a function, checked when it returns `result` (empty for a function that gives nothing).
+fn promise_code(st: St, scope: Fn, held: Text) gives Part {
+    var code = ""
+    var current = st
+    for contract in scope.afters {
+        let condition = gen_expr(current, field(contract, "condition"))
+        current = condition.st
+        let env = scope.params
+        var bind = ""
+        if held != "" {
+            bind = c_type(scope.returns) + " v_result = " + held + ";\n"
+        }
+        let at = place_of(contract)
+        var reason = ""
+        if not is_null(field(contract, "message")) {
+            reason = "rt_note(&own, rt_format(\"Reason: %s\", " + c_string(text_of(field(contract, "message"))) + "));\n"
+        }
+        var returned = ""
+        if held != "" {
+            returned = (
+                "\{ rt_buf r = \{0, 0, 0, 0};\n" + show_result(scope.returns, held)
+                + "rt_note(&own, rt_format(\"It returned: %s\", r.p)); }\n"
+            )
+        }
+        code = code + "\{\n" + bind + condition.code + "if (!" + condition.value + ") \{\n" + "rt_notes own = \{\{0}, 0};\n"
+        code = code + "rt_note(&own, rt_format(\"'%s' finished, but its condition is false: %s\", "
+        code = code + c_string(scope.name) + ", " + c_string(contract_source(contract)) + "));\n" + reason + returned
+        code = code + "rt_buf b = \{0, 0, 0, 0};\n" + values_code(env) + "rt_buf_note(&own, \"It was called with: \", &b);\n"
+        code = code + "rt_fail(\"contract\", \"E4002\", \"Postcondition violated\", "
+        code = code + c_string("'" + scope.name + "' breaks its own " + clause_label(contract)) + ", \"\", &own, 0, "
+        code = code + span4(at) + ");\n}\n}\n"
+    }
+    return part(code, "", current)
+}
+
+fn show_result(ty: Text, held: Text) gives Text {
+    if ty == "Int" {
+        return "rt_buf_int(&r, \"result\", " + held + ");\n"
+    }
+    if ty == "Bool" {
+        return "rt_buf_bool(&r, \"result\", " + held + ");\n"
+    }
+    return "rt_buf_text(&r, \"result\", " + held + ");\n"
+}
+
+fn contract_source(contract: parser.Node) gives Text {
+    var name = ""
+    if not is_null(field(contract, "name")) {
+        name = text_of(field(contract, "name")) + ": "
+    }
+    return text_of(field(contract, "clause")) + " " + name + checker.unparse(field(contract, "condition"))
+}
+
+fn clause_label(contract: parser.Node) gives Text {
+    let clause = text_of(field(contract, "clause"))
+    let name = field(contract, "name")
+    if not is_null(name) {
+        return clause + " '" + text_of(name) + "'"
+    }
+    if clause == "needs" {
+        return "a '" + clause + "' condition"
+    }
+    return "'" + clause + "' condition"
+}
+
+// Functions
+
+fn clauses_of(function: parser.Node, clause: Text) gives List[parser.Node] {
+    var found: List[parser.Node] = []
+    for item in items_of(field(function, "header")) {
+        if kind_of(item) == "Contract" and text_of(field(item, "clause")) == clause {
+            found = List.append(found, item)
+        }
+    }
+    return found
+}
+
+fn param_vars(function: parser.Node) gives List[Var] {
+    var params: List[Var] = []
+    for param in items_of(field(function, "params")) {
+        params = List.append(
+            params, Var(name: text_of(field(param, "name")), ty: text_of(field(field(param, "type"), "name")))
+        )
+    }
+    return params
+}
+
+fn return_type_of(function: parser.Node) gives Text {
+    if is_null(field(function, "return_type")) {
+        return "Void"
+    }
+    return text_of(field(field(function, "return_type"), "name"))
+}
+
+fn signature(function: parser.Node) gives Text {
+    var c_return = "void"
+    let returns = return_type_of(function)
+    if returns != "Void" {
+        c_return = c_type(returns)
+    }
+    var params = "int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec"
+    for param in param_vars(function) {
+        params = params + ", " + c_type(param.ty) + " v_" + param.name
+    }
+    return "static " + c_return + " nx_" + text_of(field(function, "name")) + "(" + params + ")"
+}
+
+fn needs_code(st: St, function: parser.Node, scope: Fn) gives Part {
+    var code = ""
+    var current = st
+    for contract in clauses_of(function, "needs") {
+        let condition = gen_expr(current, field(contract, "condition"))
+        current = condition.st
+        let at = place_of(contract)
+        var reason = ""
+        if not is_null(field(contract, "message")) {
+            reason = "rt_note(&own, rt_format(\"Reason: %s\", " + c_string(text_of(field(contract, "message"))) + "));\n"
+        }
+        code = code + "\{\n" + condition.code + "if (!" + condition.value + ") \{\nrt_notes own = \{\{0}, 0};\n"
+        code = code + "rt_note(&own, rt_format(\"The condition at line %d is false: %s\", " + to_text(at.line) + ", "
+        code = code + c_string(contract_source(contract)) + "));\n" + reason
+        code = code + "rt_buf b = \{0, 0, 0, 0};\n" + values_code(scope.params)
+        code = code + "rt_buf_note(&own, \"It was called with: \", &b);\n"
+        code = code + "rt_fail(\"contract\", \"E4001\", \"Precondition violated\", "
+        code = code + c_string("This call breaks " + clause_label(contract) + " of '" + scope.name + "'")
+        code = code + ", \"\", &own, 1, s_l, s_c, s_el, s_ec);\n}\n}\n"
+    }
+    return part(code, "", current)
+}
+
+fn gen_function(st: St, function: parser.Node) gives Part {
+    let name = text_of(field(function, "name"))
+    let returns = return_type_of(function)
+    let scope = Fn(name: name, params: param_vars(function), returns: returns, afters: clauses_of(function, "promises"))
+    for param in scope.params {
+        if c_type(param.ty) == "" {
+            return part("", "", refuse(st, "a parameter of type " + param.ty))
+        }
+    }
+    if returns != "Void" and c_type(returns) == "" {
+        return part("", "", refuse(st, "a function that gives " + returns))
+    }
+    let entry = needs_code(st, function, scope)
+    let body = gen_block(entry.st, scope, scope.params, field(function, "body"))
+    var end = ""
+    if not body.returns {
+        let promised = promise_code(body.st, scope, "")
+        end = "rt_top = rt_saved + 1;\n" + promised.code + "rt_leave(rt_saved);\n"
+        return part(
+            signature(function) + " \{\nint rt_saved = rt_enter(" + c_string(name) + ", s_l, s_c, s_el, s_ec);\n" + entry.code + body.code
+            + end + "}\n\n",
+            "", promised.st
+        )
+    }
+    return part(
+        signature(function) + " \{\nint rt_saved = rt_enter(" + c_string(name) + ", s_l, s_c, s_el, s_ec);\n" + entry.code + body.code
+        + "}\n\n",
+        "", body.st
+    )
+}
+
+// The C file of a program that has been checked.
+fn generate(program: parser.Node, path: Text, source: Text) gives Part {
+    var code = ""
+    for line in runtime_text.runtime_lines() {
+        code = code + line + "\n"
+    }
+    code = code + "\n/* The program: " + path + " */\n\nstatic const char *nx_source[] = \{\n"
+    for line in render.lines_of(source) {
+        code = code + c_string(line) + ",\n"
+    }
+    code = code + "0};\n\n"
+    var names: List[Text] = []
+    for function in items_of(field(program, "functions")) {
+        names = List.append(names, text_of(field(function, "name")))
+    }
+    var st = St(next: 0, bad: "", fns: names)
+    var declarations = ""
+    var definitions = ""
+    for function in items_of(field(program, "functions")) {
+        declarations = declarations + signature(function) + ";\n"
+    }
+    for function in items_of(field(program, "functions")) {
+        let made = gen_function(st, function)
+        definitions = definitions + made.code
+        st = made.st
+    }
+    let lines = render.lines_of(source)
+    code = code + declarations + "\n" + definitions
+    code = code + "int main(void) \{\nrt_init(" + c_string(path) + ", nx_source, " + to_text(List.length(lines)) + ");\n"
+    code = code + "nx_main(0, 0, 0, 0);\nfflush(stdout);\nreturn 0;\n}\n"
+    return part(code, "", st)
+}
+
+fn has_errors(problems: List[parser.Problem]) gives Bool {
+    for problem in problems {
+        if not Text.starts_with(problem.code, "W") {
+            return true
+        }
+    }
+    return false
+}
+
+fn main() {
+    let words = args()
+    if List.length(words) != 2 {
+        print("usage: cgen.nex PROGRAM.nex OUTPUT.c")
+        return
+    }
+    let path = List.get(words, 0)
+    let loaded = project.load(path)
+    if List.length(loaded.modules) != 1 {
+        print("not supported yet: a program with modules")
+        return
+    }
+    for module in loaded.modules {
+        if not module.clean {
+            print("error: " + path + ": the program has syntax errors; check it first")
+            return
+        }
+    }
+    let results = project.check_all(loaded, true)
+    let result = List.get(results, 0)
+    if result.unsupported != "" or has_errors(result.problems) {
+        print("error: " + path + ": the program does not check; run `check` on it first")
+        return
+    }
+    let made = generate(result.node, path, read_file(path))
+    if made.st.bad != "" {
+        print("not supported yet: " + made.st.bad)
+        return
+    }
+    write_file(List.get(words, 1), made.code)
+    print("wrote " + List.get(words, 1))
+}

@@ -1,0 +1,22 @@
+fn gcd(a: Int, b: Int) gives Int
+    needs b >= 0
+{
+    var x = a
+    var y = b
+    while y != 0
+        shrinks y
+    {
+        let t = y
+        y = x - (x / y) * y
+        x = t
+    }
+    if x < 0 and not (x == 1) {
+        return 0 - x
+    } else {
+        return x
+    }
+}
+
+fn main() {
+    print("gcd: " + to_text(gcd(12, 18)))
+}

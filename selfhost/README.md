@@ -159,6 +159,29 @@ What they say about stage 4:
   by these numbers it is years, not hours. Without a faster way to execute NEXORA that does not go through Python (stage 4, which
   decision 0024 leaves open), the fixed point stops at level 2.
 
+## The code generator to C (decision 0026)
+
+[`cgen.nex`](cgen.nex) reads and checks a program with the rest of this directory and writes the C of an executable that needs
+neither Python nor the interpreter. Stage 1 compiles `Int`, `Bool` and `Text`, functions with `needs` and `promises`, `let`, `var`,
+assignment, `if`, `while` with `shrinks`, `return`, `print`, `to_text` and `Text.length`; what it cannot compile yet it says, and
+writes nothing.
+
+```bash
+nex run selfhost/cgen.nex --allow-read . --allow-write . -- PROGRAM.nex OUTPUT.c
+cc -std=c11 OUTPUT.c -o program
+NEXORA_CC="cc" PYTHONPATH=nexora/src python selfhost/compare_cgen.py selfhost/cgen_cases/*.nex
+```
+
+The runtime of the generated programs is one header, [`runtime/nexora_rt.h`](runtime/nexora_rt.h): checked `Int` arithmetic, `Text`
+as code points, the stack of calls and loops that explains an error, and the text of a diagnostic as `nex` writes it.
+`runtime_text.nex` is that header as data for the generator (`make_runtime.py` writes it; run it again after changing the header).
+
+`compare_cgen.py` compiles each program, runs it and `nex run`, and compares the standard output, the standard error and the exit
+status: 22 programs of [`cgen_cases/`](cgen_cases/) are equal, among them each runtime error (`E3001`, `E3002`, `E3004`), a broken
+`needs`, `promises` and `shrinks`, with the chain of calls and loops in the notes. Of the 16 examples of the repository two compile
+(`hello` and `functions`); the others need `Float`, refined types, lists, records, enums, `for`, the host or more functions of
+`Text`, which are the next stages of the decision.
+
 ## Projects of modules
 
 [`project.nex`](project.nex) follows `modules.py` (decision 0018): it reads the program that runs and, before it, the files it
