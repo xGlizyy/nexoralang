@@ -1,0 +1,11 @@
+fn square(n: Int) gives Int {
+    return n * n
+}
+
+fn main() {
+    var total = 0
+    for i in [1, 2, 3] {
+        total = total + square(i)
+    }
+    print(total)
+}

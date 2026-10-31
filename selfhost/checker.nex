@@ -18,7 +18,8 @@ uses read "."
 
 // A name that is visible: a parameter, a variable or the iterator of a `for`.
 type Binding = {
-    name: Text, category: Text, ty: Text, mutable: Bool, loop_variable: Bool, line: Int, column: Int
+    name: Text, category: Text, ty: Text, mutable: Bool, loop_variable: Bool, line: Int, column: Int,
+    end_line: Int, end_column: Int
 }
 
 // What a call needs to know about a function. `generic` marks the built-ins of List, whose types
@@ -30,7 +31,7 @@ type Sig = {
 
 type State = {
     problems: List[parser.Problem], user: List[Sig], function: Text, return_type: Text,
-    in_example: Text, unsupported: Text, tables: Tables
+    in_example: Text, unsupported: Text, tables: Tables, usage: Usage
 }
 
 type Checked = { node: parser.Node, ty: Text, state: State }
@@ -153,7 +154,7 @@ fn with_problems(state: State, problems: List[parser.Problem]) gives State {
     return State(
         problems: problems, user: state.user, function: state.function, return_type: state.return_type,
         in_example: state.in_example, unsupported: state.unsupported,
-        tables: state.tables
+        tables: state.tables, usage: state.usage
     )
 }
 
@@ -161,7 +162,7 @@ fn with_user(state: State, user: List[Sig]) gives State {
     return State(
         problems: state.problems, user: user, function: state.function, return_type: state.return_type,
         in_example: state.in_example, unsupported: state.unsupported,
-        tables: state.tables
+        tables: state.tables, usage: state.usage
     )
 }
 
@@ -169,7 +170,7 @@ fn with_function(state: State, function: Text, return_type: Text) gives State {
     return State(
         problems: state.problems, user: state.user, function: function, return_type: return_type,
         in_example: state.in_example, unsupported: state.unsupported,
-        tables: state.tables
+        tables: state.tables, usage: state.usage
     )
 }
 
@@ -177,7 +178,7 @@ fn with_example(state: State, in_example: Text) gives State {
     return State(
         problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
         in_example: in_example, unsupported: state.unsupported,
-        tables: state.tables
+        tables: state.tables, usage: state.usage
     )
 }
 
@@ -188,7 +189,7 @@ fn unsupported(state: State, reason: Text) gives State {
     }
     return State(
         problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
-        in_example: state.in_example, unsupported: reason, tables: state.tables
+        in_example: state.in_example, unsupported: reason, tables: state.tables, usage: state.usage
     )
 }
 
@@ -517,7 +518,7 @@ fn binding_index(env: List[Binding], name: Text) gives Int {
 fn make_binding(name: Text, category: Text, ty: Text, mutable: Bool, loop_variable: Bool, span: parser.Span) gives Binding {
     return Binding(
         name: name, category: category, ty: ty, mutable: mutable, loop_variable: loop_variable,
-        line: span.line, column: span.column
+        line: span.line, column: span.column, end_line: span.end_line, end_column: span.end_column
     )
 }
 
@@ -624,7 +625,7 @@ fn check_name(state: State, env: List[Binding], node: parser.Node, expected: Tex
     let index = binding_index(env, name)
     if index >= 0 {
         let binding = List.get(env, index)
-        return checked(node, binding.ty, state)
+        return checked(node, binding.ty, mark_read(state, binding))
     }
     if is_type_name(state, name) or is_enum_name(state, name) {
         return checked(
@@ -1176,12 +1177,13 @@ fn check_let(state: State, env: List[Binding], node: parser.Node) gives Flow {
     }
     let free = name_is_free(current, env, name, name_span)
     var next_env = env
+    var next_state = free.state
     if free.free {
-        next_env = List.append(
-            env, make_binding(name, "variable", variable_type, kind_of(node) == "Var", false, name_span)
-        )
+        let binding = make_binding(name, "variable", variable_type, kind_of(node) == "Var", false, name_span)
+        next_env = List.append(env, binding)
+        next_state = add_symbol(free.state, binding)
     }
-    return flow(with_field(node, "value", value.node), free.state, next_env, false)
+    return flow(with_field(node, "value", value.node), next_state, next_env, false)
 }
 
 fn check_assign(state: State, env: List[Binding], node: parser.Node) gives Flow {
@@ -1242,7 +1244,7 @@ fn check_assign(state: State, env: List[Binding], node: parser.Node) gives Flow 
             ["'" + name + "' is declared as " + target.ty + "."]
         )
     }
-    return flow(rebuilt, current, env, false)
+    return flow(rebuilt, mark_assigned(current, target), env, false)
 }
 
 fn check_return(state: State, env: List[Binding], node: parser.Node) gives Typed {
@@ -1546,10 +1548,13 @@ fn check_for(state: State, env: List[Binding], node: parser.Node) gives Flow {
     let name_span = place_span(field(node, "name_span"))
     let free = name_is_free(current, env, name, name_span)
     var body_env = env
+    var body_state = free.state
     if free.free {
-        body_env = List.append(env, make_binding(name, "variable", item, false, true, name_span))
+        let binding = make_binding(name, "variable", item, false, true, name_span)
+        body_env = List.append(env, binding)
+        body_state = add_symbol(free.state, binding)
     }
-    let body = check_block(free.state, body_env, field(node, "body"))
+    let body = check_block(body_state, body_env, field(node, "body"))
     let rebuilt = with_field(
         with_field(with_field(node, "iterable", iterable.node), "clauses", clauses.node), "body", body.node
     )
@@ -1559,14 +1564,18 @@ fn check_for(state: State, env: List[Binding], node: parser.Node) gives Flow {
 // Functions
 
 fn declare_param(state: State, env: List[Binding], name: Text, span: parser.Span, ty: Text) gives Flow {
+    let binding = make_binding(name, "parameter", ty, false, false, span)
     if name == "result" {
         return flow(
             parser.Node.Null(),
-            report(
-                state, "E2013", "A parameter cannot be named 'result'",
-                "'result' is the name of the value a function gives, inside a 'promises' clause.", [], span
+            add_symbol(
+                report(
+                    state, "E2013", "A parameter cannot be named 'result'",
+                    "'result' is the name of the value a function gives, inside a 'promises' clause.", [], span
+                ),
+                binding
             ),
-            List.append(env, make_binding(name, "parameter", ty, false, false, span)),
+            List.append(env, binding),
             false
         )
     }
@@ -1574,7 +1583,7 @@ fn declare_param(state: State, env: List[Binding], name: Text, span: parser.Span
     if not free.free {
         return flow(parser.Node.Null(), free.state, env, false)
     }
-    return flow(parser.Node.Null(), free.state, List.append(env, make_binding(name, "parameter", ty, false, false, span)), false)
+    return flow(parser.Node.Null(), add_symbol(free.state, binding), List.append(env, binding), false)
 }
 
 // The signature of a function: the types of its parameters and what it gives.
@@ -1909,7 +1918,7 @@ fn fill_object(kind: Text, names: List[Text], values: List[parser.Node]) gives p
 fn initial_state() gives State {
     return State(
         problems: [], user: [], function: "", return_type: "", in_example: "", unsupported: "",
-        tables: empty_tables()
+        tables: empty_tables(), usage: empty_usage()
     )
 }
 
@@ -1988,6 +1997,9 @@ fn check_program(program: parser.Node) gives Typed {
         typed_functions = List.append(typed_functions, done.node)
         current = done.state
         i = i + 1
+    }
+    if List.length(current.problems) == 0 {
+        current = with_problems(current, warnings_of(current, program))
     }
     return Typed(
         node: fill_types(
@@ -2812,7 +2824,8 @@ fn set_enums(t: Tables, value: List[EnumInfo]) gives Tables {
 fn with_tables(state: State, tables: Tables) gives State {
     return State(
         problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
-        in_example: state.in_example, unsupported: state.unsupported, tables: tables
+        in_example: state.in_example, unsupported: state.unsupported, tables: tables,
+        usage: state.usage
     )
 }
 
@@ -5227,6 +5240,308 @@ fn check_capability(state: State, node: parser.Node) gives State {
     )
 }
 
+// Symbols and warnings
+
+// A name the program declares (a variable, a parameter or the iterator of a `for`), and, apart, every place
+// where the checker read it or gave it a new value. Warnings are decided from them once the program is known to
+// have no errors.
+type Sym = {
+    name: Text, category: Text, mutable: Bool, loop_variable: Bool,
+    line: Int, column: Int, end_line: Int, end_column: Int, function: Text
+}
+
+type Usage = { symbols: List[Sym], reads: List[Text], assigns: List[Text] }
+
+fn empty_usage() gives Usage {
+    return Usage(symbols: [], reads: [], assigns: [])
+}
+
+fn with_usage(state: State, usage: Usage) gives State {
+    return State(
+        problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
+        in_example: state.in_example, unsupported: state.unsupported, tables: state.tables, usage: usage
+    )
+}
+
+fn symbol_key(line: Int, column: Int) gives Text {
+    return to_text(line) + ":" + to_text(column)
+}
+
+fn add_symbol(state: State, binding: Binding) gives State {
+    if binding.category != "variable" and binding.category != "parameter" {
+        return state
+    }
+    let sym = Sym(
+        name: binding.name, category: binding.category, mutable: binding.mutable,
+        loop_variable: binding.loop_variable, line: binding.line, column: binding.column,
+        end_line: binding.end_line, end_column: binding.end_column, function: state.function
+    )
+    return with_usage(
+        state,
+        Usage(
+            symbols: List.append(state.usage.symbols, sym), reads: state.usage.reads, assigns: state.usage.assigns
+        )
+    )
+}
+
+fn mark_read(state: State, binding: Binding) gives State {
+    return with_usage(
+        state,
+        Usage(
+            symbols: state.usage.symbols,
+            reads: List.append(state.usage.reads, symbol_key(binding.line, binding.column)),
+            assigns: state.usage.assigns
+        )
+    )
+}
+
+fn mark_assigned(state: State, binding: Binding) gives State {
+    return with_usage(
+        state,
+        Usage(
+            symbols: state.usage.symbols, reads: state.usage.reads,
+            assigns: List.append(state.usage.assigns, symbol_key(binding.line, binding.column))
+        )
+    )
+}
+
+// The naming convention of every value name: `^_?[a-z][a-z0-9_]*$`.
+fn is_snake_case(name: Text) gives Bool {
+    var start = 0
+    if Text.starts_with(name, "_") {
+        start = 1
+    }
+    if Text.length(name) <= start {
+        return false
+    }
+    let first = Text.slice(name, start, start + 1)
+    if first < "a" or first > "z" {
+        return false
+    }
+    var i = start + 1
+    while i < Text.length(name)
+        shrinks Text.length(name) - i
+    {
+        let c = Text.slice(name, i, i + 1)
+        let valid = (c >= "a" and c <= "z") or (c >= "0" and c <= "9") or c == "_"
+        if not valid {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+fn is_lower_or_digit(c: Text) gives Bool {
+    return (c >= "a" and c <= "z") or (c >= "0" and c <= "9")
+}
+
+fn is_upper_letter(c: Text) gives Bool {
+    return c >= "A" and c <= "Z"
+}
+
+fn is_lower_letter(c: Text) gives Bool {
+    return c >= "a" and c <= "z"
+}
+
+// Puts an underscore at the boundary between a lower case letter or a digit and an upper case letter
+// (`camelCase` becomes `camel_Case`) or, with `acronyms`, between an upper case letter and the start of a word
+// that follows another upper case one (`HTTPServer` becomes `HTTP_Server`).
+fn insert_boundaries(text: Text, acronyms: Bool) gives Text {
+    var result = ""
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if i > 0 {
+            let previous = Text.slice(text, i - 1, i)
+            if not acronyms and is_lower_or_digit(previous) and is_upper_letter(c) {
+                result = result + "_"
+            }
+            if acronyms and is_upper_letter(previous) and is_upper_letter(c) and i + 1 < Text.length(text) {
+                if is_lower_letter(Text.slice(text, i + 1, i + 2)) {
+                    result = result + "_"
+                }
+            }
+        }
+        result = result + c
+        i = i + 1
+    }
+    return result
+}
+
+fn is_name_character(c: Text) gives Bool {
+    return (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9")
+}
+
+// Every run of characters that are not letters or digits becomes one underscore.
+fn collapse_separators(text: Text) gives Text {
+    var result = ""
+    var in_run = false
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if is_name_character(c) {
+            result = result + c
+            in_run = false
+        } else if not in_run {
+            result = result + "_"
+            in_run = true
+        }
+        i = i + 1
+    }
+    return result
+}
+
+fn strip_underscores(text: Text) gives Text {
+    var start = 0
+    while start < Text.length(text) and Text.slice(text, start, start + 1) == "_"
+        shrinks Text.length(text) - start
+    {
+        start = start + 1
+    }
+    var end = Text.length(text)
+    while end > start and Text.slice(text, end - 1, end) == "_"
+        shrinks end
+    {
+        end = end - 1
+    }
+    return Text.slice(text, start, end)
+}
+
+// The snake_case spelling suggested for a name that is not snake_case.
+fn snake_suggestion(name: Text) gives Text {
+    var prefix = ""
+    var body = name
+    if Text.starts_with(name, "_") {
+        prefix = "_"
+        body = Text.slice(name, 1, Text.length(name))
+    }
+    body = insert_boundaries(body, false)
+    body = insert_boundaries(body, true)
+    body = strip_underscores(collapse_separators(body))
+    body = parser.lower_text(body)
+    if body == "" {
+        body = "value"
+    }
+    return prefix + body
+}
+
+fn warning(code: Text, label: Text, hint: Text, line: Int, column: Int, end_line: Int, end_column: Int) gives parser.Problem {
+    return parser.Problem(
+        code: code, label: label, hint: hint, notes: [], line: line, column: column,
+        end_line: end_line, end_column: end_column
+    )
+}
+
+fn problem_before(a: parser.Problem, b: parser.Problem) gives Bool {
+    if a.line != b.line {
+        return a.line < b.line
+    }
+    if a.column != b.column {
+        return a.column < b.column
+    }
+    return a.code < b.code
+}
+
+// A stable sort by position and then by code.
+fn sort_problems(problems: List[parser.Problem]) gives List[parser.Problem] {
+    var sorted: List[parser.Problem] = []
+    for problem in problems {
+        var result: List[parser.Problem] = []
+        var placed = false
+        for existing in sorted {
+            if not placed and problem_before(problem, existing) {
+                result = List.append(result, problem)
+                placed = true
+            }
+            result = List.append(result, existing)
+        }
+        if not placed {
+            result = List.append(result, problem)
+        }
+        sorted = result
+    }
+    return sorted
+}
+
+// The warnings of a module that has no errors: a name that is never used, a `var` whose value never changes,
+// and a name that does not follow the convention. They describe improvements, not failures.
+fn warnings_of(state: State, program: parser.Node) gives List[parser.Problem] {
+    var pending: List[parser.Problem] = []
+    var public_functions: List[Text] = []
+    for function in items_of(field(program, "functions")) {
+        if flag_of(field(function, "public")) {
+            public_functions = List.append(public_functions, text_of(field(function, "name")))
+        }
+    }
+    for sym in state.usage.symbols {
+        if sym.name != "_" {
+            var kind = "variable"
+            if sym.category == "parameter" {
+                kind = "parameter"
+            } else if sym.loop_variable {
+                kind = "iterator"
+            }
+            let key = symbol_key(sym.line, sym.column)
+            if not List.contains(state.usage.reads, key) {
+                var hint = "Remove it, or use its value in an expression."
+                if kind == "parameter" {
+                    hint = "Remove it, or use it in the body. Name it '_' if the signature must keep the position."
+                } else if kind == "iterator" {
+                    hint = "Remove it, or use it in the body of the loop."
+                }
+                pending = List.append(
+                    pending,
+                    warning(
+                        "W2001", "The " + kind + " '" + sym.name + "' is never used", hint,
+                        sym.line, sym.column, sym.end_line, sym.end_column
+                    )
+                )
+            } else if sym.mutable and not List.contains(state.usage.assigns, key) {
+                pending = List.append(
+                    pending,
+                    warning(
+                        "W2002", "'" + sym.name + "' is declared with 'var' but is never reassigned",
+                        "Declare it with 'let': its value never changes.",
+                        sym.line, sym.column, sym.end_line, sym.end_column
+                    )
+                )
+            }
+            // A parameter of a public function is part of what another module sees, so its spelling is left alone.
+            let exempt = sym.category == "parameter" and List.contains(public_functions, sym.function)
+            if not exempt and not is_snake_case(sym.name) {
+                pending = List.append(
+                    pending,
+                    warning(
+                        "W2003", "The " + kind + " name '" + sym.name + "' does not follow snake_case",
+                        "Write it as '" + snake_suggestion(sym.name) + "'.",
+                        sym.line, sym.column, sym.end_line, sym.end_column
+                    )
+                )
+            }
+        }
+    }
+    for function in items_of(field(program, "functions")) {
+        let name = text_of(field(function, "name"))
+        // Public names belong to every module that imports this one.
+        if not flag_of(field(function, "public")) and name != "_" and not is_snake_case(name) {
+            let at = place_span(field(function, "name_span"))
+            pending = List.append(
+                pending,
+                warning(
+                    "W2003", "The function name '" + name + "' does not follow snake_case",
+                    "Write it as '" + snake_suggestion(name) + "'.", at.line, at.column, at.end_line, at.end_column
+                )
+            )
+        }
+    }
+    return sort_problems(pending)
+}
+
 // Test driver: every argument after the first is a file. For each one prints `FILE|path` and then
 // SKIP when it has lexical or syntax errors, UNSUPPORTED when the checker meets something it does not
 // know yet, or the typed tree and the errors found (the format selfhost/compare_checker.py reads).
@@ -5253,7 +5568,7 @@ fn run_checks() {
                     print("CHECKED|" + parser.to_json(result.node))
                     var shown = 0
                     for problem in result.state.problems {
-                        if shown < 100 {
+                        if shown < 100 or Text.starts_with(problem.code, "W") {
                             var place_text = ""
                             if problem.line > 0 {
                                 place_text = parser.span_text(problem.line, problem.column, problem.end_line, problem.end_column)

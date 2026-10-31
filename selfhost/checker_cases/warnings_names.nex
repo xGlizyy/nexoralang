@@ -1,0 +1,37 @@
+fn doSomething(camelCase: Int, PascalCase: Int, HTTPServer: Int, snake_ok: Int) gives Int {
+    let myVariable = camelCase
+    let ALLCAPS = PascalCase
+    let _leading = HTTPServer
+    let trailing_ = snake_ok
+    let with2Digits = 1
+    let xY = 2
+    let ABc = 3
+    let mixed_Case = 4
+    var someVar = 5
+    someVar = someVar + 1
+    for eachItem in [1] {
+        print(eachItem)
+    }
+    return myVariable + ALLCAPS + _leading + trailing_ + with2Digits + xY + ABc + mixed_Case + someVar
+}
+
+pub fn publicFunction(badParam: Int) gives Int {
+    return badParam
+}
+
+fn Another_Name() {
+}
+
+fn _private() {
+}
+
+fn _() {
+}
+
+fn main() {
+    print(doSomething(1, 2, 3, 4))
+    print(publicFunction(1))
+    Another_Name()
+    _private()
+    _()
+}
