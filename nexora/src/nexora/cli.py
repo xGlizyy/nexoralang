@@ -541,6 +541,15 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
         summary = f"not run because of {_plural(errors)}"
         return fail(_reports(analysis), summary, EXIT_INVALID_PROGRAM)
 
+    # A failure is shown with the file of the function that was running, which is not always the program: it may be
+    # a module, and its position belongs to that file's text.
+    source_by_key = {module.source.name.replace("\\", "/"): module.source for module in analysis.project.modules}         if analysis.project else {source.name.replace("\\", "/"): source}
+    function_files = {
+        id(function): module.source.name
+        for module in analysis.project.modules if module.program
+        for function in module.program.functions
+    } if analysis.project else {}
+
     input_bytes = 0
 
     def read_input() -> str:
@@ -612,15 +621,16 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
 
             previous_handler = signal.signal(signal.SIGALRM, expire)
             signal.setitimer(signal.ITIMER_REAL, timeout)
-        run(analysis.checked, write_output, text_limit=max_text, host=host)
+        run(analysis.checked, write_output, text_limit=max_text, host=host, source_files=function_files)
     except _CliLimit as error:
         sys.stdout.flush()
         return limit_failure(error, source)
     except NexoraRuntimeError as error:
+        error_source = source_by_key.get((error.file or source.name).replace("\\", "/"), source)
         if error.diagnostic.category == CONTRACT:
-            return fail(((error.diagnostic, source),), "the program stopped because a contract was broken",
+            return fail(((error.diagnostic, error_source),), "the program stopped because a contract was broken",
                         EXIT_CONTRACT_VIOLATION)
-        return fail(((error.diagnostic, source),), "the program stopped because of a runtime error",
+        return fail(((error.diagnostic, error_source),), "the program stopped because of a runtime error",
                     EXIT_RUNTIME_ERROR)
     finally:
         if timeout is not None and previous_handler is not None:

@@ -2869,11 +2869,14 @@ class Checker:
                 hint=f"To build on '{name}', refine it: type {self._refining} = {name} where ...",
             )
             return None
-        refined = self._refined.get(self._key(name))
+        # The type this check gives is the one of the module that declares it: `Small` written inside
+        # `models` is the type `models.Small`, the name the tables and the model know it by.
+        key = self._key(name)
+        refined = self._refined.get(key)
         if refined is not None:
             # The interpreter runs the check on this one; a module writes it with its own
             # bare name, and only the analysis knows which one it is (decision 0018, 5).
-            self._targets[id(node)] = self._key(name)
+            self._targets[id(node)] = key
         count = len(node.arguments)
         if count != 1:
             self._report(
@@ -2882,12 +2885,12 @@ class Checker:
                 node.span,
                 notes=(f"{name}(x) checks that x satisfies the condition of {name}.",),
             )
-            return name if refined is not None else None
+            return key if refined is not None else None
         if refined is None:
             return None
         found, argument = argument_types[0], node.arguments[0]
         if found is None:
-            return name
+            return key
         if found == VOID:
             self._report("E2011", "This call does not produce a value to check", argument.span)
         else:
@@ -2909,8 +2912,8 @@ class Checker:
                     notes=(f"'{name}' refines {refined.base}, so it checks values of type {refined.root}.",),
                 )
             else:
-                self._check_constant(argument, name)
-        return name
+                self._check_constant(argument, key)
+        return key
 
 
 def check(program: ast.Program, *, require_main: bool = True) -> tuple[CheckedProgram, list[Diagnostic]]:

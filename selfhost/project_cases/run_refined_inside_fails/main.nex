@@ -1,0 +1,5 @@
+import "m.nex"
+
+fn main() {
+    print(m.checked(50))
+}
