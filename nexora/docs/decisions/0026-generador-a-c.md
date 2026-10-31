@@ -32,7 +32,7 @@ by the generator, from text that lives in a `.nex` file.
 The self-hosted decision left stage 4 open because it "reintroduces the question of which language is
 underneath", and asked for real measurements first. They exist now, and this decision answers.
 It is **proposed**: nothing in the language changes until the maintainer accepts it, and the
-interpreters of 0024 stay as they are, the reference for what a program must do.
+interpreters of the self-hosted decision stay as they are, the reference for what a program must do.
 
 ## 2. What the measurements say
 
