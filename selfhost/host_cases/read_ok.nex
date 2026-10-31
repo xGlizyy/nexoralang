@@ -1,0 +1,6 @@
+uses read "selfhost/host_cases/data"
+fn main() {
+    let path = "selfhost/host_cases/data/in.txt"
+    print(read_file(path))
+    print(read_file("selfhost/host_cases/data/in.txt"))
+}

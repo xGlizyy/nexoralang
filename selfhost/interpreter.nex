@@ -23,6 +23,7 @@ import "parser.nex"
 import "checker.nex"
 
 uses read "."
+uses write "."
 
 // Values
 
@@ -82,7 +83,7 @@ type Machine = {
 type Prog = {
     fn_names: List[Text], fn_nodes: List[parser.Node],
     record_names: List[Text], record_fields: List[List[Text]],
-    type_names: List[Text], type_nodes: List[parser.Node]
+    type_names: List[Text], type_nodes: List[parser.Node], host: HostCfg
 }
 
 // Reading the tree
@@ -180,7 +181,7 @@ fn place_in(node: parser.Node, name: Text) gives parser.Span {
 
 // The program
 
-fn build_prog(program: parser.Node) gives Prog {
+fn build_prog(program: parser.Node, host: HostCfg) gives Prog {
     var fn_names: List[Text] = []
     var fn_nodes: List[parser.Node] = []
     for function in items_of(field(program, "functions")) {
@@ -208,7 +209,7 @@ fn build_prog(program: parser.Node) gives Prog {
     }
     return Prog(
         fn_names: fn_names, fn_nodes: fn_nodes, record_names: record_names, record_fields: record_fields,
-        type_names: type_names, type_nodes: type_nodes
+        type_names: type_names, type_nodes: type_nodes, host: host
     )
 }
 
@@ -1384,6 +1385,9 @@ fn finish_call(prog: Prog, m: Machine, node: parser.Node, arguments: List[Val]) 
         let kind = Text.slice(callee, dot + 1, Text.length(callee))
         return mk(m, Control.CValue(Val.VVariant(owner, kind, arguments)), m.env, m.stack)
     }
+    if is_host_function(callee) {
+        return host_call(prog, m, node, callee, arguments)
+    }
     if callee == "print" {
         let line = format_val(List.get(arguments, 0))
         return mk_out(m, Control.CValue(Val.VUnit()), m.stack, List.append(m.out, line))
@@ -2023,10 +2027,10 @@ fn start_machine(prog: Prog, fuel: Int) gives Machine {
 type Seen = { key: Text, status: Text, val: Val }
 
 // What is observed about the own calls of the example being evaluated.
-type Tracing = { watch: List[Text], invoked: List[Seen], skipped: List[Text] }
+type Tracing = { watch: List[Text], invoked: List[Seen], skipped: List[Text], inputs: List[Text] }
 
 fn no_tracing() gives Tracing {
-    return Tracing(watch: [], invoked: [], skipped: [])
+    return Tracing(watch: [], invoked: [], skipped: [], inputs: [])
 }
 
 fn span_key(span: parser.Span) gives Text {
@@ -2050,7 +2054,7 @@ fn note_invoked(m: Machine, node: parser.Node) gives Machine {
         Tracing(
             watch: m.tracing.watch,
             invoked: List.append(m.tracing.invoked, Seen(key: key, status: "stopped", val: Val.VUnit())),
-            skipped: m.tracing.skipped
+            skipped: m.tracing.skipped, inputs: m.tracing.inputs
         )
     )
 }
@@ -2069,7 +2073,9 @@ fn with_returned(m: Machine, site: parser.Span, value: Val) gives Machine {
             invoked = List.append(invoked, seen)
         }
     }
-    return with_tracing(m, Tracing(watch: m.tracing.watch, invoked: invoked, skipped: m.tracing.skipped))
+    return with_tracing(
+        m, Tracing(watch: m.tracing.watch, invoked: invoked, skipped: m.tracing.skipped, inputs: m.tracing.inputs)
+    )
 }
 
 // The own calls inside an operand that `and` or `or` did not need to evaluate.
@@ -2112,7 +2118,8 @@ fn note_skipped(m: Machine, operand: parser.Node) gives Machine {
         m,
         Tracing(
             watch: m.tracing.watch, invoked: m.tracing.invoked,
-            skipped: List.concat(m.tracing.skipped, skipped_calls(operand, m.tracing.watch))
+            skipped: List.concat(m.tracing.skipped, skipped_calls(operand, m.tracing.watch)),
+            inputs: m.tracing.inputs
         )
     )
 }
@@ -2274,7 +2281,7 @@ fn run_example(prog: Prog, lines: List[Text], name: Text, index: Int, item: pars
     }
     let machine = Machine(
         control: Control.CEval(condition), env: [], stack: push(Kont.KHalt(), nil_stack()), out: [], depth: 0,
-        fuel: start_fuel(), tracing: Tracing(watch: watch, invoked: [], skipped: [])
+        fuel: start_fuel(), tracing: Tracing(watch: watch, invoked: [], skipped: [], inputs: [])
     )
     let done = run_machine(prog, machine)
     let at = place_of(condition)
@@ -2351,6 +2358,333 @@ fn run_example(prog: Prog, lines: List[Text], name: Text, index: Int, item: pars
     }
 }
 
+// The host: what a program may do besides computing
+//
+// The Python interpreter asks a host for the arguments, the input and the files of the program, and the host
+// decides with the three rules of decision 0015: what the program declared, what the user allowed and what the
+// environment permits. This interpreter makes the same decisions with what it is given on its command line, and
+// performs the operation itself for the files and the standard input.
+//
+// Two things the language cannot do yet limit it. A capability is declared with a literal (`uses read "."`), so
+// this interpreter can only touch what it declares itself: it declares the working directory for files, and it
+// cannot forward a network request or a process to an origin or a command it does not know in advance (it says
+// so with E0000 when everything else allows the operation). And a read of a file that does not exist, or of an
+// input that has ended, stops this interpreter instead of becoming a value the program can see: the input is
+// read from a file given with --stdin, whose end it knows, and a missing file ends the run. The paths are
+// resolved by their text, so a symbolic link that points outside what is allowed is not noticed.
+
+// The host a program runs with.
+type HostCfg = {
+    arguments: List[Text], declared_kinds: List[Text], declared_paths: List[Text],
+    grant_kinds: List[Text], grant_paths: List[Text], cwd: Text
+}
+
+fn no_host() gives HostCfg {
+    return HostCfg(
+        arguments: [], declared_kinds: [], declared_paths: [], grant_kinds: [], grant_paths: [], cwd: ""
+    )
+}
+
+// What a program declares with `uses`, as pairs of (capability, scope) in two lists.
+fn declared_kinds_of(program: parser.Node) gives List[Text] {
+    var kinds: List[Text] = []
+    for declaration in items_of(field(program, "uses")) {
+        kinds = List.append(kinds, text_of(field(declaration, "capability")))
+    }
+    return kinds
+}
+
+fn declared_paths_of(program: parser.Node) gives List[Text] {
+    var paths: List[Text] = []
+    for declaration in items_of(field(program, "uses")) {
+        paths = List.append(paths, text_of(field(declaration, "path")))
+    }
+    return paths
+}
+
+fn scopes_for(kinds: List[Text], paths: List[Text], kind: Text) gives List[Text] {
+    var scopes: List[Text] = []
+    var i = 0
+    while i < List.length(kinds)
+        shrinks List.length(kinds) - i
+    {
+        if List.get(kinds, i) == kind {
+            scopes = List.append(scopes, List.get(paths, i))
+        }
+        i = i + 1
+    }
+    return scopes
+}
+
+fn is_absolute_path(path: Text) gives Bool {
+    return Text.starts_with(path, "/") or Text.starts_with(path, "\\") or (Text.length(path) > 1 and Text.slice(path, 1, 2) == ":")
+}
+
+// The path made absolute with the working directory, as the file system would see it, without following links.
+fn resolve_path(host: HostCfg, path: Text) gives Text {
+    if is_absolute_path(path) or host.cwd == "" {
+        return path
+    }
+    return host.cwd + "/" + path
+}
+
+fn covered_by(host: HostCfg, scopes: List[Text], path: Text) gives Bool {
+    let target = resolve_path(host, path)
+    for scope in scopes {
+        if checker.is_inside(resolve_path(host, scope), target) {
+            return true
+        }
+    }
+    return false
+}
+
+// Why the program may not use a file, or the empty text when it may.
+fn file_denied(host: HostCfg, kind: Text, path: Text) gives Text {
+    if not covered_by(host, scopes_for(host.declared_kinds, host.declared_paths, kind), path) {
+        return "this program does not declare that it needs to " + kind + " '" + path + "'"
+    }
+    if not covered_by(host, scopes_for(host.grant_kinds, host.grant_paths, kind), path) {
+        return "'" + path + "' is not among the paths the user allowed to " + kind
+    }
+    return ""
+}
+
+fn denied_machine(m: Machine, message: Text, hint: Text, node: parser.Node) gives Machine {
+    let res = bad_at("E3008", message, hint, [], "arg0")
+    return failed(m, res, node)
+}
+
+fn forwarding_machine(m: Machine, callee: Text, node: parser.Node) gives Machine {
+    return failed(m, bad("E0000", "'" + callee + "' cannot be forwarded to the host by this interpreter yet"), node)
+}
+
+fn read_hint() gives Text {
+    return "A program reads a file when it declares it with 'uses read' and the user allows it with --allow-read."
+}
+
+fn write_hint() gives Text {
+    return "A program writes a file when it declares it with 'uses write' and the user allows it with --allow-write."
+}
+
+// `Net.get(url)`: the origin the request would go to, when the URL is one the host admits at all.
+type OriginCheck = { admitted: Bool, origin: Text, unsupported: Bool }
+
+fn https_origin(url: Text) gives OriginCheck {
+    let parsed = checker.url_origin(url)
+    if parsed.unsupported != "" {
+        return OriginCheck(admitted: false, origin: "", unsupported: true)
+    }
+    if not parsed.ok or parsed.port != 443 {
+        return OriginCheck(admitted: false, origin: "", unsupported: false)
+    }
+    return OriginCheck(admitted: true, origin: "https://" + parsed.host, unsupported: false)
+}
+
+fn origin_declared(host: HostCfg, kinds: List[Text], paths: List[Text], origin: Text) gives Bool {
+    for scope in scopes_for(kinds, paths, "network") {
+        let declared = checker.url_origin(scope)
+        let wanted = checker.url_origin(origin)
+        if declared.ok and wanted.ok and declared.host == wanted.host and declared.port == wanted.port {
+            return true
+        }
+    }
+    return false
+}
+
+// The standard input has ended: the program has to know that there is nothing more to read.
+fn read_input_line(m: Machine, node: parser.Node) gives Machine {
+    let inputs = m.tracing.inputs
+    if List.length(inputs) == 0 {
+        return stop_with(
+            m, m.stack, 0, "E3009", "There is no more input to read",
+            "The standard input ended. Check it before reading again.", [], place_of(node)
+        )
+    }
+    let line = List.get(inputs, 0)
+    var rest: List[Text] = []
+    var i = 1
+    while i < List.length(inputs)
+        shrinks List.length(inputs) - i
+    {
+        rest = List.append(rest, List.get(inputs, i))
+        i = i + 1
+    }
+    let consumed = with_tracing(
+        m,
+        Tracing(
+            watch: m.tracing.watch, invoked: m.tracing.invoked, skipped: m.tracing.skipped, inputs: rest
+        )
+    )
+    return mk(consumed, Control.CValue(Val.VText(line)), consumed.env, consumed.stack)
+}
+
+fn is_host_function(callee: Text) gives Bool {
+    return (
+        callee == "args" or callee == "input" or callee == "read_file" or callee == "write_file"
+        or callee == "Net.get" or callee == "Process.run"
+    )
+}
+
+// A call to a function of the host, once its arguments are evaluated.
+fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Val]) gives Machine {
+    let host = prog.host
+    if callee == "args" {
+        var shown: List[Val] = []
+        for argument in host.arguments {
+            shown = List.append(shown, Val.VText(argument))
+        }
+        return mk(m, Control.CValue(Val.VList(shown)), m.env, m.stack)
+    }
+    if callee == "input" {
+        return read_input_line(m, node)
+    }
+    let first = text_val(List.get(a, 0))
+    if callee == "read_file" {
+        let denied = file_denied(host, "read", first)
+        if denied != "" {
+            return denied_machine(m, denied, read_hint(), node)
+        }
+        return mk(m, Control.CValue(Val.VText(read_file(first))), m.env, m.stack)
+    }
+    if callee == "write_file" {
+        let denied = file_denied(host, "write", first)
+        if denied != "" {
+            return denied_machine(m, denied, write_hint(), node)
+        }
+        write_file(first, text_val(List.get(a, 1)))
+        return mk(m, Control.CValue(Val.VUnit()), m.env, m.stack)
+    }
+    if callee == "Net.get" {
+        let origin = https_origin(first)
+        if origin.unsupported {
+            return forwarding_machine(m, callee, node)
+        }
+        if not origin.admitted {
+            return failed(
+                m, bad_at("E3014", "only HTTPS URLs without credentials and on port 443 are allowed", "", [], "arg0"), node
+            )
+        }
+        let network_hint = "A program needs 'uses network' and the matching --allow-network origin; the environment may still deny network access."
+        if not origin_declared(host, host.declared_kinds, host.declared_paths, origin.origin) {
+            return denied_machine(m, "this program does not declare network access to '" + origin.origin + "'", network_hint, node)
+        }
+        if not origin_declared(host, host.grant_kinds, host.grant_paths, origin.origin) {
+            return denied_machine(m, "'" + origin.origin + "' is not among the network origins the user allowed", network_hint, node)
+        }
+        return forwarding_machine(m, callee, node)
+    }
+    let process_hint = "A program needs 'uses process' and the matching --allow-process command; the environment may still deny external processes."
+    if not List.contains(scopes_for(host.declared_kinds, host.declared_paths, "process"), first) {
+        return denied_machine(m, "this program does not declare permission to run '" + first + "'", process_hint, node)
+    }
+    if not List.contains(scopes_for(host.grant_kinds, host.grant_paths, "process"), first) {
+        return denied_machine(m, "'" + first + "' is not among the commands the user allowed", process_hint, node)
+    }
+    return forwarding_machine(m, callee, node)
+}
+
+// Reads what the command line gives a run: the grants, the input, the working directory and the arguments.
+type RunOptions = {
+    grant_kinds: List[Text], grant_paths: List[Text], stdin: List[Text], cwd: Text, path: Text,
+    arguments: List[Text]
+}
+
+fn input_lines(text: Text) gives List[Text] {
+    if text == "" {
+        return []
+    }
+    var lines = source_lines(text)
+    if List.length(lines) > 0 and List.get(lines, List.length(lines) - 1) == "" {
+        lines = drop_last_text(lines)
+    }
+    return lines
+}
+
+fn drop_last_text(items: List[Text]) gives List[Text] {
+    var result: List[Text] = []
+    var i = 0
+    while i < List.length(items) - 1
+        shrinks List.length(items) - i
+    {
+        result = List.append(result, List.get(items, i))
+        i = i + 1
+    }
+    return result
+}
+
+fn parse_options(words: List[Text]) gives RunOptions {
+    var kinds: List[Text] = []
+    var paths: List[Text] = []
+    var stdin: List[Text] = []
+    var cwd = ""
+    var path = ""
+    var arguments: List[Text] = []
+    var i = 0
+    while i < List.length(words)
+        shrinks List.length(words) - i
+    {
+        let word = List.get(words, i)
+        if path != "" {
+            arguments = List.append(arguments, word)
+            i = i + 1
+        } else if word == "--allow-read" or word == "--allow-write" or word == "--allow-network" or word == "--allow-process" {
+            kinds = List.append(kinds, Text.slice(word, 8, Text.length(word)))
+            paths = List.append(paths, List.get(words, i + 1))
+            i = i + 2
+        } else if word == "--stdin" {
+            stdin = input_lines(read_file(List.get(words, i + 1)))
+            i = i + 2
+        } else if word == "--cwd" {
+            cwd = List.get(words, i + 1)
+            i = i + 2
+        } else {
+            path = word
+            i = i + 1
+        }
+    }
+    return RunOptions(grant_kinds: kinds, grant_paths: paths, stdin: stdin, cwd: cwd, path: path, arguments: arguments)
+}
+
+// Test driver for one program with the host: `--run [options] FILE [arguments]`. The options are --allow-read,
+// --allow-write, --allow-network and --allow-process (each with its scope), --stdin FILE and --cwd DIRECTORY.
+// Prints `FILE|path`, what the program prints, and `FAIL|...` and `STOP|` as the other drivers do.
+fn run_hosted(words: List[Text]) {
+    let options = parse_options(words)
+    print("FILE|" + options.path)
+    let lexed = lexer.tokenize(read_file(options.path))
+    if List.length(lexed.diagnostics) > 0 {
+        print("STOP|lexical")
+        return
+    }
+    let outcome = parser.parse_program(lexed.tokens)
+    if List.length(outcome.diagnostics) > 0 {
+        print("STOP|syntax")
+        return
+    }
+    let analysis = checker.analyze(outcome.program, true)
+    if analysis.unsupported != "" {
+        print("STOP|unsupported " + analysis.unsupported)
+        return
+    }
+    if has_errors(analysis.problems) {
+        print("STOP|check")
+        return
+    }
+    let host = HostCfg(
+        arguments: options.arguments, declared_kinds: declared_kinds_of(analysis.node),
+        declared_paths: declared_paths_of(analysis.node), grant_kinds: options.grant_kinds,
+        grant_paths: options.grant_paths, cwd: options.cwd
+    )
+    let prog = build_prog(analysis.node, host)
+    let start = start_machine(prog, start_fuel())
+    let tracing = Tracing(watch: [], invoked: [], skipped: [], inputs: options.stdin)
+    let done = run_machine(prog, with_tracing(start, tracing))
+    for line in done.out {
+        print(line)
+    }
+    print(stop_text(done))
+}
+
 // The steps a run may take before it is stopped.
 fn start_fuel() gives Int {
     return 300000000
@@ -2398,7 +2732,7 @@ fn run_files() {
                 } else if has_errors(analysis.problems) {
                     print("STOP|check")
                 } else {
-                    let prog = build_prog(analysis.node)
+                    let prog = build_prog(analysis.node, no_host())
                     let done = run_machine(prog, start_machine(prog, start_fuel()))
                     for line in done.out {
                         print(line)
@@ -2418,6 +2752,18 @@ fn stop_text(m: Machine) gives Text {
         Control.CFail(problem) => problem_line(problem) + "\nSTOP|fail " + problem.code
         _ => "STOP|fuel"
     }
+}
+
+fn drop_first_text_item(items: List[Text]) gives List[Text] {
+    var rest: List[Text] = []
+    var i = 1
+    while i < List.length(items)
+        shrinks List.length(items) - i
+    {
+        rest = List.append(rest, List.get(items, i))
+        i = i + 1
+    }
+    return rest
 }
 
 // Test driver for the examples: every argument after `--test` is a file. For each one prints `FILE|path`, what `nex test`
@@ -2445,7 +2791,7 @@ fn run_tests() {
                 } else if has_errors(analysis.problems) {
                     print("STOP|check")
                 } else {
-                    run_examples(build_prog(analysis.node), text, analysis.node)
+                    run_examples(build_prog(analysis.node, no_host()), text, analysis.node)
                     print("STOP|ok")
                 }
             }
@@ -2455,7 +2801,9 @@ fn run_tests() {
 }
 
 fn main() {
-    if List.length(args()) > 0 and List.get(args(), 0) == "--test" {
+    if List.length(args()) > 0 and List.get(args(), 0) == "--run" {
+        run_hosted(drop_first_text_item(args()))
+    } else if List.length(args()) > 0 and List.get(args(), 0) == "--test" {
         run_tests()
     } else {
         run_files()

@@ -4947,7 +4947,7 @@ fn drop_last(items: List[Text]) gives List[Text] {
 
 // Whether `path` is `scope` itself or is inside it. Both are compared by segments and their roots have to be
 // the same: `data2` is not inside `data`, and a relative path is never inside an absolute one.
-fn is_inside(scope: Text, path: Text) gives Bool {
+pub fn is_inside(scope: Text, path: Text) gives Bool {
     if scope == "" {
         return false
     }
@@ -4976,7 +4976,7 @@ fn same_root(first: Text, second: Text) gives Bool {
 
 // HTTPS origins
 
-type Origin = { ok: Bool, host: Text, port: Int, unsupported: Text }
+pub type Origin = { ok: Bool, host: Text, port: Int, unsupported: Text }
 
 fn bad_origin() gives Origin {
     return Origin(ok: false, host: "", port: 0, unsupported: "")
@@ -5081,7 +5081,7 @@ fn url_scheme(url: Text) gives Text {
 
 // The origin of an HTTPS URL: its lowercase host and its port. Not valid when the scheme is not https, when
 // there is no host, when there are credentials or when the port is not a number.
-fn url_origin(url: Text) gives Origin {
+pub fn url_origin(url: Text) gives Origin {
     if url_scheme(url) != "https" {
         return bad_origin()
     }

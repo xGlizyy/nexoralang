@@ -1,0 +1,2 @@
+the text of a file
+with two lines

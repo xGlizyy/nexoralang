@@ -1,0 +1,7 @@
+fn main() {
+    let given = args()
+    print(List.length(given))
+    for word in given {
+        print(word)
+    }
+}

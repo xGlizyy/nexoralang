@@ -1,0 +1,5 @@
+uses network "https://example.com"
+fn main() {
+    let url = "https://example.com:8443/data"
+    print(Net.get(url))
+}

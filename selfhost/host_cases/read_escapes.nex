@@ -1,0 +1,5 @@
+uses read "selfhost/host_cases/data"
+fn main() {
+    let path = "selfhost/host_cases/data/../secret.txt"
+    print(read_file(path))
+}
