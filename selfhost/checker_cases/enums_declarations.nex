@@ -1,0 +1,19 @@
+type Shape = enum { Circle(radius: Float), Dot }
+type Shape = enum { Other }
+type color = enum { Red }
+type Int = enum { A }
+type Dup = enum { A, A, B(x: Int, x: Int), C(y: Strange) }
+type Bad = enum { A(x: Missing) }
+type UsesBad = { b: Bad }
+type Rec = { s: Shape }
+type Mutual = enum { M(n: Nested) }
+type Nested = enum { N(m: Mutual), Done }
+type Percent = Int where value > 0
+type Holder = enum { H(p: Percent, l: List[Shape], r: Rec) }
+fn Shape() {
+}
+fn main() {
+    let Shape = 1
+    let a: Bad = Bad.A(1)
+    let b: Holder = Holder.H(5, [Shape.Dot()], Rec(s: Shape.Dot()))
+}
