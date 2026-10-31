@@ -1,0 +1,9 @@
+type Name = Text where Text.length(value) > 0, "A name is not empty"
+type Ratio = Float where value >= 0.0 and value <= 1.0
+
+fn main() {
+    print(Ratio(0.5))
+    print(Name("ada"))
+    let empty = Text.slice("abc", 1, 1)
+    print(Name(empty))
+}

@@ -1,0 +1,4 @@
+fn main() {
+    let o: Option[Int] = None
+    print(Option.value(o))
+}

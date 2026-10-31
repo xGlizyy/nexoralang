@@ -1,0 +1,4 @@
+fn main() {
+    let small = 0 - 9223372036854775807 - 1
+    print(-small)
+}

@@ -1,0 +1,11 @@
+fn root(n: Int) gives Int
+    needs positive: n > 0, "Only positive numbers have a root here"
+    needs small: n < 100
+{
+    return n
+}
+
+fn main() {
+    print(root(5))
+    print(root(500))
+}

@@ -1,0 +1,9 @@
+fn main() {
+    var i = 0
+    while i < 5
+        keeps small: i < 3, "i stays below 3"
+        shrinks 5 - i
+    {
+        i = i + 1
+    }
+}

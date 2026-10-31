@@ -1,0 +1,11 @@
+fn pick(n: Int) gives Int {
+    return match n {
+        0 => 1 / n
+        other => other
+    }
+}
+
+fn main() {
+    print(pick(3))
+    print(pick(0))
+}

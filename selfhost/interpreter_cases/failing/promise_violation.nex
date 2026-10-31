@@ -1,0 +1,9 @@
+fn double(n: Int) gives Int
+    promises result == n * 2, "The result is twice the input"
+{
+    return n * 3
+}
+
+fn main() {
+    print(double(2))
+}

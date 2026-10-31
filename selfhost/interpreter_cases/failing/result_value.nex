@@ -1,0 +1,4 @@
+fn main() {
+    let r: Result[Int, Text] = Err("boom")
+    print(Result.value(r))
+}
