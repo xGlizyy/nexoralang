@@ -1,4 +1,4 @@
-// The code generator to C, written in NEXORA (decision 0026, stage 1).
+// The code generator to C, written in NEXORA (decision 0026).
 //
 //     nex run selfhost/cgen.nex --allow-read . --allow-write . -- PROGRAM.nex OUTPUT.c
 //
@@ -6,9 +6,10 @@
 // the C of an executable that does what `nex run` does: the same output and, when the program fails, the same diagnostic with
 // the same notes and exit status. The runtime of those programs is selfhost/runtime/nexora_rt.h, put at the top of the file.
 //
-// Stage 1 compiles Int, Bool and Text, functions with `needs` and `promises`, `let`, `var`, assignment, `if`, `while` with its
-// `shrinks`, `return`, `print`, `to_text` and `Text.length`. Anything else is reported as not supported yet and nothing is
-// written.
+// Every value is an `rv`, a tagged value (see the runtime): the program was checked, so the generated code does not carry
+// types. It compiles `Int`, `Float`, `Bool` and `Text`, lists, records, enums, `Option` and `Result`, `match` and `if let`,
+// functions with `needs` and `promises`, refined types, `if`, `while` with `shrinks`, `for`, `return`, and the built-in
+// functions that do not touch the host. Anything else is reported as not supported yet and nothing is written.
 //
 // Every expression is flattened into statements that evaluate its parts in the order the language says (left to right), so the
 // order never depends on how a C compiler orders the arguments of a call.
@@ -67,20 +68,6 @@ fn text_of(node: parser.Node) gives Text {
     }
 }
 
-fn int_of(node: parser.Node) gives Int {
-    return match node {
-        parser.Node.Whole(value) => value
-        _ => 0
-    }
-}
-
-fn flag_of(node: parser.Node) gives Bool {
-    return match node {
-        parser.Node.Flag(value) => value
-        _ => false
-    }
-}
-
 fn items_of(node: parser.Node) gives List[parser.Node] {
     return match node {
         parser.Node.Items(items) => items
@@ -102,10 +89,6 @@ fn place_of(node: parser.Node) gives parser.Span {
         )
         _ => parser.no_span()
     }
-}
-
-fn type_of(node: parser.Node) gives Text {
-    return text_of(field(node, "type"))
 }
 
 // Writing C
@@ -141,21 +124,35 @@ fn span4(span: parser.Span) gives Text {
     return to_text(span.line) + ", " + to_text(span.column) + ", " + to_text(span.end_line) + ", " + to_text(span.end_column)
 }
 
-fn c_type(ty: Text) gives Text {
-    if ty == "Int" {
-        return "int64_t"
+fn node_span(node: parser.Node) gives Text {
+    return span4(place_of(node))
+}
+
+// The name a record, enum or function has in C: only letters and digits, so a name of a module (`models.area`) is fine.
+fn c_name(name: Text) gives Text {
+    var out = ""
+    var i = 0
+    while i < Text.length(name)
+        shrinks Text.length(name) - i
+    {
+        let c = Text.slice(name, i, i + 1)
+        if c == "." {
+            out = out + "__"
+        } else {
+            out = out + c
+        }
+        i = i + 1
     }
-    if ty == "Bool" {
-        return "bool"
-    }
-    if ty == "Text" {
-        return "rt_text"
-    }
-    return ""
+    return out
+}
+
+// What the generator knows of the program: its functions, records (with their fields), enums and refined types.
+type Info = {
+    fns: List[Text], records: List[Text], record_fields: List[List[Text]], enums: List[Text], refined: List[Text]
 }
 
 // What the generator keeps while it writes: the number of the next temporary, and the first thing it cannot do yet.
-type St = { next: Int, bad: Text, fns: List[Text] }
+type St = { next: Int, bad: Text, info: Info }
 
 // A piece of C: the statements that compute something, and the name or literal that holds it.
 type Part = { code: Text, value: Text, st: St }
@@ -164,7 +161,7 @@ fn refuse(st: St, reason: Text) gives St {
     if st.bad != "" {
         return st
     }
-    return St(next: st.next, bad: reason, fns: st.fns)
+    return St(next: st.next, bad: reason, info: st.info)
 }
 
 fn part(code: Text, value: Text, st: St) gives Part {
@@ -172,39 +169,56 @@ fn part(code: Text, value: Text, st: St) gives Part {
 }
 
 // A new temporary holding `expression`.
-fn temporary(st: St, ty: Text, expression: Text) gives Part {
+fn temporary(st: St, expression: Text) gives Part {
     let name = "t" + to_text(st.next)
-    return part(c_type(ty) + " " + name + " = " + expression + ";\n", name, St(next: st.next + 1, bad: st.bad, fns: st.fns))
+    return part("rv " + name + " = " + expression + ";\n", name, St(next: st.next + 1, bad: st.bad, info: st.info))
 }
 
-fn show_expr(ty: Text, name: Text, value: Text) gives Text {
-    if ty == "Int" {
-        return "rt_buf_int(&b, " + c_string(name) + ", " + value + ");\n"
+fn fresh(st: St) gives St {
+    return St(next: st.next + 1, bad: st.bad, info: st.info)
+}
+
+// The variables in scope, in the order they were declared: an error lists their values.
+type Var = { name: Text }
+
+fn values_code(vars: List[Var]) gives Text {
+    var out = ""
+    for variable in vars {
+        out = out + "rt_buf_val(&b, " + c_string(variable.name) + ", v_" + variable.name + ");\n"
     }
-    if ty == "Bool" {
-        return "rt_buf_bool(&b, " + c_string(name) + ", " + value + ");\n"
-    }
-    return "rt_buf_text(&b, " + c_string(name) + ", " + value + ");\n"
+    return out
 }
 
 // Expressions
 
+fn literal_value(node: parser.Node) gives Text {
+    return match node {
+        parser.Node.Whole(value) => "rt_int(INT64_C(" + to_text(value) + "))"
+        parser.Node.Real(text) => "rt_float(" + text + ")"
+        parser.Node.Str(value) => "rt_str(" + c_string(value) + ")"
+        parser.Node.Flag(value) => bool_value(value)
+        _ => "rt_unit()"
+    }
+}
+
+fn bool_value(value: Bool) gives Text {
+    if value {
+        return "rt_bool(true)"
+    }
+    return "rt_bool(false)"
+}
+
 fn gen_expr(st: St, node: parser.Node) gives Part {
     let kind = kind_of(node)
-    if kind == "IntLiteral" {
-        return part("", "INT64_C(" + to_text(int_of(field(node, "value"))) + ")", st)
-    }
-    if kind == "BoolLiteral" {
-        if flag_of(field(node, "value")) {
-            return part("", "true", st)
-        }
-        return part("", "false", st)
-    }
-    if kind == "TextLiteral" {
-        return part("", "rt_lit(" + c_string(text_of(field(node, "value"))) + ")", st)
+    if kind == "IntLiteral" or kind == "TextLiteral" or kind == "BoolLiteral" or kind == "FloatLiteral" {
+        return part("", literal_value(field(node, "value")), st)
     }
     if kind == "Name" {
-        return part("", "v_" + text_of(field(node, "name")), st)
+        let name = text_of(field(node, "name"))
+        if name == "None" {
+            return part("", "rt_none()", st)
+        }
+        return part("", "v_" + name, st)
     }
     if kind == "Group" {
         return gen_expr(st, field(node, "expression"))
@@ -218,19 +232,47 @@ fn gen_expr(st: St, node: parser.Node) gives Part {
     if kind == "Call" {
         return gen_call(st, node)
     }
-    return part("", "0", refuse(st, "the expression " + kind))
+    if kind == "ListLiteral" {
+        let elements = gen_args(st, items_of(field(node, "elements")))
+        let made = temporary(elements.st, "rt_list_from(" + array_of(elements.values) + ")")
+        return part(elements.code + made.code, made.value, made.st)
+    }
+    if kind == "RecordConstruction" {
+        return gen_record(st, node)
+    }
+    if kind == "FieldAccess" {
+        let target = gen_expr(st, field(node, "target"))
+        let made = temporary(target.st, "rt_field(" + target.value + ", " + c_string(text_of(field(node, "name"))) + ")")
+        return part(target.code + made.code, made.value, made.st)
+    }
+    if kind == "MatchExpr" {
+        return gen_match(st, node)
+    }
+    return part("", "rt_unit()", refuse(st, "the expression " + kind))
+}
+
+// `(rv[]){a, b}, 2`: the items of a list or the arguments of a constructor, and how many there are.
+fn array_of(values: List[Text]) gives Text {
+    if List.length(values) == 0 {
+        return "0, 0"
+    }
+    return "(rv[])\{" + parser.join_texts(values, ", ") + "}, " + to_text(List.length(values))
+}
+
+fn array_values(values: List[Text]) gives Text {
+    if List.length(values) == 0 {
+        return "0"
+    }
+    return "(rv[])\{" + parser.join_texts(values, ", ") + "}"
 }
 
 fn gen_unary(st: St, node: parser.Node) gives Part {
     let operand = gen_expr(st, field(node, "operand"))
     if text_of(field(node, "operator")) == "not" {
-        let made = temporary(operand.st, "Bool", "!" + operand.value)
+        let made = temporary(operand.st, "rt_bool(!rt_truth(" + operand.value + "))")
         return part(operand.code + made.code, made.value, made.st)
     }
-    if type_of(node) != "Int" {
-        return part("", "0", refuse(operand.st, "the operator - on " + type_of(node)))
-    }
-    let made = temporary(operand.st, "Int", "rt_neg(" + operand.value + ", " + span4(place_of(node)) + ")")
+    let made = temporary(operand.st, "rt_neg(" + operand.value + ", " + node_span(node) + ")")
     return part(operand.code + made.code, made.value, made.st)
 }
 
@@ -242,58 +284,51 @@ fn gen_binary(st: St, node: parser.Node) gives Part {
     }
     let right = gen_expr(left.st, field(node, "right"))
     let code = left.code + right.code
-    let operand_type = type_of(field(node, "left"))
-    var made = temporary(right.st, "Bool", "false")
-    if operand_type == "Int" {
-        made = gen_int_operation(right, left.value, right.value, operator, node)
-    } else if operand_type == "Text" {
-        made = gen_text_operation(right.st, left.value, right.value, operator)
-    } else if operand_type == "Bool" and (operator == "==" or operator == "!=") {
-        made = temporary(right.st, "Bool", "(" + left.value + " " + operator + " " + right.value + ")")
+    let a = left.value
+    let b = right.value
+    var expression = ""
+    if operator == "+" {
+        expression = "rt_add(" + a + ", " + b + ", " + node_span(node) + ")"
+    } else if operator == "-" {
+        expression = "rt_sub(" + a + ", " + b + ", " + node_span(node) + ")"
+    } else if operator == "*" {
+        expression = "rt_mul(" + a + ", " + b + ", " + node_span(node) + ")"
+    } else if operator == "/" {
+        expression = "rt_div(" + a + ", " + b + ", " + node_span(node) + ", " + node_span(field(node, "right")) + ")"
+    } else if operator == "==" {
+        expression = "rt_bool(rt_eq(" + a + ", " + b + "))"
+    } else if operator == "!=" {
+        expression = "rt_bool(!rt_eq(" + a + ", " + b + "))"
+    } else if operator == "<" {
+        expression = "rt_bool(rt_less(" + a + ", " + b + "))"
+    } else if operator == ">" {
+        expression = "rt_bool(rt_less(" + b + ", " + a + "))"
+    } else if operator == "<=" {
+        expression = "rt_bool(!rt_less(" + b + ", " + a + "))"
+    } else if operator == ">=" {
+        expression = "rt_bool(!rt_less(" + a + ", " + b + "))"
     } else {
-        return part("", "0", refuse(right.st, "the operator " + operator + " on " + operand_type))
+        return part("", "rt_unit()", refuse(right.st, "the operator " + operator))
     }
+    let made = temporary(right.st, expression)
     return part(code + made.code, made.value, made.st)
-}
-
-fn gen_int_operation(right: Part, a: Text, b: Text, operator: Text, node: parser.Node) gives Part {
-    let here = span4(place_of(node))
-    if operator == "+" {
-        return temporary(right.st, "Int", "rt_add(" + a + ", " + b + ", " + here + ")")
-    }
-    if operator == "-" {
-        return temporary(right.st, "Int", "rt_sub(" + a + ", " + b + ", " + here + ")")
-    }
-    if operator == "*" {
-        return temporary(right.st, "Int", "rt_mul(" + a + ", " + b + ", " + here + ")")
-    }
-    if operator == "/" {
-        let there = span4(place_of(field(node, "right")))
-        return temporary(right.st, "Int", "rt_div(" + a + ", " + b + ", " + here + ", " + there + ")")
-    }
-    return temporary(right.st, "Bool", "(" + a + " " + operator + " " + b + ")")
-}
-
-fn gen_text_operation(st: St, a: Text, b: Text, operator: Text) gives Part {
-    if operator == "+" {
-        return temporary(st, "Text", "rt_concat(" + a + ", " + b + ")")
-    }
-    return temporary(st, "Bool", "(rt_text_compare(" + a + ", " + b + ") " + operator + " 0)")
 }
 
 // `a and b`, `a or b`: the right side runs only when it can change the result.
 fn gen_logic(left: Part, node: parser.Node, operator: Text) gives Part {
-    let made = temporary(left.st, "Bool", left.value)
+    let made = temporary(left.st, left.value)
     let right = gen_expr(made.st, field(node, "right"))
-    var condition = made.value
+    var condition = "rt_truth(" + made.value + ")"
     if operator == "or" {
-        condition = "!" + made.value
+        condition = "!rt_truth(" + made.value + ")"
     }
     let code = (
         left.code + made.code + "if (" + condition + ") \{\n" + right.code + made.value + " = " + right.value + ";\n}\n"
     )
     return part(code, made.value, right.st)
 }
+
+type ArgParts = { code: Text, values: List[Text], st: St }
 
 fn gen_args(st: St, nodes: List[parser.Node]) gives ArgParts {
     var code = ""
@@ -308,98 +343,319 @@ fn gen_args(st: St, nodes: List[parser.Node]) gives ArgParts {
     return ArgParts(code: code, values: values, st: current)
 }
 
-type ArgParts = { code: Text, values: List[Text], st: St }
-
-fn gen_call(st: St, node: parser.Node) gives Part {
-    let callee = text_of(field(node, "callee"))
-    let arguments = gen_args(st, items_of(field(node, "arguments")))
-    if callee == "print" {
-        return gen_print(arguments, field(List.get(items_of(field(node, "arguments")), 0), "type"))
-    }
-    if callee == "to_text" {
-        return gen_to_text(arguments, type_of(List.get(items_of(field(node, "arguments")), 0)))
-    }
-    if callee == "Text.length" {
-        let made = temporary(arguments.st, "Int", List.get(arguments.values, 0) + ".len")
-        return part(arguments.code + made.code, made.value, made.st)
-    }
-    if not List.contains(st.fns, callee) {
-        return part("", "0", refuse(arguments.st, "the call to " + callee))
-    }
-    let site = place_of(node)
-    var passed = span4(site)
-    for value in arguments.values {
-        passed = passed + ", " + value
-    }
-    let ty = type_of(node)
-    if ty == "Void" or ty == "" {
-        return part(arguments.code + "nx_" + callee + "(" + passed + ");\n", "", arguments.st)
-    }
-    let made = temporary(arguments.st, ty, "nx_" + callee + "(" + passed + ")")
-    return part(arguments.code + made.code, made.value, made.st)
-}
-
-fn index_of_dot(text: Text) gives Int {
-    var i = 0
-    while i < Text.length(text)
-        shrinks Text.length(text) - i
+fn last_dot(text: Text) gives Int {
+    var i = Text.length(text) - 1
+    while i >= 0
+        shrinks i + 1
     {
         if Text.slice(text, i, i + 1) == "." {
             return i
         }
-        i = i + 1
+        i = i - 1
     }
     return 0 - 1
 }
 
-fn gen_print(arguments: ArgParts, ty: parser.Node) gives Part {
-    let argument_type = text_of(ty)
-    let value = List.get(arguments.values, 0)
-    if argument_type == "Int" {
-        return part(arguments.code + "rt_print(rt_int_text(" + value + "));\n", "", arguments.st)
+fn gen_record(st: St, node: parser.Node) gives Part {
+    var name = text_of(field(node, "name"))
+    let module = text_of(field(node, "qualifier"))
+    if module != "" {
+        name = module + "." + name
     }
-    if argument_type == "Bool" {
-        return part(arguments.code + "rt_print(rt_bool_text(" + value + "));\n", "", arguments.st)
+    let target = text_of(field(node, "target"))
+    if target != "" {
+        name = target
     }
-    if argument_type == "Text" {
-        return part(arguments.code + "rt_print(" + value + ");\n", "", arguments.st)
+    let at = index_of(st.info.records, name)
+    if at < 0 {
+        return part("", "rt_unit()", refuse(st, "the record " + name))
     }
-    return part("", "", refuse(arguments.st, "print of a " + argument_type))
+    let declared = List.get(st.info.record_fields, at)
+    var values: List[parser.Node] = []
+    var written: List[Text] = []
+    for initializer in items_of(field(node, "fields")) {
+        values = List.append(values, field(initializer, "value"))
+        written = List.append(written, text_of(field(initializer, "name")))
+    }
+    let parts = gen_args(st, values)
+    var ordered: List[Text] = []
+    for wanted in declared {
+        let place = index_of(written, wanted)
+        if place >= 0 {
+            ordered = List.append(ordered, List.get(parts.values, place))
+        }
+    }
+    let made = temporary(
+        parts.st, "rt_record_new(" + c_string(name) + ", rec_" + c_name(name) + ", " + to_text(List.length(ordered)) + ", "
+        + array_values(ordered) + ")"
+    )
+    return part(parts.code + made.code, made.value, made.st)
 }
 
-fn gen_to_text(arguments: ArgParts, argument_type: Text) gives Part {
-    let value = List.get(arguments.values, 0)
-    if argument_type == "Int" {
-        let made = temporary(arguments.st, "Text", "rt_int_text(" + value + ")")
-        return part(arguments.code + made.code, made.value, made.st)
-    }
-    if argument_type == "Bool" {
-        let made = temporary(arguments.st, "Text", "rt_bool_text(" + value + ")")
-        return part(arguments.code + made.code, made.value, made.st)
-    }
-    if argument_type == "Text" {
-        return part(arguments.code, value, arguments.st)
-    }
-    return part("", "0", refuse(arguments.st, "to_text of a " + argument_type))
+fn arg_node(node: parser.Node, index: Int) gives parser.Node {
+    return List.get(items_of(field(node, "arguments")), index)
 }
 
-// Statements. A variable is known by its name and type, in the order it was declared: that is what an error lists as "The
-// values".
+// The name a call resolves to: the linker wrote it for the calls of a module, and the call writes it otherwise.
+fn callee_of(node: parser.Node) gives Text {
+    let target = text_of(field(node, "target"))
+    if target != "" {
+        return target
+    }
+    return text_of(field(node, "callee"))
+}
 
-type Var = { name: Text, ty: Text }
+fn builtin_expression(callee: Text, values: List[Text], here: Text, node: parser.Node) gives Text {
+    if List.length(values) == 0 {
+        return ""
+    }
+    let first = List.get(values, 0)
+    if callee == "to_text" {
+        return "rt_txt(rt_format_value(" + first + "))"
+    }
+    if callee == "to_float" {
+        return "rt_to_float(" + first + ")"
+    }
+    if callee == "to_int" {
+        return "rt_to_int(" + first + ", " + node_span(arg_node(node, 0)) + ")"
+    }
+    if callee == "Text.length" {
+        return "rt_int(" + first + ".u.t.len)"
+    }
+    if callee == "Text.slice" {
+        return "rt_text_slice(" + parser.join_texts(values, ", ") + ", " + here + ")"
+    }
+    if callee == "Text.contains" {
+        return "rt_text_contains(" + parser.join_texts(values, ", ") + ")"
+    }
+    if callee == "Text.starts_with" {
+        return "rt_text_starts(" + parser.join_texts(values, ", ") + ")"
+    }
+    if callee == "Text.ends_with" {
+        return "rt_text_ends(" + parser.join_texts(values, ", ") + ")"
+    }
+    if callee == "Int.can_parse" {
+        return "rt_int_can_parse(" + first + ")"
+    }
+    if callee == "Float.can_parse" {
+        return "rt_float_can_parse(" + first + ")"
+    }
+    if callee == "Int.parse" {
+        return "rt_int_parse(" + first + ", " + here + ")"
+    }
+    if callee == "Float.parse" {
+        return "rt_float_parse(" + first + ", " + here + ")"
+    }
+    if callee == "List.length" {
+        return "rt_int(rt_list_len(" + first + "))"
+    }
+    if callee == "List.get" {
+        return "rt_list_get(" + first + ", " + List.get(values, 1) + ", " + here + ")"
+    }
+    if callee == "List.append" {
+        return "rt_list_append(" + first + ", " + List.get(values, 1) + ")"
+    }
+    if callee == "List.concat" {
+        return "rt_list_concat(" + first + ", " + List.get(values, 1) + ")"
+    }
+    if callee == "List.contains" {
+        return "rt_list_contains(" + first + ", " + List.get(values, 1) + ")"
+    }
+    if callee == "Some" {
+        return "rt_some(" + first + ")"
+    }
+    if callee == "Ok" {
+        return "rt_ok(" + first + ")"
+    }
+    if callee == "Err" {
+        return "rt_err(" + first + ")"
+    }
+    if callee == "Option.is_some" {
+        return "rt_bool(rt_is_kind(" + first + ", \"Some\"))"
+    }
+    if callee == "Option.is_none" {
+        return "rt_bool(rt_is_kind(" + first + ", \"None\"))"
+    }
+    if callee == "Option.value_or" {
+        return "(rt_is_kind(" + first + ", \"Some\") ? rt_arg(" + first + ", 0) : " + List.get(values, 1) + ")"
+    }
+    if callee == "Result.value_or" {
+        return "(rt_is_kind(" + first + ", \"Ok\") ? rt_arg(" + first + ", 0) : " + List.get(values, 1) + ")"
+    }
+    if callee == "Option.value" {
+        return "rt_option_value(" + first + ", " + node_span(arg_node(node, 0)) + ")"
+    }
+    if callee == "Result.is_ok" {
+        return "rt_bool(rt_is_kind(" + first + ", \"Ok\"))"
+    }
+    if callee == "Result.is_err" {
+        return "rt_bool(rt_is_kind(" + first + ", \"Err\"))"
+    }
+    if callee == "Result.value" {
+        return "rt_result_value(" + first + ", " + node_span(arg_node(node, 0)) + ")"
+    }
+    if callee == "Result.error" {
+        return "rt_result_error(" + first + ", " + node_span(arg_node(node, 0)) + ")"
+    }
+    return ""
+}
 
-type Block = { code: Text, st: St, returns: Bool }
+fn gen_call(st: St, node: parser.Node) gives Part {
+    let callee = callee_of(node)
+    let arguments = gen_args(st, items_of(field(node, "arguments")))
+    let here = node_span(node)
+    if callee == "print" {
+        return part(arguments.code + "rt_print(" + List.get(arguments.values, 0) + ");\n", "rt_unit()", arguments.st)
+    }
+    if checker.is_builtin(callee) {
+        let expression = builtin_expression(callee, arguments.values, here, node)
+        if expression == "" {
+            return part("", "rt_unit()", refuse(arguments.st, "the call to " + callee))
+        }
+        let made = temporary(arguments.st, expression)
+        return part(arguments.code + made.code, made.value, made.st)
+    }
+    if index_of(st.info.refined, callee) >= 0 {
+        let made = temporary(
+            arguments.st,
+            "nxr_" + c_name(callee) + "(" + List.get(arguments.values, 0) + ", " + c_string(text_of(field(node, "callee"))) + ", " + here + ")"
+        )
+        return part(arguments.code + made.code, made.value, made.st)
+    }
+    return gen_other_call(arguments, node, callee)
+}
 
-// What the code of a function needs to know while it is written.
-type Fn = { name: Text, params: List[Var], returns: Text, afters: List[parser.Node] }
+// An enum variant `Shape.Circle(2.0)`, a function of the program, or something that is not supported yet.
+fn gen_other_call(arguments: ArgParts, node: parser.Node, callee: Text) gives Part {
+    let st = arguments.st
+    let dot = last_dot(callee)
+    if dot > 0 and index_of(st.info.enums, Text.slice(callee, 0, dot)) >= 0 {
+        let made = temporary(
+            st,
+            "rt_variant_new(" + c_string(Text.slice(callee, 0, dot)) + ", " + c_string(Text.slice(callee, dot + 1, Text.length(callee)))
+            + ", " + to_text(List.length(arguments.values)) + ", " + array_values(arguments.values) + ")"
+        )
+        return part(arguments.code + made.code, made.value, made.st)
+    }
+    if index_of(st.info.fns, callee) < 0 {
+        return part("", "rt_unit()", refuse(st, "the call to " + callee))
+    }
+    var passed = node_span(node)
+    for value in arguments.values {
+        passed = passed + ", " + value
+    }
+    let made = temporary(st, "nx_" + c_name(callee) + "(" + passed + ")")
+    return part(arguments.code + made.code, made.value, made.st)
+}
 
-fn values_code(vars: List[Var]) gives Text {
+// Patterns
+
+// The names a pattern binds, in the order they are written.
+fn pattern_names(pattern: parser.Node) gives List[Text] {
+    let kind = kind_of(pattern)
+    if kind == "BindingPattern" {
+        return [text_of(field(pattern, "name"))]
+    }
+    var names: List[Text] = []
+    if kind == "VariantPattern" {
+        for inner in items_of(field(pattern, "arguments")) {
+            names = List.concat(names, pattern_names(inner))
+        }
+    }
+    return names
+}
+
+// The code that tests `subject` against a pattern and gives the names it binds their values. `ok` is true when it matches.
+fn gen_pattern(st: St, subject: Text, pattern: parser.Node, ok: Text) gives Part {
+    let kind = kind_of(pattern)
+    if kind == "BindingPattern" {
+        return part("if (" + ok + ") v_" + text_of(field(pattern, "name")) + " = " + subject + ";\n", "", st)
+    }
+    if kind == "LiteralPattern" {
+        return part("if (" + ok + ") " + ok + " = rt_eq(" + literal_value(field(pattern, "value")) + ", " + subject + ");\n", "", st)
+    }
+    if kind != "VariantPattern" {
+        return part("", "", st)
+    }
+    var code = "if (" + ok + ") " + ok + " = rt_is_kind(" + subject + ", " + c_string(text_of(field(pattern, "name"))) + ");\n"
+    var current = st
+    var index = 0
+    for inner in items_of(field(pattern, "arguments")) {
+        let name = "t" + to_text(current.next)
+        current = fresh(current)
+        code = code + "rv " + name + " = rt_unit();\nif (" + ok + ") " + name + " = rt_arg(" + subject + ", " + to_text(index) + ");\n"
+        let nested = gen_pattern(current, name, inner, ok)
+        code = code + nested.code
+        current = nested.st
+        index = index + 1
+    }
+    return part(code, "", current)
+}
+
+fn declare_names(names: List[Text]) gives Text {
     var out = ""
-    for variable in vars {
-        out = out + show_expr(variable.ty, variable.name, "v_" + variable.name)
+    for name in names {
+        out = out + "rv v_" + name + " = rt_unit();\n"
     }
     return out
 }
+
+// One arm of a `match`: its body runs when the pattern matches. `result` holds the value of the `match`.
+type Arm = { code: Text, st: St }
+
+// What the code of a function needs to know while it is written.
+type Fn = { name: Text, params: List[Var], afters: List[parser.Node] }
+
+type Block = { code: Text, st: St, returns: Bool }
+
+fn gen_arm(st: St, scope: Fn, env: List[Var], subject: Text, done: Text, outcome: Text, arm: parser.Node) gives Arm {
+    let pattern = field(arm, "pattern")
+    let names = pattern_names(pattern)
+    let ok = "ok" + to_text(st.next)
+    let tested = gen_pattern(fresh(st), subject, pattern, ok)
+    var inner = env
+    for name in names {
+        inner = List.append(inner, Var(name: name))
+    }
+    let body = field(arm, "body")
+    var run = ""
+    var current = tested.st
+    if kind_of(body) == "Block" {
+        let block = gen_block(current, scope, inner, body)
+        run = block.code
+        current = block.st
+    } else {
+        let value = gen_expr(current, body)
+        run = value.code + outcome + " = " + value.value + ";\n"
+        current = value.st
+    }
+    let code = (
+        "if (!" + done + ") \{\n" + declare_names(names) + "bool " + ok + " = true;\n" + tested.code + "if (" + ok + ") \{\n"
+        + done + " = true;\n" + run + "}\n}\n"
+    )
+    return Arm(code: code, st: current)
+}
+
+fn gen_match(st: St, node: parser.Node) gives Part {
+    return gen_match_in(st, Fn(name: "", params: [], afters: []), [], node)
+}
+
+fn gen_match_in(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Part {
+    let subject = gen_expr(st, field(node, "value"))
+    let held = temporary(subject.st, subject.value)
+    let result = temporary(held.st, "rt_unit()")
+    let done = "done" + to_text(result.st.next)
+    var current = fresh(result.st)
+    var code = subject.code + held.code + result.code + "\{\nbool " + done + " = false;\n"
+    for arm in items_of(field(node, "arms")) {
+        let made = gen_arm(current, scope, env, held.value, done, result.value, arm)
+        code = code + made.code
+        current = made.st
+    }
+    return part(code + "}\n", result.value, current)
+}
+
+// Statements
 
 fn gen_block(st: St, scope: Fn, env: List[Var], block: parser.Node) gives Block {
     var code = ""
@@ -412,9 +668,7 @@ fn gen_block(st: St, scope: Fn, env: List[Var], block: parser.Node) gives Block 
         current = done.st
         let kind = kind_of(statement)
         if kind == "Let" or kind == "Var" {
-            visible = List.append(
-                visible, Var(name: text_of(field(statement, "name")), ty: type_of(field(statement, "value")))
-            )
+            visible = List.append(visible, Var(name: text_of(field(statement, "name"))))
         }
         if done.returns {
             returns = true
@@ -427,22 +681,23 @@ fn gen_statement(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Blo
     let kind = kind_of(node)
     if kind == "Let" or kind == "Var" {
         let value = gen_expr(st, field(node, "value"))
-        let ty = type_of(field(node, "value"))
-        if c_type(ty) == "" {
-            return Block(code: "", st: refuse(value.st, "a variable of type " + ty), returns: false)
-        }
-        let declared = value.code + c_type(ty) + " v_" + text_of(field(node, "name")) + " = " + value.value + ";\n"
-        return Block(code: declared, st: value.st, returns: false)
+        return Block(
+            code: value.code + "rv v_" + text_of(field(node, "name")) + " = " + value.value + ";\n", st: value.st, returns: false
+        )
     }
     if kind == "Assign" {
         let value = gen_expr(st, field(node, "value"))
         return Block(
-            code: value.code + "v_" + text_of(field(node, "name")) + " = " + value.value + ";\n", st: value.st,
-            returns: false
+            code: value.code + "v_" + text_of(field(node, "name")) + " = " + value.value + ";\n", st: value.st, returns: false
         )
     }
     if kind == "ExprStatement" {
-        let value = gen_expr(st, field(node, "expression"))
+        let expression = field(node, "expression")
+        if kind_of(expression) == "MatchExpr" {
+            let made = gen_match_in(st, scope, env, expression)
+            return Block(code: made.code, st: made.st, returns: false)
+        }
+        let value = gen_expr(st, expression)
         return Block(code: value.code, st: value.st, returns: false)
     }
     if kind == "Return" {
@@ -451,8 +706,14 @@ fn gen_statement(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Blo
     if kind == "If" {
         return gen_if(st, scope, env, node)
     }
+    if kind == "IfLet" {
+        return gen_if_let(st, scope, env, node)
+    }
     if kind == "While" {
         return gen_while(st, scope, env, node)
+    }
+    if kind == "For" {
+        return gen_for(st, scope, env, node)
     }
     if kind == "Block" {
         let inner = gen_block(st, scope, env, node)
@@ -461,20 +722,25 @@ fn gen_statement(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Blo
     return Block(code: "", st: refuse(st, "the statement " + kind), returns: false)
 }
 
+fn gen_branch(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Block {
+    if kind_of(node) == "If" {
+        return gen_if(st, scope, env, node)
+    }
+    if kind_of(node) == "IfLet" {
+        return gen_if_let(st, scope, env, node)
+    }
+    return gen_block(st, scope, env, node)
+}
+
 fn gen_if(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Block {
     let condition = gen_expr(st, field(node, "condition"))
     let then_block = gen_block(condition.st, scope, env, field(node, "then_block"))
-    var code = condition.code + "if (" + condition.value + ") \{\n" + then_block.code + "}"
+    var code = condition.code + "if (rt_truth(" + condition.value + ")) \{\n" + then_block.code + "}"
     var current = then_block.st
     var returns = then_block.returns
     let otherwise = field(node, "else_branch")
     if not is_null(otherwise) {
-        var other = Block(code: "", st: current, returns: false)
-        if kind_of(otherwise) == "If" {
-            other = gen_if(current, scope, env, otherwise)
-        } else {
-            other = gen_block(current, scope, env, otherwise)
-        }
+        let other = gen_branch(current, scope, env, otherwise)
         code = code + " else \{\n" + other.code + "}"
         current = other.st
         returns = returns and other.returns
@@ -482,6 +748,34 @@ fn gen_if(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Block {
         returns = false
     }
     return Block(code: code + "\n", st: current, returns: returns)
+}
+
+fn gen_if_let(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Block {
+    let pattern = field(node, "pattern")
+    let names = pattern_names(pattern)
+    let subject = gen_expr(st, field(node, "value"))
+    let held = temporary(subject.st, subject.value)
+    let ok = "ok" + to_text(held.st.next)
+    let tested = gen_pattern(fresh(held.st), held.value, pattern, ok)
+    var inner = env
+    for name in names {
+        inner = List.append(inner, Var(name: name))
+    }
+    let then_block = gen_block(tested.st, scope, inner, field(node, "then_block"))
+    var code = subject.code + held.code + "\{\n" + declare_names(names) + "bool " + ok + " = true;\n" + tested.code
+    code = code + "if (" + ok + ") \{\n" + then_block.code + "}"
+    var current = then_block.st
+    var returns = then_block.returns
+    let otherwise = field(node, "else_branch")
+    if not is_null(otherwise) {
+        let other = gen_branch(current, scope, env, otherwise)
+        code = code + " else \{\n" + other.code + "}"
+        current = other.st
+        returns = returns and other.returns
+    } else {
+        returns = false
+    }
+    return Block(code: code + "\n}\n", st: current, returns: returns)
 }
 
 fn clause_of(node: parser.Node, clause: Text) gives parser.Node {
@@ -493,15 +787,59 @@ fn clause_of(node: parser.Node, clause: Text) gives parser.Node {
     return parser.Node.Null()
 }
 
-fn gen_while(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Block {
-    if not is_null(clause_of(node, "keeps")) {
-        return Block(code: "", st: refuse(st, "a loop with `keeps`"), returns: false)
+// The `keeps` of a loop, checked before every turn (and, in a `for`, after the last): the first one that is false stops the
+// program, naming the turn and the values. The code runs inside the frame the loop keeps while it checks them.
+fn keeps_code(st: St, env: List[Var], node: parser.Node, line: Text) gives Part {
+    var code = ""
+    var current = st
+    for item in items_of(field(node, "clauses")) {
+        if text_of(field(item, "clause")) == "keeps" {
+            let condition = gen_expr(current, field(item, "condition"))
+            current = condition.st
+            let at = place_of(item)
+            var reason = ""
+            if not is_null(field(item, "message")) {
+                reason = "rt_note(&own, rt_format(\"Reason: %s\", " + c_string(text_of(field(item, "message"))) + "));\n"
+            }
+            code = code + "\{\n" + condition.code + "if (!rt_truth(" + condition.value + ")) \{\nrt_pop();\nrt_notes own = \{\{0}, 0};\n"
+            code = code + "rt_note(&own, rt_format(\"The condition at line %d is false: %s\", " + to_text(at.line) + ", "
+            code = code + c_string(contract_source(item)) + "));\n" + reason
+            code = code + "if (turn == 0) rt_note(&own, rt_format(\"Before the first turn of the loop at line " + line + ".\"));\n"
+            code = code + "else rt_note(&own, rt_format(\"After turn %lld of the loop at line " + line + ".\", (long long)turn));\n"
+            code = code + "rt_buf b = \{0, 0, 0, 0};\n" + values_code(env) + "rt_buf_note(&own, \"The values: \", &b);\n"
+            code = code + "rt_fail(\"contract\", \"E4005\", \"Loop invariant violated\", \"This condition is false\", \"\", &own, 0, "
+            code = code + node_span(field(item, "condition")) + ");\n}\n}\n"
+        }
     }
+    return part(code, "", current)
+}
+
+fn gen_for(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Block {
+    let loop_at = place_of(node)
+    let line = to_text(loop_at.line)
+    let name = text_of(field(node, "name"))
+    let iterable = gen_expr(st, field(node, "iterable"))
+    var inner = env
+    inner = List.append(inner, Var(name: name))
+    let kept = keeps_code(fresh(iterable.st), env, node, line)
+    let body = gen_block(kept.st, scope, inner, field(node, "body"))
+    let id = to_text(iterable.st.next)
+    let code = (
+        iterable.code + "\{\nrv it" + id + " = " + iterable.value + ";\nint64_t n" + id + " = rt_list_len(it" + id + ");\n"
+        + "int64_t turn = 0;\nfor (;;) \{\n" + "rt_push_loop(RT_COND, " + line + ", turn);\n" + kept.code + "rt_pop();\n"
+        + "if (turn >= n" + id + ") break;\nrv v_" + name + " = rt_list_at(it" + id + ", turn);\n"
+        + "rt_push_loop(RT_BODY, " + line + ", turn + 1);\n" + body.code + "rt_pop();\nturn++;\n}\n}\n"
+    )
+    return Block(code: code, st: body.st, returns: false)
+}
+
+fn gen_while(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Block {
     let loop_at = place_of(node)
     let line = to_text(loop_at.line)
     let measure = clause_of(node, "shrinks")
     let measured = gen_expr(st, field(measure, "condition"))
-    let condition = gen_expr(measured.st, field(node, "condition"))
+    let kept = keeps_code(measured.st, env, node, line)
+    let condition = gen_expr(kept.st, field(node, "condition"))
     let body = gen_block(condition.st, scope, env, field(node, "body"))
     let measure_span = place_of(measure)
     let shown_measure = "shrinks " + checker.unparse(field(measure, "condition"))
@@ -520,14 +858,14 @@ fn gen_while(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Block {
         + "    : (m == before ? rt_format(\"The measure was %lld and is still %lld\", (long long)before, (long long)m)\n"
         + "    : rt_format(\"The measure was %lld and is now %lld\", (long long)before, (long long)m));\n"
         + "rt_fail(\"contract\", \"E4006\", \"Loop measure did not decrease\", label, \"\", &own, 0, "
-        + span4(place_of(field(measure, "condition"))) + ");\n}\n"
+        + node_span(field(measure, "condition")) + ");\n}\n"
     )
     let code = (
         "\{\nint64_t turn = 0;\nbool turn_has_before = false;\nint64_t before = 0;\nfor (;;) \{\n"
         + "rt_push_loop(RT_COND, " + line + ", turn);\n"
-        + condition.code + "bool go = " + condition.value + ";\nrt_pop();\nif (!go) break;\nturn++;\n"
+        + kept.code + condition.code + "bool go = rt_truth(" + condition.value + ");\nrt_pop();\nif (!go) break;\nturn++;\n"
         + "rt_push_loop(RT_MEASURE, " + line + ", turn);\n"
-        + measured.code + "int64_t m = " + measured.value + ";\nrt_pop();\n"
+        + measured.code + "int64_t m = " + measured.value + ".u.i;\nrt_pop();\n"
         + broken
         + "turn_has_before = true;\nbefore = m;\n"
         + "rt_push_loop(RT_BODY, " + line + ", turn);\n"
@@ -540,38 +878,28 @@ fn gen_while(st: St, scope: Fn, env: List[Var], node: parser.Node) gives Block {
 // function (and of the loops it was in) are left.
 fn gen_return(st: St, scope: Fn, node: parser.Node) gives Block {
     let value_node = field(node, "value")
-    var computed = part("", "", st)
+    var computed = part("", "rt_unit()", st)
     if not is_null(value_node) {
         computed = gen_expr(st, value_node)
     }
-    var code = computed.code
-    var result = ""
-    if not is_null(value_node) {
-        result = "r" + to_text(computed.st.next)
-        code = code + c_type(scope.returns) + " " + result + " = " + computed.value + ";\n"
-    }
-    let next = St(next: computed.st.next + 1, bad: computed.st.bad, fns: computed.st.fns)
-    let promised = promise_code(next, scope, result)
-    code = code + "rt_top = rt_saved + 1;\n" + promised.code + "rt_leave(rt_saved);\n"
-    if result != "" {
-        code = code + "return " + result + ";\n"
-    } else {
-        code = code + "return;\n"
-    }
+    let result = "r" + to_text(computed.st.next)
+    var code = computed.code + "rv " + result + " = " + computed.value + ";\n"
+    let next = fresh(computed.st)
+    let promised = promise_code(next, scope, result, not is_null(value_node))
+    code = code + "rt_top = rt_saved + 1;\n" + promised.code + "rt_leave(rt_saved);\nreturn " + result + ";\n"
     return Block(code: code, st: promised.st, returns: true)
 }
 
-// The `promises` of a function, checked when it returns `result` (empty for a function that gives nothing).
-fn promise_code(st: St, scope: Fn, held: Text) gives Part {
+// The `promises` of a function, checked when it returns `held` (which is `result` only when the function gives a value).
+fn promise_code(st: St, scope: Fn, held: Text, gives_value: Bool) gives Part {
     var code = ""
     var current = st
     for contract in scope.afters {
         let condition = gen_expr(current, field(contract, "condition"))
         current = condition.st
-        let env = scope.params
         var bind = ""
-        if held != "" {
-            bind = c_type(scope.returns) + " v_result = " + held + ";\n"
+        if gives_value {
+            bind = "rv v_result = " + held + ";\n"
         }
         let at = place_of(contract)
         var reason = ""
@@ -579,31 +907,21 @@ fn promise_code(st: St, scope: Fn, held: Text) gives Part {
             reason = "rt_note(&own, rt_format(\"Reason: %s\", " + c_string(text_of(field(contract, "message"))) + "));\n"
         }
         var returned = ""
-        if held != "" {
+        if gives_value {
             returned = (
-                "\{ rt_buf r = \{0, 0, 0, 0};\n" + show_result(scope.returns, held)
+                "\{ rt_buf r = \{0, 0, 0, 0};\nrt_buf_val(&r, \"result\", " + held + ");\n"
                 + "rt_note(&own, rt_format(\"It returned: %s\", r.p)); }\n"
             )
         }
-        code = code + "\{\n" + bind + condition.code + "if (!" + condition.value + ") \{\n" + "rt_notes own = \{\{0}, 0};\n"
+        code = code + "\{\n" + bind + condition.code + "if (!rt_truth(" + condition.value + ")) \{\n" + "rt_notes own = \{\{0}, 0};\n"
         code = code + "rt_note(&own, rt_format(\"'%s' finished, but its condition is false: %s\", "
         code = code + c_string(scope.name) + ", " + c_string(contract_source(contract)) + "));\n" + reason + returned
-        code = code + "rt_buf b = \{0, 0, 0, 0};\n" + values_code(env) + "rt_buf_note(&own, \"It was called with: \", &b);\n"
+        code = code + "rt_buf b = \{0, 0, 0, 0};\n" + values_code(scope.params) + "rt_buf_note(&own, \"It was called with: \", &b);\n"
         code = code + "rt_fail(\"contract\", \"E4002\", \"Postcondition violated\", "
         code = code + c_string("'" + scope.name + "' breaks its own " + clause_label(contract)) + ", \"\", &own, 0, "
         code = code + span4(at) + ");\n}\n}\n"
     }
     return part(code, "", current)
-}
-
-fn show_result(ty: Text, held: Text) gives Text {
-    if ty == "Int" {
-        return "rt_buf_int(&r, \"result\", " + held + ");\n"
-    }
-    if ty == "Bool" {
-        return "rt_buf_bool(&r, \"result\", " + held + ");\n"
-    }
-    return "rt_buf_text(&r, \"result\", " + held + ");\n"
 }
 
 fn contract_source(contract: parser.Node) gives Text {
@@ -641,31 +959,26 @@ fn clauses_of(function: parser.Node, clause: Text) gives List[parser.Node] {
 fn param_vars(function: parser.Node) gives List[Var] {
     var params: List[Var] = []
     for param in items_of(field(function, "params")) {
-        params = List.append(
-            params, Var(name: text_of(field(param, "name")), ty: text_of(field(field(param, "type"), "name")))
-        )
+        params = List.append(params, Var(name: text_of(field(param, "name"))))
     }
     return params
 }
 
-fn return_type_of(function: parser.Node) gives Text {
-    if is_null(field(function, "return_type")) {
-        return "Void"
+// What a declaration is called in the program: the key the linker gave it, or its own name.
+fn declared_name(declaration: parser.Node) gives Text {
+    let key = text_of(field(declaration, "key"))
+    if key != "" {
+        return key
     }
-    return text_of(field(field(function, "return_type"), "name"))
+    return text_of(field(declaration, "name"))
 }
 
 fn signature(function: parser.Node) gives Text {
-    var c_return = "void"
-    let returns = return_type_of(function)
-    if returns != "Void" {
-        c_return = c_type(returns)
-    }
     var params = "int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec"
     for param in param_vars(function) {
-        params = params + ", " + c_type(param.ty) + " v_" + param.name
+        params = params + ", rv v_" + param.name
     }
-    return "static " + c_return + " nx_" + text_of(field(function, "name")) + "(" + params + ")"
+    return "static rv nx_" + c_name(declared_name(function)) + "(" + params + ")"
 }
 
 fn needs_code(st: St, function: parser.Node, scope: Fn) gives Part {
@@ -679,7 +992,7 @@ fn needs_code(st: St, function: parser.Node, scope: Fn) gives Part {
         if not is_null(field(contract, "message")) {
             reason = "rt_note(&own, rt_format(\"Reason: %s\", " + c_string(text_of(field(contract, "message"))) + "));\n"
         }
-        code = code + "\{\n" + condition.code + "if (!" + condition.value + ") \{\nrt_notes own = \{\{0}, 0};\n"
+        code = code + "\{\n" + condition.code + "if (!rt_truth(" + condition.value + ")) \{\nrt_notes own = \{\{0}, 0};\n"
         code = code + "rt_note(&own, rt_format(\"The condition at line %d is false: %s\", " + to_text(at.line) + ", "
         code = code + c_string(contract_source(contract)) + "));\n" + reason
         code = code + "rt_buf b = \{0, 0, 0, 0};\n" + values_code(scope.params)
@@ -693,62 +1006,123 @@ fn needs_code(st: St, function: parser.Node, scope: Fn) gives Part {
 
 fn gen_function(st: St, function: parser.Node) gives Part {
     let name = text_of(field(function, "name"))
-    let returns = return_type_of(function)
-    let scope = Fn(name: name, params: param_vars(function), returns: returns, afters: clauses_of(function, "promises"))
-    for param in scope.params {
-        if c_type(param.ty) == "" {
-            return part("", "", refuse(st, "a parameter of type " + param.ty))
-        }
-    }
-    if returns != "Void" and c_type(returns) == "" {
-        return part("", "", refuse(st, "a function that gives " + returns))
-    }
+    let scope = Fn(name: name, params: param_vars(function), afters: clauses_of(function, "promises"))
     let entry = needs_code(st, function, scope)
     let body = gen_block(entry.st, scope, scope.params, field(function, "body"))
-    var end = ""
-    if not body.returns {
-        let promised = promise_code(body.st, scope, "")
-        end = "rt_top = rt_saved + 1;\n" + promised.code + "rt_leave(rt_saved);\n"
-        return part(
-            signature(function) + " \{\nint rt_saved = rt_enter(" + c_string(name) + ", s_l, s_c, s_el, s_ec);\n" + entry.code + body.code
-            + end + "}\n\n",
-            "", promised.st
-        )
+    let opening = signature(function) + " \{\nint rt_saved = rt_enter(" + c_string(name) + ", s_l, s_c, s_el, s_ec);\n"
+    if body.returns {
+        return part(opening + entry.code + body.code + "}\n\n", "", body.st)
     }
-    return part(
-        signature(function) + " \{\nint rt_saved = rt_enter(" + c_string(name) + ", s_l, s_c, s_el, s_ec);\n" + entry.code + body.code
-        + "}\n\n",
-        "", body.st
+    let promised = promise_code(body.st, scope, "rt_unit()", false)
+    let end = "rt_top = rt_saved + 1;\n" + promised.code + "rt_leave(rt_saved);\nreturn rt_unit();\n"
+    return part(opening + entry.code + body.code + end + "}\n\n", "", promised.st)
+}
+
+// Refined types: a function that checks the chain of conditions, root first, and gives the value back.
+
+fn base_of(declaration: parser.Node) gives Text {
+    let key = text_of(field(declaration, "base_key"))
+    if key != "" {
+        return key
+    }
+    return text_of(field(field(declaration, "base"), "name"))
+}
+
+fn refine_signature(declaration: parser.Node) gives Text {
+    return (
+        "static rv nxr_" + c_name(declared_name(declaration))
+        + "(rv v_value, const char *written, int64_t l, int64_t c, int64_t el, int64_t ec)"
     )
 }
 
-// The C file of a program that has been checked.
+fn gen_refined(st: St, declaration: parser.Node) gives Part {
+    let name = text_of(field(declaration, "name"))
+    var code = refine_signature(declaration) + " \{\n"
+    let base = base_of(declaration)
+    if index_of(st.info.refined, base) >= 0 {
+        code = code + "v_value = nxr_" + c_name(base) + "(v_value, written, l, c, el, ec);\n"
+    }
+    let condition = gen_expr(st, field(declaration, "condition"))
+    var reason = "\"\""
+    if not is_null(field(declaration, "message")) {
+        reason = c_string(text_of(field(declaration, "message")))
+    }
+    code = code + condition.code + "if (!rt_truth(" + condition.value + ")) rt_refine_fail(written, " + c_string(name) + ", "
+    code = code + c_string(checker.unparse(field(declaration, "condition"))) + ", v_value, " + reason + ", l, c, el, ec);\n"
+    code = code + "return v_value;\n}\n\n"
+    return part(code, "", condition.st)
+}
+
+// The file
+
+fn record_descriptor(record: parser.Node) gives Text {
+    var names: List[Text] = []
+    for declared in items_of(field(record, "fields")) {
+        names = List.append(names, c_string(text_of(field(declared, "name"))))
+    }
+    var list = "0"
+    if List.length(names) > 0 {
+        list = parser.join_texts(names, ", ")
+    }
+    return "static const char *const rec_" + c_name(declared_name(record)) + "[] = \{" + list + "};\n"
+}
+
 fn generate(program: parser.Node, path: Text, source: Text) gives Part {
     var code = ""
     for line in runtime_text.runtime_lines() {
         code = code + line + "\n"
     }
     code = code + "\n/* The program: " + path + " */\n\nstatic const char *nx_source[] = \{\n"
-    for line in render.lines_of(source) {
+    let lines = render.lines_of(source)
+    for line in lines {
         code = code + c_string(line) + ",\n"
     }
     code = code + "0};\n\n"
-    var names: List[Text] = []
+    var fns: List[Text] = []
     for function in items_of(field(program, "functions")) {
-        names = List.append(names, text_of(field(function, "name")))
+        fns = List.append(fns, declared_name(function))
     }
-    var st = St(next: 0, bad: "", fns: names)
+    var record_names: List[Text] = []
+    var record_fields: List[List[Text]] = []
+    for record in items_of(field(program, "records")) {
+        var declared: List[Text] = []
+        for item in items_of(field(record, "fields")) {
+            declared = List.append(declared, text_of(field(item, "name")))
+        }
+        record_names = List.append(record_names, declared_name(record))
+        record_fields = List.append(record_fields, declared)
+        code = code + record_descriptor(record)
+    }
+    var enums: List[Text] = []
+    for declaration in items_of(field(program, "enums")) {
+        enums = List.append(enums, declared_name(declaration))
+    }
+    var refined: List[Text] = []
+    for declaration in items_of(field(program, "types")) {
+        refined = List.append(refined, declared_name(declaration))
+    }
+    var st = St(
+        next: 0, bad: "",
+        info: Info(fns: fns, records: record_names, record_fields: record_fields, enums: enums, refined: refined)
+    )
     var declarations = ""
     var definitions = ""
     for function in items_of(field(program, "functions")) {
         declarations = declarations + signature(function) + ";\n"
+    }
+    for declaration in items_of(field(program, "types")) {
+        declarations = declarations + refine_signature(declaration) + ";\n"
+    }
+    for declaration in items_of(field(program, "types")) {
+        let made = gen_refined(st, declaration)
+        definitions = definitions + made.code
+        st = made.st
     }
     for function in items_of(field(program, "functions")) {
         let made = gen_function(st, function)
         definitions = definitions + made.code
         st = made.st
     }
-    let lines = render.lines_of(source)
     code = code + declarations + "\n" + definitions
     code = code + "int main(void) \{\nrt_init(" + c_string(path) + ", nx_source, " + to_text(List.length(lines)) + ");\n"
     code = code + "nx_main(0, 0, 0, 0);\nfflush(stdout);\nreturn 0;\n}\n"

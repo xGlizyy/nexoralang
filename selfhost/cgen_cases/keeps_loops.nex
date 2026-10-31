@@ -1,0 +1,18 @@
+fn main() {
+    var i = 0
+    var total = 0
+    while i < 5
+        keeps total >= 0
+        shrinks 5 - i
+    {
+        total = total + i
+        i = i + 1
+    }
+    print(total)
+    for x in [1, 2, 3]
+        keeps total >= 0
+    {
+        total = total + x
+    }
+    print(total)
+}

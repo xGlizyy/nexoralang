@@ -1,0 +1,25 @@
+fn sum(xs: List[Int]) gives Int {
+    var total = 0
+    for x in xs {
+        total = total + x
+    }
+    return total
+}
+
+fn main() {
+    let xs = [3, 1, 2]
+    print(xs)
+    print(List.length(xs))
+    print(List.get(xs, 1))
+    print(List.append(xs, 9))
+    print(List.concat(xs, [7, 8]))
+    print(List.contains(xs, 2))
+    print(List.contains(xs, 5))
+    print(sum(xs))
+    let words = ["a", "b"]
+    print(words)
+    let nested = [[1], [2, 3]]
+    print(nested)
+    var empty: List[Int] = []
+    print(empty)
+}

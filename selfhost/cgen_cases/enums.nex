@@ -1,0 +1,39 @@
+type Shape = enum { Circle(radius: Float), Rect(w: Float, h: Float), Empty }
+
+fn area(s: Shape) gives Float {
+    return match s {
+        Shape.Circle(r) => r * r * 3.0
+        Shape.Rect(w, h) => w * h
+        Shape.Empty => 0.0
+    }
+}
+
+fn describe(s: Shape) gives Text {
+    return match s {
+        Shape.Circle(r) => "circle " + to_text(r)
+        _ => "other"
+    }
+}
+
+fn show_all(shapes: List[Shape]) {
+    for s in shapes {
+        match s {
+            Shape.Empty => {
+                print("empty one")
+            }
+            _ => {
+                print(describe(s))
+            }
+        }
+    }
+}
+
+fn main() {
+    let shapes = [Shape.Circle(2.0), Shape.Rect(2.0, 3.0), Shape.Empty()]
+    for s in shapes {
+        print(s)
+        print(area(s))
+        print(describe(s))
+    }
+    show_all(shapes)
+}

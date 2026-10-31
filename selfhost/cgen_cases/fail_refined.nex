@@ -1,0 +1,11 @@
+type Percent = Int where value >= 0 and value <= 100
+type Small = Percent where value < 30, "small means under thirty"
+
+fn pick(n: Int) gives Int {
+    return n
+}
+
+fn main() {
+    print(Small(pick(10)))
+    print(Small(pick(50)))
+}

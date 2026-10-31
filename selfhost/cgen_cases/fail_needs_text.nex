@@ -1,0 +1,10 @@
+fn shout(s: Text) gives Text
+    needs Text.length(s) > 0, "an empty text cannot be shouted"
+{
+    return s + "!"
+}
+
+fn main() {
+    print(shout("hey"))
+    print(shout(""))
+}
