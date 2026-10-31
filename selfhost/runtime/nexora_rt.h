@@ -17,9 +17,16 @@ typedef struct {
     int64_t len; /* code points: what Text.length counts */
 } rt_text;
 
-static const char *rt_path = "";
-static const char **rt_src = 0;
+/* The files of the program: the one that runs and the modules it imports. A diagnostic quotes the file of the function that
+ * failed, so each one is kept with its path and its lines. */
+static const char *rt_path = "";          /* the file the diagnostic being drawn is about */
+static const char *const *rt_src = 0;
 static int rt_src_lines = 0;
+static const char *rt_entry = "";         /* the path the program was given, which `nex run` closes its report with */
+static int rt_nfiles = 0;
+static const char *const *rt_file_path = 0;
+static const char *const *const *rt_file_lines = 0;
+static const int *rt_file_count = 0;
 
 static void *rt_alloc(size_t n) {
     void *p = malloc(n ? n : 1);
@@ -106,6 +113,7 @@ enum { RT_CALL, RT_COND, RT_MEASURE, RT_BODY };
 typedef struct {
     int kind;
     const char *name;
+    int file; /* the file of the function, for a call */
     int64_t line;
     int64_t column; /* for a call; for a loop, the turn */
 } rt_frame;
@@ -301,10 +309,25 @@ static void rt_fail(const char *category, const char *code, const char *title, c
     rt_notes notes = {{0}, 0};
     rt_all_notes(&notes, own, skip);
     fflush(stdout);
+    {
+        /* The file of the function that was running: the caller's when the first `skip` calls are left out. */
+        int index = 0, seen = 0;
+        for (int i = rt_top - 1; i >= 0; i--) {
+            if (rt_frames[i].kind == RT_CALL) {
+                if (seen == skip) { index = rt_frames[i].file; break; }
+                seen++;
+            }
+        }
+        if (index >= 0 && index < rt_nfiles) {
+            rt_path = rt_file_path[index];
+            rt_src = rt_file_lines[index];
+            rt_src_lines = rt_file_count[index];
+        }
+    }
     rt_render(category, "error", code, title, label, hint, &notes, line, column, end_line, end_column);
     fputc('\n', stderr);
     bool contract = strcmp(category, "contract") == 0;
-    fprintf(stderr, "error: %s: the program stopped because %s\n", rt_path,
+    fprintf(stderr, "error: %s: the program stopped because %s\n", rt_entry,
             contract ? "a contract was broken" : "of a runtime error");
     exit(contract ? 5 : 3);
 }
@@ -908,7 +931,7 @@ static void rt_refine_fail(const char *written, const char *declared, const char
 
 /* Entering and leaving a function. The call that would be the 1,001st nested stops the program. */
 
-static int rt_enter(const char *name, int64_t line, int64_t column, int64_t end_line, int64_t end_column) {
+static int rt_enter(const char *name, int file, int64_t line, int64_t column, int64_t end_line, int64_t end_column) {
     if (rt_calls >= RT_MAX_CALLS) {
         rt_notes own = {{0}, 0};
         rt_fail("runtime", "E3004", "Too many nested calls", "The program nested more than 1000 calls",
@@ -918,6 +941,7 @@ static int rt_enter(const char *name, int64_t line, int64_t column, int64_t end_
     int saved = rt_top;
     rt_frames[rt_top].kind = RT_CALL;
     rt_frames[rt_top].name = name;
+    rt_frames[rt_top].file = file;
     rt_frames[rt_top].line = line;
     rt_frames[rt_top].column = column;
     rt_top++;
@@ -933,6 +957,7 @@ static void rt_leave(int saved) {
 static void rt_push_loop(int kind, int64_t line, int64_t turn) {
     rt_frames[rt_top].kind = kind;
     rt_frames[rt_top].name = "";
+    rt_frames[rt_top].file = 0;
     rt_frames[rt_top].line = line;
     rt_frames[rt_top].column = turn;
     rt_top++;
@@ -942,9 +967,249 @@ static void rt_pop(void) {
     rt_top--;
 }
 
-/* The program: the path it was compiled from and its source, for the lines a diagnostic quotes. */
-static void rt_init(const char *path, const char **lines, int count) {
-    rt_path = path;
-    rt_src = lines;
-    rt_src_lines = count;
+/* The host: what the program may do besides computing. A program declares what it needs (`uses read "data"`), the user allows it
+ * with options of the executable (`--allow-read data`), and both have to cover a path for the program to use it (decision 0015). */
+
+#ifdef _WIN32
+#include <direct.h>
+#define rt_getcwd _getcwd
+#else
+#include <unistd.h>
+#define rt_getcwd getcwd
+#endif
+#include <errno.h>
+
+#define RT_MAX_SCOPES 64
+static const char *rt_declared_kind[RT_MAX_SCOPES], *rt_declared_path[RT_MAX_SCOPES];
+static int rt_declared = 0;
+static const char *rt_granted_kind[RT_MAX_SCOPES], *rt_granted_path[RT_MAX_SCOPES];
+static int rt_granted = 0;
+static const char *const *rt_args_list = 0;
+static int rt_args_count = 0;
+
+static void rt_declare(const char *kind, const char *path) {
+    if (rt_declared < RT_MAX_SCOPES) {
+        rt_declared_kind[rt_declared] = kind;
+        rt_declared_path[rt_declared] = path;
+        rt_declared++;
+    }
+}
+
+/* A path split in its root and its segments, with `.` and `..` resolved and without touching the file system. */
+typedef struct {
+    char root[8];
+    char *seg[128];
+    int n;
+} rt_parts;
+
+static void rt_split(const char *path, rt_parts *p) {
+    size_t len = strlen(path);
+    char *text = (char *)rt_alloc(len + 1);
+    for (size_t i = 0; i <= len; i++) text[i] = path[i] == '\\' ? '/' : path[i];
+    p->root[0] = 0;
+    p->n = 0;
+    char *cursor = text;
+    if (text[0] == '/') {
+        strcpy(p->root, "/");
+        cursor = text + 1;
+    } else if (len > 1 && text[1] == ':') {
+        p->root[0] = (text[0] >= 'a' && text[0] <= 'z') ? (char)(text[0] - 32) : text[0];
+        p->root[1] = ':';
+        p->root[2] = 0;
+        cursor = text + 2;
+    }
+    char *start = cursor;
+    for (;; cursor++) {
+        if (*cursor == '/' || *cursor == 0) {
+            bool last = *cursor == 0;
+            *cursor = 0;
+            if (start[0] != 0 && strcmp(start, ".") != 0) {
+                if (strcmp(start, "..") == 0) {
+                    if (p->n > 0 && strcmp(p->seg[p->n - 1], "..") != 0) p->n--;
+                    else if (p->root[0] == 0 && p->n < 128) p->seg[p->n++] = start;
+                } else if (p->n < 128) {
+                    p->seg[p->n++] = start;
+                }
+            }
+            start = cursor + 1;
+            if (last) break;
+        }
+    }
+}
+
+static const char *rt_absolute(const char *path) {
+    bool absolute = path[0] == '/' || path[0] == '\\' || (strlen(path) > 1 && path[1] == ':');
+    if (absolute) return path;
+    char cwd[1024];
+    if (!rt_getcwd(cwd, sizeof cwd)) return path;
+    return rt_format("%s/%s", cwd, path);
+}
+
+static bool rt_inside(const char *scope, const char *path) {
+    if (scope[0] == 0) return false;
+    rt_parts inner, outer;
+    rt_split(rt_absolute(scope), &inner);
+    rt_split(rt_absolute(path), &outer);
+    if (strcmp(inner.root, outer.root) != 0 || outer.n < inner.n) return false;
+    for (int i = 0; i < inner.n; i++) {
+        if (strcmp(inner.seg[i], outer.seg[i]) != 0) return false;
+    }
+    return true;
+}
+
+/* Why the program may not use a path, or 0 when it may. */
+static const char *rt_denied(const char *kind, const char *path) {
+    bool declared = false, granted = false;
+    for (int i = 0; i < rt_declared; i++) {
+        if (strcmp(rt_declared_kind[i], kind) == 0 && rt_inside(rt_declared_path[i], path)) declared = true;
+    }
+    if (!declared) return rt_format("this program does not declare that it needs to %s '%s'", kind, path);
+    for (int i = 0; i < rt_granted; i++) {
+        if (strcmp(rt_granted_kind[i], kind) == 0 && rt_inside(rt_granted_path[i], path)) granted = true;
+    }
+    if (!granted) return rt_format("'%s' is not among the paths the user allowed to %s", path, kind);
+    return 0;
+}
+
+static void rt_denied_fail(const char *message, const char *kind, RT_SPAN) {
+    rt_runtime("E3008", "Permission denied", message,
+               strcmp(kind, "read") == 0
+                   ? "A program reads a file when it declares it with 'uses read' and the user allows it with --allow-read."
+                   : "A program writes a file when it declares it with 'uses write' and the user allows it with --allow-write.",
+               l, c, el, ec);
+}
+
+static bool rt_valid_utf8(const unsigned char *s, size_t n) {
+    size_t i = 0;
+    while (i < n) {
+        unsigned char b = s[i];
+        size_t more = b < 0x80 ? 0 : (b >> 5) == 6 ? 1 : (b >> 4) == 14 ? 2 : (b >> 3) == 30 ? 3 : 99;
+        if (more == 99) return false;
+        for (size_t k = 1; k <= more; k++) {
+            if (i + k >= n || (s[i + k] & 0xC0) != 0x80) return false;
+        }
+        i += more + 1;
+    }
+    return true;
+}
+
+static rv rt_read_file(rv path, RT_SPAN) {
+    const char *name = path.u.t.p;
+    const char *why = rt_denied("read", name);
+    if (why) rt_denied_fail(why, "read", l, c, el, ec);
+    FILE *f = fopen(name, "rb");
+    if (!f) {
+        rt_runtime("E3010", "File error", rt_format("The file '%s' could not be read: %s", name, strerror(errno)), "", l, c, el, ec);
+    }
+    size_t cap = 4096, n = 0;
+    unsigned char *data = (unsigned char *)rt_alloc(cap);
+    int ch;
+    while ((ch = fgetc(f)) != EOF) {
+        if (n + 1 >= cap) {
+            cap *= 2;
+            data = (unsigned char *)realloc(data, cap);
+            if (!data) exit(3);
+        }
+        data[n++] = (unsigned char)ch;
+    }
+    fclose(f);
+    /* Universal line breaks, as Python reads a text file: \r\n and \r become \n. */
+    size_t out = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (data[i] == '\r') {
+            data[out++] = '\n';
+            if (i + 1 < n && data[i + 1] == '\n') i++;
+        } else {
+            data[out++] = data[i];
+        }
+    }
+    data[out] = 0;
+    if (!rt_valid_utf8(data, out)) {
+        rt_runtime("E3010", "File error", rt_format("The file '%s' is not UTF-8 text", name),
+                   "NEXORA reads text files: the file has to be saved as UTF-8.", l, c, el, ec);
+    }
+    rt_text t = {(const char *)data, (int64_t)out, rt_count_points((const char *)data, (int64_t)out)};
+    return rt_txt(t);
+}
+
+static rv rt_write_file(rv path, rv text, RT_SPAN) {
+    const char *name = path.u.t.p;
+    const char *why = rt_denied("write", name);
+    if (why) rt_denied_fail(why, "write", l, c, el, ec);
+    FILE *f = fopen(name, "w");
+    if (!f) {
+        rt_runtime("E3010", "File error", rt_format("The file '%s' could not be written: %s", name, strerror(errno)), "", l, c, el, ec);
+    }
+    fwrite(text.u.t.p, 1, (size_t)text.u.t.bytes, f);
+    fclose(f);
+    return rt_unit();
+}
+
+static rv rt_input(RT_SPAN) {
+    size_t cap = 128, n = 0;
+    char *line = (char *)rt_alloc(cap);
+    int ch;
+    bool any = false;
+    while ((ch = fgetc(stdin)) != EOF) {
+        any = true;
+        if (ch == '\n') break;
+        if (n + 1 >= cap) {
+            cap *= 2;
+            line = (char *)realloc(line, cap);
+            if (!line) exit(3);
+        }
+        line[n++] = (char)ch;
+    }
+    if (!any) {
+        rt_runtime("E3009", "No more input", "There is no more input to read", "The standard input ended. Check it before reading again.",
+                   l, c, el, ec);
+    }
+    if (n > 0 && line[n - 1] == '\r') n--;
+    line[n] = 0;
+    rt_text t = {line, (int64_t)n, rt_count_points(line, (int64_t)n)};
+    return rt_txt(t);
+}
+
+static rv rt_args(void) {
+    rv *items = (rv *)rt_alloc((size_t)(rt_args_count > 0 ? rt_args_count : 1) * sizeof(rv));
+    for (int i = 0; i < rt_args_count; i++) items[i] = rt_str(rt_args_list[i]);
+    return rt_list_from(items, rt_args_count);
+}
+
+/* The command line of an executable is the one of `nex run`: the options of the user, then `--`, then the arguments of the
+ * program. */
+static void rt_options(int argc, char **argv) {
+    int i = 1;
+    for (; i < argc; i++) {
+        const char *a = argv[i];
+        if (strcmp(a, "--") == 0) { i++; break; }
+        const char *kind = strcmp(a, "--allow-read") == 0 ? "read" : strcmp(a, "--allow-write") == 0 ? "write"
+                         : strcmp(a, "--allow-network") == 0 ? "network" : strcmp(a, "--allow-process") == 0 ? "process" : 0;
+        if (kind && i + 1 < argc) {
+            if (rt_granted < RT_MAX_SCOPES) {
+                rt_granted_kind[rt_granted] = kind;
+                rt_granted_path[rt_granted] = argv[i + 1];
+                rt_granted++;
+            }
+            i++;
+        } else {
+            break;
+        }
+    }
+    rt_args_list = (const char *const *)(argv + i);
+    rt_args_count = argc - i;
+}
+
+/* The program: the path it was given and the files it is made of, for the lines a diagnostic quotes. */
+static void rt_setup(const char *entry, int count, const char *const *paths, const char *const *const *lines, const int *counts) {
+    rt_entry = entry;
+    rt_nfiles = count;
+    rt_file_path = paths;
+    rt_file_lines = lines;
+    rt_file_count = counts;
+    if (count > 0) {
+        rt_path = paths[0];
+        rt_src = lines[0];
+        rt_src_lines = counts[0];
+    }
 }
