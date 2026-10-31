@@ -546,7 +546,10 @@ def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
     def read_input() -> str:
         nonlocal input_bytes
         if max_input is None and max_text is None:
-            return sys.stdin.readline().removesuffix("\n").removesuffix("\r")
+            line = sys.stdin.readline()
+            if line == "":
+                raise EOFError("the standard input ended")
+            return line.removesuffix("\n").removesuffix("\r")
         if max_input is None:
             raw_text = sys.stdin.readline(max_text + 2)
             if raw_text == "":
