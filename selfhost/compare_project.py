@@ -65,6 +65,10 @@ def nexora_results(paths: list[Path]) -> dict[str, list[str]]:
     return results
 
 
+def _as_program(lines: list[str]) -> list[str]:
+    return [line.replace("CHECKED|", "PROGRAM|", 1) for line in lines]
+
+
 def main(names: list[str]) -> int:
     paths = [Path(name) for name in names]
     failures = skipped = unsupported = ok = 0
@@ -88,7 +92,8 @@ def main(names: list[str]) -> int:
             if got[0].startswith("SKIP|") or expected[0].startswith("SKIP|"):
                 skipped += 1
                 continue
-            if same(expected, got):
+            # The tree is compared as data (compare_programs.same reads a PROGRAM| line as JSON), not as text.
+            if same(_as_program(expected), _as_program(got)):
                 ok += 1
                 print(f"ok    {path} ({sum(1 for line in expected if line.startswith('D|'))} diagnostics)")
             else:
