@@ -65,12 +65,15 @@ program.c ── the system's C compiler (cc) ──▶ executable
 Everything up to the typed tree already exists in NEXORA and is checked against the Python
 implementation. The new part is the generator and the runtime it emits.
 
-**Status (2026-10-31).** Stages 1 to 5 and 6 below are written and checked in `selfhost/`: the generator `cgen.nex`, the runtime
-(with a conservative garbage collector), `compare_cgen.py` and `bootstrap.py`. 46 programs, the 16 examples of the repository,
-13 projects of modules and 18 cases of the host build with a C compiler and give the same output, diagnostics and exit status as
-`nex run`. The compiler compiles itself: the executable built from the C that Python wrote compiles `cgen.nex` into byte-identical C,
-and the same generator builds `nex.nex` as a native `nex check`, `nex run` and `nex test`. Not done: `Net.get`, `Process.run`, the
-limits `--max-*`, and a decision on keeping the generated C as the seed. The C compiler used was `zig cc`, from a virtual environment.
+**Status (2026-10-31).** Stages 1 to 6 below are written and checked in `selfhost/`: the generator `cgen.nex`, the runtime (with a
+conservative garbage collector), `compare_cgen.py` and `bootstrap.py`. 46 programs, the 16 examples of the repository, 13 projects of
+modules and 58 cases of the host and the limits `--max-text`, `--max-output` and `--max-input` build with a C compiler and give the
+same output, diagnostics and exit status as `nex run`. The compiler compiles itself: from Python alone it takes about 40 minutes, and
+the executable built from the C that Python wrote compiles `cgen.nex` into byte-identical C, twice. `selfhost/seed/cgen.c` keeps that C,
+so the compiler can be rebuilt with a C compiler and no NEXORA run by Python (this answers the last open question). The same generator
+builds `nex.nex` as a native `nex check`, `nex run` and `nex test`. Not done: `Net.get` and `Process.run` run nothing (they make the
+same permission decisions and then say that a compiled program cannot make the operation yet). The C compiler used was `zig cc`, from a
+virtual environment.
 
 ### 3.2 What the generated program must do
 
@@ -156,4 +159,4 @@ reviewed) as the seed.
 - Which C compiler is the reference for the tests: `cc` of the system, or one fixed (GCC or Clang)?
 - Does the runtime keep text as UTF-8 with a count of code points, or as an array of code points?
   The first is smaller and faster to print; the second makes `Text.slice` constant.
-- Is the generated C kept in the repository as the seed of stage 6, or only a checksum of it?
+- (Answered) The generated C is kept in the repository as the seed of stage 6: `selfhost/seed/cgen.c`.
