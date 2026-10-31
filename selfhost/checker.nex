@@ -1922,7 +1922,7 @@ fn initial_state() gives State {
     )
 }
 
-fn check_program(program: parser.Node) gives Typed {
+fn check_program(program: parser.Node, require_main: Bool) gives Typed {
     var current = initial_state()
     if has_declarations(program) {
         return Typed(node: program, state: unsupported(current, "declarations"))
@@ -1987,7 +1987,9 @@ fn check_program(program: parser.Node) gives Typed {
             }
         }
     }
-    current = check_main(current, main_node, main_found, main_sig)
+    if require_main or main_found {
+        current = check_main(current, main_node, main_found, main_sig)
+    }
     var typed_functions: List[parser.Node] = []
     var i = 0
     while i < List.length(functions)
@@ -5546,8 +5548,8 @@ fn warnings_of(state: State, program: parser.Node) gives List[parser.Problem] {
 // checker met something it does not know yet, what it was.
 pub type Analysis = { node: parser.Node, problems: List[parser.Problem], unsupported: Text }
 
-pub fn analyze(program: parser.Node) gives Analysis {
-    let result = check_program(program)
+pub fn analyze(program: parser.Node, require_main: Bool) gives Analysis {
+    let result = check_program(program, require_main)
     return Analysis(node: result.node, problems: result.state.problems, unsupported: result.state.unsupported)
 }
 
@@ -5570,7 +5572,7 @@ fn run_checks() {
             if List.length(outcome.diagnostics) > 0 {
                 print("SKIP|syntax")
             } else {
-                let result = check_program(outcome.program)
+                let result = check_program(outcome.program, true)
                 if result.state.unsupported != "" {
                     print("UNSUPPORTED|" + result.state.unsupported)
                 } else {

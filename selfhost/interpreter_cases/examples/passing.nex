@@ -1,0 +1,13 @@
+fn double(n: Int) gives Int
+    example double(2) == 4, "Twice two is four"
+    example double(0) == 0
+    example double(-3) == -6
+{
+    return n * 2
+}
+
+fn greet(name: Text) gives Text
+    example greet("Ada") == "Hello, Ada"
+{
+    return "Hello, " + name
+}

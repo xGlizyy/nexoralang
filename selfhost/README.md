@@ -9,7 +9,7 @@ runs it for now; it is the bootstrap, not the goal.
 | Lexer | [`lexer.nex`](lexer.nex) | Done. Same tokens and lexical errors as `lexer.py` on every program of the repository and on the cases in [`lexer_cases/`](lexer_cases/), with the gaps below |
 | Parser | [`parser.nex`](parser.nex) | Done. Same tree and same syntax errors as `parser.py` on every program of the repository and on the cases in [`parser_cases/`](parser_cases/), including error recovery, the limit of 100 errors and the nesting and depth limits |
 | Checker | [`checker.nex`](checker.nex) | In progress. Everything of a single file, warnings included: functions, variables, loops, `if`, operators, lists, records, refined types (with an evaluator of conditions written in NEXORA), enums, `Option` and `Result`, `match` and `if let`, contracts, examples, `uses` and the capabilities of the built-ins, the "did you mean" hints and the warnings `W2001` to `W2003`. Same typed tree, errors and warnings as `checker.py` on the programs it supports; modules are next |
-| Interpreter | [`interpreter.nex`](interpreter.nex) | In progress. An abstract machine with an explicit stack of continuations that runs the typed tree: expressions, statements, functions with their `needs` and `promises`, loops with their `keeps` and `shrinks`, records, enums, `Option`/`Result`, `match`, `if let`, refined checks and the pure built-ins. It stops with the same diagnostic as `nex run` (code, message, hint, notes with the chain of calls and loops, and position) on 41 programs that fail on purpose. Same output as `nex run` on 14 repository programs and on 6 programs written for it. The examples (`nex test`), the host functions (files, input, network, processes), the limits of resources and modules are next |
+| Interpreter | [`interpreter.nex`](interpreter.nex) | In progress. An abstract machine with an explicit stack of continuations that runs the typed tree: expressions, statements, functions with their `needs` and `promises`, loops with their `keeps` and `shrinks`, records, enums, `Option`/`Result`, `match`, `if let`, refined checks, the pure built-ins and the `example` clauses of `nex test`. It stops with the same diagnostic as `nex run` (code, message, hint, notes with the chain of calls and loops, and position) on 41 programs that fail on purpose, and reports each example as `nex test` does (status, own calls evaluated and not, diagnostic, output) on 16 programs. Same output as `nex run` on 14 repository programs and on 6 programs written for it. The host functions (files, input, network, processes), the limits of resources and modules are next |
 
 ## Checking a part against the Python implementation
 
@@ -68,6 +68,16 @@ What the first runs show:
 |---|---|
 | Call depth | A program that nests 997 calls runs and prints what `nex run` prints. The machine keeps what is left to do in a linked stack, so the depth of the program does not use the depth of the interpreter. A recursive evaluator would have stopped at about 250. |
 | Speed | About 2,500 steps per second, running on the Python interpreter. `fib(15)` is 50,318 steps and a loop of 3,000 turns 105,271. It is for checking the language, not for running programs: stage 4 of decision 0024 is about that. |
+
+For the examples:
+
+```bash
+PYTHONPATH=nexora/src python selfhost/compare_examples.py FILE.nex [FILE.nex ...]
+```
+
+Both interpreters evaluate the `example` clauses of each program and, for each example, its status, the own calls that were
+and were not evaluated (with their type, value and the reason), the diagnostic and what it printed are compared.
+`interpreter_cases/examples/` holds programs written for it.
 
 ## Stage 1 measurement: call depth
 

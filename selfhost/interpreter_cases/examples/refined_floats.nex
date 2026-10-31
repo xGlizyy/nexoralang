@@ -1,0 +1,15 @@
+type Percent = Int where value >= 0 and value <= 100
+
+fn halve(p: Percent) gives Float
+    example halve(Percent(50)) == 25.0
+    example halve(Percent(7)) == 3.5
+{
+    return to_float(p) / 2.0
+}
+
+fn pct(n: Int) gives Percent
+    example pct(30) == Percent(30)
+    example pct(300) == Percent(100)
+{
+    return Percent(n)
+}

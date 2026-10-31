@@ -1,0 +1,8 @@
+fn root(n: Int) gives Int
+    needs n >= 0, "No root of a negative"
+    example root(4) == 4
+    example root(-1) == 1
+    example root(1) + root(-2) == 0
+{
+    return n
+}

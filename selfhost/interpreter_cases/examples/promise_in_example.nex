@@ -1,0 +1,10 @@
+fn grow(n: Int) gives Int
+    promises result > n, "It must grow"
+    example grow(1) == 2
+    example grow(5) == 5
+{
+    if n > 3 {
+        return n
+    }
+    return n + 1
+}

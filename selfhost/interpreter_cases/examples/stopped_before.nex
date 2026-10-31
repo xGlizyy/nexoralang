@@ -1,0 +1,6 @@
+fn safe_div(a: Int, b: Int) gives Int
+    example safe_div(6, 3) + safe_div(1, 0) == 2
+    example safe_div(1, 0) + safe_div(6, 3) == 2
+{
+    return a / b
+}
