@@ -1,0 +1,19 @@
+fn is_even(n: Int) gives Bool {
+    if n == 0 {
+        return true
+    }
+    return is_odd(n - 1)
+}
+
+fn is_odd(n: Int) gives Bool {
+    if n == 0 {
+        return false
+    }
+    return is_even(n - 1)
+}
+
+fn main() {
+    print(is_even(400))
+    print(is_odd(401))
+    print(is_even(7))
+}

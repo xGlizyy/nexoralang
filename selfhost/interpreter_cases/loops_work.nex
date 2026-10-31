@@ -1,0 +1,18 @@
+fn main() {
+    var total = 0
+    var i = 0
+    while i < 3000
+        shrinks 3000 - i
+    {
+        total = total + i * 2 - i
+        i = i + 1
+    }
+    print(total)
+    var count = 0
+    for n in [1, 2, 3, 4, 5] {
+        for m in [10, 20] {
+            count = count + n * m
+        }
+    }
+    print(count)
+}

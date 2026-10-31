@@ -1,0 +1,20 @@
+fn sum_to(n: Int) gives Int {
+    if n == 0 {
+        return 0
+    }
+    return n + sum_to(n - 1)
+}
+
+fn depth(n: Int) gives Int {
+    if n == 0 {
+        return 0
+    }
+    return 1 + depth(n - 1)
+}
+
+fn main() {
+    print(sum_to(10))
+    print(sum_to(500))
+    print(depth(990))
+    print(sum_to(997))
+}

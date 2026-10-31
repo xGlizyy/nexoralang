@@ -9,7 +9,7 @@ runs it for now; it is the bootstrap, not the goal.
 | Lexer | [`lexer.nex`](lexer.nex) | Done. Same tokens and lexical errors as `lexer.py` on every program of the repository and on the cases in [`lexer_cases/`](lexer_cases/), with the gaps below |
 | Parser | [`parser.nex`](parser.nex) | Done. Same tree and same syntax errors as `parser.py` on every program of the repository and on the cases in [`parser_cases/`](parser_cases/), including error recovery, the limit of 100 errors and the nesting and depth limits |
 | Checker | [`checker.nex`](checker.nex) | In progress. Everything of a single file, warnings included: functions, variables, loops, `if`, operators, lists, records, refined types (with an evaluator of conditions written in NEXORA), enums, `Option` and `Result`, `match` and `if let`, contracts, examples, `uses` and the capabilities of the built-ins, the "did you mean" hints and the warnings `W2001` to `W2003`. Same typed tree, errors and warnings as `checker.py` on the programs it supports; modules are next |
-| Interpreter | | Not started |
+| Interpreter | [`interpreter.nex`](interpreter.nex) | In progress, first slice. An abstract machine with an explicit stack of continuations that runs the typed tree: expressions, statements, functions, records, enums, `Option`/`Result`, `match`, `if let`, refined checks and the pure built-ins. Same output as `nex run` on 14 repository programs and on 5 programs written for it. Contracts, loop clauses, examples, the host functions and the formatting of runtime errors are next |
 
 ## Checking a part against the Python implementation
 
@@ -51,6 +51,23 @@ warnings are compared. A program that uses something the NEXORA checker does not
 
 On Windows, give `PYTHONPATH` a single entry: its separator is `;`, and `nexora/src:selfhost` is read as
 one path that does not exist, so Python finds another copy of `nexora`.
+
+For the interpreter:
+
+```bash
+PYTHONPATH=nexora/src python selfhost/compare_interpreter.py FILE.nex [FILE.nex ...]
+```
+
+Each program is run by `nex run` and by the interpreter written in NEXORA, and what they print is compared. Only the
+programs that `nex run` runs to the end are compared: the NEXORA interpreter does not format the errors of a run yet.
+`interpreter_cases/` holds programs written for it.
+
+What the first runs show:
+
+| | |
+|---|---|
+| Call depth | A program that nests 997 calls runs and prints what `nex run` prints. The machine keeps what is left to do in a linked stack, so the depth of the program does not use the depth of the interpreter. A recursive evaluator would have stopped at about 250. |
+| Speed | About 2,500 steps per second, running on the Python interpreter. `fib(15)` is 50,318 steps and a loop of 3,000 turns 105,271. It is for checking the language, not for running programs: stage 4 of decision 0024 is about that. |
 
 ## Stage 1 measurement: call depth
 
