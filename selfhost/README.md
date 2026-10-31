@@ -9,7 +9,7 @@ runs it for now; it is the bootstrap, not the goal.
 | Lexer | [`lexer.nex`](lexer.nex) | Done. Same tokens and lexical errors as `lexer.py` on every program of the repository and on the cases in [`lexer_cases/`](lexer_cases/), with the gaps below |
 | Parser | [`parser.nex`](parser.nex) | Done. Same tree and same syntax errors as `parser.py` on every program of the repository and on the cases in [`parser_cases/`](parser_cases/), including error recovery, the limit of 100 errors and the nesting and depth limits |
 | Checker | [`checker.nex`](checker.nex) | In progress. Everything of a single file, warnings included: functions, variables, loops, `if`, operators, lists, records, refined types (with an evaluator of conditions written in NEXORA), enums, `Option` and `Result`, `match` and `if let`, contracts, examples, `uses` and the capabilities of the built-ins, the "did you mean" hints and the warnings `W2001` to `W2003`. Same typed tree, errors and warnings as `checker.py` on the programs it supports; modules are next |
-| Interpreter | [`interpreter.nex`](interpreter.nex) | In progress. An abstract machine with an explicit stack of continuations that runs the typed tree: expressions, statements, functions with their `needs` and `promises`, loops with their `keeps` and `shrinks`, records, enums, `Option`/`Result`, `match`, `if let`, refined checks, the pure built-ins, the `example` clauses of `nex test` and the host (arguments, input and files, with the three rules of what the program declares, the user allows and the environment permits). It stops with the same diagnostic as `nex run` on 41 programs that fail on purpose, reports each example as `nex test` does on 16, and gives the same result as `nex run` on 27 host cases. Same output as `nex run` on 14 repository programs and on 6 programs written for it. The limits of resources and modules are next |
+| Interpreter | [`interpreter.nex`](interpreter.nex) | In progress. An abstract machine with an explicit stack of continuations that runs the typed tree: expressions, statements, functions with their `needs` and `promises`, loops with their `keeps` and `shrinks`, records, enums, `Option`/`Result`, `match`, `if let`, refined checks, the pure built-ins, the `example` clauses of `nex test` and the host (arguments, input and files, with the three rules of what the program declares, the user allows and the environment permits). It stops with the same diagnostic as `nex run` on 41 programs that fail on purpose, reports each example as `nex test` does on 16, and gives the same result as `nex run` on 52 host cases, among them `E3003`, the text limit and the output limit. Same output as `nex run` on 14 repository programs and on 6 programs written for it. `--max-text`, `--max-output` and `E3003` are done; `--timeout`, `--max-memory`, `--max-input`, `--max-source` and modules are next |
 
 ## Checking a part against the Python implementation
 
@@ -86,9 +86,16 @@ PYTHONPATH=nexora/src python selfhost/compare_host.py
 ```
 
 Each case in `compare_host.py` is a program with the options a user would give (`--allow-read`, `--allow-write`,
-`--allow-network`, `--allow-process`), an input and arguments, run by `nex run` and by
+`--allow-network`, `--allow-process`), an input, arguments and limits, run by `nex run` and by
 `interpreter.nex --run [options] FILE [arguments]`. The options are the grants, `--stdin FILE` (the input, read from a file
 because the end of the real input cannot be told without stopping) and `--cwd DIRECTORY` (to resolve relative paths).
+
+The limits of resources that the program can see are read as options: `--max-text CHARS` (`E3006`: a Text made by a
+literal, `+`, `to_text`, `args`, `input` or `read_file` that is too long) and `--max-output BYTES` (`E3015`, after printing
+what fits). `E3003` (a Float operation that does not fit) needs no option. The result of the operation is never
+computed to find out, because on this interpreter an overflow would stop the interpreter itself: each operand is brought
+to a scale where the rounding of the real operation can be decided (powers of two are exact), and the tests agree with
+`nex run` at the edge of the range (`float_add_edge_tie` and `float_add_edge_below`).
 
 The host has limits that come from the language and are not fixed here:
 
@@ -97,6 +104,9 @@ The host has limits that come from the language and are not fixed here:
 | `Net.get` and `Process.run` are decided but not run | A capability is declared with a literal (`uses network "https://example.com"`), so this interpreter cannot declare what it does not know in advance. When every rule allows the operation it stops with `E0000`. |
 | A file that does not exist ends this interpreter | There is no way to try to read a file and get a value back when it fails. `nex run` gives the program `E3010`. |
 | The end of the input needs `--stdin` | `input()` cannot be asked whether there is a line left; at the end it stops the program that calls it. |
+| `--max-output` with a character that is not ASCII | A Text has no code point, so the bytes of such a character cannot be counted. The run stops with `E0000` when it prints one under the limit. |
+| `--timeout` and `--max-memory` | There is no clock and no way to ask for the memory in use. The interpreter has its own bound, the fuel of the machine. |
+| `--max-input` and `--max-source` | They count bytes: the terminator of each line of the input is lost when it is split into lines, and a Text has no byte size. |
 | Symbolic links are not followed | Paths are resolved by their text, there is no `realpath`. A link that points outside what is allowed is not noticed. |
 
 ## Stage 1 measurement: call depth

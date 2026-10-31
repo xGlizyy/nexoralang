@@ -134,6 +134,37 @@ CASES_TABLE = {
     ),
 }
 
+# name -> (program, limits). The limits are options of `nex run` that the interpreter in NEXORA also reads.
+FLOAT = 'fn main() {{\n    let a = Float.parse("{a}")\n    let b = Float.parse("{b}")\n    print(a {op} b)\n}}\n'
+TWO_LINES = 'fn main() {\n    print("hello")\n    print("world")\n}\n'
+LIMIT_CASES = {
+    "float_multiply_overflows": (FLOAT.format(a="1e200", b="1e200", op="*"), []),
+    "float_multiply_fits": (FLOAT.format(a="1e154", b="1e154", op="*"), []),
+    "float_multiply_small_by_large": (FLOAT.format(a="1e-300", b="1e300", op="*"), []),
+    "float_multiply_negative": (FLOAT.format(a="-1e200", b="1e200", op="*"), []),
+    "float_add_overflows": (FLOAT.format(a="1.7e308", b="1.7e308", op="+"), []),
+    "float_add_fits": (FLOAT.format(a="8e307", b="8e307", op="+"), []),
+    "float_add_edge_tie": (FLOAT.format(a="1.7976931348623157e308", b="9.979201547673599e291", op="+"), []),
+    "float_add_edge_below": (FLOAT.format(a="1.7976931348623157e308", b="9.9792015476735e291", op="+"), []),
+    "float_subtract_overflows": (FLOAT.format(a="1.7e308", b="-1.7e308", op="-"), []),
+    "float_subtract_fits": (FLOAT.format(a="1.7e308", b="1.7e308", op="-"), []),
+    "float_divide_overflows": (FLOAT.format(a="1e300", b="1e-100", op="/"), []),
+    "float_divide_fits": (FLOAT.format(a="1e300", b="1e-8", op="/"), []),
+    "float_divide_subnormal": (FLOAT.format(a="1e300", b="5e-324", op="/"), []),
+    "float_divide_negative": (FLOAT.format(a="-1e300", b="1e-100", op="/"), []),
+    "text_literal_long": ('fn main() {\n    print("abcdef")\n}\n', ["--max-text", "5"]),
+    "text_literal_fits": ('fn main() {\n    print("abcde")\n}\n', ["--max-text", "5"]),
+    "text_concat_long": ('fn main() {\n    let a = "abc"\n    print(a + "def")\n}\n', ["--max-text", "5"]),
+    "text_to_text_long": ('fn main() {\n    print(to_text(123456))\n}\n', ["--max-text", "5"]),
+    "text_input_long": ('fn main() {\n    print(input())\n}\n', ["--max-text", "5"]),
+    "text_argument_long": ('fn main() {\n    print(args())\n}\n', ["--max-text", "5"]),
+    "text_read_long": (READ_DATA + f'fn main() {{\n    print(read_file("{DATA}/in.txt"))\n}}\n', ["--max-text", "10"]),
+    "output_cut_in_a_line": (TWO_LINES, ["--max-output", "8"]),
+    "output_fits_exactly": (TWO_LINES, ["--max-output", "12"]),
+    "output_cut_at_a_line": (TWO_LINES, ["--max-output", "6"]),
+    "output_one_over": (TWO_LINES, ["--max-output", "11"]),
+}
+
 
 def prepare() -> None:
     (CASES / "data" / "sub").mkdir(parents=True, exist_ok=True)
@@ -142,6 +173,8 @@ def prepare() -> None:
     (CASES / "secret.txt").write_text("secret\n", encoding="utf-8", newline="\n")
     for name, (program, _, _, _) in CASES_TABLE.items():
         (CASES / f"{name}.nex").write_text(program, encoding="utf-8", newline="\n")
+    for name, (program, _) in LIMIT_CASES.items():
+        (CASES / f"{name}.nex").write_text(program, encoding="utf-8", newline="\n")
     (CASES / "data" / "out.txt").unlink(missing_ok=True)
 
 
@@ -149,9 +182,9 @@ def options_of(allow: list[tuple[str, str]]) -> list[str]:
     return [item for kind, scope in allow for item in (f"--allow-{kind}", scope)]
 
 
-def python_run(path: str, allow: list[tuple[str, str]], text: str, arguments: list[str]):
+def python_run(path: str, allow: list[tuple[str, str]], text: str, arguments: list[str], limits: list[str] = ()):
     run = subprocess.run(
-        [sys.executable, "-m", "nexora", "run", path, "--format", "json", *options_of(allow),
+        [sys.executable, "-m", "nexora", "run", path, "--format", "json", *options_of(allow), *limits,
          *(["--", *arguments] if arguments else [])],
         capture_output=True, text=True, encoding="utf-8", input=text,
     )
@@ -161,12 +194,12 @@ def python_run(path: str, allow: list[tuple[str, str]], text: str, arguments: li
     return run.returncode, run.stdout, diagnostic
 
 
-def nexora_run(path: str, allow: list[tuple[str, str]], text: str, arguments: list[str]):
+def nexora_run(path: str, allow: list[tuple[str, str]], text: str, arguments: list[str], limits: list[str] = ()):
     stdin_file = CASES / "stdin.txt"
     stdin_file.write_text(text, encoding="utf-8", newline="")
     run = subprocess.run(
         [sys.executable, "-m", "nexora", "run", (HERE / "interpreter.nex").as_posix(), "--allow-read", ".",
-         "--allow-write", ".", "--max-output", "1000000000", "--", "--run", *options_of(allow),
+         "--allow-write", ".", "--max-output", "1000000000", "--", "--run", *options_of(allow), *limits,
          "--stdin", stdin_file.relative_to(HERE.parent).as_posix(), "--cwd", Path.cwd().as_posix(), path, *arguments],
         capture_output=True, text=True, encoding="utf-8",
     )
@@ -178,13 +211,15 @@ def nexora_run(path: str, allow: list[tuple[str, str]], text: str, arguments: li
     for line in run.stdout.split("\n")[:-1]:
         if line.startswith("FILE|"):
             lines, fail = [], None
+        elif line.startswith("PARTIAL|"):
+            lines.append(line[8:])
         elif line.startswith("FAIL|"):
             fail = line
         elif line.startswith("STOP|"):
-            result = {"stop": line[5:].split(" ")[0], "reason": line[5:], "output": "".join(item + "\n" for item in lines),
+            result = {"stop": line[5:].split(" ")[0], "reason": line[5:], "output": "".join(lines),
                       "fail": fail}
         else:
-            lines.append(line)
+            lines.append(line + "\n")
     return result
 
 
@@ -195,6 +230,8 @@ def parse_fail(line: str) -> dict:
 
 def expected_fail(diagnostic: dict) -> dict:
     where = f"{diagnostic['line']}:{diagnostic['column']}-{diagnostic['end_line']}:{diagnostic['end_column']}"
+    if diagnostic["line"] is None:
+        where = "None:None-None:None"
     return {"code": diagnostic["code"], "label": diagnostic["label"], "hint": diagnostic["hint"] or "",
             "notes": diagnostic["notes"], "where": where}
 
@@ -205,10 +242,16 @@ def main() -> int:
         return 2
     prepare()
     same = different = skipped = 0
-    for name, (_, allow, text, arguments) in CASES_TABLE.items():
+    cases = [(name, allow, text, arguments, []) for name, (_, allow, text, arguments) in CASES_TABLE.items()]
+    for name, (_, limits) in LIMIT_CASES.items():
+        read = [("read", DATA)] if name == "text_read_long" else []
+        text = "abcdefgh\n" if name == "text_input_long" else ""
+        arguments = ["abcdefgh"] if name == "text_argument_long" else []
+        cases.append((name, read, text, arguments, limits))
+    for name, allow, text, arguments, limits in cases:
         path = f"selfhost/host_cases/{name}.nex"
-        code, expected, diagnostic = python_run(path, allow, text, arguments)
-        run = nexora_run(path, allow, text, arguments)
+        code, expected, diagnostic = python_run(path, allow, text, arguments, limits)
+        run = nexora_run(path, allow, text, arguments, limits)
         if code not in (0, 3, 5):
             skipped += 1
             print(f"skip  {name} (nex run exits with {code})")

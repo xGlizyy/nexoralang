@@ -1,0 +1,4 @@
+uses read "selfhost/host_cases/data"
+fn main() {
+    print(read_file("selfhost/host_cases/data/in.txt"))
+}

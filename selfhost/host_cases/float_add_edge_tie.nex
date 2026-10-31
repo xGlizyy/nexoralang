@@ -1,0 +1,5 @@
+fn main() {
+    let a = Float.parse("1.7976931348623157e308")
+    let b = Float.parse("9.979201547673599e291")
+    print(a + b)
+}
