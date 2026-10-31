@@ -132,6 +132,33 @@ the same text on 41 projects and programs for `check`, on 46 for `run` and on 15
 | The output limit stops in the middle of a line | `print` writes whole lines, so what fit of that line is printed with a line break. |
 | A file with syntax errors | Only its lexical and syntax errors are shown, as for the file that runs. `nex check` also checks the partial tree of an imported module. |
 
+## Stage 3: the fixed point
+
+```bash
+PYTHONPATH=nexora/src python selfhost/fixed_point.py selfhost/fixed_point_cases/small.nex --levels 0,1,2
+```
+
+The same program runs at three levels and what it prints is compared: level 0 is `nex run`; level 1 is `interpreter.nex` run by
+Python; level 2 is `interpreter.nex` run by `interpreter.nex`, run by Python. Both programs of
+[`fixed_point_cases/`](fixed_point_cases/) print the same at the three levels.
+
+| Measurement | Result |
+|---|---|
+| The checker in NEXORA checks the whole source of the interpreter (5 modules, ~13,000 lines) | 7 min 32 s on Python; the same diagnostics and the same typed tree as `checker.py` (`compare_project.py selfhost/interpreter.nex`) |
+| `print(1 + 2)`, level 1 / level 2 | 0.4 s of Python for `nex run`; level 2 takes 17 min 51 s (level 1 takes 55,794 steps) |
+| A record, a function and a list, level 2 | 24 min 16 s; the program takes 55 steps at level 2, which are 231,860 steps at level 1 |
+| `fib(16)`, level 0 / level 1 | 0.4 s / 41 s, 81,428 steps: about 2,000 steps a second |
+
+What they say about stage 4:
+
+- A level costs two to three orders of magnitude over the one below: about 100 to 800 times from Python to level 1, and
+  about 4,400 steps of level 1 for each step of level 2.
+- Almost all of the time of level 2 is not the program but the interpreter checking its own source (the 7 and a half minutes
+  above, run again by level 1) before it can run anything.
+- Level 3, the interpreter running itself running itself, would need level 2 to check 13,000 lines at that speed. It was not run:
+  by these numbers it is years, not hours. Without a faster way to execute NEXORA that does not go through Python (stage 4, which
+  decision 0024 leaves open), the fixed point stops at level 2.
+
 ## Projects of modules
 
 [`project.nex`](project.nex) follows `modules.py` (decision 0018): it reads the program that runs and, before it, the files it

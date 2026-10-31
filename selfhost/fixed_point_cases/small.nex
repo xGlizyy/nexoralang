@@ -1,0 +1,11 @@
+type Point = { x: Int, y: Int }
+
+fn area(p: Point) gives Int {
+    return p.x * p.y
+}
+
+fn main() {
+    let p = Point(x: 3, y: 4)
+    print("area: " + to_text(area(p)))
+    print([1, 2, 3])
+}
