@@ -1,0 +1,39 @@
+fn a() gives Int {
+    return
+}
+fn b() {
+    return 1
+}
+fn c() gives Int {
+    return "x"
+}
+fn d() gives Int {
+    print(1)
+}
+fn e(x: Int) gives Int {
+    if x > 0 {
+        return 1
+    }
+}
+fn f(x: Int) gives Int {
+    if x > 0 {
+        return 1
+    } else {
+        return 2
+    }
+}
+fn g() gives Int {
+    return 1
+    print(2)
+    print(3)
+}
+fn h() gives Int {
+    while true
+        shrinks 1
+    {
+        return 1
+    }
+}
+fn main() {
+    return
+}

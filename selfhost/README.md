@@ -8,7 +8,7 @@ runs it for now; it is the bootstrap, not the goal.
 |------|------|-------|
 | Lexer | [`lexer.nex`](lexer.nex) | Done. Same tokens and lexical errors as `lexer.py` on every program of the repository and on the cases in [`lexer_cases/`](lexer_cases/), with the gaps below |
 | Parser | [`parser.nex`](parser.nex) | Done. Same tree and same syntax errors as `parser.py` on every program of the repository and on the cases in [`parser_cases/`](parser_cases/), including error recovery, the limit of 100 errors and the nesting and depth limits |
-| Checker | | Not started |
+| Checker | [`checker.nex`](checker.nex) | In progress, first slice. Functions, variables, loops, `if`, operators, lists, calls to the functions of the program and the built-in ones, contracts and examples. Same typed tree and same errors as `checker.py` on the programs it supports (see below); records, enums, refined types, `Option`/`Result`, `match`, `if let`, modules, `uses`, warnings and the "did you mean" hints are next |
 | Interpreter | | Not started |
 
 ## Checking a part against the Python implementation
@@ -37,6 +37,20 @@ PYTHONPATH=nexora/src python selfhost/compare_programs.py FILE.nex [FILE.nex ...
 `parser_cases/programs/` holds malformed programs that exercise recovery, headers, declarations, the
 old 0.11 syntax and the size limits. A file with lexical errors is skipped: the lexer is checked on
 its own.
+
+For the checker:
+
+```bash
+PYTHONPATH=nexora/src python selfhost/compare_checker.py FILE.nex [FILE.nex ...]
+```
+
+Both checkers read the program and the typed tree (what `nex inspect` shows) and the errors are
+compared. A program that uses something the NEXORA checker does not know yet is reported as
+*unsupported* by it and skipped, and the summary says why. Warnings are not produced yet.
+`checker_cases/` holds programs with type errors that exercise each error path of this slice.
+
+On Windows, give `PYTHONPATH` a single entry: its separator is `;`, and `nexora/src:selfhost` is read as
+one path that does not exist, so Python finds another copy of `nexora`.
 
 ## Stage 1 measurement: call depth
 

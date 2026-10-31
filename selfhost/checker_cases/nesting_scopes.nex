@@ -1,0 +1,14 @@
+fn main() {
+    let a = 1
+    if true {
+        let b = 2
+        let a = 3
+    }
+    print(b)
+    {
+        let c = 4
+    }
+    print(c)
+    for a in [1] {
+    }
+}

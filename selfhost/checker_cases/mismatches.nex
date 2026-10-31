@@ -1,0 +1,18 @@
+fn main() {
+    let a: Int = "text"
+    let b: Float = 1
+    let c: Text = 5
+    let d: Bool = 1
+    let e = 1 + "x"
+    let f = 1 + 1.5
+    let g = true + false
+    let h = "a" - "b"
+    let i = "a" < 1
+    let j = -true
+    let k = not 3
+    let l = not "x"
+    let m = 1 and 2
+    let n = 1 == "x"
+    let o = 1.5 / 2
+    print(a)
+}

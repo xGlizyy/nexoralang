@@ -1,0 +1,16 @@
+fn f(p: Int) {
+    p = 1
+}
+fn main() {
+    let a = 1
+    a = 2
+    var b = 1
+    b = "x"
+    b = 2
+    c = 3
+    for x in [1, 2] {
+        x = 3
+    }
+    var d = 1
+    d = print(1)
+}

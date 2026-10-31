@@ -1,0 +1,6 @@
+fn main() {
+    print(missing)
+    print(result)
+    let x = missing + 1
+    unknown_call(1)
+}

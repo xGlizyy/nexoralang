@@ -1,0 +1,19 @@
+fn print() {
+}
+fn dup() {
+}
+fn dup() {
+}
+fn result_param(result: Int) {
+}
+fn twice(a: Int, a: Int) {
+}
+fn void_param(x: Void) {
+}
+fn gives_void() gives Void {
+}
+fn main() {
+    let dup = 1
+    let print = 2
+    let twice = 3
+}

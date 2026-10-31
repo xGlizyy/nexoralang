@@ -1,0 +1,22 @@
+fn f(x: Int) gives Int
+    needs x > 0
+    needs x
+    needs 1.5, "float"
+    promises result > 0
+    promises result
+    trust y: x < 100, "small"
+    example f(1) == 1
+    example 1 == 1
+    example f(x) == 1
+    example g() == 1
+{
+    return x
+}
+fn g() {
+    print(1)
+}
+fn h(x: Int)
+    promises result > 0
+{
+    print(x)
+}

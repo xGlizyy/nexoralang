@@ -1,0 +1,10 @@
+fn helper() {
+}
+fn main() {
+    let helper = 1
+    let Int = 2
+    let input = 3
+    var text = ""
+    text = text + "x"
+    print(text)
+}
