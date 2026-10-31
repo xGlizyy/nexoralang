@@ -1,0 +1,4 @@
+fn main() {
+    let r: Result[Int, Text] = Ok(1)
+    print(Result.error(r))
+}

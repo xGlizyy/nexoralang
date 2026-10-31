@@ -1,0 +1,11 @@
+type Percent = Int where value >= 0 and value <= 100, "A percentage"
+type Small = Percent where value < 10, "Below ten"
+
+fn make(n: Int) gives Small {
+    return Small(n)
+}
+
+fn main() {
+    print(make(5))
+    print(make(50))
+}

@@ -1,0 +1,26 @@
+fn inner(x: Int) gives Int {
+    var n = 0
+    while n < 3
+        shrinks 3 - n
+    {
+        if x == 2 and n == 1 {
+            return 10 / (n - 1)
+        }
+        n = n + 1
+    }
+    return n
+}
+
+fn main() {
+    var total = 0
+    for x in [1, 2, 3] {
+        var j = 0
+        while j < 2
+            shrinks 2 - j
+        {
+            total = total + inner(x)
+            j = j + 1
+        }
+    }
+    print(total)
+}

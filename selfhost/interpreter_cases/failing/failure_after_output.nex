@@ -1,0 +1,6 @@
+fn main() {
+    print("first")
+    print("second")
+    print(List.get([1], 5))
+    print("never")
+}

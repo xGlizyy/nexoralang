@@ -1,0 +1,10 @@
+fn f(n: Int) gives Int
+    promises ok: result > 0
+    promises big: result > 100, "It should be big"
+{
+    return n
+}
+
+fn main() {
+    print(f(5))
+}

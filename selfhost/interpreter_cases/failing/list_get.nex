@@ -1,0 +1,5 @@
+fn main() {
+    let xs = [1, 2, 3]
+    print(List.get(xs, 1))
+    print(List.get(xs, 3))
+}

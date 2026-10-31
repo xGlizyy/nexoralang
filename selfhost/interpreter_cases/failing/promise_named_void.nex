@@ -1,0 +1,9 @@
+fn tweak(n: Int)
+    promises 1 == 2
+{
+    print(n)
+}
+
+fn main() {
+    tweak(4)
+}

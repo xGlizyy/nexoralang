@@ -9,7 +9,7 @@ runs it for now; it is the bootstrap, not the goal.
 | Lexer | [`lexer.nex`](lexer.nex) | Done. Same tokens and lexical errors as `lexer.py` on every program of the repository and on the cases in [`lexer_cases/`](lexer_cases/), with the gaps below |
 | Parser | [`parser.nex`](parser.nex) | Done. Same tree and same syntax errors as `parser.py` on every program of the repository and on the cases in [`parser_cases/`](parser_cases/), including error recovery, the limit of 100 errors and the nesting and depth limits |
 | Checker | [`checker.nex`](checker.nex) | In progress. Everything of a single file, warnings included: functions, variables, loops, `if`, operators, lists, records, refined types (with an evaluator of conditions written in NEXORA), enums, `Option` and `Result`, `match` and `if let`, contracts, examples, `uses` and the capabilities of the built-ins, the "did you mean" hints and the warnings `W2001` to `W2003`. Same typed tree, errors and warnings as `checker.py` on the programs it supports; modules are next |
-| Interpreter | [`interpreter.nex`](interpreter.nex) | In progress, first slice. An abstract machine with an explicit stack of continuations that runs the typed tree: expressions, statements, functions, records, enums, `Option`/`Result`, `match`, `if let`, refined checks and the pure built-ins. Same output as `nex run` on 14 repository programs and on 5 programs written for it. Contracts, loop clauses, examples, the host functions and the formatting of runtime errors are next |
+| Interpreter | [`interpreter.nex`](interpreter.nex) | In progress. An abstract machine with an explicit stack of continuations that runs the typed tree: expressions, statements, functions with their `needs` and `promises`, loops with their `keeps` and `shrinks`, records, enums, `Option`/`Result`, `match`, `if let`, refined checks and the pure built-ins. It stops with the same diagnostic as `nex run` (code, message, hint, notes with the chain of calls and loops, and position) on 41 programs that fail on purpose. Same output as `nex run` on 14 repository programs and on 6 programs written for it. The examples (`nex test`), the host functions (files, input, network, processes), the limits of resources and modules are next |
 
 ## Checking a part against the Python implementation
 
@@ -58,9 +58,9 @@ For the interpreter:
 PYTHONPATH=nexora/src python selfhost/compare_interpreter.py FILE.nex [FILE.nex ...]
 ```
 
-Each program is run by `nex run` and by the interpreter written in NEXORA, and what they print is compared. Only the
-programs that `nex run` runs to the end are compared: the NEXORA interpreter does not format the errors of a run yet.
-`interpreter_cases/` holds programs written for it.
+Each program is run by `nex run` and by the interpreter written in NEXORA, and what they print is compared, and, when the
+program stops with a runtime error or a broken contract, the diagnostic: code, message, hint, notes and position.
+`interpreter_cases/` holds programs written for it, and `interpreter_cases/failing/` one program for each way of failing.
 
 What the first runs show:
 

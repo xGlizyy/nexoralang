@@ -1,0 +1,7 @@
+fn forever(n: Int) gives Int {
+    return forever(n + 1)
+}
+
+fn main() {
+    print(forever(0))
+}

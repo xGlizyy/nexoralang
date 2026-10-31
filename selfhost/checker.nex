@@ -3450,7 +3450,7 @@ fn evaluate(node: parser.Node, current: Val) gives EvalOut {
 }
 
 // An expression written back as source text, for the notes of a refinement.
-fn unparse(node: parser.Node) gives Text {
+pub fn unparse(node: parser.Node) gives Text {
     let kind = kind_of(node)
     if kind == "TextLiteral" {
         return parser.quote(text_of(field(node, "value")))
