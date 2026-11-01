@@ -160,3 +160,18 @@ reviewed) as the seed.
 - Does the runtime keep text as UTF-8 with a count of code points, or as an array of code points?
   The first is smaller and faster to print; the second makes `Text.slice` constant.
 - (Answered) The generated C is kept in the repository as the seed of stage 6: `selfhost/seed/cgen.c`.
+
+## 8. Update of 1 November 2026: what was built
+
+This section records results; it does not change the decision or its status, which is for the maintainer.
+
+- The generator, the runtime and the compiler that compiles itself exist in `selfhost/` and reach a fixed
+  point (the C written by the compiler built from it is the same text again). The seed is
+  `selfhost/seed/cgen.c`. The measurements of speed and of equivalence with `nex` are in `selfhost/README.md`.
+- The generator also builds the Playground worker (`selfhost/worker.nex`): the debugger on the abstract
+  machine of the interpreter, projects loaded from memory, a host that allows nothing, and the limits of
+  the process. It runs on the public site since 1 November 2026, in an image with that executable only.
+  What was compared with the Python worker, what differs and what is not proved are in
+  [the Playground page](../playground.md#the-native-worker).
+- Python is still needed once, to produce the first compiler; every later one is built with itself. Python
+  remains the reference implementation for the language and for the command-line tool.

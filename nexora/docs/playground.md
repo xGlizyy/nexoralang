@@ -2,9 +2,11 @@
 
 The Playground lets you write, check and run NEXORA code from the browser, including multi-file
 projects and an explicit entry file. Its statement debugger can step through the program. The code
-is sent to the server, which hands it to the **same interpreter used by the `nex` command**, and the page
-shows what the interpreter answers. There is no simulated execution nor a second
-implementation of the language in JavaScript.
+is sent to the server, which hands it to a worker, and the page shows what the worker answers. There is
+no simulated execution and no implementation of the language in JavaScript. Two workers speak the same
+protocol: the Python one, which runs the **same interpreter as the `nex` command** (the reference, and
+what you get when you run the Playground locally), and, since 1 November 2026 on the public site, a
+**native worker written in NEXORA** (see [The native worker](#the-native-worker)).
 
 This page describes the architecture, the API, the limits, the real isolation that exists, how to
 run it locally and how to deploy it on your own server.
@@ -24,15 +26,17 @@ run it locally and how to deploy it on your own server.
 | Page (`web/playground.html`) | Implemented; browser preview reviewed locally in Edge on 28 October 2026 |
 | Limits of time, size, output, concurrency and requests | Implemented and tested |
 | Operating system memory and CPU limits | Implemented for Linux and macOS, but they are only enforced by the operating system where they exist: the CPU one on both, the memory one only on Linux (on macOS, the kernel accepts the address space limit and does not apply it). Tested on Linux (Ubuntu 24.04 on WSL 2) with `tests/test_worker.py`, which launches the worker as a process, without a container; on macOS, only the CPU one. On Windows they do not exist |
+| Native worker (written in NEXORA) | In use on the public site since 1 November 2026; compared with the Python worker on 121 requests and 35 debug sessions, with no difference; see [The native worker](#the-native-worker) |
 | Container isolation (Docker) | In use on the public site: workers run with no network, a read-only filesystem, dropped capabilities, no-new-privileges, and CPU, memory and process limits |
-| Deployment on a public server | Live at [nexoralang.org/playground](https://nexoralang.org/playground), running NEXORA 0.14.1; staging and production passed the release verifier on 29 October 2026 |
+| Deployment on a public server | Live at [nexoralang.org/playground](https://nexoralang.org/playground), running NEXORA 0.15.0 with the native worker; staging and production passed the release verifier on 1 November 2026 |
 
 The hosted Playground runs in production as a constrained service; this does not change the
 early-stage status of the language itself. See [limitations](limitations.md) before using NEXORA for
 production software.
 
-**Practical conclusion:** the public Playground is live and runs the reference interpreter inside a
-Docker worker. For a new self-hosted deployment, keep it disabled until you configure and verify
+**Practical conclusion:** the public Playground is live and runs inside a Docker worker: since 1 November 2026
+the native worker written in NEXORA, with the Python reference worker still available (it is the one a
+local run uses). For a new self-hosted deployment, keep it disabled until you configure and verify
 container isolation with the [checklist](#checking-the-isolation).
 
 ## Architecture
@@ -80,6 +84,50 @@ automatic indentation, marking of the lines with errors and jumping to the posit
 
 What it does **not** offer: autocompletion, bracket matching, multiple cursors, code folding nor
 its own search.
+
+## The native worker
+
+`selfhost/worker.nex` is the worker of the public site since 1 November 2026. It is written in NEXORA and
+compiled to one static executable by the NEXORA compiler (decision
+[0026](decisions/0026-generador-a-c.md)); the container image holds that executable and nothing else: no
+Python and no shell. It speaks the same protocol as `python -I -m nexora.worker` (`info`, `check`, `run`
+and the `nexora.debug/1` session), so the web server is the same. A release of the server chooses the
+worker with `servidor/playground/WORKER_KIND` (`native` or `python`), and rolling back is deploying a
+release that says `python`.
+
+What was checked, and where:
+
+| Check | Result |
+|-------|--------|
+| 121 requests (`check`, `run`, projects, limits, paths that are not allowed, requests that are not understood) sent to both workers, compared field by field (`selfhost/compare_worker.py`) | All equal |
+| 35 debug sessions (steps, breakpoints, projects, errors, the limit of 10,000 statements, commands that are not understood) driven on both, every line compared (`selfhost/compare_debug.py`) | All equal |
+| The same two checks against a static Linux (musl) executable, on WSL 2 | All equal |
+| The real web server with each worker, same HTTP requests (`servidor/test/native-worker.test.js`) | Same answers |
+| Staging, through its public API: 68 `check` and `run` requests and a debug session, against the Python worker | All equal |
+| Production, through its public API, on 1 November 2026: 14 requests, `/info` and a debug session | All equal |
+| A program that uses more memory than its 256 MB container, in a cgroup of that size on WSL 2 | `memory_limit` in 0.3 s, no kernel kill |
+
+The worker applies to itself the limits of the Python one on POSIX systems (address space, CPU seconds,
+wall-clock seconds, no files, no processes). Inside a container it also reads the memory limit of its
+cgroup and keeps its address space 12.5% below it, so a program that uses too much gets `memory_limit`
+instead of being killed by the kernel (the server would then see a failed worker).
+
+Known differences from the Python worker:
+
+- `duration_ms` is always 0: a NEXORA program has no clock. The server measures the time itself and
+  overwrites the field.
+- A request that is not understood is answered with `{"schema": "nexora.result/1", "status":
+  "internal_error"}` and exit status 0 (a NEXORA program has no exit status); the server discards it
+  because it has no `action`.
+- A debug controller that disconnects ends the worker with a diagnostic instead of silently.
+- The check of a project path treats a letter that is not ASCII as allowed; a limit of 0 in `limits` is
+  read as no limit.
+- A compiled program never runs `Net.get` or `Process.run` (it only decides whether they are allowed).
+  The worker denies both anyway.
+
+These checks compare answers on the cases above; they do not prove that the two workers agree on every
+program. The Python interpreter remains the reference: when the two differ, that is a defect of the native
+worker until shown otherwise, and the checks are run again with every change of the language.
 
 ## API
 
