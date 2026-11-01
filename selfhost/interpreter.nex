@@ -1506,7 +1506,52 @@ fn pure_binary_right(prog: Prog, env: List[Frame], node: parser.Node, operator: 
     }
 }
 
+// The operations on two Int that most programs spend their time in. Anything else, and every case that would fail, goes the long way.
+fn int_fast(operator: Text, x: Int, y: Int) gives Option[Val] {
+    if operator == "+" {
+        if add_overflows(x, y) {
+            return None
+        }
+        return Some(Val.VInt(x + y))
+    }
+    if operator == "-" {
+        if subtract_overflows(x, y) {
+            return None
+        }
+        return Some(Val.VInt(x - y))
+    }
+    if operator == "<" {
+        return Some(Val.VBool(x < y))
+    }
+    if operator == ">" {
+        return Some(Val.VBool(x > y))
+    }
+    if operator == "==" {
+        return Some(Val.VBool(x == y))
+    }
+    if operator == "<=" {
+        return Some(Val.VBool(x <= y))
+    }
+    if operator == ">=" {
+        return Some(Val.VBool(x >= y))
+    }
+    if operator == "!=" {
+        return Some(Val.VBool(x != y))
+    }
+    return None
+}
+
 fn pure_operation(prog: Prog, operator: Text, a: Val, b: Val) gives Option[Val] {
+    let fast = match a {
+        Val.VInt(x) => match b {
+            Val.VInt(y) => int_fast(operator, x, y)
+            _ => None
+        }
+        _ => None
+    }
+    if Option.is_some(fast) {
+        return fast
+    }
     let res = binary_value(operator, a, b)
     if not res.ok or val_too_long(prog.host.max_text, res.val) {
         return None
