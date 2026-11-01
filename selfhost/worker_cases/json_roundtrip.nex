@@ -1,0 +1,17 @@
+import "../json.nex"
+
+// Reads as many lines as the first argument says, each one a JSON text, and writes what each one gives back.
+fn main() {
+    var left = Int.parse(List.get(args(), 0))
+    while left > 0
+        shrinks left
+    {
+        let read = json.parse(input())
+        if read.ok {
+            print(json.dump(read.value))
+        } else {
+            print("ERROR")
+        }
+        left = left - 1
+    }
+}
