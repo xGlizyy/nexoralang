@@ -42,8 +42,10 @@ def command_nexora(command: str, path: str, extra: tuple[str, ...] = ()) -> Resu
     if native:
         # nex.nex compiled to an executable by selfhost/cgen.nex: no Python in the way. The streams and the status are the
         # ones of the process.
+        # An executable built with --cli is called as the command is: `nex check FILE`.
+        options = [] if os.environ.get("NEXORA_NEX_CLI") else ["--allow-read", ".", "--allow-write", ".", "--"]
         run = subprocess.run(
-            [native, "--allow-read", ".", "--allow-write", ".", "--", command, *extra, path],
+            [native, *options, command, *extra, path],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, input=b"",
         )
         return Result(run.stdout, run.stderr, run.returncode)
