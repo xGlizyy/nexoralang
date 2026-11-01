@@ -21,6 +21,11 @@ Each version groups its changes into these sections, when they contain content:
 
 ### Added
 
+- The Playground worker written in NEXORA (`selfhost/worker.nex`): `info`, `check`, `run` and the debugger
+  with the protocol of `nexora.worker`, compiled by the NEXORA compiler to one static executable. It is the
+  worker of the public site since 1 November 2026 (see `docs/playground.md`); the Python worker remains the
+  reference and the default of a local run.
+
 - Closed user enums with named payloads, constructors, nested `match` patterns and `if let`.
 - Static exhaustive-case analysis for enums, `Option`, `Result` and `Bool`, including missing-case
   witnesses and unreachable-arm diagnostics.
