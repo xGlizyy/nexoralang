@@ -18,9 +18,28 @@ static const char *const rt_stat_names[16] = {"allocations", "bytes", "collectio
                                               "variant_new", "list_new", "list_append", "calls", "text_compare", "", "", "", ""};
 #define RT_COUNT(i) (rt_stat[i]++)
 #define RT_COUNT_BY(i, n) (rt_stat[i] += (unsigned long long)(n))
+/* How many times each function of the program was called. */
+static const char *rt_fn_name[4096];
+static unsigned long long rt_fn_count[4096];
+static int rt_fn_total = 0;
+static void rt_count_function(const char *name) {
+    for (int i = 0; i < rt_fn_total; i++) {
+        if (rt_fn_name[i] == name) { rt_fn_count[i]++; return; }
+    }
+    if (rt_fn_total < 4096) { rt_fn_name[rt_fn_total] = name; rt_fn_count[rt_fn_total++] = 1; }
+}
 static void rt_print_stats(void) {
     for (int i = 0; i < 16; i++) {
         if (rt_stat_names[i][0]) fprintf(stderr, "stat %-14s %llu\n", rt_stat_names[i], rt_stat[i]);
+    }
+    for (int round = 0; round < 25; round++) {
+        int best = -1;
+        for (int i = 0; i < rt_fn_total; i++) {
+            if (best < 0 || rt_fn_count[i] > rt_fn_count[best]) best = i;
+        }
+        if (best < 0 || rt_fn_count[best] == 0) break;
+        fprintf(stderr, "fn %-28s %llu\n", rt_fn_name[best], rt_fn_count[best]);
+        rt_fn_count[best] = 0;
     }
 }
 #else
@@ -52,6 +71,7 @@ static const int *rt_file_count = 0;
  * searched. */
 
 #include <setjmp.h>
+#include <time.h>
 #ifdef _WIN32
 #include <malloc.h>
 #define rt_page_alloc(size) _aligned_malloc((size), (size))
@@ -60,7 +80,7 @@ static const int *rt_file_count = 0;
 #endif
 
 #define RT_PAGE ((size_t)1 << 16)
-#define RT_PAGE_HEADER ((size_t)4160) /* 64 bytes of header and 4,096 marks: the most blocks a page can hold (16 bytes each) */
+#define RT_PAGE_HEADER ((size_t)8224) /* the header, then 4,096 marks and 4,096 "in use" bytes: the most blocks a page holds */
 #define RT_SMALL_MAX 256
 #define RT_CLASSES 16 /* sizes 16, 32, ... 256 */
 
@@ -68,6 +88,7 @@ typedef struct rt_page {
     struct rt_page *next;
     uint32_t size;
     uint32_t count;
+    uint32_t inverse; /* 2^32 / size, to find which block an address is in without dividing */
     unsigned char raw;
 } rt_page;
 
@@ -128,6 +149,11 @@ static int rt_is_page(uintptr_t page) {
 }
 
 static unsigned char *rt_page_marks(rt_page *page) { return (unsigned char *)page + sizeof(rt_page); }
+/* Whether each block is in use: a free block holds the link of the list of free blocks, which must not be followed. */
+static unsigned char *rt_page_in_use(rt_page *page) { return (unsigned char *)page + sizeof(rt_page) + 4096; }
+static uint32_t rt_block_index(rt_page *page, uintptr_t address) {
+    return (uint32_t)(((uint64_t)(address - (uintptr_t)page - RT_PAGE_HEADER) * page->inverse) >> 32);
+}
 static char *rt_page_first(rt_page *page) { return (char *)page + RT_PAGE_HEADER; }
 
 /* A new page of blocks of one size, all of them free. */
@@ -139,8 +165,10 @@ static void rt_new_page(int raw, int class_index) {
     page->size = size;
     page->count = (uint32_t)((RT_PAGE - RT_PAGE_HEADER) / size);
     page->raw = (unsigned char)raw;
+    page->inverse = (uint32_t)(((uint64_t)1 << 32) / size + 1);
     rt_pages = page;
     memset(rt_page_marks(page), 0, page->count);
+    memset(rt_page_in_use(page), 0, page->count);
     rt_page_set_add((uintptr_t)page);
     char *at = rt_page_first(page);
     for (uint32_t i = page->count; i > 0; i--) {
@@ -183,8 +211,8 @@ static void rt_mark_word(uintptr_t word) {
     if (rt_is_page(page_address)) {
         rt_page *page = (rt_page *)page_address;
         if (word < page_address + RT_PAGE_HEADER) return;
-        size_t index = (word - page_address - RT_PAGE_HEADER) / page->size;
-        if (index >= page->count) return;
+        size_t index = rt_block_index(page, word);
+        if (index >= page->count || !rt_page_in_use(page)[index]) return;
         unsigned char *mark = &rt_page_marks(page)[index];
         if (!*mark) {
             *mark = 1;
@@ -209,6 +237,9 @@ static void rt_mark_words(const char *lo, const char *hi) {
 
 static void rt_collect(void) {
     RT_COUNT(2);
+#ifdef RT_STATS
+    clock_t gc_started = clock();
+#endif
     if (!rt_stack_base) { rt_since_gc = 0; return; }
     if (rt_nblocks > 1) qsort(rt_blocks, rt_nblocks, sizeof(rt_block), rt_block_order);
     for (size_t i = 0; i < rt_nblocks; i++) rt_blocks[i].mark = 0;
@@ -222,6 +253,22 @@ static void rt_collect(void) {
         rt_mark_words(item.p, item.p + item.size);
     }
     size_t live = 0;
+#ifdef RT_STATS
+    {
+        size_t sizes[8] = {0}, counts[8] = {0};
+        int distinct = 0;
+        for (size_t i = 0; i < rt_nblocks; i++) {
+            if (!rt_blocks[i].mark) continue;
+            int at = -1;
+            for (int k = 0; k < distinct; k++) if (sizes[k] == rt_blocks[i].size) at = k;
+            if (at < 0 && distinct < 8) { sizes[distinct] = rt_blocks[i].size; at = distinct++; }
+            if (at >= 0) counts[at]++;
+        }
+        fprintf(stderr, "  live big blocks by size:");
+        for (int k = 0; k < distinct; k++) fprintf(stderr, " %zu x%zu", sizes[k], counts[k]);
+        fprintf(stderr, "\n");
+    }
+#endif
     /* The big blocks that nothing points to are freed. */
     size_t kept = 0;
     for (size_t i = 0; i < rt_nblocks; i++) {
@@ -239,6 +286,7 @@ static void rt_collect(void) {
     }
     for (rt_page *page = rt_pages; page; page = page->next) {
         unsigned char *marks = rt_page_marks(page);
+        unsigned char *in_use = rt_page_in_use(page);
         int class_index = (int)(page->size / 16) - 1;
         char *first = rt_page_first(page);
         for (uint32_t i = page->count; i > 0; i--) {
@@ -247,6 +295,7 @@ static void rt_collect(void) {
                 live += page->size;
             } else {
                 char *block = first + (size_t)(i - 1) * page->size;
+                in_use[i - 1] = 0;
                 *(void **)block = rt_free_list[page->raw][class_index];
                 rt_free_list[page->raw][class_index] = block;
             }
@@ -254,6 +303,9 @@ static void rt_collect(void) {
     }
     rt_since_gc = 0;
     rt_threshold = live > rt_floor ? live : rt_floor;
+#ifdef RT_STATS
+    fprintf(stderr, "gc: live %zu bytes, %zu big blocks, %.1f ms\n", live, rt_nblocks, (double)(clock() - gc_started) * 1000.0 / CLOCKS_PER_SEC);
+#endif
 }
 
 /* NEXORA_GC_FLOOR=<bytes> makes it collect much more often, which is how the collector is tested. */
@@ -282,6 +334,10 @@ static void *rt_alloc_kind(size_t n, int raw, int zero) {
             p = rt_free_list[raw][class_index];
         }
         rt_free_list[raw][class_index] = *(void **)p;
+        {
+            rt_page *page = (rt_page *)((uintptr_t)p & ~(uintptr_t)(RT_PAGE - 1));
+            rt_page_in_use(page)[rt_block_index(page, (uintptr_t)p)] = 1;
+        }
         size_t size = (size_t)(class_index + 1) * 16;
         if (zero) memset(p, 0, size);
         rt_since_gc += size;
@@ -642,16 +698,20 @@ typedef struct rv {
     } u;
 } rv;
 
-typedef struct { int64_t n; rv *items; } rt_list;
+/* A list is a count and a view of a buffer of items. The buffer is shared by the lists that were made from each other by adding to
+ * the end: `used` says how much of it some list already sees, so a list that sees all of it can be given one more item without
+ * copying anything, and an older list, which sees less, is never changed. */
+typedef struct { int64_t used, cap; rv items[]; } rt_listbuf;
+typedef struct { int64_t n; rv *items; rt_listbuf *buf; } rt_list;
 typedef struct { const char *name; int n; const char *const *names; rv f[]; } rt_record;
 /* `owner` is the enum a variant belongs to, or "" for the variants of Option and Result. */
 typedef struct { const char *owner; const char *kind; int n; rv a[]; } rt_variant;
 
-static rv rt_unit(void) { rv v; v.tag = RT_UNIT; v.u.i = 0; return v; }
-static rv rt_int(int64_t n) { rv v; v.tag = RT_INT; v.u.i = n; return v; }
-static rv rt_float(double x) { rv v; v.tag = RT_FLOAT; v.u.f = x; return v; }
-static rv rt_bool(bool b) { rv v; v.tag = RT_BOOL; v.u.b = b; return v; }
-static rv rt_txt(rt_text t) { rv v; v.tag = RT_TEXT; v.u.t = t; return v; }
+static rv rt_unit(void) { rv v = {0}; v.tag = RT_UNIT; v.u.i = 0; return v; }
+static rv rt_int(int64_t n) { rv v = {0}; v.tag = RT_INT; v.u.i = n; return v; }
+static rv rt_float(double x) { rv v = {0}; v.tag = RT_FLOAT; v.u.f = x; return v; }
+static rv rt_bool(bool b) { rv v = {0}; v.tag = RT_BOOL; v.u.b = b; return v; }
+static rv rt_txt(rt_text t) { rv v = {0}; v.tag = RT_TEXT; v.u.t = t; return v; }
 static rv rt_str(const char *s) { return rt_txt(rt_lit(s)); }
 static bool rt_truth(rv v) { return v.u.b; }
 
@@ -661,18 +721,32 @@ static rv *rt_copy_values(const rv *items, int64_t n) {
     return copy;
 }
 
-static rv rt_list_take(rv *items, int64_t n) {
+static rt_listbuf *rt_new_listbuf(int64_t cap) {
+    rt_listbuf *buf = (rt_listbuf *)rt_alloc(sizeof(rt_listbuf) + (size_t)(cap > 0 ? cap : 1) * sizeof(rv));
+    buf->used = 0;
+    buf->cap = cap;
+    return buf;
+}
+
+static rv rt_list_view(rt_listbuf *buf, int64_t n) {
     RT_COUNT(8);
     rt_list *l = (rt_list *)rt_alloc(sizeof(rt_list));
     l->n = n;
-    l->items = items;
-    rv v;
+    l->buf = buf;
+    l->items = buf ? buf->items : 0;
+    rv v = {0};
     v.tag = RT_LIST;
     v.u.o = l;
     return v;
 }
 
-static rv rt_list_from(const rv *items, int64_t n) { return rt_list_take(rt_copy_values(items, n), n); }
+static rv rt_list_from(const rv *items, int64_t n) {
+    if (n == 0) return rt_list_view(0, 0);
+    rt_listbuf *buf = rt_new_listbuf(n);
+    for (int64_t i = 0; i < n; i++) buf->items[i] = items[i];
+    buf->used = n;
+    return rt_list_view(buf, n);
+}
 
 static rv rt_record_new(const char *name, const char *const *names, int n, const rv *fields) {
     RT_COUNT(6);
@@ -681,7 +755,7 @@ static rv rt_record_new(const char *name, const char *const *names, int n, const
     r->n = n;
     r->names = names;
     for (int i = 0; i < n; i++) r->f[i] = fields[i];
-    rv v;
+    rv v = {0};
     v.tag = RT_RECORD;
     v.u.o = r;
     return v;
@@ -697,7 +771,7 @@ static rv rt_variant_new(const char *owner, const char *kind, int n, const rv *a
     if (n == 0) {
         for (int i = 0; i < rt_nullary_count; i++) {
             if (rt_nullary[i].owner == owner && rt_nullary[i].kind == kind) {
-                rv shared;
+                rv shared = {0};
                 shared.tag = RT_VARIANT;
                 shared.u.o = rt_nullary[i].value;
                 return shared;
@@ -713,7 +787,7 @@ static rv rt_variant_new(const char *owner, const char *kind, int n, const rv *a
             rt_nullary[rt_nullary_count].kind = kind;
             rt_nullary[rt_nullary_count].value = x;
             rt_nullary_count++;
-            rv first;
+            rv first = {0};
             first.tag = RT_VARIANT;
             first.u.o = x;
             return first;
@@ -724,7 +798,7 @@ static rv rt_variant_new(const char *owner, const char *kind, int n, const rv *a
     x->kind = kind;
     x->n = n;
     for (int i = 0; i < n; i++) x->a[i] = args[i];
-    rv v;
+    rv v = {0};
     v.tag = RT_VARIANT;
     v.u.o = x;
     return v;
@@ -1059,8 +1133,35 @@ static void rt_builtin_needs(const char *callee, const char *condition, const ch
 
 /* Text */
 
+/* Where the code point number `point` starts, as a byte. A text that is all ASCII (as many bytes as code points) needs no search. For
+ * another one that is long, a table of where every 32nd code point starts is made once and kept for the last such text, so that
+ * the lexer, which cuts one character at a time out of the same source, does not read the text from its start every time. */
+static const char *rt_index_text = 0;
+static int64_t rt_index_bytes = 0;
+static int64_t *rt_index_offsets = 0;
+
 static int64_t rt_byte_of_point(rt_text t, int64_t point) {
+    if (t.len == t.bytes) return point;
     int64_t byte = 0, seen = 0;
+    if (t.bytes >= 256) {
+        if (rt_index_text != t.p || rt_index_bytes != t.bytes) {
+            free(rt_index_offsets);
+            rt_index_offsets = (int64_t *)malloc((size_t)(t.len / 32 + 2) * sizeof(int64_t));
+            if (!rt_index_offsets) { fputs("error: out of memory\n", stderr); exit(3); }
+            int64_t points = 0;
+            for (int64_t i = 0; i < t.bytes; i++) {
+                if (((unsigned char)t.p[i] & 0xC0) != 0x80) {
+                    if (points % 32 == 0) rt_index_offsets[points / 32] = i;
+                    points++;
+                }
+            }
+            rt_index_text = t.p;
+            rt_index_bytes = t.bytes;
+        }
+        if (point >= t.len) return t.bytes;
+        seen = (point / 32) * 32;
+        byte = rt_index_offsets[point / 32];
+    }
     while (byte < t.bytes && seen < point) {
         byte++;
         while (byte < t.bytes && (((unsigned char)t.p[byte]) & 0xC0) == 0x80) byte++;
@@ -1230,18 +1331,35 @@ static rv rt_list_get(rv list, rv index, RT_SPAN) {
 static rv rt_list_append(rv list, rv item) {
     RT_COUNT(9);
     rt_list *x = rt_as_list(list);
-    rv *items = (rv *)rt_alloc((size_t)(x->n + 1) * sizeof(rv));
-    for (int64_t i = 0; i < x->n; i++) items[i] = x->items[i];
-    items[x->n] = item;
-    return rt_list_take(items, x->n + 1);
+    rt_listbuf *buf = x->buf;
+    static int no_share = -1;
+    if (no_share < 0) no_share = getenv("NEXORA_NO_SHARE") != 0;
+    if (!no_share && buf && x->n == buf->used && buf->used < buf->cap) {
+        buf->items[buf->used++] = item;
+        return rt_list_view(buf, x->n + 1);
+    }
+    rt_listbuf *copy = rt_new_listbuf(x->n < 4 ? 8 : x->n * 2);
+    for (int64_t i = 0; i < x->n; i++) copy->items[i] = x->items[i];
+    copy->items[x->n] = item;
+    copy->used = x->n + 1;
+    return rt_list_view(copy, x->n + 1);
 }
 
 static rv rt_list_concat(rv a, rv b) {
     rt_list *x = rt_as_list(a), *y = rt_as_list(b);
-    rv *items = (rv *)rt_alloc((size_t)(x->n + y->n + 1) * sizeof(rv));
-    for (int64_t i = 0; i < x->n; i++) items[i] = x->items[i];
-    for (int64_t i = 0; i < y->n; i++) items[x->n + i] = y->items[i];
-    return rt_list_take(items, x->n + y->n);
+    if (y->n == 0) return a;
+    if (x->n == 0) return b;
+    rt_listbuf *buf = x->buf;
+    if (buf && x->n == buf->used && buf->used + y->n <= buf->cap) {
+        for (int64_t i = 0; i < y->n; i++) buf->items[buf->used + i] = y->items[i];
+        buf->used += y->n;
+        return rt_list_view(buf, x->n + y->n);
+    }
+    rt_listbuf *copy = rt_new_listbuf((x->n + y->n) * 2);
+    for (int64_t i = 0; i < x->n; i++) copy->items[i] = x->items[i];
+    for (int64_t i = 0; i < y->n; i++) copy->items[x->n + i] = y->items[i];
+    copy->used = x->n + y->n;
+    return rt_list_view(copy, x->n + y->n);
 }
 
 static rv rt_list_contains(rv list, rv item) {
@@ -1301,8 +1419,21 @@ static void rt_refine_fail(const char *written, const char *declared, const char
 
 /* Entering and leaving a function. The call that would be the 1,001st nested stops the program. */
 
+#ifdef RT_NO_FRAMES
+/* A tool of selfhost/ compiled for speed: calls and loops keep no frames, so an error is not explained by them. */
+static int rt_enter(const char *name, int file, int64_t line, int64_t column, int64_t end_line, int64_t end_column) {
+    (void)name; (void)file; (void)line; (void)column; (void)end_line; (void)end_column;
+    return 0;
+}
+static void rt_leave(int saved) { (void)saved; }
+static void rt_push_loop(int kind, int64_t line, int64_t turn) { (void)kind; (void)line; (void)turn; }
+static void rt_pop(void) {}
+#else
 static int rt_enter(const char *name, int file, int64_t line, int64_t column, int64_t end_line, int64_t end_column) {
     RT_COUNT(10);
+#ifdef RT_STATS
+    rt_count_function(name);
+#endif
     if (rt_calls >= RT_MAX_CALLS) {
         rt_notes own = {{0}, 0};
         rt_fail("runtime", "E3004", "Too many nested calls", "The program nested more than 1000 calls",
@@ -1337,6 +1468,82 @@ static void rt_push_loop(int kind, int64_t line, int64_t turn) {
 static void rt_pop(void) {
     rt_top--;
 }
+#endif
+
+/* The accessors of the syntax tree (parser.Node), written in C. The compiler and the interpreter of selfhost/ are programs that
+ * read that tree all the time, and each of these functions is small enough that the frame of a call costs more than the work.
+ * cgen.nex puts them in place of the NEXORA functions of the same name in those files only; the NEXORA definitions say what they
+ * do and are what runs under Python, and the comparisons check that the two agree. */
+
+static bool rt_intr_is(rv v, const char *kind) { return v.tag == RT_VARIANT && strcmp(rt_as_variant(v)->kind, kind) == 0; }
+
+static rv rt_intr_kind_of(rv node) {
+    if (rt_intr_is(node, "Obj")) return rt_arg(node, 0);
+    return rt_str("");
+}
+
+static rv rt_intr_null(void) { return rt_variant_new("parser.Node", "Null", 0, 0); }
+
+static rv rt_intr_index_of(rv names, rv name) {
+    rt_list *list = rt_as_list(names);
+    for (int64_t i = 0; i < list->n; i++) {
+        rt_text a = list->items[i].u.t, b = name.u.t;
+        if (a.bytes == b.bytes && (a.p == b.p || memcmp(a.p, b.p, (size_t)a.bytes) == 0)) return rt_int(i);
+    }
+    return rt_int(-1);
+}
+
+static rv rt_intr_field_at(rv names, rv values, rv name) {
+    int64_t at = rt_intr_index_of(names, name).u.i;
+    if (at < 0) return rt_intr_null();
+    return rt_as_list(values)->items[at];
+}
+
+static rv rt_intr_field(rv node, rv name) {
+    if (!rt_intr_is(node, "Obj")) return rt_intr_null();
+    return rt_intr_field_at(rt_arg(node, 1), rt_arg(node, 2), name);
+}
+
+/* The same list with one item replaced. */
+static rv rt_intr_replace_val(rv vals, rv at, rv value) {
+    rt_list *x = rt_as_list(vals);
+    if (x->n == 0) return vals;
+    rt_listbuf *copy = rt_new_listbuf(x->n);
+    for (int64_t i = 0; i < x->n; i++) copy->items[i] = i == at.u.i ? value : x->items[i];
+    copy->used = x->n;
+    return rt_list_view(copy, x->n);
+}
+
+/* `assign` of the interpreter: the environment is a list of frames, each a record of names and values (in that order). The
+ * innermost frame that has the name gets the new value; the new frame is made like the old one. */
+static rv rt_intr_assign(rv env, rv name, rv value) {
+    rt_list *frames = rt_as_list(env);
+    int64_t found = -1, place = -1;
+    for (int64_t i = frames->n - 1; i >= 0 && found < 0; i--) {
+        rt_record *frame = rt_as_record(frames->items[i]);
+        rt_list *names = rt_as_list(frame->f[0]);
+        for (int64_t k = 0; k < names->n; k++) {
+            rt_text a = names->items[k].u.t, b = name.u.t;
+            if (a.bytes == b.bytes && (a.p == b.p || memcmp(a.p, b.p, (size_t)a.bytes) == 0)) { found = i; place = k; break; }
+        }
+    }
+    if (found < 0) return env;
+    rt_record *old = rt_as_record(frames->items[found]);
+    rv fields[2];
+    fields[0] = old->f[0];
+    fields[1] = rt_intr_replace_val(old->f[1], rt_int(place), value);
+    rv frame = rt_record_new(old->name, old->names, 2, fields);
+    rt_listbuf *copy = rt_new_listbuf(frames->n);
+    for (int64_t i = 0; i < frames->n; i++) copy->items[i] = i == found ? frame : frames->items[i];
+    copy->used = frames->n;
+    return rt_list_view(copy, frames->n);
+}
+
+static rv rt_intr_text_of(rv node) { return rt_intr_is(node, "Str") ? rt_arg(node, 0) : rt_str(""); }
+static rv rt_intr_items_of(rv node) { return rt_intr_is(node, "Items") ? rt_arg(node, 0) : rt_list_from(0, 0); }
+static rv rt_intr_is_null(rv node) { return rt_bool(rt_intr_is(node, "Null")); }
+static rv rt_intr_flag_of(rv node) { return rt_intr_is(node, "Flag") ? rt_arg(node, 0) : rt_bool(false); }
+static rv rt_intr_int_of(rv node) { return rt_intr_is(node, "Whole") ? rt_arg(node, 0) : rt_int(0); }
 
 /* The host: what the program may do besides computing. A program declares what it needs (`uses read "data"`), the user allows it
  * with options of the executable (`--allow-read data`), and both have to cover a path for the program to use it (decision 0015). */
@@ -1668,7 +1875,7 @@ static rv rt_process_run(rv command, RT_SPAN) {
 static rv rt_args(RT_SPAN) {
     rv *items = (rv *)rt_alloc((size_t)(rt_args_count > 0 ? rt_args_count : 1) * sizeof(rv));
     for (int i = 0; i < rt_args_count; i++) items[i] = rt_check_text(rt_str(rt_args_list[i]), l, c, el, ec);
-    return rt_list_take(items, rt_args_count);
+    return rt_list_from(items, rt_args_count);
 }
 
 /* The command line of an executable is the one of `nex run`: the options of the user, then `--`, then the arguments of the

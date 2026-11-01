@@ -1026,7 +1026,72 @@ fn needs_code(st: St, function: parser.Node, scope: Fn) gives Part {
     return part(code, "", current)
 }
 
+// The functions of the files of selfhost/ that read the syntax tree: the runtime does them in C, without a frame (see
+// nexora_rt.h). Only these files, and only these names with these numbers of parameters.
+fn is_compiler_file(file: Text) gives Bool {
+    return List.contains(
+        [
+            "selfhost/lexer.nex", "selfhost/parser.nex", "selfhost/checker.nex", "selfhost/project.nex",
+            "selfhost/interpreter.nex", "selfhost/render.nex", "selfhost/cgen.nex", "selfhost/nex.nex"
+        ],
+        file
+    )
+}
+
+fn intrinsic_of(function: parser.Node) gives Text {
+    let file = text_of(field(function, "file"))
+    if not is_compiler_file(file) {
+        return ""
+    }
+    let name = text_of(field(function, "name"))
+    let count = List.length(items_of(field(function, "params")))
+    if count == 1 {
+        if name == "kind_of" {
+            return "rt_intr_kind_of"
+        }
+        if name == "text_of" {
+            return "rt_intr_text_of"
+        }
+        if name == "items_of" {
+            return "rt_intr_items_of"
+        }
+        if name == "is_null" {
+            return "rt_intr_is_null"
+        }
+        if name == "flag_of" {
+            return "rt_intr_flag_of"
+        }
+        if name == "int_of" {
+            return "rt_intr_int_of"
+        }
+    }
+    if count == 2 and name == "field" {
+        return "rt_intr_field"
+    }
+    if count == 2 and name == "index_of" {
+        return "rt_intr_index_of"
+    }
+    if count == 3 and name == "field_at" {
+        return "rt_intr_field_at"
+    }
+    if count == 3 and name == "replace_val" and file == "selfhost/interpreter.nex" {
+        return "rt_intr_replace_val"
+    }
+    if count == 3 and name == "assign" and file == "selfhost/interpreter.nex" {
+        return "rt_intr_assign"
+    }
+    return ""
+}
+
 fn gen_function(st: St, function: parser.Node) gives Part {
+    let intrinsic = intrinsic_of(function)
+    if intrinsic != "" {
+        var passed: List[Text] = []
+        for param in param_vars(function) {
+            passed = List.append(passed, "v_" + param.name)
+        }
+        return part(signature(function) + " \{\nreturn " + intrinsic + "(" + parser.join_texts(passed, ", ") + ");\n}\n\n", "", st)
+    }
     let name = text_of(field(function, "name"))
     let scope = Fn(name: name, params: param_vars(function), afters: clauses_of(function, "promises"))
     let entry = needs_code(st, function, scope)
@@ -1129,8 +1194,13 @@ fn uses_code(program: parser.Node) gives Text {
     return code
 }
 
-fn generate(program: parser.Node, path: Text, paths: List[Text]) gives Part {
+// `trusted` is for the tools of selfhost/ themselves: the stack of calls that explains an error of a program is not kept, and the
+// limit of 1,000 nested calls (which is a rule for the programs the language runs) does not apply to them.
+fn generate(program: parser.Node, path: Text, paths: List[Text], trusted: Bool) gives Part {
     var code = ""
+    if trusted {
+        code = "#define RT_NO_FRAMES\n"
+    }
     for line in runtime_text.runtime_lines() {
         code = code + line + "\n"
     }
@@ -1200,8 +1270,8 @@ fn has_errors(problems: List[parser.Problem]) gives Bool {
 
 fn main() {
     let words = args()
-    if List.length(words) != 2 {
-        print("usage: cgen.nex PROGRAM.nex OUTPUT.c")
+    if List.length(words) != 2 and not (List.length(words) == 3 and List.get(words, 2) == "--trusted") {
+        print("usage: cgen.nex PROGRAM.nex OUTPUT.c [--trusted]")
         return
     }
     let path = List.get(words, 0)
@@ -1226,7 +1296,7 @@ fn main() {
     if List.length(results) > 1 {
         program = project.link(results)
     }
-    let made = generate(program, path, paths)
+    let made = generate(program, path, paths, List.length(words) == 3)
     if made.st.bad != "" {
         print("not supported yet: " + made.st.bad)
         return
