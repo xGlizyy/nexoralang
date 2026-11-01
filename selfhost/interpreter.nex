@@ -2244,9 +2244,13 @@ fn match_value(m: Machine, node: parser.Node, rest: Stk, v: Val) gives Machine {
     for arm in items_of(field(node, "arms")) {
         let bound = match_pattern(field(arm, "pattern"), v)
         if bound.ok {
+            // An arm with a block is run as a statement; any other arm is an expression and gives its value.
+            var next = Control.CEval(field(arm, "body"))
+            if kind_of(field(arm, "body")) == "Block" {
+                next = Control.CExec(field(arm, "body"))
+            }
             return mk(
-                m, Control.CEval(field(arm, "body")), push_frame(m.env, Frame(names: bound.names, vals: bound.vals)),
-                push(Kont.KPopFrame(), rest)
+                m, next, push_frame(m.env, Frame(names: bound.names, vals: bound.vals)), push(Kont.KPopFrame(), rest)
             )
         }
     }
