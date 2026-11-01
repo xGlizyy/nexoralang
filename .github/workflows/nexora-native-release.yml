@@ -29,8 +29,8 @@ jobs:
         include:
           - { target: linux-x64, runner: ubuntu-latest, flags: "-lm -ldl", exe: "" }
           - { target: linux-arm64, runner: ubuntu-24.04-arm, flags: "-lm -ldl", exe: "" }
-          - { target: macos-arm64, runner: macos-14, flags: "-lm", exe: "" }
-          - { target: macos-x64, runner: macos-13, flags: "-lm", exe: "" }
+          - { target: macos-arm64, runner: macos-15, flags: "-lm", exe: "" }
+          - { target: macos-x64, runner: macos-15-intel, flags: "-lm", exe: "" }
           # The collector of the runtime is not safe yet when a Windows compiler inlines (selfhost/README.md): the programs for Windows are
           # built without inlining, which is the way that was checked with the formatter, the language server and the whole suite.
           - { target: windows-x64, runner: windows-latest, flags: "-fno-inline", exe: ".exe" }
