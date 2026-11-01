@@ -2211,6 +2211,50 @@ static rv rt_intr_stream_text(rv text) {
 
 static rv rt_intr_byte_length(rv text) { return rt_int(text.u.t.bytes); }
 
+/* The language server (selfhost/lsp.nex) speaks over the standard input and output, as bytes: a header line ends with CRLF and the
+ * length of a message is in bytes. `lsp_body` reads exactly that many bytes (a list with the text, or an empty list if the input ends
+ * first, or the bytes are not UTF-8); `lsp_send` writes a message with its header and flushes. */
+static void rt_binary_stdio(void) {
+#ifdef _WIN32
+    static int done = 0;
+    if (!done) { done = 1; _setmode(_fileno(stdin), _O_BINARY); _setmode(_fileno(stdout), _O_BINARY); }
+#endif
+}
+
+static rv rt_intr_lsp_body(rv count) {
+    rt_binary_stdio();
+    int64_t want = count.u.i;
+    if (want < 0) return rt_list_from(0, 0);
+    char *data = (char *)rt_alloc_raw((size_t)want + 1);
+    size_t got = want > 0 ? fread(data, 1, (size_t)want, stdin) : 0;
+    if ((int64_t)got != want || !rt_valid_utf8((const unsigned char *)data, got)) return rt_list_from(0, 0);
+    data[got] = 0;
+    int64_t points = 0;
+    for (size_t i = 0; i < got; i++) if (((unsigned char)data[i] & 0xC0) != 0x80) points++;
+    rt_text t = {data, (int64_t)got, points};
+    rv item = rt_txt(t);
+    return rt_list_from(&item, 1);
+}
+
+/* The MCP server (selfhost/mcp.nex) writes one message on a line and flushes. */
+static rv rt_intr_mcp_send(rv text) {
+    rt_binary_stdio();
+    rt_text t = text.u.t;
+    fwrite(t.p, 1, (size_t)t.bytes, stdout);
+    fputc('\n', stdout);
+    fflush(stdout);
+    return rt_unit();
+}
+
+static rv rt_intr_lsp_send(rv text) {
+    rt_binary_stdio();
+    rt_text t = text.u.t;
+    fprintf(stdout, "Content-Length: %lld\r\n\r\n", (long long)t.bytes);
+    fwrite(t.p, 1, (size_t)t.bytes, stdout);
+    fflush(stdout);
+    return rt_unit();
+}
+
 static rv rt_intr_text_of(rv node) { return rt_intr_is(node, "Str") ? rt_arg(node, 0) : rt_str(""); }
 static rv rt_intr_items_of(rv node) { return rt_intr_is(node, "Items") ? rt_arg(node, 0) : rt_list_from(0, 0); }
 static rv rt_intr_is_null(rv node) { return rt_bool(rt_intr_is(node, "Null")); }
@@ -2437,10 +2481,7 @@ static rv rt_input(RT_SPAN) {
     return rt_check_text(rt_txt(t), l, c, el, ec);
 }
 
-/* `Net.get` and `Process.run`. The decisions are the ones of the Python host (an HTTPS URL without credentials and on port 443;
- * what the program declares and what the user allowed). Doing the request or starting the process needs a TLS library and a
- * process supervisor that these executables do not have yet, so when every rule allows the operation the program stops with a
- * diagnostic that says so, instead of pretending. */
+/* `Net.get` and `Process.run`: the decisions of the host (below), and then the operations (rt_https_get, rt_run_process). */
 
 /* The origin an HTTPS URL goes to, as urlsplit and the idna codec read it, or 0 when it is not one this host admits. */
 static const char *rt_origin(const char *url, int *port_out) {
@@ -2497,6 +2538,1251 @@ static const char *rt_origin(const char *url, int *port_out) {
     return rt_format("https://%s", hostport);
 }
 
+/* The host operations: `Net.get` and `Process.run`.
+ *
+ * The decisions (an HTTPS URL without credentials and on port 443; what the program declares and what the user allowed) are the
+ * ones of the Python host (nexora/src/nexora/host.py) and are made above, in rt_net_get and rt_process_run, and in the interpreter
+ * (selfhost/interpreter.nex). What is here is the operation itself, with the same limits: five seconds, one MiB, no redirects, no
+ * shell, no standard input, and an environment that has only PATH.
+ *
+ * Nothing is linked: the system provides the rest. The TLS of the system is used: SChannel on Windows, and OpenSSL (or LibreSSL, on
+ * macOS) opened when it is needed on the other systems, so that a build needs no library and a program that never makes a request
+ * does not need one at run time. The certificate of the server is always verified, with the roots of the system, and its name must be
+ * the one of the URL.
+ */
+
+#define RT_HOST_SECONDS 5
+#define RT_HOST_MAX_BYTES 1048576
+
+/* What an operation of the host gives: the bytes it read, or the reason it could not. */
+typedef struct {
+    bool ok;
+    rt_buf data;
+    char *error;
+} rt_host_result;
+
+static rt_host_result rt_host_fail(char *message) {
+    rt_host_result r;
+    memset(&r, 0, sizeof r);
+    r.ok = false;
+    r.error = message;
+    return r;
+}
+
+static rt_host_result rt_host_done(rt_buf data) {
+    rt_host_result r;
+    memset(&r, 0, sizeof r);
+    r.ok = true;
+    r.data = data;
+    return r;
+}
+
+/* The monotonic clock, in milliseconds. */
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#define SECURITY_WIN32
+#include <sspi.h>
+#include <schannel.h>
+static int64_t rt_host_now(void) { return (int64_t)GetTickCount64(); }
+#else
+#include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <dlfcn.h>
+static int64_t rt_host_now(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+#endif
+
+/* ---------- HTTP over a connection ---------- */
+
+/* A connection to a server that speaks TLS: the system on which it is built says how. */
+typedef struct rt_conn rt_conn;
+static rt_conn *rt_conn_open(const char *host, char *error, size_t size);
+static int rt_conn_send(rt_conn *connection, const char *data, size_t n);
+static long rt_conn_recv(rt_conn *connection, char *buffer, size_t n);
+static void rt_conn_close(rt_conn *connection);
+
+/* Where the authority of an HTTPS URL ends (the URL has already been admitted by rt_origin). */
+static const char *rt_url_target(const char *url, rt_buf *target) {
+    const char *at = url + 8;
+    while (*at && *at != '/' && *at != '?' && *at != '#') at++;
+    const char *end = at;
+    while (*end && *end != '#') end++;
+    if (*at == '/' ) {
+        rt_buf_add(target, at, (size_t)(end - at));
+    } else {
+        rt_buf_add(target, "/", 1);
+        rt_buf_add(target, at, (size_t)(end - at));
+    }
+    return target->p;
+}
+
+static bool rt_prefix_ci(const char *s, const char *prefix) {
+    while (*prefix) {
+        char a = *s++, b = *prefix++;
+        if (a >= 'A' && a <= 'Z') a = (char)(a + 32);
+        if (b >= 'A' && b <= 'Z') b = (char)(b + 32);
+        if (a != b) return false;
+    }
+    return true;
+}
+
+/* The body of a response whose headers end at `head` (the offset of the blank line) and that has `have` bytes in `raw`. Answers 1 when
+ * the response is complete (the body is in `body`), 0 when more bytes are needed, -1 when the framing is wrong. */
+static int rt_http_body(const char *raw, size_t have, size_t head, bool chunked, int64_t length, rt_buf *body) {
+    const char *at = raw + head + 4;
+    size_t left = have - head - 4;
+    body->n = 0;
+    if (chunked) {
+        for (;;) {
+            size_t i = 0;
+            while (i < left && at[i] != '\n') i++;
+            if (i >= left) return 0;
+            size_t size = 0;
+            size_t digits = 0;
+            for (size_t k = 0; k < i && at[k] != ';' && at[k] != '\r'; k++) {
+                int v = at[k] >= '0' && at[k] <= '9' ? at[k] - '0' : (at[k] | 32) >= 'a' && (at[k] | 32) <= 'f' ? (at[k] | 32) - 'a' + 10 : -1;
+                if (v < 0) return -1;
+                if (size > (size_t)RT_HOST_MAX_BYTES * 16) return -1;
+                size = size * 16 + (size_t)v;
+                digits++;
+            }
+            if (digits == 0) return -1;
+            at += i + 1;
+            left -= i + 1;
+            if (size == 0) {
+                /* The trailers, if any, end with a blank line. */
+                for (;;) {
+                    size_t j = 0;
+                    while (j < left && at[j] != '\n') j++;
+                    if (j >= left) return 0;
+                    bool blank = j == 0 || (j == 1 && at[0] == '\r');
+                    at += j + 1;
+                    left -= j + 1;
+                    if (blank) return 1;
+                }
+            }
+            if (body->n + size > (size_t)RT_HOST_MAX_BYTES + 1) {
+                body->n = (size_t)RT_HOST_MAX_BYTES + 1;
+                return 1;
+            }
+            if (left < size + 2) return 0;
+            rt_buf_add(body, at, size);
+            at += size + 2;
+            left -= size + 2;
+        }
+    }
+    if (length >= 0) {
+        if ((int64_t)left < length) return 0;
+        size_t take = (size_t)length;
+        if (take > (size_t)RT_HOST_MAX_BYTES + 1) take = (size_t)RT_HOST_MAX_BYTES + 1;
+        rt_buf_add(body, at, take);
+        return 1;
+    }
+    return 0;
+}
+
+static rt_host_result rt_https_get(const char *url) {
+    int port;
+    const char *origin = rt_origin(url, &port);
+    if (!origin) return rt_host_fail("only HTTPS URLs without credentials and on port 443 are allowed");
+    const char *host = origin + 8;
+    rt_buf target = {0, 0, 0, 0};
+    rt_url_target(url, &target);
+    char error[400];
+    error[0] = 0;
+    rt_conn *connection = rt_conn_open(host, error, sizeof error);
+    if (!connection) return rt_host_fail(rt_format("HTTPS request failed: <urlopen error %s>", error));
+    rt_buf request = {0, 0, 0, 0};
+    rt_buf_add(&request, "GET ", 4);
+    rt_buf_add(&request, target.p, target.n);
+    static const char request_head[] = " HTTP/1.1\r\nAccept-Encoding: identity\r\nAccept: text/plain, */*\r\nHost: ";
+    static const char request_tail[] = "\r\nUser-Agent: nexora\r\nConnection: close\r\n\r\n";
+    rt_buf_add(&request, request_head, sizeof request_head - 1);
+    rt_buf_add(&request, host, strlen(host));
+    rt_buf_add(&request, request_tail, sizeof request_tail - 1);
+    if (rt_conn_send(connection, request.p, request.n) != 0) {
+        rt_conn_close(connection);
+        return rt_host_fail("HTTPS request failed: <urlopen error the request could not be sent>");
+    }
+    rt_buf raw = {0, 0, 0, 0};
+    rt_buf body = {0, 0, 0, 0};
+    char chunk[8192];
+    int64_t started = rt_host_now();
+    long head = -1;
+    bool chunked = false;
+    int64_t length = -1;
+    int status = 0;
+    char *reason = "";
+    bool complete = false;
+    bool closed = false;
+    while (!complete && !closed) {
+        long got = rt_conn_recv(connection, chunk, sizeof chunk);
+        if (got < 0) {
+            rt_conn_close(connection);
+            if (rt_host_now() - started >= RT_HOST_SECONDS * 1000) return rt_host_fail("HTTPS request failed: <urlopen error timed out>");
+            return rt_host_fail("HTTPS request failed: <urlopen error the connection failed while reading>");
+        }
+        if (got == 0) {
+            closed = true;
+        } else {
+            rt_buf_add(&raw, chunk, (size_t)got);
+        }
+        if (head < 0) {
+            for (size_t i = 0; i + 3 < raw.n; i++) {
+                if (raw.p[i] == '\r' && raw.p[i + 1] == '\n' && raw.p[i + 2] == '\r' && raw.p[i + 3] == '\n') {
+                    head = (long)i;
+                    break;
+                }
+            }
+            if (head < 0) {
+                if (raw.n > 65536) {
+                    rt_conn_close(connection);
+                    return rt_host_fail("HTTPS request failed: <urlopen error the headers of the response are too long>");
+                }
+                continue;
+            }
+            /* The status line and the headers, read without changing the bytes. */
+            const char *line = raw.p;
+            const char *limit = raw.p + head;
+            const char *eol = line;
+            while (eol < limit && *eol != '\r') eol++;
+            if (eol - line < 12 || !rt_prefix_ci(line, "http/1.")) {
+                rt_conn_close(connection);
+                return rt_host_fail("HTTPS request failed: <urlopen error the response is not HTTP>");
+            }
+            status = atoi(line + 9);
+            reason = eol - line > 13 ? rt_format("%.*s", (int)(eol - line - 13), line + 13) : (char *)"";
+            const char *next = eol + 2;
+            while (next < limit) {
+                const char *end = next;
+                while (end < limit && *end != '\r') end++;
+                if (rt_prefix_ci(next, "transfer-encoding:")) {
+                    for (const char *k = next + 18; k + 7 <= end; k++) {
+                        if (rt_prefix_ci(k, "chunked")) chunked = true;
+                    }
+                }
+                if (rt_prefix_ci(next, "content-length:")) length = (int64_t)atoll(next + 15);
+                next = end + 2;
+            }
+            if (status != 200) {
+                /* Only the status matters: the answer is not read. */
+                rt_conn_close(connection);
+                if (status > 200 && status < 300) return rt_host_fail(rt_format("HTTPS request returned status %d", status));
+                return rt_host_fail(rt_format("HTTPS request failed: HTTP Error %d: %s", status, reason));
+            }
+        }
+        if (head >= 0) {
+            int state = rt_http_body(raw.p, raw.n, (size_t)head, chunked, length, &body);
+            if (state < 0) {
+                rt_conn_close(connection);
+                return rt_host_fail("HTTPS request failed: <urlopen error the framing of the response is wrong>");
+            }
+            if (state == 1) complete = true;
+            if (body.n > RT_HOST_MAX_BYTES) {
+                rt_conn_close(connection);
+                return rt_host_fail(rt_format("HTTPS response exceeds %d bytes", RT_HOST_MAX_BYTES));
+            }
+            if (raw.n > (size_t)RT_HOST_MAX_BYTES * 2 + 65536) {
+                rt_conn_close(connection);
+                return rt_host_fail(rt_format("HTTPS response exceeds %d bytes", RT_HOST_MAX_BYTES));
+            }
+        }
+    }
+    rt_conn_close(connection);
+    if (head < 0) return rt_host_fail("HTTPS request failed: <urlopen error the connection closed before the response>");
+    if (!complete) {
+        /* No length: the body is what came until the server closed the connection. */
+        body.n = 0;
+        size_t offset = (size_t)head + 4;
+        if (!chunked && length < 0) {
+            if (raw.n - offset > RT_HOST_MAX_BYTES) return rt_host_fail(rt_format("HTTPS response exceeds %d bytes", RT_HOST_MAX_BYTES));
+            rt_buf_add(&body, raw.p + offset, raw.n - offset);
+        } else {
+            return rt_host_fail("HTTPS request failed: <urlopen error the response ended before its body was complete>");
+        }
+    }
+    if (body.n > RT_HOST_MAX_BYTES) return rt_host_fail(rt_format("HTTPS response exceeds %d bytes", RT_HOST_MAX_BYTES));
+    if (!rt_valid_utf8((const unsigned char *)body.p, body.n)) return rt_host_fail("HTTPS response is not valid UTF-8");
+    return rt_host_done(body);
+}
+
+#ifndef _WIN32
+/* ---------- TLS on POSIX systems: OpenSSL or LibreSSL, opened when a request is made ---------- */
+
+typedef struct {
+    void *library;
+    const void *(*TLS_client_method)(void);
+    void *(*SSL_CTX_new)(const void *);
+    void (*SSL_CTX_free)(void *);
+    int (*SSL_CTX_set_default_verify_paths)(void *);
+    void (*SSL_CTX_set_verify)(void *, int, void *);
+    long (*SSL_CTX_ctrl)(void *, int, long, void *);
+    void *(*SSL_new)(void *);
+    void (*SSL_free)(void *);
+    int (*SSL_set_fd)(void *, int);
+    long (*SSL_ctrl)(void *, int, long, void *);
+    int (*SSL_set1_host)(void *, const char *);
+    int (*SSL_connect)(void *);
+    int (*SSL_read)(void *, void *, int);
+    int (*SSL_write)(void *, const void *, int);
+    int (*SSL_shutdown)(void *);
+    int (*SSL_get_error)(const void *, int);
+    long (*SSL_get_verify_result)(const void *);
+    unsigned long (*ERR_get_error)(void);
+    void (*ERR_error_string_n)(unsigned long, char *, size_t);
+    const char *(*X509_verify_cert_error_string)(long);
+} rt_ssl_api;
+
+static rt_ssl_api rt_ssl;
+static int rt_ssl_state = 0; /* 0: not tried, 1: ready, -1: not available */
+
+static void *rt_ssl_symbol(const char *name) { return dlsym(rt_ssl.library, name); }
+
+static bool rt_ssl_load(char *error, size_t size) {
+    if (rt_ssl_state == 1) return true;
+    if (rt_ssl_state == -1) {
+        snprintf(error, size, "no TLS library (OpenSSL) could be found on this system");
+        return false;
+    }
+    static const char *const names[] = {
+        "libssl.so.3", "libssl.so.1.1", "libssl.so", "libssl.3.dylib", "libssl.dylib",
+        "/opt/homebrew/lib/libssl.3.dylib", "/usr/local/lib/libssl.3.dylib", "/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib",
+        "/usr/local/opt/openssl@3/lib/libssl.3.dylib", "/usr/lib/libssl.48.dylib", "/usr/lib/libssl.44.dylib", 0
+    };
+    for (int i = 0; names[i] && !rt_ssl.library; i++) rt_ssl.library = dlopen(names[i], RTLD_NOW | RTLD_LOCAL);
+    if (rt_ssl.library) {
+#define RT_SSL_FN(name) *(void **)&rt_ssl.name = rt_ssl_symbol(#name)
+        RT_SSL_FN(TLS_client_method); RT_SSL_FN(SSL_CTX_new); RT_SSL_FN(SSL_CTX_free);
+        RT_SSL_FN(SSL_CTX_set_default_verify_paths); RT_SSL_FN(SSL_CTX_set_verify); RT_SSL_FN(SSL_CTX_ctrl);
+        RT_SSL_FN(SSL_new); RT_SSL_FN(SSL_free); RT_SSL_FN(SSL_set_fd); RT_SSL_FN(SSL_ctrl); RT_SSL_FN(SSL_set1_host);
+        RT_SSL_FN(SSL_connect); RT_SSL_FN(SSL_read); RT_SSL_FN(SSL_write); RT_SSL_FN(SSL_shutdown); RT_SSL_FN(SSL_get_error);
+        RT_SSL_FN(SSL_get_verify_result); RT_SSL_FN(ERR_get_error); RT_SSL_FN(ERR_error_string_n);
+        RT_SSL_FN(X509_verify_cert_error_string);
+#undef RT_SSL_FN
+        if (!rt_ssl.TLS_client_method || !rt_ssl.SSL_CTX_new || !rt_ssl.SSL_new || !rt_ssl.SSL_set_fd || !rt_ssl.SSL_connect ||
+            !rt_ssl.SSL_read || !rt_ssl.SSL_write || !rt_ssl.SSL_set1_host || !rt_ssl.SSL_CTX_set_default_verify_paths ||
+            !rt_ssl.SSL_CTX_set_verify || !rt_ssl.SSL_ctrl || !rt_ssl.SSL_CTX_ctrl || !rt_ssl.SSL_get_error) {
+            rt_ssl.library = 0;
+        }
+    }
+    if (!rt_ssl.library) {
+        rt_ssl_state = -1;
+        snprintf(error, size, "no TLS library (OpenSSL) could be found on this system");
+        return false;
+    }
+    rt_ssl_state = 1;
+    return true;
+}
+
+struct rt_conn {
+    int fd;
+    void *context;
+    void *session;
+};
+
+static int rt_tcp_connect(const char *host, char *error, size_t size) {
+    struct addrinfo hints;
+    struct addrinfo *found = 0;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_family = AF_UNSPEC;
+    int code = getaddrinfo(host, "443", &hints, &found);
+    if (code != 0 || !found) {
+        snprintf(error, size, "[Errno -2] Name or service not known (%s)", code != 0 ? gai_strerror(code) : "no address");
+        return -1;
+    }
+    int fd = -1;
+    const char *why = "connection failed";
+    for (struct addrinfo *a = found; a && fd < 0; a = a->ai_next) {
+        int s = socket(a->ai_family, a->ai_socktype, a->ai_protocol);
+        if (s < 0) continue;
+        int flags = fcntl(s, F_GETFL, 0);
+        fcntl(s, F_SETFL, flags | O_NONBLOCK);
+        int rc = connect(s, a->ai_addr, a->ai_addrlen);
+        if (rc != 0 && errno == EINPROGRESS) {
+            struct pollfd p = {s, POLLOUT, 0};
+            rc = poll(&p, 1, RT_HOST_SECONDS * 1000) == 1 ? 0 : -1;
+            if (rc == 0) {
+                int soerr = 0;
+                socklen_t len = sizeof soerr;
+                getsockopt(s, SOL_SOCKET, SO_ERROR, &soerr, &len);
+                if (soerr != 0) { rc = -1; errno = soerr; }
+            } else {
+                why = "timed out";
+            }
+        }
+        if (rc == 0) {
+            fcntl(s, F_SETFL, flags);
+            struct timeval limit = {RT_HOST_SECONDS, 0};
+            setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &limit, sizeof limit);
+            setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &limit, sizeof limit);
+            fd = s;
+        } else {
+            if (errno) why = strerror(errno);
+            close(s);
+        }
+    }
+    freeaddrinfo(found);
+    if (fd < 0) snprintf(error, size, "%s", why);
+    return fd;
+}
+
+static rt_conn *rt_conn_open(const char *host, char *error, size_t size) {
+    if (!rt_ssl_load(error, size)) return 0;
+    signal(SIGPIPE, SIG_IGN);
+    int fd = rt_tcp_connect(host, error, size);
+    if (fd < 0) return 0;
+    rt_conn *c = (rt_conn *)calloc(1, sizeof *c);
+    if (!c) { close(fd); snprintf(error, size, "out of memory"); return 0; }
+    c->fd = fd;
+    c->context = rt_ssl.SSL_CTX_new(rt_ssl.TLS_client_method());
+    if (c->context) {
+        rt_ssl.SSL_CTX_set_default_verify_paths(c->context);
+        rt_ssl.SSL_CTX_set_verify(c->context, 1 /* SSL_VERIFY_PEER */, 0);
+        rt_ssl.SSL_CTX_ctrl(c->context, 123 /* SSL_CTRL_SET_MIN_PROTO_VERSION */, 0x0303 /* TLS 1.2 */, 0);
+        c->session = rt_ssl.SSL_new(c->context);
+    }
+    if (!c->session) {
+        snprintf(error, size, "[SSL] the TLS context could not be made");
+        rt_conn_close(c);
+        return 0;
+    }
+    rt_ssl.SSL_set_fd(c->session, fd);
+    rt_ssl.SSL_ctrl(c->session, 55 /* SSL_CTRL_SET_TLSEXT_HOSTNAME */, 0 /* host_name */, (void *)host);
+    rt_ssl.SSL_set1_host(c->session, host);
+    int rc = rt_ssl.SSL_connect(c->session);
+    if (rc != 1) {
+        long verify = rt_ssl.SSL_get_verify_result ? rt_ssl.SSL_get_verify_result(c->session) : 0;
+        if (verify != 0 && rt_ssl.X509_verify_cert_error_string) {
+            snprintf(error, size, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: %s", rt_ssl.X509_verify_cert_error_string(verify));
+        } else {
+            char detail[200] = "the handshake failed";
+            unsigned long code = rt_ssl.ERR_get_error ? rt_ssl.ERR_get_error() : 0;
+            if (code && rt_ssl.ERR_error_string_n) rt_ssl.ERR_error_string_n(code, detail, sizeof detail);
+            else if (errno == EAGAIN || errno == EWOULDBLOCK) snprintf(detail, sizeof detail, "timed out");
+            snprintf(error, size, "[SSL] %s", detail);
+        }
+        rt_conn_close(c);
+        return 0;
+    }
+    return c;
+}
+
+static int rt_conn_send(rt_conn *c, const char *data, size_t n) {
+    size_t done = 0;
+    while (done < n) {
+        int wrote = rt_ssl.SSL_write(c->session, data + done, (int)(n - done > 16384 ? 16384 : n - done));
+        if (wrote <= 0) return -1;
+        done += (size_t)wrote;
+    }
+    return 0;
+}
+
+static long rt_conn_recv(rt_conn *c, char *buffer, size_t n) {
+    int got = rt_ssl.SSL_read(c->session, buffer, (int)n);
+    if (got > 0) return got;
+    int why = rt_ssl.SSL_get_error(c->session, got);
+    if (why == 6 /* SSL_ERROR_ZERO_RETURN */) return 0;
+    /* A server that closes the connection without the closing alert of TLS has still ended its answer. */
+    if (why == 5 /* SSL_ERROR_SYSCALL */ && errno == 0) return 0;
+    if (why == 1 /* SSL_ERROR_SSL */) {
+        unsigned long code = rt_ssl.ERR_get_error ? rt_ssl.ERR_get_error() : 0;
+        (void)code;
+        return 0;
+    }
+    return -1;
+}
+
+static void rt_conn_close(rt_conn *c) {
+    if (!c) return;
+    if (c->session) {
+        rt_ssl.SSL_shutdown(c->session);
+        rt_ssl.SSL_free(c->session);
+    }
+    if (c->context) rt_ssl.SSL_CTX_free(c->context);
+    if (c->fd >= 0) close(c->fd);
+    free(c);
+}
+#endif
+
+#ifdef _WIN32
+/* ---------- TLS on Windows: Winsock and SChannel, both opened when a request is made ---------- */
+
+typedef struct {
+    HMODULE library;
+    int (WSAAPI *WSAStartup)(WORD, LPWSADATA);
+    SOCKET (WSAAPI *socket)(int, int, int);
+    int (WSAAPI *closesocket)(SOCKET);
+    int (WSAAPI *connect)(SOCKET, const struct sockaddr *, int);
+    int (WSAAPI *send)(SOCKET, const char *, int, int);
+    int (WSAAPI *recv)(SOCKET, char *, int, int);
+    int (WSAAPI *setsockopt)(SOCKET, int, int, const char *, int);
+    int (WSAAPI *getsockopt)(SOCKET, int, int, char *, int *);
+    int (WSAAPI *ioctlsocket)(SOCKET, long, u_long *);
+    int (WSAAPI *select)(int, fd_set *, fd_set *, fd_set *, const struct timeval *);
+    int (WSAAPI *WSAGetLastError)(void);
+    int (WSAAPI *getaddrinfo)(PCSTR, PCSTR, const ADDRINFOA *, PADDRINFOA *);
+    void (WSAAPI *freeaddrinfo)(PADDRINFOA);
+} rt_winsock_api;
+
+static rt_winsock_api rt_ws;
+static int rt_ws_state = 0;
+static PSecurityFunctionTableA rt_sspi = 0;
+
+static bool rt_win_load(char *error, size_t size) {
+    if (rt_ws_state == 1) return true;
+    if (rt_ws_state == -1) {
+        snprintf(error, size, "the TLS of Windows is not available");
+        return false;
+    }
+    rt_ws_state = -1;
+    HMODULE security = LoadLibraryA("secur32.dll");
+    if (!security) security = LoadLibraryA("security.dll");
+    rt_ws.library = LoadLibraryA("ws2_32.dll");
+    if (!security || !rt_ws.library) {
+        snprintf(error, size, "the TLS of Windows is not available");
+        return false;
+    }
+#define RT_WS_FN(name) *(void **)&rt_ws.name = (void *)GetProcAddress(rt_ws.library, #name)
+    RT_WS_FN(WSAStartup); RT_WS_FN(socket); RT_WS_FN(closesocket); RT_WS_FN(connect); RT_WS_FN(send); RT_WS_FN(recv);
+    RT_WS_FN(setsockopt); RT_WS_FN(getsockopt); RT_WS_FN(ioctlsocket); RT_WS_FN(select); RT_WS_FN(WSAGetLastError);
+    RT_WS_FN(getaddrinfo); RT_WS_FN(freeaddrinfo);
+#undef RT_WS_FN
+    INIT_SECURITY_INTERFACE_A init = (INIT_SECURITY_INTERFACE_A)GetProcAddress(security, "InitSecurityInterfaceA");
+    if (!init || !rt_ws.WSAStartup || !rt_ws.socket || !rt_ws.connect || !rt_ws.send || !rt_ws.recv || !rt_ws.getaddrinfo ||
+        !rt_ws.select || !rt_ws.ioctlsocket) {
+        snprintf(error, size, "the TLS of Windows is not available");
+        return false;
+    }
+    rt_sspi = init();
+    WSADATA data;
+    if (!rt_sspi || rt_ws.WSAStartup(MAKEWORD(2, 2), &data) != 0) {
+        snprintf(error, size, "the network of Windows could not be started");
+        return false;
+    }
+    rt_ws_state = 1;
+    return true;
+}
+
+struct rt_conn {
+    SOCKET socket;
+    CredHandle credentials;
+    CtxtHandle context;
+    bool have_credentials, have_context;
+    SecPkgContext_StreamSizes sizes;
+    /* Bytes read from the socket and not yet decrypted, and bytes decrypted and not yet given. */
+    char *wire;
+    size_t wire_used, wire_cap;
+    char *plain;
+    size_t plain_start, plain_end;
+};
+
+static int rt_win_wait(SOCKET s, bool for_write) {
+    fd_set set;
+    FD_ZERO(&set);
+    FD_SET(s, &set);
+    struct timeval limit = {RT_HOST_SECONDS, 0};
+    int rc = rt_ws.select(0, for_write ? 0 : &set, for_write ? &set : 0, 0, &limit);
+    return rc == 1 ? 0 : -1;
+}
+
+static SOCKET rt_win_connect(const char *host, char *error, size_t size) {
+    ADDRINFOA hints;
+    PADDRINFOA found = 0;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_family = AF_UNSPEC;
+    int code = rt_ws.getaddrinfo(host, "443", &hints, &found);
+    if (code != 0 || !found) {
+        snprintf(error, size, "[Errno 11001] getaddrinfo failed");
+        return INVALID_SOCKET;
+    }
+    SOCKET result = INVALID_SOCKET;
+    const char *why = "connection failed";
+    for (PADDRINFOA a = found; a && result == INVALID_SOCKET; a = a->ai_next) {
+        SOCKET s = rt_ws.socket(a->ai_family, a->ai_socktype, a->ai_protocol);
+        if (s == INVALID_SOCKET) continue;
+        u_long nonblocking = 1;
+        rt_ws.ioctlsocket(s, FIONBIO, &nonblocking);
+        int rc = rt_ws.connect(s, a->ai_addr, (int)a->ai_addrlen);
+        if (rc != 0 && rt_ws.WSAGetLastError() == WSAEWOULDBLOCK) {
+            rc = rt_win_wait(s, true);
+            if (rc == 0) {
+                int soerr = 0;
+                int len = sizeof soerr;
+                rt_ws.getsockopt(s, SOL_SOCKET, SO_ERROR, (char *)&soerr, &len);
+                if (soerr != 0) rc = -1;
+            } else {
+                why = "timed out";
+            }
+        }
+        if (rc == 0) {
+            nonblocking = 0;
+            rt_ws.ioctlsocket(s, FIONBIO, &nonblocking);
+            DWORD limit = RT_HOST_SECONDS * 1000;
+            rt_ws.setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&limit, sizeof limit);
+            rt_ws.setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char *)&limit, sizeof limit);
+            result = s;
+        } else {
+            rt_ws.closesocket(s);
+        }
+    }
+    rt_ws.freeaddrinfo(found);
+    if (result == INVALID_SOCKET) snprintf(error, size, "%s", why);
+    return result;
+}
+
+static bool rt_win_send_all(SOCKET s, const char *data, size_t n) {
+    size_t done = 0;
+    while (done < n) {
+        int wrote = rt_ws.send(s, data + done, (int)(n - done > 65536 ? 65536 : n - done), 0);
+        if (wrote <= 0) return false;
+        done += (size_t)wrote;
+    }
+    return true;
+}
+
+static void rt_win_wire_room(rt_conn *c, size_t more) {
+    if (c->wire_used + more > c->wire_cap) {
+        size_t cap = (c->wire_used + more) * 2;
+        c->wire = (char *)realloc(c->wire, cap);
+        c->wire_cap = cap;
+    }
+}
+
+/* The reason SChannel gives for a handshake that failed, as the words of a certificate problem when it is one. */
+static const char *rt_win_status_text(SECURITY_STATUS status) {
+    switch ((unsigned long)status) {
+    case 0x800B0109: case 0x80090325: return "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate";
+    case 0x800B010F: return "[SSL: CERTIFICATE_VERIFY_FAILED] Hostname mismatch, certificate is not valid for the host";
+    case 0x80090328: return "[SSL: CERTIFICATE_VERIFY_FAILED] certificate has expired";
+    case 0x80090322: return "[SSL: CERTIFICATE_VERIFY_FAILED] Hostname mismatch, certificate is not valid for the host";
+    case 0x800B0101: return "[SSL: CERTIFICATE_VERIFY_FAILED] certificate has expired";
+    case 0x800B0111: case 0x800B010A: return "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed";
+    case 0x80090308: return "[SSL] the server sent a message that is not valid";
+    case 0x80090326: return "[SSL] the server sent a fatal alert";
+    case 0x80090331: return "[SSL] no protocol or cipher in common with the server";
+    default: return 0;
+    }
+}
+
+static rt_conn *rt_conn_open(const char *host, char *error, size_t size) {
+    if (!rt_win_load(error, size)) return 0;
+    rt_conn *c = (rt_conn *)calloc(1, sizeof *c);
+    if (!c) { snprintf(error, size, "out of memory"); return 0; }
+    c->socket = INVALID_SOCKET;
+    c->socket = rt_win_connect(host, error, size);
+    if (c->socket == INVALID_SOCKET) { free(c); return 0; }
+
+    SCHANNEL_CRED credentials;
+    memset(&credentials, 0, sizeof credentials);
+    credentials.dwVersion = SCHANNEL_CRED_VERSION;
+    credentials.dwFlags = SCH_USE_STRONG_CRYPTO | SCH_CRED_AUTO_CRED_VALIDATION | SCH_CRED_NO_DEFAULT_CREDS;
+    TimeStamp lifetime;
+    SECURITY_STATUS status = rt_sspi->AcquireCredentialsHandleA(0, (SEC_CHAR *)UNISP_NAME_A, SECPKG_CRED_OUTBOUND, 0, &credentials, 0, 0,
+                                                              &c->credentials, &lifetime);
+    if (status != SEC_E_OK) {
+        snprintf(error, size, "[SSL] the credentials of TLS could not be made (0x%08lX)", (unsigned long)status);
+        rt_conn_close(c);
+        return 0;
+    }
+    c->have_credentials = true;
+
+    DWORD request = ISC_REQ_SEQUENCE_DETECT | ISC_REQ_REPLAY_DETECT | ISC_REQ_CONFIDENTIALITY | ISC_RET_EXTENDED_ERROR |
+                    ISC_REQ_ALLOCATE_MEMORY | ISC_REQ_STREAM;
+    DWORD attributes = 0;
+    SecBuffer out_buffer = {0, SECBUFFER_TOKEN, 0};
+    SecBufferDesc out_desc = {SECBUFFER_VERSION, 1, &out_buffer};
+    status = rt_sspi->InitializeSecurityContextA(&c->credentials, 0, (SEC_CHAR *)host, request, 0, 0, 0, 0, &c->context, &out_desc,
+                                                 &attributes, &lifetime);
+    if (status != SEC_I_CONTINUE_NEEDED) {
+        const char *text = rt_win_status_text(status);
+        if (text) snprintf(error, size, "%s", text); else snprintf(error, size, "[SSL] the handshake could not start (0x%08lX)", (unsigned long)status);
+        rt_conn_close(c);
+        return 0;
+    }
+    c->have_context = true;
+    bool sent = rt_win_send_all(c->socket, (const char *)out_buffer.pvBuffer, out_buffer.cbBuffer);
+    rt_sspi->FreeContextBuffer(out_buffer.pvBuffer);
+    if (!sent) { snprintf(error, size, "[SSL] the handshake could not be sent"); rt_conn_close(c); return 0; }
+
+    int64_t started = rt_host_now();
+    bool need_more = true;
+    for (;;) {
+        if (need_more) {
+            if (rt_host_now() - started > RT_HOST_SECONDS * 1000) { snprintf(error, size, "timed out"); rt_conn_close(c); return 0; }
+            rt_win_wire_room(c, 16384);
+            int got = rt_ws.recv(c->socket, c->wire + c->wire_used, 16384, 0);
+            if (got <= 0) { snprintf(error, size, got == 0 ? "[SSL] the server closed the connection during the handshake" : "timed out"); rt_conn_close(c); return 0; }
+            c->wire_used += (size_t)got;
+        }
+        SecBuffer in_buffers[2];
+        in_buffers[0].pvBuffer = c->wire;
+        in_buffers[0].cbBuffer = (ULONG)c->wire_used;
+        in_buffers[0].BufferType = SECBUFFER_TOKEN;
+        in_buffers[1].pvBuffer = 0;
+        in_buffers[1].cbBuffer = 0;
+        in_buffers[1].BufferType = SECBUFFER_EMPTY;
+        SecBufferDesc in_desc = {SECBUFFER_VERSION, 2, in_buffers};
+        SecBuffer outs[1] = {{0, SECBUFFER_TOKEN, 0}};
+        SecBufferDesc out_description = {SECBUFFER_VERSION, 1, outs};
+        status = rt_sspi->InitializeSecurityContextA(&c->credentials, &c->context, (SEC_CHAR *)host, request, 0, 0, &in_desc, 0, 0,
+                                                     &out_description, &attributes, &lifetime);
+        if (outs[0].cbBuffer > 0 && outs[0].pvBuffer) {
+            bool ok = rt_win_send_all(c->socket, (const char *)outs[0].pvBuffer, outs[0].cbBuffer);
+            rt_sspi->FreeContextBuffer(outs[0].pvBuffer);
+            if (!ok) { snprintf(error, size, "[SSL] the handshake could not be sent"); rt_conn_close(c); return 0; }
+        }
+        if (status == SEC_E_INCOMPLETE_MESSAGE) { need_more = true; continue; }
+        if (status == SEC_E_OK || status == SEC_I_CONTINUE_NEEDED) {
+            /* What the server sent after the end of the handshake belongs to the data. */
+            if (in_buffers[1].BufferType == SECBUFFER_EXTRA && in_buffers[1].cbBuffer > 0) {
+                memmove(c->wire, c->wire + (c->wire_used - in_buffers[1].cbBuffer), in_buffers[1].cbBuffer);
+                c->wire_used = in_buffers[1].cbBuffer;
+                need_more = false;
+                if (status == SEC_I_CONTINUE_NEEDED) need_more = false;
+            } else {
+                c->wire_used = 0;
+                need_more = true;
+            }
+            if (status == SEC_E_OK) break;
+            continue;
+        }
+        const char *text = rt_win_status_text(status);
+        if (text) snprintf(error, size, "%s", text); else snprintf(error, size, "[SSL] the handshake failed (0x%08lX)", (unsigned long)status);
+        rt_conn_close(c);
+        return 0;
+    }
+    status = rt_sspi->QueryContextAttributesA(&c->context, SECPKG_ATTR_STREAM_SIZES, &c->sizes);
+    if (status != SEC_E_OK) { snprintf(error, size, "[SSL] the sizes of the messages are not known"); rt_conn_close(c); return 0; }
+    return c;
+}
+
+static int rt_conn_send(rt_conn *c, const char *data, size_t n) {
+    size_t done = 0;
+    size_t chunk_max = c->sizes.cbMaximumMessage;
+    char *message = (char *)malloc(c->sizes.cbHeader + chunk_max + c->sizes.cbTrailer);
+    if (!message) return -1;
+    while (done < n) {
+        size_t take = n - done > chunk_max ? chunk_max : n - done;
+        memcpy(message + c->sizes.cbHeader, data + done, take);
+        SecBuffer buffers[4];
+        buffers[0].pvBuffer = message;
+        buffers[0].cbBuffer = c->sizes.cbHeader;
+        buffers[0].BufferType = SECBUFFER_STREAM_HEADER;
+        buffers[1].pvBuffer = message + c->sizes.cbHeader;
+        buffers[1].cbBuffer = (ULONG)take;
+        buffers[1].BufferType = SECBUFFER_DATA;
+        buffers[2].pvBuffer = message + c->sizes.cbHeader + take;
+        buffers[2].cbBuffer = c->sizes.cbTrailer;
+        buffers[2].BufferType = SECBUFFER_STREAM_TRAILER;
+        buffers[3].pvBuffer = 0;
+        buffers[3].cbBuffer = 0;
+        buffers[3].BufferType = SECBUFFER_EMPTY;
+        SecBufferDesc desc = {SECBUFFER_VERSION, 4, buffers};
+        SECURITY_STATUS status = rt_sspi->EncryptMessage(&c->context, 0, &desc, 0);
+        if (status != SEC_E_OK) { free(message); return -1; }
+        if (!rt_win_send_all(c->socket, message, buffers[0].cbBuffer + buffers[1].cbBuffer + buffers[2].cbBuffer)) { free(message); return -1; }
+        done += take;
+    }
+    free(message);
+    return 0;
+}
+
+static long rt_conn_recv(rt_conn *c, char *buffer, size_t n) {
+    for (;;) {
+        if (c->plain_start < c->plain_end) {
+            size_t take = c->plain_end - c->plain_start;
+            if (take > n) take = n;
+            memcpy(buffer, c->plain + c->plain_start, take);
+            c->plain_start += take;
+            return (long)take;
+        }
+        if (c->wire_used > 0) {
+            SecBuffer buffers[4];
+            buffers[0].pvBuffer = c->wire;
+            buffers[0].cbBuffer = (ULONG)c->wire_used;
+            buffers[0].BufferType = SECBUFFER_DATA;
+            for (int i = 1; i < 4; i++) { buffers[i].pvBuffer = 0; buffers[i].cbBuffer = 0; buffers[i].BufferType = SECBUFFER_EMPTY; }
+            SecBufferDesc desc = {SECBUFFER_VERSION, 4, buffers};
+            SECURITY_STATUS status = rt_sspi->DecryptMessage(&c->context, &desc, 0, 0);
+            if (status == SEC_E_OK) {
+                char *data = 0;
+                size_t length = 0;
+                size_t extra = 0;
+                for (int i = 1; i < 4; i++) {
+                    if (buffers[i].BufferType == SECBUFFER_DATA) { data = (char *)buffers[i].pvBuffer; length = buffers[i].cbBuffer; }
+                    if (buffers[i].BufferType == SECBUFFER_EXTRA) extra = buffers[i].cbBuffer;
+                }
+                free(c->plain);
+                c->plain = (char *)malloc(length ? length : 1);
+                if (!c->plain) return -1;
+                if (length) memcpy(c->plain, data, length);
+                c->plain_start = 0;
+                c->plain_end = length;
+                if (extra) memmove(c->wire, c->wire + (c->wire_used - extra), extra);
+                c->wire_used = extra;
+                continue;
+            }
+            if (status == SEC_I_CONTEXT_EXPIRED) return 0;
+            if (status != SEC_E_INCOMPLETE_MESSAGE) return -1;
+        }
+        rt_win_wire_room(c, 16384);
+        int got = rt_ws.recv(c->socket, c->wire + c->wire_used, 16384, 0);
+        if (got == 0) return 0;
+        if (got < 0) return -1;
+        c->wire_used += (size_t)got;
+    }
+}
+
+static void rt_conn_close(rt_conn *c) {
+    if (!c) return;
+    if (c->have_context) rt_sspi->DeleteSecurityContext(&c->context);
+    if (c->have_credentials) rt_sspi->FreeCredentialsHandle(&c->credentials);
+    if (c->socket != INVALID_SOCKET) rt_ws.closesocket(c->socket);
+    free(c->wire);
+    free(c->plain);
+    free(c);
+}
+#endif
+
+/* ---------- Processes ---------- */
+
+/* The path of the executable that a command names, as shutil.which finds it with the PATH of this process, or 0. */
+#ifdef _WIN32
+static bool rt_is_file_win(const wchar_t *path) {
+    DWORD attributes = GetFileAttributesW(path);
+    return attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static wchar_t *rt_utf8_to_wide(const char *text) {
+    int n = MultiByteToWideChar(CP_UTF8, 0, text, -1, 0, 0);
+    wchar_t *wide = (wchar_t *)malloc((size_t)(n > 0 ? n : 1) * sizeof(wchar_t));
+    if (!wide) return 0;
+    if (n > 0) MultiByteToWideChar(CP_UTF8, 0, text, -1, wide, n); else wide[0] = 0;
+    return wide;
+}
+
+static char *rt_wide_to_utf8(const wchar_t *wide) {
+    int n = WideCharToMultiByte(CP_UTF8, 0, wide, -1, 0, 0, 0, 0);
+    char *text = (char *)malloc((size_t)(n > 0 ? n : 1));
+    if (!text) return 0;
+    if (n > 0) WideCharToMultiByte(CP_UTF8, 0, wide, -1, text, n, 0, 0); else text[0] = 0;
+    return text;
+}
+
+/* shutil.which on Windows (Python 3.12): a name with a directory is taken as it is; otherwise the current directory comes first, then each
+ * directory of PATH, and the name is tried as it is when it already ends with an extension of PATHEXT and with each extension if not. */
+static wchar_t *rt_which(const char *command) {
+    wchar_t *name = rt_utf8_to_wide(command);
+    if (!name) return 0;
+    if (wcschr(name, L'\\') || wcschr(name, L'/')) {
+        wchar_t *same = rt_is_file_win(name) ? name : 0;
+        if (!same) free(name);
+        return same;
+    }
+    const wchar_t *pathext = _wgetenv(L"PATHEXT");
+    if (!pathext || !*pathext) pathext = L".COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC";
+    const wchar_t *path = _wgetenv(L"PATH");
+    size_t name_length = wcslen(name);
+    bool has_extension = false;
+    for (const wchar_t *e = pathext; *e;) {
+        const wchar_t *stop = wcschr(e, L';');
+        size_t length = stop ? (size_t)(stop - e) : wcslen(e);
+        if (length > 0 && name_length >= length && _wcsnicmp(name + name_length - length, e, length) == 0) has_extension = true;
+        e += length;
+        if (*e == L';') e++;
+    }
+    wchar_t *found = 0;
+    size_t at = 0, path_length = path ? wcslen(path) : 0;
+    bool current = true;
+    while (!found) {
+        wchar_t directory[1024];
+        if (current) {
+            wcscpy(directory, L".");
+        } else {
+            size_t end = at;
+            while (end < path_length && path[end] != L';') end++;
+            size_t length = end - at;
+            if (length >= 1000) length = 999;
+            wcsncpy(directory, path + at, length);
+            directory[length] = 0;
+            at = end + 1;
+        }
+        wchar_t base[1400];
+        _snwprintf(base, 1400, L"%ls%ls%ls", directory, directory[0] ? L"\\" : L"", name);
+        base[1399] = 0;
+        if (has_extension) {
+            if (rt_is_file_win(base)) found = _wcsdup(base);
+        } else {
+            for (const wchar_t *e = pathext; *e && !found;) {
+                const wchar_t *stop = wcschr(e, L';');
+                size_t length = stop ? (size_t)(stop - e) : wcslen(e);
+                if (length > 0) {
+                    wchar_t full[1500];
+                    _snwprintf(full, 1500, L"%ls%.*ls", base, (int)length, e);
+                    full[1499] = 0;
+                    if (rt_is_file_win(full)) found = _wcsdup(full);
+                }
+                e += length;
+                if (*e == L';') e++;
+            }
+        }
+        if (current) { current = false; if (!path || !*path) break; continue; }
+        if (at > path_length) break;
+    }
+    free(name);
+    return found;
+}
+
+/* subprocess.list2cmdline */
+static void rt_quote_argument(rt_buf *line, const char *argument) {
+    bool quote = argument[0] == 0 || strchr(argument, ' ') || strchr(argument, '\t');
+    if (quote) rt_buf_add(line, "\"", 1);
+    size_t backslashes = 0;
+    for (const char *c = argument; *c; c++) {
+        if (*c == '\\') {
+            backslashes++;
+        } else if (*c == '"') {
+            for (size_t i = 0; i < backslashes * 2; i++) rt_buf_add(line, "\\", 1);
+            backslashes = 0;
+            rt_buf_add(line, "\\\"", 2);
+        } else {
+            for (size_t i = 0; i < backslashes; i++) rt_buf_add(line, "\\", 1);
+            backslashes = 0;
+            rt_buf_add(line, c, 1);
+        }
+    }
+    for (size_t i = 0; i < backslashes; i++) rt_buf_add(line, "\\", 1);
+    if (quote) {
+        for (size_t i = 0; i < backslashes; i++) rt_buf_add(line, "\\", 1);
+        rt_buf_add(line, "\"", 1);
+    }
+}
+
+typedef struct { HANDLE read; rt_buf data; bool done; } rt_pipe_reader;
+
+static void rt_pump(rt_pipe_reader *r, bool *too_large) {
+    if (r->done) return;
+    for (;;) {
+        DWORD available = 0;
+        if (!PeekNamedPipe(r->read, 0, 0, 0, &available, 0)) { r->done = true; return; }
+        if (available == 0) return;
+        char chunk[8192];
+        DWORD got = 0;
+        if (!ReadFile(r->read, chunk, sizeof chunk, &got, 0) || got == 0) { r->done = true; return; }
+        if (r->data.n + got > RT_HOST_MAX_BYTES) { *too_large = true; return; }
+        rt_buf_add(&r->data, chunk, got);
+    }
+}
+
+static rt_host_result rt_run_process(const char *command, const char *const *arguments, int count) {
+    wchar_t *executable = rt_which(command);
+    if (!executable) return rt_host_fail(rt_format("process '%s' could not start: process '%s' is not available on PATH", command, command));
+    char *executable_utf8 = rt_wide_to_utf8(executable);
+    rt_buf line = {0, 0, 0, 0};
+    rt_quote_argument(&line, executable_utf8);
+    for (int i = 0; i < count; i++) {
+        rt_buf_add(&line, " ", 1);
+        rt_quote_argument(&line, arguments[i]);
+    }
+    wchar_t *command_line = rt_utf8_to_wide(line.p ? line.p : "");
+    free(executable_utf8);
+
+    /* The environment: PATH is the default path of the system, and the variables that Windows needs to start a program. */
+    rt_buf environment = {0, 0, 0, 0};
+    static const wchar_t *const names[] = {L"SYSTEMROOT", L"WINDIR", L"TEMP", L"TMP", 0};
+    wchar_t block[8192];
+    size_t used = 0;
+    const wchar_t *path = L"PATH=.;C:\\bin";
+    wcscpy(block, path);
+    used = wcslen(path) + 1;
+    for (int i = 0; names[i]; i++) {
+        const wchar_t *value = _wgetenv(names[i]);
+        if (value && used + wcslen(names[i]) + wcslen(value) + 3 < 8000) {
+            used += (size_t)_snwprintf(block + used, 8000 - used, L"%ls=%ls", names[i], value) + 1;
+        }
+    }
+    block[used] = 0;
+    (void)environment;
+
+    SECURITY_ATTRIBUTES inheritable = {sizeof inheritable, 0, TRUE};
+    HANDLE out_read = 0, out_write = 0, err_read = 0, err_write = 0;
+    CreatePipe(&out_read, &out_write, &inheritable, 0);
+    CreatePipe(&err_read, &err_write, &inheritable, 0);
+    SetHandleInformation(out_read, HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation(err_read, HANDLE_FLAG_INHERIT, 0);
+    HANDLE nul = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &inheritable, OPEN_EXISTING, 0, 0);
+
+    STARTUPINFOW startup;
+    memset(&startup, 0, sizeof startup);
+    startup.cb = sizeof startup;
+    startup.dwFlags = STARTF_USESTDHANDLES;
+    startup.hStdInput = nul;
+    startup.hStdOutput = out_write;
+    startup.hStdError = err_write;
+    PROCESS_INFORMATION info;
+    memset(&info, 0, sizeof info);
+
+    HANDLE job = CreateJobObjectW(0, 0);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits;
+        memset(&limits, 0, sizeof limits);
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof limits);
+    }
+    BOOL created = CreateProcessW(0, command_line, 0, 0, TRUE,
+                                  CREATE_NEW_PROCESS_GROUP | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW | CREATE_SUSPENDED, block, 0,
+                                  &startup, &info);
+    DWORD start_error = created ? 0 : GetLastError();
+    CloseHandle(out_write);
+    CloseHandle(err_write);
+    if (nul != INVALID_HANDLE_VALUE) CloseHandle(nul);
+    free(command_line);
+    free(executable);
+    if (!created) {
+        CloseHandle(out_read);
+        CloseHandle(err_read);
+        if (job) CloseHandle(job);
+        char *reason = rt_format("[WinError %lu] the process could not be created", (unsigned long)start_error);
+        return rt_host_fail(rt_format("process '%s' could not start: %s", command, reason));
+    }
+    if (job) AssignProcessToJobObject(job, info.hProcess);
+    ResumeThread(info.hThread);
+
+    rt_pipe_reader out = {out_read, {0, 0, 0, 0}, false};
+    rt_pipe_reader err = {err_read, {0, 0, 0, 0}, false};
+    bool too_large = false, timed_out = false;
+    int64_t started = rt_host_now();
+    for (;;) {
+        rt_pump(&out, &too_large);
+        rt_pump(&err, &too_large);
+        if (too_large) break;
+        DWORD waited = WaitForSingleObject(info.hProcess, 0);
+        if (waited == WAIT_OBJECT_0) break;
+        if (rt_host_now() - started > RT_HOST_SECONDS * 1000) { timed_out = true; break; }
+        Sleep(2);
+    }
+    if (too_large || timed_out) {
+        if (job) TerminateJobObject(job, 1); else TerminateProcess(info.hProcess, 1);
+        WaitForSingleObject(info.hProcess, 2000);
+    } else {
+        /* What was written before the end, and then whatever the descendants of the command still hold is stopped. */
+        rt_pump(&out, &too_large);
+        rt_pump(&err, &too_large);
+        if (job) TerminateJobObject(job, 1);
+    }
+    DWORD status = 0;
+    GetExitCodeProcess(info.hProcess, &status);
+    CloseHandle(info.hThread);
+    CloseHandle(info.hProcess);
+    if (job) CloseHandle(job);
+    CloseHandle(out_read);
+    CloseHandle(err_read);
+    if (timed_out) return rt_host_fail(rt_format("process '%s' exceeded %d seconds", command, RT_HOST_SECONDS));
+    if (too_large) return rt_host_fail(rt_format("process output exceeds %d bytes", RT_HOST_MAX_BYTES));
+    if (status != 0) {
+        /* The text of the standard error, without the white space at its ends. */
+        const char *text = err.data.p ? err.data.p : "";
+        size_t length = err.data.n;
+        while (length > 0 && (text[length - 1] == ' ' || text[length - 1] == '\n' || text[length - 1] == '\r' || text[length - 1] == '\t')) length--;
+        while (length > 0 && (*text == ' ' || *text == '\n' || *text == '\r' || *text == '\t')) { text++; length--; }
+        if (length > 0) return rt_host_fail(rt_format("process '%s' exited with status %ld: %.*s", command, (long)(int)status, (int)length, text));
+        return rt_host_fail(rt_format("process '%s' exited with status %ld", command, (long)(int)status));
+    }
+    if (!rt_valid_utf8((const unsigned char *)(out.data.p ? out.data.p : ""), out.data.n)) {
+        return rt_host_fail(rt_format("process '%s' wrote output that is not UTF-8", command));
+    }
+    return rt_host_done(out.data);
+}
+#else
+static char *rt_which(const char *command) {
+    if (strchr(command, '/')) {
+        return access(command, X_OK) == 0 ? rt_format("%s", command) : 0;
+    }
+    const char *path = getenv("PATH");
+    if (!path) path = ":/bin:/usr/bin";
+    size_t at = 0, length = strlen(path);
+    for (;;) {
+        size_t end = at;
+        while (end < length && path[end] != ':') end++;
+        char *candidate = rt_format("%.*s%s%s", (int)(end - at), path + at, end > at ? "/" : "", command);
+        struct stat info;
+        if (stat(candidate, &info) == 0 && S_ISREG(info.st_mode) && access(candidate, X_OK) == 0) return candidate;
+        if (end >= length) break;
+        at = end + 1;
+    }
+    return 0;
+}
+
+static bool rt_drain(int fd, rt_buf *data, bool *too_large) {
+    char chunk[8192];
+    for (;;) {
+        ssize_t got = read(fd, chunk, sizeof chunk);
+        if (got > 0) {
+            if (data->n + (size_t)got > RT_HOST_MAX_BYTES) { *too_large = true; return false; }
+            rt_buf_add(data, chunk, (size_t)got);
+            continue;
+        }
+        if (got < 0 && errno == EINTR) continue;
+        return got == 0 ? false : true; /* false: the end of the stream; true: nothing more for now */
+    }
+}
+
+static rt_host_result rt_run_process(const char *command, const char *const *arguments, int count) {
+    char *executable = rt_which(command);
+    if (!executable) return rt_host_fail(rt_format("process '%s' could not start: process '%s' is not available on PATH", command, command));
+    char **argv = (char **)calloc((size_t)count + 2, sizeof(char *));
+    argv[0] = executable;
+    for (int i = 0; i < count; i++) argv[i + 1] = (char *)arguments[i];
+    static char path_variable[] = "PATH=:/bin:/usr/bin";
+    char *environment[] = {path_variable, 0};
+
+    int out_pipe[2], err_pipe[2], fail_pipe[2];
+    if (pipe(out_pipe) != 0 || pipe(err_pipe) != 0 || pipe(fail_pipe) != 0) {
+        free(argv);
+        return rt_host_fail(rt_format("process '%s' could not start: %s", command, strerror(errno)));
+    }
+    fcntl(fail_pipe[1], F_SETFD, FD_CLOEXEC);
+    fflush(stdout);
+    fflush(stderr);
+    pid_t pid = fork();
+    if (pid < 0) {
+        int reason = errno;
+        free(argv);
+        return rt_host_fail(rt_format("process '%s' could not start: %s", command, strerror(reason)));
+    }
+    if (pid == 0) {
+        setsid();
+        int null = open("/dev/null", O_RDONLY);
+        if (null >= 0) dup2(null, 0);
+        dup2(out_pipe[1], 1);
+        dup2(err_pipe[1], 2);
+        for (int fd = 3; fd < 256; fd++) if (fd != fail_pipe[1]) close(fd);
+        execve(argv[0], argv, environment);
+        int reason = errno;
+        ssize_t ignored = write(fail_pipe[1], &reason, sizeof reason);
+        (void)ignored;
+        _exit(127);
+    }
+    close(out_pipe[1]);
+    close(err_pipe[1]);
+    close(fail_pipe[1]);
+    free(argv);
+    int reason = 0;
+    ssize_t reported = read(fail_pipe[0], &reason, sizeof reason);
+    close(fail_pipe[0]);
+    if (reported == (ssize_t)sizeof reason) {
+        close(out_pipe[0]);
+        close(err_pipe[0]);
+        waitpid(pid, 0, 0);
+        return rt_host_fail(rt_format("process '%s' could not start: [Errno %d] %s: '%s'", command, reason, strerror(reason), executable));
+    }
+    fcntl(out_pipe[0], F_SETFL, fcntl(out_pipe[0], F_GETFL, 0) | O_NONBLOCK);
+    fcntl(err_pipe[0], F_SETFL, fcntl(err_pipe[0], F_GETFL, 0) | O_NONBLOCK);
+    rt_buf out = {0, 0, 0, 0};
+    rt_buf err = {0, 0, 0, 0};
+    bool out_open = true, err_open = true, too_large = false, timed_out = false;
+    int64_t started = rt_host_now();
+    int status = 0;
+    bool exited = false;
+    int64_t exited_at = 0;
+    while ((out_open || err_open) && !too_large) {
+        int64_t left = RT_HOST_SECONDS * 1000 - (rt_host_now() - started);
+        if (exited && exited_at + 1000 - rt_host_now() < left) {
+            /* The command is gone and a descendant that left its group still holds the pipes: what was written is all there will be. */
+            left = exited_at + 1000 - rt_host_now();
+            if (left <= 0) break;
+        }
+        if (left <= 0) { timed_out = true; break; }
+        struct pollfd watched[2];
+        int n = 0;
+        if (out_open) { watched[n].fd = out_pipe[0]; watched[n].events = POLLIN; watched[n].revents = 0; n++; }
+        if (err_open) { watched[n].fd = err_pipe[0]; watched[n].events = POLLIN; watched[n].revents = 0; n++; }
+        int ready = poll(watched, (nfds_t)n, left > 50 ? 50 : (int)left);
+        if (ready < 0 && errno != EINTR) break;
+        if (out_open && !rt_drain(out_pipe[0], &out, &too_large)) out_open = false;
+        if (err_open && !rt_drain(err_pipe[0], &err, &too_large)) err_open = false;
+        if (!exited && waitpid(pid, &status, WNOHANG) == pid) {
+            exited = true;
+            exited_at = rt_host_now();
+            /* The command is gone: what its descendants still hold open is closed by stopping its group. */
+            killpg(pid, SIGKILL);
+        }
+    }
+    if (too_large || timed_out) killpg(pid, SIGKILL);
+    if (!exited) {
+        killpg(pid, SIGKILL);
+        waitpid(pid, &status, 0);
+    }
+    killpg(pid, SIGKILL);
+    close(out_pipe[0]);
+    close(err_pipe[0]);
+    if (timed_out) return rt_host_fail(rt_format("process '%s' exceeded %d seconds", command, RT_HOST_SECONDS));
+    if (too_large) return rt_host_fail(rt_format("process output exceeds %d bytes", RT_HOST_MAX_BYTES));
+    int code = WIFEXITED(status) ? WEXITSTATUS(status) : (WIFSIGNALED(status) ? -WTERMSIG(status) : status);
+    if (code != 0) {
+        const char *text = err.p ? err.p : "";
+        size_t length = err.n;
+        while (length > 0 && (text[length - 1] == ' ' || text[length - 1] == '\n' || text[length - 1] == '\r' || text[length - 1] == '\t')) length--;
+        while (length > 0 && (*text == ' ' || *text == '\n' || *text == '\r' || *text == '\t')) { text++; length--; }
+        if (length > 0) return rt_host_fail(rt_format("process '%s' exited with status %d: %.*s", command, code, (int)length, text));
+        return rt_host_fail(rt_format("process '%s' exited with status %d", command, code));
+    }
+    if (!rt_valid_utf8((const unsigned char *)(out.p ? out.p : ""), out.n)) {
+        return rt_host_fail(rt_format("process '%s' wrote output that is not UTF-8", command));
+    }
+    return rt_host_done(out);
+}
+#endif
+
+/* The text of a result: what the operation read, as a Text. */
+static rv rt_host_text(rt_host_result r) {
+    char *copy = (char *)rt_alloc_raw(r.data.n + 1);
+    if (r.data.n) memcpy(copy, r.data.p, r.data.n);
+    copy[r.data.n] = 0;
+    int64_t points = 0;
+    for (size_t i = 0; i < r.data.n; i++) if (((unsigned char)copy[i] & 0xC0) != 0x80) points++;
+    rt_text t = {copy, (int64_t)r.data.n, points};
+    return rt_txt(t);
+}
+
+/* The arguments of a command, as C strings. */
+static const char *const *rt_host_arguments(rv list, int *count) {
+    rt_list *items = rt_as_list(list);
+    *count = (int)items->n;
+    const char **out = (const char **)rt_alloc_raw(sizeof(char *) * (size_t)(items->n + 1));
+    for (int64_t i = 0; i < items->n; i++) out[i] = items->items[i].u.t.p;
+    out[items->n] = 0;
+    return out;
+}
+
+/* For the interpreter of the tools (selfhost/interpreter.nex): the operation done by the host. The answer is a list of two texts, "ok"
+ * and what was read, or "error" and the reason. */
+static rv rt_host_answer(rt_host_result r) {
+    rv items[2];
+    items[0] = rt_str(r.ok ? "ok" : "error");
+    items[1] = r.ok ? rt_host_text(r) : rt_str(r.error ? r.error : "failed");
+    return rt_list_from(items, 2);
+}
+
+static rv rt_intr_host_get(rv url) { return rt_host_answer(rt_https_get(url.u.t.p)); }
+
+static rv rt_intr_host_run(rv command, rv arguments) {
+    int count;
+    const char *const *list = rt_host_arguments(arguments, &count);
+    return rt_host_answer(rt_run_process(command.u.t.p, list, count));
+}
+
 static bool rt_scope_allows_origin(const char *scope, const char *origin) {
     int a, b;
     const char *declared = rt_origin(scope, &a);
@@ -2524,9 +3810,9 @@ static rv rt_net_get(rv url, RT_SPAN) {
     if (!rt_has_scope(rt_granted_kind, rt_granted_path, rt_granted, "network", origin)) {
         rt_runtime("E3008", "Permission denied", rt_format("'%s' is not among the network origins the user allowed", origin), hint, l, c, el, ec);
     }
-    rt_runtime("E3014", "External operation failed", "HTTPS requests are not available in a program built by the C generator yet",
-               "Run the program with `nex run`, which can make them.", l, c, el, ec);
-    return rt_unit();
+    rt_host_result done = rt_https_get(url.u.t.p);
+    if (!done.ok) rt_runtime("E3014", "External operation failed", done.error, "", l, c, el, ec);
+    return rt_check_text(rt_host_text(done), l, c, el, ec);
 }
 
 static bool rt_has_command(const char *const *kinds, const char *const *paths, int count, const char *command) {
@@ -2536,7 +3822,7 @@ static bool rt_has_command(const char *const *kinds, const char *const *paths, i
     return false;
 }
 
-static rv rt_process_run(rv command, RT_SPAN) {
+static rv rt_process_run(rv command, rv arguments, RT_SPAN) {
     const char *name = command.u.t.p;
     static const char *hint = "A program needs 'uses process' and the matching --allow-process command; the environment may still deny external processes.";
     if (!rt_has_command(rt_declared_kind, rt_declared_path, rt_declared, name)) {
@@ -2545,9 +3831,11 @@ static rv rt_process_run(rv command, RT_SPAN) {
     if (!rt_has_command(rt_granted_kind, rt_granted_path, rt_granted, name)) {
         rt_runtime("E3008", "Permission denied", rt_format("'%s' is not among the commands the user allowed", name), hint, l, c, el, ec);
     }
-    rt_runtime("E3014", "External operation failed", "external processes are not available in a program built by the C generator yet",
-               "Run the program with `nex run`, which can start them.", l, c, el, ec);
-    return rt_unit();
+    int count;
+    const char *const *list = rt_host_arguments(arguments, &count);
+    rt_host_result done = rt_run_process(name, list, count);
+    if (!done.ok) rt_runtime("E3014", "External operation failed", done.error, "", l, c, el, ec);
+    return rt_check_text(rt_host_text(done), l, c, el, ec);
 }
 
 static rv rt_args(RT_SPAN) {

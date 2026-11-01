@@ -1,0 +1,5 @@
+fn main() {
+    let saludo = "hola 😀"
+    let grüße = saludo
+    print(grüße)
+}

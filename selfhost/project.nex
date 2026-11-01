@@ -30,7 +30,9 @@ pub type Project = { modules: List[Module], names: List[Text], over: Text }
 
 // The files of a project that is not on disk (the worker of the playground): `on` is true, and a path that is not in `paths`
 // is not part of the project.
-type Virtual = { on: Bool, solo: Bool, paths: List[Text], texts: List[Text], legacy: Bool }
+// `overlay` is a project on disk in which some files have another text, the one an editor has open and has not saved (the language server):
+// a file that is not in `paths` is read from the disk, and one that is in `paths` is not looked for there.
+type Virtual = { on: Bool, solo: Bool, paths: List[Text], texts: List[Text], legacy: Bool, overlay: Bool }
 
 type Loader = {
     modules: List[Module], stack: List[Text], keys: List[Text], names: List[Text], name_keys: List[Text],
@@ -233,7 +235,7 @@ pub fn is_ascii_text(text: Text) gives Bool {
 }
 
 fn source_of(virt: Virtual, path: Text) gives Text {
-    if virt.on {
+    if virt.on or (virt.overlay and index_of(virt.paths, path) >= 0) {
         return List.get(virt.texts, index_of(virt.paths, path))
     }
     let raw = read_file(path)
@@ -267,7 +269,8 @@ fn read_module(loader: Loader, path: Text) gives Loader {
             )
         }
     }
-    var lexed = lexer.tokenize(text)
+    // CRLF and a lone CR end a line as LF does (the Python lexer reads them so).
+    var lexed = lexer.tokenize(legacy.lf_only(text))
     if loader.virt.legacy {
         let plain = lexer.tokenize(legacy.lf_only(text))
         lexed = lexer.LexResult(tokens: legacy.stream(plain.tokens), diagnostics: plain.diagnostics)
@@ -299,7 +302,8 @@ fn read_module(loader: Loader, path: Text) gives Loader {
     )
     var imports: List[Text] = []
     var pending: List[parser.Problem] = []
-    if clean {
+    // A program with syntax errors has a partial tree, and the modules it imports are read all the same (the Python loader does).
+    if reason == "syntax" {
         for declaration in items_of(field(program, "imports")) {
             let written = text_of(field(declaration, "path"))
             let span = span_of(field(declaration, "path_span"))
@@ -343,19 +347,24 @@ fn read_module(loader: Loader, path: Text) gives Loader {
                         span
                     )
                 )
-            } else if not current.virt.on and module_problem(target) != "" {
+            } else if not current.virt.on and not (current.virt.overlay and List.contains(current.virt.paths, target)) and module_problem(target) != "" {
                 let trouble = module_problem(target)
+                // The language server (an overlay) words these two problems with the path as it is written in the import.
+                var shown = target
+                var advice = (
+                    "An import names a file relative to the file that has it: import " + json.char_from_code(34)
+                    + "app/models.nex" + json.char_from_code(34) + "."
+                )
+                if current.virt.overlay {
+                    shown = written
+                    advice = "An import names a file relative to the file that has it."
+                }
                 if Text.starts_with(trouble, "E0002") {
-                    pending = List.append(pending, problem_at("E0002", target + " is not valid UTF-8", "", span))
+                    pending = List.append(pending, problem_at("E0002", shown + " is not valid UTF-8", "", span))
                 } else {
                     pending = List.append(
                         pending,
-                        problem_at(
-                            "E0001", Text.slice(trouble, 6, Text.length(trouble)) + ": " + target,
-                            "An import names a file relative to the file that has it: import " + json.char_from_code(34)
-                            + "app/models.nex" + json.char_from_code(34) + ".",
-                            span
-                        )
+                        problem_at("E0001", Text.slice(trouble, 6, Text.length(trouble)) + ": " + shown, advice, span)
                     )
                 }
             } else {
@@ -388,7 +397,7 @@ pub fn load(entry: Text) gives Project {
 pub fn load_limited(entry: Text, limit: Int) gives Project {
     let start = Loader(
         modules: [], stack: [], keys: [], names: [], name_keys: [], limit: limit,
-        virt: Virtual(on: false, solo: false, paths: [], texts: [], legacy: false), over: ""
+        virt: Virtual(on: false, solo: false, paths: [], texts: [], legacy: false, overlay: false), over: ""
     )
     let done = read_module(start, entry)
     return Project(modules: done.modules, names: done.names, over: done.over)
@@ -398,7 +407,7 @@ pub fn load_limited(entry: Text, limit: Int) gives Project {
 pub fn load_legacy(entry: Text) gives Project {
     let start = Loader(
         modules: [], stack: [], keys: [], names: [], name_keys: [], limit: 0,
-        virt: Virtual(on: false, solo: false, paths: [], texts: [], legacy: true), over: ""
+        virt: Virtual(on: false, solo: false, paths: [], texts: [], legacy: true, overlay: false), over: ""
     )
     let done = read_module(start, entry)
     return Project(modules: done.modules, names: done.names, over: done.over)
@@ -409,7 +418,17 @@ pub fn load_legacy(entry: Text) gives Project {
 pub fn load_virtual(entry: Text, paths: List[Text], texts: List[Text], solo: Bool) gives Project {
     let start = Loader(
         modules: [], stack: [], keys: [], names: [], name_keys: [], limit: 0,
-        virt: Virtual(on: true, solo: solo, paths: paths, texts: texts, legacy: false), over: ""
+        virt: Virtual(on: true, solo: solo, paths: paths, texts: texts, legacy: false, overlay: false), over: ""
+    )
+    let done = read_module(start, entry)
+    return Project(modules: done.modules, names: done.names, over: done.over)
+}
+
+// A project on disk in which the files of `paths` have the texts of `texts` (the buffers an editor has open).
+pub fn load_overlay(entry: Text, paths: List[Text], texts: List[Text]) gives Project {
+    let start = Loader(
+        modules: [], stack: [], keys: [], names: [], name_keys: [], limit: 0,
+        virt: Virtual(on: false, solo: false, paths: paths, texts: texts, legacy: false, overlay: true), over: ""
     )
     let done = read_module(start, entry)
     return Project(modules: done.modules, names: done.names, over: done.over)
@@ -516,12 +535,28 @@ fn visible_to(modules: List[Module], module: Module, exports: List[checker.Expor
     return visible
 }
 
+// What a module reports: the problems of its imports, then those of the checker (unless the project is broken).
+fn shown_problems(module: Module, found: List[parser.Problem], broken: Bool) gives List[parser.Problem] {
+    if broken {
+        return module.pending
+    }
+    return List.concat(module.pending, found)
+}
+
 // Checks every module in order, each one with the exports of the modules it imports.
 pub fn check_all(project: Project, require_main: Bool) gives List[Checked] {
     let modules = project.modules
     var results: List[Checked] = []
     var exports: List[checker.Export] = []
     var errors = false
+    // An import that cannot be read, a cycle or two modules with one name: the program cannot be assembled, and what the checker would
+    // say about the bodies of any module would be noise on top of the error that caused it (the Python loader drops it).
+    var broken = false
+    for each in modules {
+        if List.length(each.pending) > 0 {
+            broken = true
+        }
+    }
     var i = 0
     while i < List.length(modules)
         shrinks List.length(modules) - i
@@ -541,11 +576,12 @@ pub fn check_all(project: Project, require_main: Bool) gives List[Checked] {
                 partial_export = partial.export
                 partial_symbols = partial.symbols
                 partial_refs = partial.refs
+                exports = List.append(exports, partial.export)
             }
             results = List.append(
                 results,
                 Checked(
-                    module: module, node: module.program, typed: typed, problems: module.problems, unsupported: "",
+                    module: module, node: module.program, typed: typed, problems: List.concat(module.problems, module.pending), unsupported: "",
                     export: partial_export, symbols: partial_symbols, refs: partial_refs
                 )
             )
@@ -560,7 +596,7 @@ pub fn check_all(project: Project, require_main: Bool) gives List[Checked] {
                 results,
                 Checked(
                     module: module, node: analysis.node, typed: analysis.node,
-                    problems: List.concat(module.pending, analysis.problems), unsupported: analysis.unsupported,
+                    problems: shown_problems(module, analysis.problems, broken), unsupported: analysis.unsupported,
                     export: analysis.export, symbols: analysis.symbols, refs: analysis.refs
                 )
             )

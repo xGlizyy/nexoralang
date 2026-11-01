@@ -1,0 +1,104 @@
+# The native NEXORA tools (nex, nexora-lsp, nex-mcp, the formatter and the worker) as programs for each system, built from the seed of the
+# compiler (selfhost/seed/cgen.c) with a C compiler and nothing else.
+#
+# Nothing is published by this workflow unless a tag `native-v*` is pushed, and then the programs are attached to the release of that tag
+# by the identity of the workflow (GITHUB_TOKEN). Run by hand (workflow_dispatch) it only builds the programs and keeps them for a few days
+# as artifacts, with their checksums, so that they can be tried before a tag is made.
+#
+# The programs link nothing but the C library: HTTPS uses the TLS of the system (SChannel, or OpenSSL / LibreSSL opened when it is needed),
+# and processes use the system calls of the platform.
+
+name: nexora-native-release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["native-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x64, runner: ubuntu-latest, flags: "-lm -ldl", exe: "" }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm, flags: "-lm -ldl", exe: "" }
+          - { target: macos-arm64, runner: macos-14, flags: "-lm", exe: "" }
+          - { target: macos-x64, runner: macos-13, flags: "-lm", exe: "" }
+          # The collector of the runtime is not safe yet when a Windows compiler inlines (selfhost/README.md): the programs for Windows are
+          # built without inlining, which is the way that was checked with the formatter, the language server and the whole suite.
+          - { target: windows-x64, runner: windows-latest, flags: "-fno-inline", exe: ".exe" }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The compiler, from the seed
+        run: |
+          mkdir -p out
+          cc -std=c11 -O2 selfhost/seed/cgen.c -o out/compiler${{ matrix.exe }} ${{ matrix.flags }}
+
+      - name: The programs
+        run: |
+          build() {
+            ./out/compiler --allow-read . --allow-write . -- "selfhost/$1.nex" "out/$1.c" --trusted $2
+            cc -std=c11 -O2 "out/$1.c" -o "out/$3${{ matrix.exe }}" ${{ matrix.flags }}
+          }
+          build nex "--cli" nex
+          build lsp "--cli" nexora-lsp
+          build mcp "--cli" nex-mcp
+          build formatter "" nexora-format
+          build worker "" nexora-worker
+
+      - name: A program of each kind runs
+        run: |
+          printf 'fn main() {\n    print("hello")\n}\n' > out/hello.nex
+          test "$(./out/nex${{ matrix.exe }} run out/hello.nex | tr -d '\r')" = "hello"
+          ./out/nex${{ matrix.exe }} check out/hello.nex
+          printf '{"action": "info"}\n' | ./out/nexora-worker${{ matrix.exe }} | grep -qF '"status": "success"'
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          name="nexora-native-${{ matrix.target }}"
+          mkdir "$name"
+          cp out/nex${{ matrix.exe }} out/nexora-lsp${{ matrix.exe }} out/nex-mcp${{ matrix.exe }} out/nexora-format${{ matrix.exe }} out/nexora-worker${{ matrix.exe }} "$name/"
+          cp LICENSE* "$name/" 2>/dev/null || true
+          if [ "${{ matrix.exe }}" = ".exe" ]; then
+            7z a "dist/$name.zip" "$name" > /dev/null
+          else
+            tar -czf "dist/$name.tar.gz" "$name"
+          fi
+          (cd dist && (sha256sum * 2>/dev/null || shasum -a 256 *) > "$name.sha256")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexora-native-${{ matrix.target }}
+          path: dist/*
+          retention-days: 7
+
+  release:
+    name: Attach to the release
+    if: startsWith(github.ref, 'refs/tags/native-v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create the release and attach the programs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/* --repo "${{ github.repository }}" --title "NEXORA native ${{ github.ref_name }}" \
+            --notes "The native tools of NEXORA, built from the seed of the compiler. Check the .sha256 file of each system."

@@ -1,0 +1,8 @@
+import "m.nex"
+
+fn main() {
+    let p = m.Pair(a: 1, b: "x")
+    print(m.add(p.a, 2))
+}
+
+fn broken( {

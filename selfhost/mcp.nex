@@ -1,0 +1,797 @@
+// The MCP server of NEXORA, written in NEXORA (nexora/src/nexora/mcp_server.py is the reference): the static analysis of the language as
+// tools for the assistants that speak the Model Context Protocol, over the standard input and output, one JSON message per line.
+//
+// The tools analyse; none of them runs the program it is given, opens a file named by the caller, or executes a command. The source
+// code is passed as text, and whatever a program contains is data to analyse, never an instruction to this server.
+//
+//   nexora_check, nexora_get_diagnostics, nexora_inspect, nexora_get_context, nexora_get_symbols  the program, as text
+//   nexora_get_language_spec, nexora_get_capabilities                                              the language itself
+//
+// This server needs nothing else installed (the one of Python needs the MCP SDK). The description of the tools, the capabilities
+// and the specification are data generated from the Python implementation (mcp_tables.nex, make_mcp_tables.py).
+//
+// The two functions that talk to the system (`mcp_line`, `mcp_send`) are replaced by C ones in the executable that cgen.nex makes; the
+// definitions here are what Python runs, which has no input.
+
+import "json.nex"
+import "parser.nex"
+import "lexer.nex"
+import "project.nex"
+import "report.nex"
+import "context.nex"
+import "symbols.nex"
+import "info.nex"
+import "mcp_tables.nex"
+import "unicode_tables.nex"
+
+// One line of the input without its line break; an empty list when the input ends.
+fn mcp_line() gives List[Text] {
+    return []
+}
+
+// A message: the text and a line break, written and flushed.
+fn mcp_send(_: Text) {
+}
+
+// The largest program a tool accepts, in bytes of UTF-8.
+fn max_source() gives Int {
+    return 262144
+}
+
+fn default_filename() gives Text {
+    return "source.nex"
+}
+
+// Texts
+
+fn object_of(keys: List[Text], values: List[json.Json]) gives json.Json {
+    return json.Json.JObj(keys, values)
+}
+
+fn text_json(value: Text) gives json.Json {
+    return json.Json.JStr(value)
+}
+
+fn joined(parts: List[Text]) gives Text {
+    var out = ""
+    for part in parts {
+        out = out + part
+    }
+    return out
+}
+
+fn split_on(text: Text, separator: Text) gives List[Text] {
+    var parts: List[Text] = []
+    var start = 0
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.slice(text, i, i + 1) == separator {
+            parts = List.append(parts, Text.slice(text, start, i))
+            start = i + 1
+        }
+        i = i + 1
+    }
+    return List.append(parts, Text.slice(text, start, Text.length(text)))
+}
+
+fn is_blank(c: Text) gives Bool {
+    return c == " " or c == "\t" or c == "\n" or c == json.char_from_code(13) or c == json.char_from_code(11) or c == json.char_from_code(12)
+}
+
+fn trimmed(text: Text) gives Text {
+    var start = 0
+    var end = Text.length(text)
+    while start < end and is_blank(Text.slice(text, start, start + 1))
+        shrinks end - start
+    {
+        start = start + 1
+    }
+    while end > start and is_blank(Text.slice(text, end - 1, end))
+        shrinks end - start
+    {
+        end = end - 1
+    }
+    return Text.slice(text, start, end)
+}
+
+// The text without one line break at its end (what `$` at the end of a regular expression allows).
+fn without_final_break(text: Text) gives Text {
+    if Text.ends_with(text, "\n") {
+        return Text.slice(text, 0, Text.length(text) - 1)
+    }
+    return text
+}
+
+fn is_ascii_letter(c: Text) gives Bool {
+    return (c >= "a" and c <= "z") or (c >= "A" and c <= "Z")
+}
+
+fn is_ascii_digit(c: Text) gives Bool {
+    return c >= "0" and c <= "9"
+}
+
+// Whether a character is one that `\w` matches: a letter, a digit or an underscore (also the ones that are not ASCII).
+fn is_word_char(c: Text) gives Bool {
+    if is_ascii_letter(c) or is_ascii_digit(c) or c == "_" {
+        return true
+    }
+    let code = json.code_of(c)
+    if code < 128 {
+        return false
+    }
+    return lexer.in_ranges(code, unicode_tables.alphanumeric())
+}
+
+// `^[A-Za-z0-9_-]{1,64}\.nex$`
+fn is_filename(written: Text) gives Bool {
+    let name = without_final_break(written)
+    if not Text.ends_with(name, ".nex") {
+        return false
+    }
+    let stem = Text.slice(name, 0, Text.length(name) - 4)
+    if Text.length(stem) < 1 or Text.length(stem) > 64 {
+        return false
+    }
+    var i = 0
+    while i < Text.length(stem)
+        shrinks Text.length(stem) - i
+    {
+        let c = Text.slice(stem, i, i + 1)
+        if not (is_ascii_letter(c) or is_ascii_digit(c) or c == "_" or c == "-") {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// `[A-Za-z_][A-Za-z0-9_]{0,99}`
+fn is_identifier(written: Text) gives Bool {
+    if Text.length(written) < 1 or Text.length(written) > 100 {
+        return false
+    }
+    var i = 0
+    while i < Text.length(written)
+        shrinks Text.length(written) - i
+    {
+        let c = Text.slice(written, i, i + 1)
+        if not (is_ascii_letter(c) or c == "_" or (i > 0 and is_ascii_digit(c))) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// `^[\w-]{1,120}$`
+fn is_section(written: Text) gives Bool {
+    let name = without_final_break(written)
+    if Text.length(name) < 1 or Text.length(name) > 120 {
+        return false
+    }
+    var i = 0
+    while i < Text.length(name)
+        shrinks Text.length(name) - i
+    {
+        let c = Text.slice(name, i, i + 1)
+        if not (is_word_char(c) or c == "-") {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// What Python's repr shows of a JSON value, the way pydantic shows the value that it rejects in a message (cut in the middle when long).
+
+fn hex_of(code: Int, width: Int) gives Text {
+    let digits = "0123456789abcdef"
+    var out = ""
+    var rest = code
+    while rest > 0
+        shrinks rest
+    {
+        let digit = rest - (rest / 16) * 16
+        out = Text.slice(digits, digit, digit + 1) + out
+        rest = rest / 16
+    }
+    while Text.length(out) < width
+        shrinks width - Text.length(out)
+    {
+        out = "0" + out
+    }
+    return out
+}
+
+fn string_repr(value: Text) gives Text {
+    var quote = "'"
+    if Text.contains(value, "'") and not Text.contains(value, "\"") {
+        quote = "\""
+    }
+    var out = quote
+    var i = 0
+    while i < Text.length(value)
+        shrinks Text.length(value) - i
+    {
+        let c = Text.slice(value, i, i + 1)
+        let code = json.code_of(c)
+        if c == quote or c == "\\" {
+            out = out + "\\" + c
+        } else if c == "\n" {
+            out = out + "\\n"
+        } else if c == "\t" {
+            out = out + "\\t"
+        } else if code == 13 {
+            out = out + "\\r"
+        } else if lexer.is_printable(c) {
+            out = out + c
+        } else if code < 256 {
+            out = out + "\\x" + hex_of(code, 2)
+        } else if code < 65536 {
+            out = out + "\\u" + hex_of(code, 4)
+        } else {
+            out = out + "\\U" + hex_of(code, 8)
+        }
+        i = i + 1
+    }
+    return out + quote
+}
+
+fn value_repr(value: json.Json) gives Text {
+    return match value {
+        json.Json.JNull => "None"
+        json.Json.JBool(flag) => bool_repr(flag)
+        json.Json.JInt(number) => to_text(number)
+        json.Json.JFloat(number) => json.dump(value)
+        json.Json.JStr(text) => string_repr(text)
+        json.Json.JList(items) => list_repr(items)
+        json.Json.JObj(keys, values) => object_repr(keys, values)
+    }
+}
+
+fn bool_repr(flag: Bool) gives Text {
+    if flag {
+        return "True"
+    }
+    return "False"
+}
+
+fn list_repr(items: List[json.Json]) gives Text {
+    var shown: List[Text] = []
+    for item in items {
+        shown = List.append(shown, value_repr(item))
+    }
+    return "[" + parser.join_texts(shown, ", ") + "]"
+}
+
+fn object_repr(keys: List[Text], values: List[json.Json]) gives Text {
+    var shown: List[Text] = []
+    var i = 0
+    for key in keys {
+        shown = List.append(shown, string_repr(key) + ": " + value_repr(List.get(values, i)))
+        i = i + 1
+    }
+    return "\{" + parser.join_texts(shown, ", ") + "}"
+}
+
+fn shortened(text: Text) gives Text {
+    if Text.length(text) > 50 {
+        return Text.slice(text, 0, 25) + "..." + Text.slice(text, Text.length(text) - 24, Text.length(text))
+    }
+    return text
+}
+
+fn type_name(value: json.Json) gives Text {
+    return match value {
+        json.Json.JNull => "NoneType"
+        json.Json.JBool(flag) => "bool"
+        json.Json.JInt(number) => "int"
+        json.Json.JFloat(number) => "float"
+        json.Json.JStr(text) => "str"
+        json.Json.JList(items) => "list"
+        json.Json.JObj(keys, values) => "dict"
+    }
+}
+
+// The arguments of a tool
+
+// A parameter of a tool: its name, whether it must be given, whether `null` is a value that it accepts, and its default.
+type Param = { name: Text, required: Bool, nullable: Bool, default: Text }
+
+type Checked = { complaints: List[Text], values: List[json.Json] }
+
+fn plural_errors(count: Int) gives Text {
+    if count == 1 {
+        return "1 validation error"
+    }
+    return to_text(count) + " validation errors"
+}
+
+// The message that pydantic writes when the arguments do not fit the signature of the tool, and the values that did fit.
+fn checked_arguments(tool: Text, params: List[Param], arguments: json.Json) gives Checked {
+    var complaints: List[Text] = []
+    var values: List[json.Json] = []
+    for param in params {
+        let present = json.field_of(arguments, param.name)
+        var given = false
+        for key in json.keys_of(arguments) {
+            if key == param.name {
+                given = true
+            }
+        }
+        if not given {
+            if param.required {
+                complaints = List.append(
+                    complaints,
+                    param.name + "\n  Field required [type=missing, input_value=" + shortened(value_repr(arguments))
+                    + ", input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.14/v/missing"
+                )
+            }
+            values = List.append(values, json.Json.JNull())
+        } else if json.is_text(present) or (param.nullable and json.is_null(present)) {
+            values = List.append(values, present)
+        } else {
+            complaints = List.append(
+                complaints,
+                param.name + "\n  Input should be a valid string [type=string_type, input_value=" + shortened(value_repr(present))
+                + ", input_type=" + type_name(present) + "]\n    For further information visit https://errors.pydantic.dev/2.14/v/string_type"
+            )
+            values = List.append(values, json.Json.JNull())
+        }
+    }
+    if List.length(complaints) == 0 {
+        return Checked(complaints: [], values: values)
+    }
+    let head = plural_errors(List.length(complaints)) + " for " + tool + "Arguments\n"
+    return Checked(complaints: [head + parser.join_texts(complaints, "\n")], values: [])
+}
+
+// The text of an argument that was given, or the default.
+fn text_argument(value: json.Json, fallback: Text) gives Text {
+    if json.is_text(value) {
+        return json.text_value(value, fallback)
+    }
+    return fallback
+}
+
+// What a tool answers: a document, or the message of an error it expected (`ToolError`).
+type Outcome = { ok: Bool, document: json.Json, message: Text }
+
+fn failed(message: Text) gives Outcome {
+    return Outcome(ok: false, document: json.Json.JNull(), message: message)
+}
+
+fn succeeded(document: json.Json) gives Outcome {
+    return Outcome(ok: true, document: document, message: "")
+}
+
+// The validation that every tool that takes a program makes: 'source' and 'filename'.
+fn source_problem(source: Text, filename: Text) gives Text {
+    if project.byte_length(source) > max_source() {
+        return "'source' is larger than the limit of " + to_text(max_source()) + " bytes."
+    }
+    if not is_filename(filename) {
+        return "'filename' is only a label for the results: a simple name ending in .nex, not a path."
+    }
+    return ""
+}
+
+// The analysis of a program given as text: it cannot import anything.
+type Solo = { unsupported: Bool, results: List[project.Checked], reports: List[report.Report] }
+
+fn analyse_solo(filename: Text, source: Text) gives Solo {
+    let loaded = project.load_virtual(filename, [filename], [source], true)
+    let results = project.check_all(loaded, true)
+    var unsupported = false
+    for result in results {
+        if result.unsupported != "" {
+            unsupported = true
+        }
+    }
+    return Solo(unsupported: unsupported, results: results, reports: report.reports_of(results))
+}
+
+fn parsed(text: Text) gives json.Json {
+    let read = json.parse(text)
+    return read.value
+}
+
+fn unsupported_outcome() gives Outcome {
+    return failed("this implementation cannot check this program yet")
+}
+
+fn check_tool(filename: Text, source: Text) gives Outcome {
+    let solo = analyse_solo(filename, source)
+    if solo.unsupported {
+        return unsupported_outcome()
+    }
+    return succeeded(parsed(report.document(filename, solo.reports)))
+}
+
+fn diagnostics_tool(filename: Text, source: Text) gives Outcome {
+    let solo = analyse_solo(filename, source)
+    if solo.unsupported {
+        return unsupported_outcome()
+    }
+    let document = parsed(report.document(filename, solo.reports))
+    let list = json.field_of(document, "diagnostics")
+    return succeeded(
+        object_of(
+            ["ok", "count", "diagnostics"],
+            [json.field_of(document, "ok"), json.Json.JInt(List.length(json.items_of(list))), list]
+        )
+    )
+}
+
+fn inspect_tool(filename: Text, source: Text) gives Outcome {
+    let solo = analyse_solo(filename, source)
+    if solo.unsupported {
+        return unsupported_outcome()
+    }
+    let last = List.get(solo.results, List.length(solo.results) - 1)
+    var program = last.typed
+    if last.module.reason == "lexical" and not last.module.clean {
+        program = parser.Node.Null()
+    }
+    return succeeded(parsed(report.inspect_document(filename, solo.reports, last.module.clean, program)))
+}
+
+fn context_tool(filename: Text, source: Text) gives Outcome {
+    let solo = analyse_solo(filename, source)
+    if solo.unsupported {
+        return unsupported_outcome()
+    }
+    let described = context.analyse(filename, source, solo.results)
+    return succeeded(parsed(context.to_json(described, solo.reports)))
+}
+
+fn symbols_tool(filename: Text, source: Text, name: Text, function: Text) gives Outcome {
+    let solo = analyse_solo(filename, source)
+    if solo.unsupported {
+        return unsupported_outcome()
+    }
+    let listing = symbols.analyse(filename, solo.results)
+    return succeeded(parsed(symbols.render_json(listing, solo.reports, name, function)))
+}
+
+// The specification of the language
+
+type Section = { id: Text, title: Text, level: Int, start: Int, end: Int }
+
+fn sections_of(index: json.Json) gives List[Section] {
+    var out: List[Section] = []
+    for item in json.items_of(index) {
+        out = List.append(
+            out,
+            Section(
+                id: json.text_value(json.field_of(item, "id"), ""), title: json.text_value(json.field_of(item, "title"), ""),
+                level: whole(json.field_of(item, "level")), start: whole(json.field_of(item, "start")),
+                end: whole(json.field_of(item, "end"))
+            )
+        )
+    }
+    return out
+}
+
+fn whole(value: json.Json) gives Int {
+    return match json.int_or_none(value) {
+        Some(number) => number
+        None => 0
+    }
+}
+
+fn spec_tool(section: Text, given: Bool) gives Outcome {
+    let data = parsed(joined(mcp_tables.spec_index_parts()))
+    let sections = sections_of(json.field_of(data, "sections"))
+    var listed: List[json.Json] = []
+    for each in sections {
+        listed = List.append(
+            listed,
+            object_of(["id", "title", "level"], [text_json(each.id), text_json(each.title), json.Json.JInt(each.level)])
+        )
+    }
+    var chosen = json.Json.JNull()
+    if given {
+        var wanted = section
+        if wanted == "113-error-codes" {
+            wanted = "113-diagnostic-codes"
+        }
+        var found = false
+        let lines = split_on(joined(mcp_tables.spec_parts()), "\n")
+        for each in sections {
+            if not found and each.id == wanted {
+                found = true
+                var piece: List[Text] = []
+                var i = each.start
+                while i < each.end and i < List.length(lines)
+                    shrinks each.end - i
+                {
+                    piece = List.append(piece, List.get(lines, i))
+                    i = i + 1
+                }
+                chosen = object_of(
+                    ["id", "title", "text"], [text_json(each.id), text_json(each.title), text_json(trimmed(parser.join_texts(piece, "\n")))]
+                )
+            }
+        }
+        if not found {
+            return failed("The specification has no section with the id '" + section + "'.")
+        }
+    }
+    return succeeded(
+        object_of(
+            ["schema", "nexora_version", "available", "spec_version", "language", "sections", "section"],
+            [
+                text_json("nexora.spec/2"), text_json(info.version()), json.Json.JBool(true),
+                json.field_of(data, "spec_version"), text_json("en"), json.Json.JList(listed), chosen
+            ]
+        )
+    )
+}
+
+fn capabilities_tool() gives Outcome {
+    return succeeded(parsed(joined(mcp_tables.capabilities_parts())))
+}
+
+// The tools
+
+fn source_params() gives List[Param] {
+    return (
+        [
+            Param(name: "source", required: true, nullable: false, default: ""),
+            Param(name: "filename", required: false, nullable: false, default: "source.nex")
+        ]
+    )
+}
+
+fn tool_params(tool: Text) gives List[Param] {
+    if tool == "nexora_get_symbols" {
+        return List.concat(
+            source_params(),
+            [
+                Param(name: "name", required: false, nullable: true, default: ""),
+                Param(name: "function", required: false, nullable: true, default: "")
+            ]
+        )
+    }
+    if tool == "nexora_get_language_spec" {
+        return [Param(name: "section", required: false, nullable: true, default: "")]
+    }
+    if tool == "nexora_get_capabilities" {
+        return []
+    }
+    return source_params()
+}
+
+fn is_tool(tool: Text) gives Bool {
+    return List.contains(
+        [
+            "nexora_check", "nexora_get_diagnostics", "nexora_inspect", "nexora_get_context", "nexora_get_symbols",
+            "nexora_get_language_spec", "nexora_get_capabilities"
+        ],
+        tool
+    )
+}
+
+fn run_tool(tool: Text, arguments: json.Json) gives Outcome {
+    let checked = checked_arguments(tool, tool_params(tool), arguments)
+    if List.length(checked.complaints) > 0 {
+        return failed(List.get(checked.complaints, 0))
+    }
+    if tool == "nexora_get_capabilities" {
+        return capabilities_tool()
+    }
+    if tool == "nexora_get_language_spec" {
+        let section = List.get(checked.values, 0)
+        if json.is_text(section) and not is_section(json.text_value(section, "")) {
+            return failed("'section' must be a section id from the list this tool returns.")
+        }
+        return spec_tool(json.text_value(section, ""), json.is_text(section))
+    }
+    let source = json.text_value(List.get(checked.values, 0), "")
+    var filename = default_filename()
+    if json.is_text(List.get(checked.values, 1)) {
+        filename = json.text_value(List.get(checked.values, 1), default_filename())
+    }
+    let problem = source_problem(source, filename)
+    if problem != "" {
+        return failed(problem)
+    }
+    if tool == "nexora_check" {
+        return check_tool(filename, source)
+    }
+    if tool == "nexora_get_diagnostics" {
+        return diagnostics_tool(filename, source)
+    }
+    if tool == "nexora_inspect" {
+        return inspect_tool(filename, source)
+    }
+    if tool == "nexora_get_context" {
+        return context_tool(filename, source)
+    }
+    let name = List.get(checked.values, 2)
+    if json.is_text(name) and not is_identifier(json.text_value(name, "")) {
+        return failed("'name' must be a NEXORA identifier.")
+    }
+    let function = List.get(checked.values, 3)
+    if json.is_text(function) and not is_identifier(json.text_value(function, "")) {
+        return failed("'function' must be a NEXORA identifier.")
+    }
+    return symbols_tool(filename, source, json.text_value(name, ""), json.text_value(function, ""))
+}
+
+// The result of a call of a tool, as the protocol has it.
+fn call_result(tool: Text, arguments: json.Json) gives json.Json {
+    if not is_tool(tool) {
+        return object_of(
+            ["content", "isError"],
+            [json.Json.JList([object_of(["type", "text"], [text_json("text"), text_json("Unknown tool: " + tool)])]), json.Json.JBool(true)]
+        )
+    }
+    let outcome = run_tool(tool, arguments)
+    if not outcome.ok {
+        return object_of(
+            ["content", "isError"],
+            [
+                json.Json.JList(
+                    [object_of(["type", "text"], [text_json("text"), text_json("Error executing tool " + tool + ": " + outcome.message)])]
+                ),
+                json.Json.JBool(true)
+            ]
+        )
+    }
+    return object_of(
+        ["content", "isError", "structuredContent"],
+        [
+            json.Json.JList([object_of(["type", "text"], [text_json("text"), text_json(json.dump_indented(outcome.document))])]),
+            json.Json.JBool(false), outcome.document
+        ]
+    )
+}
+
+// The protocol
+
+fn supported_versions() gives List[Text] {
+    return ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]
+}
+
+fn latest_version() gives Text {
+    return "2025-11-25"
+}
+
+fn error_json(identifier: json.Json, code: Int, message: Text, data: json.Json) gives json.Json {
+    return object_of(
+        ["jsonrpc", "id", "error"],
+        [text_json("2.0"), identifier, object_of(["code", "message", "data"], [json.Json.JInt(code), text_json(message), data])]
+    )
+}
+
+fn result_json(identifier: json.Json, answer: json.Json) gives json.Json {
+    return object_of(["jsonrpc", "id", "result"], [text_json("2.0"), identifier, answer])
+}
+
+fn invalid_parameters(identifier: json.Json) gives json.Json {
+    return error_json(identifier, 0 - 32602, "Invalid request parameters", text_json(""))
+}
+
+fn initialize_result(params: json.Json) gives json.Json {
+    var version = latest_version()
+    let asked = json.text_value(json.field_of(params, "protocolVersion"), "")
+    if List.contains(supported_versions(), asked) {
+        version = asked
+    }
+    let off = json.Json.JBool(false)
+    return object_of(
+        ["capabilities", "instructions", "protocolVersion", "serverInfo"],
+        [
+            object_of(
+                ["prompts", "resources", "tools"],
+                [
+                    object_of(["listChanged"], [off]), object_of(["listChanged", "subscribe"], [off, off]),
+                    object_of(["listChanged"], [off])
+                ]
+            ),
+            text_json(mcp_tables.instructions()), text_json(version),
+            object_of(["name", "version"], [text_json("nexora"), text_json(info.version())])
+        ]
+    )
+}
+
+fn is_initialize(params: json.Json) gives Bool {
+    return (
+        json.is_text(json.field_of(params, "protocolVersion")) and json.is_object(json.field_of(params, "capabilities"))
+        and json.is_object(json.field_of(params, "clientInfo"))
+    )
+}
+
+// The answer to a request, or nothing for a notification; `started` tells whether the client has initialized the session.
+type Reply = { send: Bool, message: json.Json, started: Bool }
+
+fn silent(started: Bool) gives Reply {
+    return Reply(send: false, message: json.Json.JNull(), started: started)
+}
+
+fn reply_with(message: json.Json, started: Bool) gives Reply {
+    return Reply(send: true, message: message, started: started)
+}
+
+fn handle(message: json.Json, started: Bool) gives Reply {
+    let method = json.text_value(json.field_of(message, "method"), "")
+    let identifier = json.field_of(message, "id")
+    let params = json.field_of(message, "params")
+    if method == "" or json.is_null(identifier) {
+        return silent(started)
+    }
+    if method == "ping" {
+        return reply_with(result_json(identifier, object_of([], [])), started)
+    }
+    if method == "initialize" {
+        if not is_initialize(params) {
+            return reply_with(invalid_parameters(identifier), started)
+        }
+        return reply_with(result_json(identifier, initialize_result(params)), true)
+    }
+    let known = List.contains(
+        ["tools/list", "tools/call", "resources/list", "resources/templates/list", "prompts/list"], method
+    )
+    if not known {
+        return reply_with(error_json(identifier, 0 - 32601, "Method not found", text_json(method)), started)
+    }
+    if not started {
+        return reply_with(invalid_parameters(identifier), started)
+    }
+    if method == "tools/list" {
+        return reply_with(result_json(identifier, object_of(["tools"], [parsed(joined(mcp_tables.tools_parts()))])), started)
+    }
+    if method == "resources/list" {
+        return reply_with(result_json(identifier, object_of(["resources"], [json.Json.JList([])])), started)
+    }
+    if method == "resources/templates/list" {
+        return reply_with(result_json(identifier, object_of(["resourceTemplates"], [json.Json.JList([])])), started)
+    }
+    if method == "prompts/list" {
+        return reply_with(result_json(identifier, object_of(["prompts"], [json.Json.JList([])])), started)
+    }
+    let tool = json.field_of(params, "name")
+    var arguments = json.field_of(params, "arguments")
+    if json.is_null(arguments) {
+        arguments = object_of([], [])
+    }
+    if not json.is_text(tool) or not json.is_object(arguments) {
+        return reply_with(invalid_parameters(identifier), started)
+    }
+    return reply_with(result_json(identifier, call_result(json.text_value(tool, ""), arguments)), started)
+}
+
+fn serve() {
+    var started = false
+    var running = true
+    var fuel = 1000000000
+    while running and fuel > 0
+        shrinks fuel
+    {
+        fuel = fuel - 1
+        let got = mcp_line()
+        if List.length(got) == 0 {
+            running = false
+        } else {
+            let line = trimmed(List.get(got, 0))
+            if line != "" {
+                let read = json.parse(line)
+                if read.ok and json.is_object(read.value) {
+                    let reply = handle(read.value, started)
+                    started = reply.started
+                    if reply.send {
+                        mcp_send(json.dump(reply.message))
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn main() {
+    serve()
+}

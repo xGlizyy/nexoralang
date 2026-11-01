@@ -1,0 +1,7 @@
+import "missing.nex"
+
+fn main() {
+    print(1)
+}
+
+fn broken( {

@@ -250,6 +250,9 @@ fn clauses_start(clauses: List[lexer.Token], piece: lexer.Token) gives Bool {
 // carriage return as one line end each, and the positions of the tokens are the same.
 pub fn lf_only(text: Text) gives Text {
     let carriage = json.char_from_code(13)
+    if not Text.contains(text, carriage) {
+        return text
+    }
     var out = ""
     var i = 0
     while i < Text.length(text)

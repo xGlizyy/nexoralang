@@ -1,0 +1,11 @@
+// Ünïcode ✓ 😀 in a comment, with the cursor after it: 😀😀 x
+fn greet(name: Text) gives Text {
+    return "hola 😀 ñandú " + name
+}
+
+fn main() {
+    let message = greet("mundo 😀")
+    let other = "é" + message
+    print(other)
+    print(Text.length(other))
+}

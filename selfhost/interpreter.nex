@@ -2993,8 +2993,41 @@ fn denied_machine(m: Machine, message: Text, hint: Text, node: parser.Node) give
     return failed(m, res, node)
 }
 
-fn forwarding_machine(m: Machine, callee: Text, node: parser.Node) gives Machine {
-    return failed(m, bad("E0000", "'" + callee + "' cannot be forwarded to the host by this interpreter yet"), node)
+// The operations of the host that the rules above admit. The definitions here are what Python runs, which has no way to do them; the
+// executables that cgen.nex makes replace them with C ones (the answer is "ok" and what was read, or "error" and the reason).
+fn host_get(url: Text) gives List[Text] {
+    return ["error", "HTTPS requests are not available in this interpreter: " + url]
+}
+
+fn host_run(command: Text, arguments: List[Text]) gives List[Text] {
+    return ["error", "external processes are not available in this interpreter: " + command + " " + parser.join_texts(arguments, " ")]
+}
+
+fn texts_of_val(v: Val) gives List[Text] {
+    return match v {
+        Val.VList(items) => texts_of_items(items)
+        _ => []
+    }
+}
+
+fn texts_of_items(items: List[Val]) gives List[Text] {
+    var out: List[Text] = []
+    for item in items {
+        out = List.append(out, text_val(item))
+    }
+    return out
+}
+
+// The value of a call to the host, or the failure it ended with.
+fn host_answer(m: Machine, host: HostCfg, node: parser.Node, answer: List[Text]) gives Machine {
+    let reading = List.get(answer, 1)
+    if List.get(answer, 0) != "ok" {
+        return failed(m, bad_at("E3014", reading, "", [], "arg0"), node)
+    }
+    if text_too_long(host.max_text, reading) {
+        return failed(m, text_limit_res(host.max_text, "arg0"), node)
+    }
+    return mk(m, Control.CValue(Val.VText(reading)), m.env, m.stack)
 }
 
 fn read_hint() gives Text {
@@ -3201,7 +3234,7 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
         }
         let origin = https_origin(first)
         if origin.unsupported {
-            return forwarding_machine(m, callee, node)
+            return failed(m, bad("E0000", "'" + callee + "' cannot be forwarded to the host by this interpreter yet"), node)
         }
         if not origin.admitted {
             return failed(
@@ -3218,7 +3251,7 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
         if not origin_declared(host, host.grant_kinds, host.grant_paths, origin.origin) {
             return denied_machine(m, "'" + origin.origin + "' is not among the network origins the user allowed", network_hint, node)
         }
-        return forwarding_machine(m, callee, node)
+        return host_answer(m, host, node, host_get(first))
     }
     let process_hint = "A program needs 'uses process' and the matching --allow-process command; the environment may still deny external processes."
     if host.locked {
@@ -3230,7 +3263,7 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
     if not List.contains(scopes_for(host.grant_kinds, host.grant_paths, "process"), first) {
         return denied_machine(m, "'" + first + "' is not among the commands the user allowed", process_hint, node)
     }
-    return forwarding_machine(m, callee, node)
+    return host_answer(m, host, node, host_run(first, texts_of_val(List.get(a, 1))))
 }
 
 // Reads what the command line gives a run: the grants, the input, the working directory and the arguments.

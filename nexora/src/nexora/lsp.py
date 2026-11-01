@@ -340,7 +340,10 @@ class Server:
         document = self.documents.get(uri)
         if document is None:
             return
-        text = item.get("contentChanges", [{}])[-1].get("text", document.text)
+        # The changes are beside the document in the parameters, not inside it. The server asks for the whole text
+        # (change: 1), so the last change is the new text.
+        changes = params.get("contentChanges") or [{}]
+        text = changes[-1].get("text", document.text)
         self.documents[uri] = Document(document.uri, document.language_id, item.get("version", document.version), text)
         self.analyses.clear()
 

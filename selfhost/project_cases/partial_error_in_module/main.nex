@@ -1,0 +1,7 @@
+import "m.nex"
+
+fn main() {
+    print(m.add(1, 2))
+}
+
+fn broken( {

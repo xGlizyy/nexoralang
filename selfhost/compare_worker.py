@@ -62,6 +62,8 @@ def hand_written() -> list[tuple[str, object]]:
         ("run list growth", run_program("fn main() {\n    var items: List[Int] = []\n    var i = 0\n    while i < 20000\n        shrinks 20000 - i\n    {\n        items = List.append(items, i)\n        i = i + 1\n    }\n    print(List.length(items))\n}\n", limits={"output_bytes": 100, "text_chars": 100})),
         ("import in a single source", {"action": "check", "code": 'import "other.nex"\n\nfn main() {\n}\n'}),
         ("import in a single source, run", run_program('import "other.nex"\n\nfn main() {\n}\n')),
+        # The checker says nothing else about a program whose import cannot be read (the loader of Python drops it).
+        ("import in a single source, used", {"action": "check", "code": 'import "other.nex"\n\nfn main() {\n    print(other.one())\n}\n'}),
         # Projects
         ("project ok", {"action": "run", "code": "", "filename": "main.nex", "limits": LIMITS, "files": {
             "main.nex": 'import "lib.nex"\n\nfn main() {\n    print(lib.twice(4))\n}\n',

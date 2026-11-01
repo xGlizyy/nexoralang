@@ -1,0 +1,1721 @@
+// The language server of NEXORA, written in NEXORA (nexora/src/nexora/lsp.py is the reference): it speaks LSP over the standard input
+// and output.
+//
+// It does not re-implement the language. Every answer comes from the stages the command line uses (the lexer, the parser and the
+// checker, through project.nex), so the diagnostics the editor shows are the ones `nex check` gives, with the same codes and texts.
+//
+// What it offers: diagnostics, completion, hover, go to definition, references, rename, the symbols of a document, the signature of
+// the function being called, document highlights, and formatting of a document or a range (formatter.nex).
+//
+// The three functions that talk to the system (`lsp_line`, `lsp_body`, `lsp_send`) are replaced by C ones in the executable that
+// cgen.nex makes; the definitions here are what Python runs, which has no input.
+
+import "json.nex"
+import "parser.nex"
+import "lexer.nex"
+import "project.nex"
+import "report.nex"
+import "context.nex"
+import "symbols.nex"
+import "formatter.nex"
+import "lsp_tables.nex"
+import "info.nex"
+
+uses read "."
+
+// One header line of a message, without its line break; an empty list when the input ends.
+fn lsp_line() gives List[Text] {
+    return []
+}
+
+// Exactly `count` bytes of the input as a text; an empty list when the input ends first.
+fn lsp_body(_: Int) gives List[Text] {
+    return []
+}
+
+// A message, with the header that the protocol asks for, written and flushed.
+fn lsp_send(_: Text) {
+}
+
+// Texts and numbers
+
+fn astral() gives Text {
+    return json.char_from_code(65536)
+}
+
+fn split_lines(text: Text) gives List[Text] {
+    var lines: List[Text] = []
+    var start = 0
+    var i = 0
+    let n = Text.length(text)
+    let carriage = json.char_from_code(13)
+    while i < n
+        shrinks n - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c == "\n" {
+            lines = List.append(lines, Text.slice(text, start, i))
+            start = i + 1
+        } else if c == carriage {
+            lines = List.append(lines, Text.slice(text, start, i))
+            if i + 1 < n and Text.slice(text, i + 1, i + 2) == "\n" {
+                i = i + 1
+            }
+            start = i + 1
+        }
+        i = i + 1
+    }
+    return List.append(lines, Text.slice(text, start, n))
+}
+
+fn join_lines(lines: List[Text], from: Int, to: Int) gives Text {
+    var out = ""
+    var i = from
+    while i < to
+        shrinks to - i
+    {
+        if i > from {
+            out = out + "\n"
+        }
+        out = out + List.get(lines, i)
+        i = i + 1
+    }
+    return out
+}
+
+fn units_of(c: Text, encoding: Text) gives Int {
+    if encoding == "utf-16" {
+        if c >= astral() {
+            return 2
+        }
+        return 1
+    }
+    if encoding == "utf-8" {
+        return project.byte_length(c)
+    }
+    return 1
+}
+
+// The column of the protocol (counted from zero, in the units of the encoding) of a column of the language (from one).
+fn to_protocol_column(line: Text, column: Int, encoding: Text) gives Int {
+    var stop = column - 1
+    if stop < 0 {
+        stop = 0
+    }
+    if stop > Text.length(line) {
+        stop = Text.length(line)
+    }
+    var total = 0
+    var i = 0
+    while i < stop
+        shrinks stop - i
+    {
+        total = total + units_of(Text.slice(line, i, i + 1), encoding)
+        i = i + 1
+    }
+    return total
+}
+
+// The column of the language (from one) of a column of the protocol (from zero).
+fn from_protocol_column(line: Text, character: Int, encoding: Text) gives Int {
+    if character <= 0 {
+        return 1
+    }
+    var used = 0
+    var i = 0
+    while i < Text.length(line)
+        shrinks Text.length(line) - i
+    {
+        let units = units_of(Text.slice(line, i, i + 1), encoding)
+        if used + units > character {
+            return i + 1
+        }
+        used = used + units
+        if used == character {
+            return i + 2
+        }
+        i = i + 1
+    }
+    return Text.length(line) + 1
+}
+
+// Json
+
+fn text_json(value: Text) gives json.Json {
+    return json.Json.JStr(value)
+}
+
+fn int_json(value: Int) gives json.Json {
+    return json.Json.JInt(value)
+}
+
+fn object_of(keys: List[Text], values: List[json.Json]) gives json.Json {
+    return json.Json.JObj(keys, values)
+}
+
+fn list_of(items: List[json.Json]) gives json.Json {
+    return json.Json.JList(items)
+}
+
+fn number_at(value: json.Json, fallback: Int) gives Int {
+    return match json.int_or_none(value) {
+        Some(n) => n
+        None => fallback
+    }
+}
+
+fn field2(value: json.Json, first: Text, second: Text) gives json.Json {
+    return json.field_of(json.field_of(value, first), second)
+}
+
+// Places
+
+fn holds(place: symbols.Place, line: Int, column: Int) gives Bool {
+    return place.line == line and place.column <= column and column < place.end_column
+}
+
+fn position_json(line: Int, column: Int, lines: List[Text], encoding: Text) gives json.Json {
+    var index = line - 1
+    if index < 0 {
+        index = 0
+    }
+    var text = ""
+    if index < List.length(lines) {
+        text = List.get(lines, index)
+    }
+    return object_of(["line", "character"], [int_json(index), int_json(to_protocol_column(text, column, encoding))])
+}
+
+fn range_json(place: symbols.Place, lines: List[Text], encoding: Text) gives json.Json {
+    return object_of(
+        ["start", "end"],
+        [
+            position_json(place.line, place.column, lines, encoding),
+            position_json(place.end_line, place.end_column, lines, encoding)
+        ]
+    )
+}
+
+// The line and the column of the language of a position of the protocol.
+type Spot = { line: Int, column: Int }
+
+fn spot_of(position: json.Json, lines: List[Text], encoding: Text) gives Spot {
+    let line = number_at(json.field_of(position, "line"), 0) + 1
+    var character = number_at(json.field_of(position, "character"), 0)
+    if character < 0 {
+        character = 0
+    }
+    var column = character + 1
+    if line >= 1 and line <= List.length(lines) {
+        column = from_protocol_column(List.get(lines, line - 1), character, encoding)
+    }
+    return Spot(line: line, column: column)
+}
+
+// Paths and addresses
+
+fn hex_value(c: Text) gives Int {
+    let digits = "0123456789abcdef"
+    var i = 0
+    while i < 16
+        shrinks 16 - i
+    {
+        if Text.slice(digits, i, i + 1) == c {
+            return i
+        }
+        i = i + 1
+    }
+    let upper = "ABCDEF"
+    i = 0
+    while i < 6
+        shrinks 6 - i
+    {
+        if Text.slice(upper, i, i + 1) == c {
+            return 10 + i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn modulo(number: Int, by: Int) gives Int {
+    return number - (number / by) * by
+}
+
+// The bytes of a text as numbers (UTF-8).
+fn bytes_of(text: Text) gives List[Int] {
+    var out: List[Int] = []
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let code = json.code_of(Text.slice(text, i, i + 1))
+        if code < 128 {
+            out = List.append(out, code)
+        } else if code < 2048 {
+            out = List.append(List.append(out, 192 + code / 64), 128 + modulo(code, 64))
+        } else if code < 65536 {
+            out = List.append(List.append(List.append(out, 224 + code / 4096), 128 + modulo(code / 64, 64)), 128 + modulo(code, 64))
+        } else {
+            out = List.append(
+                List.append(List.append(List.append(out, 240 + code / 262144), 128 + modulo(code / 4096, 64)), 128 + modulo(code / 64, 64)),
+                128 + modulo(code, 64)
+            )
+        }
+        i = i + 1
+    }
+    return out
+}
+
+// The text of the UTF-8 bytes (a byte that does not belong to a character is dropped).
+fn text_of_bytes(bytes: List[Int]) gives Text {
+    var out = ""
+    var i = 0
+    while i < List.length(bytes)
+        shrinks List.length(bytes) - i
+    {
+        let b = List.get(bytes, i)
+        var need = 0
+        var code = b
+        if b >= 240 {
+            need = 3
+            code = modulo(b, 8)
+        } else if b >= 224 {
+            need = 2
+            code = modulo(b, 16)
+        } else if b >= 192 {
+            need = 1
+            code = modulo(b, 32)
+        }
+        var k = 0
+        while k < need and i + 1 + k < List.length(bytes)
+            shrinks need - k
+        {
+            code = code * 64 + modulo(List.get(bytes, i + 1 + k), 64)
+            k = k + 1
+        }
+        out = out + json.char_from_code(code)
+        i = i + 1 + need
+    }
+    return out
+}
+
+fn percent_decoded(text: Text) gives Text {
+    if not Text.contains(text, "%") {
+        return text
+    }
+    var bytes: List[Int] = []
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if (c == "%" and i + 2 < Text.length(text) and hex_value(Text.slice(text, i + 1, i + 2)) >= 0
+            and hex_value(Text.slice(text, i + 2, i + 3)) >= 0) {
+            bytes = List.append(bytes, hex_value(Text.slice(text, i + 1, i + 2)) * 16 + hex_value(Text.slice(text, i + 2, i + 3)))
+            i = i + 3
+        } else {
+            for b in bytes_of(c) {
+                bytes = List.append(bytes, b)
+            }
+            i = i + 1
+        }
+    }
+    return text_of_bytes(bytes)
+}
+
+fn hex_digit(n: Int) gives Text {
+    return Text.slice("0123456789ABCDEF", n, n + 1)
+}
+
+// What `urllib.parse.quote` leaves as it is, plus the slash.
+fn is_plain(c: Text) gives Bool {
+    return ((c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9") or c == "_" or c == "." or c == "-"
+        or c == "~" or c == "/")
+}
+
+fn percent_encoded(text: Text) gives Text {
+    var out = ""
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if is_plain(c) {
+            out = out + c
+        } else {
+            for b in bytes_of(c) {
+                out = out + "%" + hex_digit(b / 16) + hex_digit(modulo(b, 16))
+            }
+        }
+        i = i + 1
+    }
+    return out
+}
+
+fn split_on(text: Text, separator: Text) gives List[Text] {
+    var parts: List[Text] = []
+    var start = 0
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.slice(text, i, i + 1) == separator {
+            parts = List.append(parts, Text.slice(text, start, i))
+            start = i + 1
+        }
+        i = i + 1
+    }
+    return List.append(parts, Text.slice(text, start, Text.length(text)))
+}
+
+// A path with its dots resolved and its separators as "/".
+fn normal_path(written: Text) gives Text {
+    let safe = project.slashes(written)
+    var kept: List[Text] = []
+    for part in split_on(safe, "/") {
+        if part == "" or part == "." {
+            kept = kept
+        } else if part == ".." {
+            if List.length(kept) > 0 and List.get(kept, List.length(kept) - 1) != ".." {
+                var shorter: List[Text] = []
+                var i = 0
+                while i < List.length(kept) - 1
+                    shrinks List.length(kept) - i
+                {
+                    shorter = List.append(shorter, List.get(kept, i))
+                    i = i + 1
+                }
+                kept = shorter
+            }
+        } else {
+            kept = List.append(kept, part)
+        }
+    }
+    var out = parser.join_texts(kept, "/")
+    if Text.starts_with(safe, "/") {
+        out = "/" + out
+    }
+    return out
+}
+
+// The path of a `file:` address, or "" for another kind of address.
+fn path_from_uri(uri: Text) gives Text {
+    if not Text.starts_with(uri, "file:") {
+        return ""
+    }
+    var rest = Text.slice(uri, 5, Text.length(uri))
+    if Text.starts_with(rest, "//") {
+        rest = Text.slice(rest, 2, Text.length(rest))
+        var at = 0
+        while at < Text.length(rest) and Text.slice(rest, at, at + 1) != "/"
+            shrinks Text.length(rest) - at
+        {
+            at = at + 1
+        }
+        rest = Text.slice(rest, at, Text.length(rest))
+    }
+    var stop = 0
+    while stop < Text.length(rest) and Text.slice(rest, stop, stop + 1) != "?" and Text.slice(rest, stop, stop + 1) != "#"
+        shrinks Text.length(rest) - stop
+    {
+        stop = stop + 1
+    }
+    var path = percent_decoded(Text.slice(rest, 0, stop))
+    if Text.length(path) >= 3 and Text.slice(path, 0, 1) == "/" and Text.slice(path, 2, 3) == ":" {
+        path = Text.slice(path, 1, Text.length(path))
+    }
+    return normal_path(path)
+}
+
+fn uri_of_path(path: Text) gives Text {
+    if Text.length(path) >= 2 and Text.slice(path, 1, 2) == ":" {
+        return "file:///" + Text.slice(path, 0, 2) + percent_encoded(Text.slice(path, 2, Text.length(path)))
+    }
+    return "file://" + percent_encoded(path)
+}
+
+// The documents the editor has open, and what was found out about them
+
+type Doc = { uri: Text, language: Text, version: Int, text: Text }
+
+// A module of the project of a document: its name, its file, the address of that file and its lines.
+type Part = { name: Text, path: Text, uri: Text, text: Text, lines: List[Text] }
+
+// A function of the file that runs, as the tree has it: all of them, also the ones the checker did not accept.
+type Declared = { name: Text, place: symbols.Place, returns: Text }
+
+type Analysis = {
+    uri: Text, text: Text, entry: Text, analysed: Bool, symbols: List[symbols.Symbol], reports: List[report.Report],
+    parts: List[Part], declared: List[Declared]
+}
+
+type Tables = {
+    keywords: List[Text], reserved: List[Text], builtins: List[json.Json]
+}
+
+type State = {
+    docs: List[Doc], cache: List[Analysis], encoding: Text, tables: Tables
+}
+
+fn doc_index(docs: List[Doc], uri: Text) gives Int {
+    var i = 0
+    while i < List.length(docs)
+        shrinks List.length(docs) - i
+    {
+        let doc = List.get(docs, i)
+        if doc.uri == uri {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn text_of_file(path: Text) gives Text {
+    let raw = read_file(path)
+    if Text.length(raw) > 0 and Text.slice(raw, 0, 1) == json.char_from_code(65279) {
+        return Text.slice(raw, 1, Text.length(raw))
+    }
+    return raw
+}
+
+fn part_of(state: State, module: project.Module) gives Part {
+    var uri = ""
+    var text = ""
+    var found = false
+    for doc in state.docs {
+        if not found and path_from_uri(doc.uri) == module.path {
+            uri = doc.uri
+            text = doc.text
+            found = true
+        }
+    }
+    if not found {
+        uri = uri_of_path(module.path)
+        text = text_of_file(module.path)
+    }
+    return Part(name: module.name, path: module.path, uri: uri, text: text, lines: split_lines(text))
+}
+
+fn analyse(state: State, doc: Doc) gives Analysis {
+    let entry = path_from_uri(doc.uri)
+    var loaded = project.Project(modules: [], names: [], over: "")
+    if entry != "" {
+        var paths: List[Text] = []
+        var texts: List[Text] = []
+        for each in state.docs {
+            let there = path_from_uri(each.uri)
+            if there != "" {
+                paths = List.append(paths, there)
+                texts = List.append(texts, each.text)
+            }
+        }
+        loaded = project.load_overlay(entry, paths, texts)
+    } else {
+        loaded = project.load_virtual(doc.uri, [doc.uri], [doc.text], true)
+    }
+    let results = project.check_all(loaded, false)
+    var unsupported = false
+    for result in results {
+        if result.unsupported != "" {
+            unsupported = true
+        }
+    }
+    let reports = report.reports_of(results)
+    let listing = symbols.analyse(doc.uri, results)
+    var parts: List[Part] = []
+    for module in loaded.modules {
+        parts = List.append(parts, part_of(state, module))
+    }
+    var declared: List[Declared] = []
+    let last = List.get(results, List.length(results) - 1)
+    if listing.analysed {
+        for function in context.items_of(context.field(last.typed, "functions")) {
+            declared = List.append(
+                declared,
+                Declared(
+                    name: context.text_of(context.field(function, "name")), place: symbols.name_place(function),
+                    returns: symbols.editor_return(function)
+                )
+            )
+        }
+    }
+    return Analysis(
+        uri: doc.uri, text: doc.text, entry: entry, analysed: listing.analysed and not unsupported, symbols: listing.symbols,
+        reports: reports, parts: parts, declared: declared
+    )
+}
+
+// The analysis of a document, computed once for each state of the documents.
+type Found = { analysis: Analysis, state: State }
+
+fn analysis_of(state: State, doc: Doc) gives Found {
+    for cached in state.cache {
+        if cached.uri == doc.uri and cached.text == doc.text {
+            return Found(analysis: cached, state: state)
+        }
+    }
+    let fresh = analyse(state, doc)
+    return Found(
+        analysis: fresh, state: State(docs: state.docs, cache: List.append(state.cache, fresh), encoding: state.encoding, tables: state.tables)
+    )
+}
+
+// The part of the project that a symbol or a reference belongs to: the file that runs for the empty name.
+fn part_named(analysis: Analysis, name: Text) gives Option[Part] {
+    if name == "" {
+        if List.length(analysis.parts) == 0 {
+            return None
+        }
+        return Some(List.get(analysis.parts, List.length(analysis.parts) - 1))
+    }
+    for part in analysis.parts {
+        if part.name == name {
+            return Some(part)
+        }
+    }
+    return None
+}
+
+// Diagnostics
+
+fn severity_of(code: Text) gives Int {
+    if Text.starts_with(code, "W") {
+        return 2
+    }
+    return 1
+}
+
+fn diagnostic_json(problem: parser.Problem, text: Text, encoding: Text) gives json.Json {
+    let lines = split_lines(text)
+    let place = symbols.Place(line: problem.line, column: problem.column, end_line: problem.end_line, end_column: problem.end_column)
+    var message = problem.label
+    if problem.hint != "" {
+        message = problem.label + "\n\n" + problem.hint
+    }
+    return object_of(
+        ["range", "severity", "code", "source", "message"],
+        [
+            range_json(place, lines, encoding), int_json(severity_of(problem.code)), text_json(problem.code), text_json("nexora"),
+            text_json(message)
+        ]
+    )
+}
+
+fn text_of_part(analysis: Analysis, path: Text) gives Text {
+    for part in analysis.parts {
+        if part.path == path {
+            return part.text
+        }
+    }
+    return analysis.text
+}
+
+fn diagnostics_of(analysis: Analysis, encoding: Text) gives json.Json {
+    var out: List[json.Json] = []
+    for each in analysis.reports {
+        if analysis.entry == "" or each.file == analysis.entry {
+            out = List.append(out, diagnostic_json(each.problem, text_of_part(analysis, each.file), encoding))
+        }
+    }
+    return list_of(out)
+}
+
+// Symbols
+
+fn symbol_at(analysis: Analysis, line: Int, column: Int) gives Option[symbols.Symbol] {
+    for symbol in analysis.symbols {
+        if symbol.module == "" and holds(symbol.declaration, line, column) {
+            return Some(symbol)
+        }
+    }
+    for symbol in analysis.symbols {
+        if symbol.module == "" {
+            for place in symbol.references {
+                if holds(place, line, column) {
+                    return Some(symbol)
+                }
+            }
+        }
+    }
+    for symbol in analysis.symbols {
+        if symbol.module != "" {
+            for place in symbol.references {
+                if holds(place, line, column) {
+                    return Some(symbol)
+                }
+            }
+        }
+    }
+    return None
+}
+
+// The address and the lines of the file that declares a symbol.
+type Whereabouts = { uri: Text, lines: List[Text] }
+
+fn whereabouts(analysis: Analysis, name: Text, document_lines: List[Text]) gives Whereabouts {
+    return match part_named(analysis, name) {
+        Some(part) => Whereabouts(uri: part.uri, lines: part.lines)
+        None => Whereabouts(uri: analysis.uri, lines: document_lines)
+    }
+}
+
+// Where a symbol is written, grouped by the file: the order in which the files were met.
+type Group = { uri: Text, ranges: List[json.Json] }
+
+fn grouped(groups: List[Group], uri: Text, range: json.Json) gives List[Group] {
+    var out: List[Group] = []
+    var done = false
+    for group in groups {
+        if group.uri == uri {
+            out = List.append(out, Group(uri: group.uri, ranges: List.append(group.ranges, range)))
+            done = true
+        } else {
+            out = List.append(out, group)
+        }
+    }
+    if not done {
+        out = List.append(out, Group(uri: uri, ranges: [range]))
+    }
+    return out
+}
+
+fn before_or_equal(line: Int, column: Int, other_line: Int, other_column: Int) gives Bool {
+    return line < other_line or (line == other_line and column <= other_column)
+}
+
+// The reference of a call to a function of a module, cut down to the name of the function: `m.add` to `add`.
+fn member_place(analysis: Analysis, module: Text, name: Text, place: symbols.Place) gives symbols.Place {
+    return match part_named(analysis, module) {
+        Some(part) => member_in(part.text, name, place)
+        None => place
+    }
+}
+
+fn member_in(text: Text, name: Text, place: symbols.Place) gives symbols.Place {
+    var found = place
+    let lexed = lexer.tokenize(text)
+    for token in lexed.tokens {
+        if (token.kind == "name" and token.lexeme == name
+            and before_or_equal(place.line, place.column, token.line, token.column)
+            and before_or_equal(token.end_line, token.end_column, place.end_line, place.end_column)) {
+            found = symbols.Place(line: token.line, column: token.column, end_line: token.end_line, end_column: token.end_column)
+        }
+    }
+    return found
+}
+
+fn locations_of(analysis: Analysis, symbol: symbols.Symbol, document_lines: List[Text], encoding: Text) gives List[Group] {
+    var groups: List[Group] = []
+    let own = whereabouts(analysis, symbol.module, document_lines)
+    groups = grouped(groups, own.uri, range_json(symbol.declaration, own.lines, encoding))
+    var index = 0
+    for place in symbol.references {
+        var module = ""
+        if index < List.length(symbol.ref_modules) {
+            module = List.get(symbol.ref_modules, index)
+        }
+        var shown = place
+        if symbol.category == "function" and symbol.module != "" {
+            shown = member_place(analysis, module, symbol.name, place)
+        }
+        let there = whereabouts(analysis, module, document_lines)
+        groups = grouped(groups, there.uri, range_json(shown, there.lines, encoding))
+        index = index + 1
+    }
+    return groups
+}
+
+// Calls
+
+// The name of the function whose call is being written at that position: a name followed by its parenthesis.
+fn call_name_at(text: Text, line: Int, column: Int) gives Text {
+    let lexed = lexer.tokenize(text)
+    let tokens = lexed.tokens
+    let count = List.length(tokens)
+    var index = 0
+    while index < count
+        shrinks count - index
+    {
+        let token = List.get(tokens, index)
+        if token.kind == "name" and token.line == line and token.column <= column and column < token.end_column {
+            var following = lexer.Token(kind: "", lexeme: "", value: "", line: 0, column: 0, end_line: 0, end_column: 0)
+            if index + 1 < count {
+                following = List.get(tokens, index + 1)
+            }
+            if following.kind == "." and index + 3 < count {
+                let member = List.get(tokens, index + 2)
+                let paren = List.get(tokens, index + 3)
+                if member.kind == "name" and paren.kind == "(" and paren.line == line {
+                    return token.lexeme + "." + member.lexeme
+                }
+            }
+            if index >= 2 and following.kind == "(" and following.line == line {
+                let dot = List.get(tokens, index - 1)
+                let owner = List.get(tokens, index - 2)
+                if dot.kind == "." and owner.kind == "name" {
+                    return owner.lexeme + "." + token.lexeme
+                }
+            }
+            if following.kind == "(" and following.line == line {
+                return token.lexeme
+            }
+            return ""
+        }
+        index = index + 1
+    }
+    return ""
+}
+
+// The function that a name stands for: the functions of the file that runs by their name, those of a module by `module.name`.
+fn function_named(analysis: Analysis, name: Text) gives Option[symbols.Symbol] {
+    for symbol in analysis.symbols {
+        if symbol.category == "function" {
+            var key = symbol.name
+            if symbol.module != "" {
+                key = symbol.module + "." + symbol.name
+            }
+            if key == name {
+                return Some(symbol)
+            }
+        }
+    }
+    return None
+}
+
+fn builtin_named(tables: Tables, name: Text) gives Option[json.Json] {
+    for entry in tables.builtins {
+        if json.text_value(json.field_of(entry, "name"), "") == name {
+            return Some(entry)
+        }
+    }
+    return None
+}
+
+fn markdown_json(code: Text) gives json.Json {
+    return object_of(
+        ["contents"],
+        [object_of(["kind", "value"], [text_json("markdown"), text_json("```nexora\n" + code + "\n```")])]
+    )
+}
+
+// The handlers: each one answers with the result of the request.
+
+type Answer = { result: json.Json, state: State }
+
+fn document_of(state: State, params: json.Json) gives Option[Doc] {
+    let at = doc_index(state.docs, json.text_value(field2(params, "textDocument", "uri"), ""))
+    if at < 0 {
+        return None
+    }
+    return Some(List.get(state.docs, at))
+}
+
+fn null_answer(state: State) gives Answer {
+    return Answer(result: json.Json.JNull(), state: state)
+}
+
+fn empty_answer(state: State) gives Answer {
+    return Answer(result: list_of([]), state: state)
+}
+
+fn sorted_unique(names: List[Text]) gives List[Text] {
+    var out: List[Text] = []
+    for name in names {
+        var before: List[Text] = []
+        var after: List[Text] = []
+        var present = false
+        for kept in out {
+            if kept == name {
+                present = true
+            }
+            if kept < name {
+                before = List.append(before, kept)
+            } else if kept > name {
+                after = List.append(after, kept)
+            }
+        }
+        if not present {
+            out = List.concat(List.append(before, name), after)
+        }
+    }
+    return out
+}
+
+fn names_in_scope(analysis: Analysis, line: Int, column: Int) gives List[Text] {
+    var names: List[Text] = []
+    for symbol in analysis.symbols {
+        if not symbol.scoped or symbol.category == "function" {
+            if symbol.module != "" {
+                names = List.append(names, symbol.module + "." + symbol.name)
+            } else {
+                names = List.append(names, symbol.name)
+            }
+        } else if symbol.scope.line < line or (symbol.scope.line == line and symbol.scope.column <= column) {
+            names = List.append(names, symbol.name)
+        }
+    }
+    return names
+}
+
+fn item_json(label: Text, kind: Int, detail: Text, sort: Text) gives json.Json {
+    return object_of(
+        ["label", "kind", "detail", "sortText"], [text_json(label), int_json(kind), text_json(detail), text_json(sort)]
+    )
+}
+
+fn completion(state: State, params: json.Json) gives Answer {
+    return match document_of(state, params) {
+        None => empty_answer(state)
+        Some(doc) => completion_in(state, doc, params)
+    }
+}
+
+fn completion_in(state: State, doc: Doc, params: json.Json) gives Answer {
+    let found = analysis_of(state, doc)
+    let spot = spot_of(json.field_of(params, "position"), split_lines(doc.text), found.state.encoding)
+    var items: List[json.Json] = []
+    for word in found.state.tables.keywords {
+        items = List.append(items, item_json(word, 14, "keyword", "1" + word))
+    }
+    for entry in found.state.tables.builtins {
+        let name = json.text_value(json.field_of(entry, "name"), "")
+        items = List.append(items, item_json(name, 3, json.text_value(json.field_of(entry, "signature"), ""), "2" + name))
+    }
+    if found.analysis.analysed {
+        for name in sorted_unique(names_in_scope(found.analysis, spot.line, spot.column)) {
+            items = List.append(items, item_json(name, 6, "in scope", "3" + name))
+        }
+    }
+    for word in found.state.tables.reserved {
+        items = List.append(items, item_json(word, 14, "reserved word: not implemented yet", "4" + word))
+    }
+    return Answer(result: list_of(items), state: found.state)
+}
+
+fn hover(state: State, params: json.Json) gives Answer {
+    return match document_of(state, params) {
+        None => null_answer(state)
+        Some(doc) => hover_in(state, doc, params)
+    }
+}
+
+fn hover_in(state: State, doc: Doc, params: json.Json) gives Answer {
+    let found = analysis_of(state, doc)
+    if not found.analysis.analysed {
+        return null_answer(found.state)
+    }
+    let lines = split_lines(doc.text)
+    let spot = spot_of(json.field_of(params, "position"), lines, found.state.encoding)
+    let called = call_name_at(doc.text, spot.line, spot.column)
+    if called != "" {
+        let function = function_named(found.analysis, called)
+        if is_some_symbol(function) {
+            return Answer(result: markdown_json(signature_of(function)), state: found.state)
+        }
+        let builtin = builtin_named(found.state.tables, called)
+        if is_some_json(builtin) {
+            return Answer(result: markdown_json(json.text_value(json.field_of(value_json(builtin), "signature"), "")), state: found.state)
+        }
+    }
+    return match symbol_at(found.analysis, spot.line, spot.column) {
+        None => null_answer(found.state)
+        Some(symbol) => Answer(result: markdown_json(symbol_detail(found.analysis, symbol)), state: found.state)
+    }
+}
+
+fn is_some_symbol(found: Option[symbols.Symbol]) gives Bool {
+    return match found {
+        Some(symbol) => true
+        None => false
+    }
+}
+
+fn signature_of(found: Option[symbols.Symbol]) gives Text {
+    return match found {
+        Some(symbol) => symbol.editor_signature
+        None => ""
+    }
+}
+
+fn is_some_json(found: Option[json.Json]) gives Bool {
+    return match found {
+        Some(entry) => true
+        None => false
+    }
+}
+
+fn value_json(found: Option[json.Json]) gives json.Json {
+    return match found {
+        Some(entry) => entry
+        None => json.Json.JNull()
+    }
+}
+
+fn symbol_detail(analysis: Analysis, symbol: symbols.Symbol) gives Text {
+    var detail = symbol.kind
+    if detail == "" {
+        detail = "?"
+    }
+    if symbol.category == "function" {
+        // Python looks the function up by its bare name: a function of a module is found only if the file that runs has one with that name.
+        for other in analysis.symbols {
+            if other.category == "function" and other.module == "" and other.name == symbol.name {
+                detail = other.editor_signature
+            }
+        }
+    }
+    return symbol.name + ": " + detail
+}
+
+fn definition(state: State, params: json.Json) gives Answer {
+    return match document_of(state, params) {
+        None => empty_answer(state)
+        Some(doc) => definition_in(state, doc, params)
+    }
+}
+
+fn definition_in(state: State, doc: Doc, params: json.Json) gives Answer {
+    let found = analysis_of(state, doc)
+    if not found.analysis.analysed {
+        return Answer(result: list_of([]), state: found.state)
+    }
+    let lines = split_lines(doc.text)
+    let spot = spot_of(json.field_of(params, "position"), lines, found.state.encoding)
+    return match symbol_at(found.analysis, spot.line, spot.column) {
+        None => Answer(result: list_of([]), state: found.state)
+        Some(symbol) => Answer(result: list_of([definition_json(found.analysis, symbol, lines, found.state.encoding)]), state: found.state)
+    }
+}
+
+fn definition_json(analysis: Analysis, symbol: symbols.Symbol, lines: List[Text], encoding: Text) gives json.Json {
+    let own = whereabouts(analysis, symbol.module, lines)
+    return object_of(["uri", "range"], [text_json(own.uri), range_json(symbol.declaration, own.lines, encoding)])
+}
+
+fn references(state: State, params: json.Json) gives Answer {
+    return match document_of(state, params) {
+        None => empty_answer(state)
+        Some(doc) => references_in(state, doc, params)
+    }
+}
+
+fn references_in(state: State, doc: Doc, params: json.Json) gives Answer {
+    let found = analysis_of(state, doc)
+    if not found.analysis.analysed {
+        return Answer(result: list_of([]), state: found.state)
+    }
+    let lines = split_lines(doc.text)
+    let encoding = found.state.encoding
+    let spot = spot_of(json.field_of(params, "position"), lines, encoding)
+    return match symbol_at(found.analysis, spot.line, spot.column) {
+        None => Answer(result: list_of([]), state: found.state)
+        Some(symbol) => Answer(result: references_json(found.analysis, symbol, lines, encoding, params), state: found.state)
+    }
+}
+
+fn includes_declaration(params: json.Json) gives Bool {
+    return match field2(params, "context", "includeDeclaration") {
+        json.Json.JBool(value) => value
+        _ => true
+    }
+}
+
+fn references_json(
+    analysis: Analysis, symbol: symbols.Symbol, lines: List[Text], encoding: Text, params: json.Json
+) gives json.Json {
+    var groups = locations_of(analysis, symbol, lines, encoding)
+    if not includes_declaration(params) {
+        let own = whereabouts(analysis, symbol.module, lines)
+        let declared = json.dump(range_json(symbol.declaration, own.lines, encoding))
+        var kept: List[Group] = []
+        for group in groups {
+            if group.uri == own.uri {
+                var ranges: List[json.Json] = []
+                for range in group.ranges {
+                    if json.dump(range) != declared {
+                        ranges = List.append(ranges, range)
+                    }
+                }
+                kept = List.append(kept, Group(uri: group.uri, ranges: ranges))
+            } else {
+                kept = List.append(kept, group)
+            }
+        }
+        groups = kept
+    }
+    var out: List[json.Json] = []
+    for group in groups {
+        for range in group.ranges {
+            out = List.append(out, object_of(["uri", "range"], [text_json(group.uri), range]))
+        }
+    }
+    return list_of(out)
+}
+
+fn highlight(state: State, params: json.Json) gives Answer {
+    return match document_of(state, params) {
+        None => empty_answer(state)
+        Some(doc) => highlight_in(state, doc, params)
+    }
+}
+
+fn highlight_in(state: State, doc: Doc, params: json.Json) gives Answer {
+    let found = analysis_of(state, doc)
+    if not found.analysis.analysed {
+        return Answer(result: list_of([]), state: found.state)
+    }
+    let lines = split_lines(doc.text)
+    let spot = spot_of(json.field_of(params, "position"), lines, found.state.encoding)
+    return match symbol_at(found.analysis, spot.line, spot.column) {
+        None => Answer(result: list_of([]), state: found.state)
+        Some(symbol) => Answer(result: highlights_json(found.analysis, symbol, doc, lines, found.state.encoding), state: found.state)
+    }
+}
+
+fn highlights_json(analysis: Analysis, symbol: symbols.Symbol, doc: Doc, lines: List[Text], encoding: Text) gives json.Json {
+    var out: List[json.Json] = []
+    for group in locations_of(analysis, symbol, lines, encoding) {
+        if group.uri == doc.uri {
+            for range in group.ranges {
+                out = List.append(out, object_of(["range", "kind"], [range, int_json(1)]))
+            }
+        }
+    }
+    return list_of(out)
+}
+
+fn rename(state: State, params: json.Json) gives Answer {
+    return match document_of(state, params) {
+        None => null_answer(state)
+        Some(doc) => rename_in(state, doc, params)
+    }
+}
+
+fn rename_in(state: State, doc: Doc, params: json.Json) gives Answer {
+    let found = analysis_of(state, doc)
+    if not found.analysis.analysed {
+        return null_answer(found.state)
+    }
+    let lines = split_lines(doc.text)
+    let spot = spot_of(json.field_of(params, "position"), lines, found.state.encoding)
+    let new_name = json.text_value(json.field_of(params, "newName"), "")
+    return match symbol_at(found.analysis, spot.line, spot.column) {
+        None => null_answer(found.state)
+        Some(symbol) => rename_answer(found, symbol, lines, new_name)
+    }
+}
+
+fn rename_answer(found: Found, symbol: symbols.Symbol, lines: List[Text], new_name: Text) gives Answer {
+    if new_name == "" {
+        return null_answer(found.state)
+    }
+    var keys: List[Text] = []
+    var values: List[json.Json] = []
+    for group in locations_of(found.analysis, symbol, lines, found.state.encoding) {
+        var edits: List[json.Json] = []
+        for range in group.ranges {
+            edits = List.append(edits, object_of(["range", "newText"], [range, text_json(new_name)]))
+        }
+        keys = List.append(keys, group.uri)
+        values = List.append(values, list_of(edits))
+    }
+    return Answer(result: object_of(["changes"], [object_of(keys, values)]), state: found.state)
+}
+
+fn prepare_rename(state: State, params: json.Json) gives Answer {
+    return match document_of(state, params) {
+        None => null_answer(state)
+        Some(doc) => prepare_rename_in(state, doc, params)
+    }
+}
+
+fn prepare_rename_in(state: State, doc: Doc, params: json.Json) gives Answer {
+    let found = analysis_of(state, doc)
+    if not found.analysis.analysed {
+        return null_answer(found.state)
+    }
+    let lines = split_lines(doc.text)
+    let spot = spot_of(json.field_of(params, "position"), lines, found.state.encoding)
+    return match symbol_at(found.analysis, spot.line, spot.column) {
+        None => null_answer(found.state)
+        Some(symbol) => Answer(
+            result: object_of(
+                ["range", "placeholder"], [range_json(symbol.declaration, lines, found.state.encoding), text_json(symbol.name)]
+            ),
+            state: found.state
+        )
+    }
+}
+
+fn document_symbol(state: State, params: json.Json) gives Answer {
+    return match document_of(state, params) {
+        None => empty_answer(state)
+        Some(doc) => document_symbol_in(state, doc)
+    }
+}
+
+fn document_symbol_in(state: State, doc: Doc) gives Answer {
+    let found = analysis_of(state, doc)
+    if not found.analysis.analysed {
+        return Answer(result: list_of([]), state: found.state)
+    }
+    let lines = split_lines(doc.text)
+    let encoding = found.state.encoding
+    var out: List[json.Json] = []
+    for function in found.analysis.declared {
+        let range = range_json(function.place, lines, encoding)
+        out = List.append(
+            out,
+            object_of(
+                ["name", "kind", "range", "selectionRange", "detail"],
+                [text_json(function.name), int_json(12), range, range, text_json(function.returns)]
+            )
+        )
+    }
+    for symbol in found.analysis.symbols {
+        if symbol.recorded == "variable" and symbol.module == "" {
+            let range = range_json(symbol.declaration, lines, encoding)
+            out = List.append(
+                out,
+                object_of(
+                    ["name", "kind", "range", "selectionRange", "detail"],
+                    [text_json(symbol.name), int_json(13), range, range, text_json(symbol.kind)]
+                )
+            )
+        }
+    }
+    return Answer(result: list_of(out), state: found.state)
+}
+
+fn signature_help(state: State, params: json.Json) gives Answer {
+    return match document_of(state, params) {
+        None => null_answer(state)
+        Some(doc) => signature_help_in(state, doc, params)
+    }
+}
+
+fn signature_help_in(state: State, doc: Doc, params: json.Json) gives Answer {
+    let found = analysis_of(state, doc)
+    if not found.analysis.analysed {
+        return null_answer(found.state)
+    }
+    let spot = spot_of(json.field_of(params, "position"), split_lines(doc.text), found.state.encoding)
+    let name = call_name_at(doc.text, spot.line, spot.column)
+    if name == "" {
+        return null_answer(found.state)
+    }
+    return match function_named(found.analysis, name) {
+        Some(function) => Answer(result: function_signatures_json(function), state: found.state)
+        None => builtin_help(found, name)
+    }
+}
+
+fn builtin_help(found: Found, name: Text) gives Answer {
+    return match builtin_named(found.state.tables, name) {
+        None => null_answer(found.state)
+        Some(entry) => Answer(result: builtin_signatures_json(entry), state: found.state)
+    }
+}
+
+fn function_signatures_json(function: symbols.Symbol) gives json.Json {
+    var parameters: List[json.Json] = []
+    var i = 0
+    for each in function.params {
+        parameters = List.append(
+            parameters, object_of(["label", "documentation"], [text_json(each), text_json(List.get(function.editor_param_types, i))])
+        )
+        i = i + 1
+    }
+    return signatures_json(function.editor_signature, parameters)
+}
+
+fn signatures_json(label: Text, parameters: List[json.Json]) gives json.Json {
+    return object_of(
+        ["signatures", "activeSignature"],
+        [list_of([object_of(["label", "parameters"], [text_json(label), list_of(parameters)])]), int_json(0)]
+    )
+}
+
+fn builtin_signatures_json(entry: json.Json) gives json.Json {
+    var parameters: List[json.Json] = []
+    for pair in json.items_of(json.field_of(entry, "params")) {
+        let both = json.items_of(pair)
+        parameters = List.append(
+            parameters,
+            object_of(
+                ["label", "documentation"],
+                [text_json(json.text_value(List.get(both, 0), "")), text_json(json.text_value(List.get(both, 1), ""))]
+            )
+        )
+    }
+    return signatures_json(json.text_value(json.field_of(entry, "signature"), ""), parameters)
+}
+
+// Formatting
+
+fn whole_range(lines: List[Text], encoding: Text) gives json.Json {
+    var last_line = List.length(lines) - 1
+    if last_line < 0 {
+        last_line = 0
+    }
+    var character = 0
+    if List.length(lines) > 0 {
+        let last = List.get(lines, List.length(lines) - 1)
+        character = to_protocol_column(last, Text.length(last) + 1, encoding)
+    }
+    return object_of(
+        ["start", "end"],
+        [
+            object_of(["line", "character"], [int_json(0), int_json(0)]),
+            object_of(["line", "character"], [int_json(last_line), int_json(character)])
+        ]
+    )
+}
+
+fn range_of_lines(lines: List[Text], start_line: Int, end_line: Int, encoding: Text) gives json.Json {
+    var from = start_line - 1
+    if from < 0 {
+        from = 0
+    }
+    var limit = end_line
+    if limit > List.length(lines) {
+        limit = List.length(lines)
+    }
+    var last = limit - 1
+    if last < 0 {
+        last = 0
+    }
+    var character = 0
+    if List.length(lines) > 0 {
+        let text = List.get(lines, last)
+        character = to_protocol_column(text, Text.length(text) + 1, encoding)
+    }
+    return object_of(
+        ["start", "end"],
+        [
+            object_of(["line", "character"], [int_json(from), int_json(0)]),
+            object_of(["line", "character"], [int_json(last), int_json(character)])
+        ]
+    )
+}
+
+fn formatting(state: State, params: json.Json) gives Answer {
+    return match document_of(state, params) {
+        None => empty_answer(state)
+        Some(doc) => formatting_in(state, doc)
+    }
+}
+
+fn formatting_in(state: State, doc: Doc) gives Answer {
+    let result = formatter.format_source(doc.text)
+    if not result.ok {
+        return empty_answer(state)
+    }
+    return Answer(
+        result: list_of([object_of(["range", "newText"], [whole_range(split_lines(doc.text), state.encoding), text_json(result.text)])]),
+        state: state
+    )
+}
+
+fn range_formatting(state: State, params: json.Json) gives Answer {
+    return match document_of(state, params) {
+        None => empty_answer(state)
+        Some(doc) => range_formatting_in(state, doc, params)
+    }
+}
+
+fn range_formatting_in(state: State, doc: Doc, params: json.Json) gives Answer {
+    let result = formatter.format_source(doc.text)
+    if not result.ok {
+        return empty_answer(state)
+    }
+    let area = json.field_of(params, "range")
+    let start = number_at(field2(area, "start", "line"), 0) + 1
+    let end = number_at(field2(area, "end", "line"), 0) + 1
+    var formatted = split_on(result.text, "\n")
+    if List.length(formatted) > 0 and List.get(formatted, List.length(formatted) - 1) == "" {
+        var shorter: List[Text] = []
+        var i = 0
+        while i < List.length(formatted) - 1
+            shrinks List.length(formatted) - i
+        {
+            shorter = List.append(shorter, List.get(formatted, i))
+            i = i + 1
+        }
+        formatted = shorter
+    }
+    var from = start - 1
+    if from < 0 {
+        from = 0
+    }
+    var to = end
+    if to > List.length(formatted) {
+        to = List.length(formatted)
+    }
+    var cut = ""
+    if from < to {
+        cut = join_lines(formatted, from, to)
+    }
+    return Answer(
+        result: list_of(
+            [object_of(["range", "newText"], [range_of_lines(split_lines(doc.text), start, end, state.encoding), text_json(cut)])]
+        ),
+        state: state
+    )
+}
+
+// The notifications about the documents
+
+fn did_open(state: State, params: json.Json) gives State {
+    let item = json.field_of(params, "textDocument")
+    let doc = Doc(
+        uri: json.text_value(json.field_of(item, "uri"), ""), language: json.text_value(json.field_of(item, "languageId"), "nexora"),
+        version: number_at(json.field_of(item, "version"), 0), text: json.text_value(json.field_of(item, "text"), "")
+    )
+    return State(docs: with_doc(state.docs, doc), cache: [], encoding: state.encoding, tables: state.tables)
+}
+
+// A document set by its address: it keeps its place if it was there.
+fn with_doc(docs: List[Doc], doc: Doc) gives List[Doc] {
+    let at = doc_index(docs, doc.uri)
+    if at < 0 {
+        return List.append(docs, doc)
+    }
+    var out: List[Doc] = []
+    var i = 0
+    while i < List.length(docs)
+        shrinks List.length(docs) - i
+    {
+        if i == at {
+            out = List.append(out, doc)
+        } else {
+            out = List.append(out, List.get(docs, i))
+        }
+        i = i + 1
+    }
+    return out
+}
+
+fn did_change(state: State, params: json.Json) gives State {
+    let item = json.field_of(params, "textDocument")
+    let uri = json.text_value(json.field_of(item, "uri"), "")
+    let at = doc_index(state.docs, uri)
+    if at < 0 {
+        return state
+    }
+    let old = List.get(state.docs, at)
+    var text = old.text
+    let changes = json.items_of(json.field_of(params, "contentChanges"))
+    if List.length(changes) > 0 {
+        text = json.text_value(json.field_of(List.get(changes, List.length(changes) - 1), "text"), old.text)
+    }
+    let doc = Doc(uri: old.uri, language: old.language, version: number_at(json.field_of(item, "version"), old.version), text: text)
+    return State(docs: with_doc(state.docs, doc), cache: [], encoding: state.encoding, tables: state.tables)
+}
+
+fn did_close(state: State, params: json.Json) gives State {
+    let uri = json.text_value(field2(params, "textDocument", "uri"), "")
+    var kept: List[Doc] = []
+    for doc in state.docs {
+        if doc.uri != uri {
+            kept = List.append(kept, doc)
+        }
+    }
+    return State(docs: kept, cache: [], encoding: state.encoding, tables: state.tables)
+}
+
+fn did_save(state: State) gives State {
+    return State(docs: state.docs, cache: [], encoding: state.encoding, tables: state.tables)
+}
+
+fn initialize(state: State, params: json.Json) gives Answer {
+    var encoding = "utf-16"
+    var chosen = false
+    for offered in json.items_of(field2(json.field_of(params, "capabilities"), "general", "positionEncodings")) {
+        let name = json.text_value(offered, "")
+        if not chosen and (name == "utf-16" or name == "utf-8" or name == "utf-32") {
+            encoding = name
+            chosen = true
+        }
+    }
+    let yes = json.Json.JBool(true)
+    let capabilities = object_of(
+        [
+            "positionEncoding", "textDocumentSync", "completionProvider", "hoverProvider", "definitionProvider", "referencesProvider",
+            "renameProvider", "documentSymbolProvider", "signatureHelpProvider", "documentFormattingProvider",
+            "documentRangeFormattingProvider", "documentHighlightProvider", "workspace"
+        ],
+        [
+            text_json(encoding),
+            object_of(["openClose", "change", "save"], [yes, int_json(1), object_of(["includeText"], [yes])]),
+            object_of(["triggerCharacters"], [list_of([text_json("."), text_json(" ")])]), yes, yes, yes,
+            object_of(["prepareProvider"], [yes]), yes, object_of(["triggerCharacters"], [list_of([text_json("("), text_json(",")])]),
+            yes, yes, yes,
+            object_of(["workspaceFolders"], [object_of(["supported", "changeNotifications"], [yes, yes])])
+        ]
+    )
+    let result = object_of(
+        ["capabilities", "serverInfo"],
+        [capabilities, object_of(["name", "version"], [text_json("nexora-lsp"), text_json(info.version())])]
+    )
+    return Answer(
+        result: result,
+        state: State(docs: state.docs, cache: state.cache, encoding: encoding, tables: state.tables)
+    )
+}
+
+// The loop
+
+fn read_message() gives Option[json.Json] {
+    var length = 0
+    var reading = true
+    var fuel = 100000
+    while reading and fuel > 0
+        shrinks fuel
+    {
+        fuel = fuel - 1
+        let got = lsp_line()
+        if List.length(got) == 0 {
+            return None
+        }
+        let line = List.get(got, 0)
+        let trimmed = trimmed_text(line)
+        if trimmed == "" {
+            reading = false
+        } else {
+            let colon = index_of_colon(trimmed)
+            if colon >= 0 and lowered(trimmed_text(Text.slice(trimmed, 0, colon))) == "content-length" {
+                length = digits_value(trimmed_text(Text.slice(trimmed, colon + 1, Text.length(trimmed))))
+            }
+        }
+    }
+    if reading or length <= 0 {
+        return None
+    }
+    let body = lsp_body(length)
+    if List.length(body) == 0 {
+        return None
+    }
+    let parsed = json.parse(List.get(body, 0))
+    if not parsed.ok {
+        return None
+    }
+    return Some(parsed.value)
+}
+
+fn index_of_colon(text: Text) gives Int {
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.slice(text, i, i + 1) == ":" {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn is_blank(c: Text) gives Bool {
+    return c == " " or c == "\t" or c == "\n" or c == json.char_from_code(13) or c == json.char_from_code(11) or c == json.char_from_code(12)
+}
+
+fn trimmed_text(text: Text) gives Text {
+    var start = 0
+    var end = Text.length(text)
+    while start < end and is_blank(Text.slice(text, start, start + 1))
+        shrinks end - start
+    {
+        start = start + 1
+    }
+    while end > start and is_blank(Text.slice(text, end - 1, end))
+        shrinks end - start
+    {
+        end = end - 1
+    }
+    return Text.slice(text, start, end)
+}
+
+fn lowered(text: Text) gives Text {
+    var out = ""
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c >= "A" and c <= "Z" {
+            out = out + json.char_from_code(json.code_of(c) + 32)
+        } else {
+            out = out + c
+        }
+        i = i + 1
+    }
+    return out
+}
+
+fn digits_value(text: Text) gives Int {
+    var value = 0
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c < "0" or c > "9" {
+            return 0
+        }
+        value = value * 10 + json.code_of(c) - 48
+        i = i + 1
+    }
+    return value
+}
+
+fn send(message: json.Json) {
+    lsp_send(json.dump(message))
+}
+
+fn reply(identifier: json.Json, answer: json.Json) {
+    send(object_of(["jsonrpc", "id", "result"], [text_json("2.0"), identifier, answer]))
+}
+
+fn publish(state: State) gives State {
+    var current = state
+    for doc in state.docs {
+        let found = analysis_of(current, doc)
+        current = found.state
+        send(
+            object_of(
+                ["jsonrpc", "method", "params"],
+                [
+                    text_json("2.0"), text_json("textDocument/publishDiagnostics"),
+                    object_of(
+                        ["uri", "version", "diagnostics"],
+                        [text_json(doc.uri), int_json(doc.version), diagnostics_of(found.analysis, current.encoding)]
+                    )
+                ]
+            )
+        )
+    }
+    return current
+}
+
+fn tables_of() gives Tables {
+    let read = json.parse(lsp_tables.tables_text())
+    let data = read.value
+    var keywords: List[Text] = []
+    for word in json.items_of(json.field_of(data, "keywords")) {
+        keywords = List.append(keywords, json.text_value(word, ""))
+    }
+    var reserved: List[Text] = []
+    for word in json.items_of(json.field_of(data, "reserved")) {
+        reserved = List.append(reserved, json.text_value(word, ""))
+    }
+    return Tables(keywords: keywords, reserved: reserved, builtins: json.items_of(json.field_of(data, "builtins")))
+}
+
+// What a request answers; a notification has no answer.
+fn handle(state: State, method: Text, params: json.Json) gives Answer {
+    if method == "initialize" {
+        return initialize(state, params)
+    }
+    if method == "textDocument/completion" {
+        return completion(state, params)
+    }
+    if method == "textDocument/hover" {
+        return hover(state, params)
+    }
+    if method == "textDocument/definition" {
+        return definition(state, params)
+    }
+    if method == "textDocument/references" {
+        return references(state, params)
+    }
+    if method == "textDocument/rename" {
+        return rename(state, params)
+    }
+    if method == "textDocument/prepareRename" {
+        return prepare_rename(state, params)
+    }
+    if method == "textDocument/documentSymbol" {
+        return document_symbol(state, params)
+    }
+    if method == "textDocument/signatureHelp" {
+        return signature_help(state, params)
+    }
+    if method == "textDocument/formatting" {
+        return formatting(state, params)
+    }
+    if method == "textDocument/rangeFormatting" {
+        return range_formatting(state, params)
+    }
+    if method == "textDocument/documentHighlight" {
+        return highlight(state, params)
+    }
+    if method == "textDocument/didOpen" {
+        return Answer(result: json.Json.JNull(), state: did_open(state, params))
+    }
+    if method == "textDocument/didChange" {
+        return Answer(result: json.Json.JNull(), state: did_change(state, params))
+    }
+    if method == "textDocument/didClose" {
+        return Answer(result: json.Json.JNull(), state: did_close(state, params))
+    }
+    if method == "textDocument/didSave" {
+        return Answer(result: json.Json.JNull(), state: did_save(state))
+    }
+    return null_answer(state)
+}
+
+fn is_known(method: Text) gives Bool {
+    return List.contains(
+        [
+            "initialize", "initialized", "shutdown", "exit", "textDocument/didOpen", "textDocument/didChange", "textDocument/didClose",
+            "textDocument/didSave", "textDocument/completion", "textDocument/hover", "textDocument/definition",
+            "textDocument/references", "textDocument/rename", "textDocument/prepareRename", "textDocument/documentSymbol",
+            "textDocument/signatureHelp", "textDocument/formatting", "textDocument/rangeFormatting", "textDocument/documentHighlight"
+        ],
+        method
+    )
+}
+
+fn serve() {
+    var state = State(docs: [], cache: [], encoding: "utf-16", tables: tables_of())
+    var running = true
+    var fuel = 1000000000
+    while running and fuel > 0
+        shrinks fuel
+    {
+        fuel = fuel - 1
+        match read_message() {
+            None => {
+                running = false
+            }
+            Some(message) => {
+                let method = json.text_value(json.field_of(message, "method"), "")
+                let identifier = json.field_of(message, "id")
+                let params = json.field_of(message, "params")
+                if method == "exit" {
+                    running = false
+                } else if not is_known(method) {
+                    if not json.is_null(identifier) {
+                        reply(identifier, json.Json.JNull())
+                    }
+                } else {
+                    let answer = handle(state, method, params)
+                    state = answer.state
+                    if not json.is_null(identifier) {
+                        reply(identifier, answer.result)
+                    }
+                    if method == "textDocument/didOpen" or method == "textDocument/didChange" or method == "textDocument/didSave" {
+                        state = publish(state)
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn main() {
+    serve()
+}
