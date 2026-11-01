@@ -22,6 +22,7 @@ import "render.nex"
 import "titles.nex"
 import "interpreter.nex"
 import "info.nex"
+import "report.nex"
 
 // What the process is willing to read of a request.
 fn max_request() gives Int {
@@ -29,66 +30,20 @@ fn max_request() gives Int {
 }
 
 fn string(text: Text) gives json.Json {
-    return json.Json.JStr(text)
+    return report.string(text)
 }
 
 fn number(value: Int) gives json.Json {
-    return json.Json.JInt(value)
+    return report.number(value)
 }
 
-fn position(value: Int) gives json.Json {
-    if value <= 0 {
-        return json.Json.JNull()
-    }
-    return json.Json.JInt(value)
-}
-
-// A diagnostic as `Diagnostic.to_dict` writes it.
-fn diagnostic_json(problem: parser.Problem, file: Text) gives json.Json {
-    var title = titles.title_of(problem.code)
-    if title == "" {
-        title = "Not supported by this implementation yet"
-    }
-    var hint = json.Json.JNull()
-    if problem.hint != "" {
-        hint = string(problem.hint)
-    }
-    var notes: List[json.Json] = []
-    for note in problem.notes {
-        notes = List.append(notes, string(note))
-    }
-    let keys = ["severity", "category", "code", "message", "label", "hint", "notes", "file", "line", "column", "end_line", "end_column"]
-    let values = [string(render.severity_of(problem.code)), string(titles.category_of(problem.code)), string(problem.code), string(title), string(problem.label), hint, json.Json.JList(notes), string(file), position(problem.line), position(problem.column), position(problem.end_line), position(problem.end_column)]
-    return json.Json.JObj(keys, values)
-}
-
-type Report = { problem: parser.Problem, file: Text }
-
-fn reports_of(results: List[project.Checked]) gives List[Report] {
-    var reports: List[Report] = []
-    for result in results {
-        for problem in result.problems {
-            reports = List.append(reports, Report(problem: problem, file: result.module.path))
-        }
-    }
-    return reports
-}
-
-fn has_errors(reports: List[Report]) gives Bool {
+fn has_errors(reports: List[report.Report]) gives Bool {
     for report in reports {
         if not Text.starts_with(report.problem.code, "W") {
             return true
         }
     }
     return false
-}
-
-fn diagnostics_json(reports: List[Report]) gives json.Json {
-    var items: List[json.Json] = []
-    for report in reports {
-        items = List.append(items, diagnostic_json(report.problem, report.file))
-    }
-    return json.Json.JList(items)
 }
 
 // A `nexora.result/1`.
@@ -264,7 +219,7 @@ fn read_request(request: json.Json) gives Request {
 }
 
 // A request that has been loaded and checked: what the checker found, and the program that runs when it found no errors.
-type Analysis = { unsupported: Bool, reports: List[Report], node: parser.Node }
+type Analysis = { unsupported: Bool, reports: List[report.Report], node: parser.Node }
 
 fn analyse(request: Request) gives Analysis {
     var loaded = project.load_virtual(request.filename, [request.filename], [request.code], true)
@@ -282,7 +237,7 @@ fn analyse(request: Request) gives Analysis {
     if List.length(results) > 1 {
         node = project.link(results)
     }
-    return Analysis(unsupported: false, reports: reports_of(results), node: node)
+    return Analysis(unsupported: false, reports: report.reports_of(results), node: node)
 }
 
 // The options of a run: the limits of the request, and nothing else.
@@ -305,11 +260,11 @@ fn answer(request: Request) {
     }
     let reports = analysis.reports
     if has_errors(reports) {
-        print(result_line(request.action, "invalid", "", diagnostics_json(reports), json.Json.JNull()))
+        print(result_line(request.action, "invalid", "", report.diagnostics(reports), json.Json.JNull()))
         return
     }
     if request.action == "check" {
-        print(result_line("check", "success", "", diagnostics_json(reports), json.Json.JNull()))
+        print(result_line("check", "success", "", report.diagnostics(reports), json.Json.JNull()))
         return
     }
     let node = analysis.node
@@ -339,7 +294,7 @@ fn answer(request: Request) {
     if file == "" {
         file = request.filename
     }
-    let one = diagnostics_json([Report(problem: problem, file: file)])
+    let one = report.diagnostics([report.Report(problem: problem, file: file)])
     if problem.code == "E3007" and not request.files {
         print(result_line(
             "run", "memory_limit", output, one,
@@ -614,7 +569,7 @@ fn debug_finished(request: Request, done: interpreter.Advance) {
     if titles.category_of(problem.code) == "contract" {
         state = "contract_violation"
     }
-    let one = diagnostics_json([Report(problem: problem, file: done.file)])
+    let one = report.diagnostics([report.Report(problem: problem, file: done.file)])
     print(debug_doc(state, ["diagnostics", "output"], [one, string(done.delta)], true))
 }
 
@@ -632,7 +587,7 @@ fn debug_session(given: json.Json) {
         return
     }
     if has_errors(analysis.reports) {
-        print(debug_doc("invalid", ["diagnostics"], [diagnostics_json(analysis.reports)], true))
+        print(debug_doc("invalid", ["diagnostics"], [report.diagnostics(analysis.reports)], true))
         return
     }
     var breaks = read.breaks

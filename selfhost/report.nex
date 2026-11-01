@@ -1,0 +1,77 @@
+// A diagnostic as `Diagnostic.to_dict` writes it, and the documents made of them: what the worker of the playground answers
+// (worker.nex) and what `nex --format json` writes (nex.nex), the same code for both.
+
+import "json.nex"
+import "parser.nex"
+import "project.nex"
+import "render.nex"
+import "titles.nex"
+import "info.nex"
+
+pub fn string(text: Text) gives json.Json {
+    return json.Json.JStr(text)
+}
+
+pub fn number(value: Int) gives json.Json {
+    return json.Json.JInt(value)
+}
+
+pub fn position(value: Int) gives json.Json {
+    if value <= 0 {
+        return json.Json.JNull()
+    }
+    return json.Json.JInt(value)
+}
+
+// A diagnostic as `Diagnostic.to_dict` writes it.
+pub fn diagnostic(problem: parser.Problem, file: Text) gives json.Json {
+    var title = titles.title_of(problem.code)
+    if title == "" {
+        title = "Not supported by this implementation yet"
+    }
+    var hint = json.Json.JNull()
+    if problem.hint != "" {
+        hint = string(problem.hint)
+    }
+    var notes: List[json.Json] = []
+    for note in problem.notes {
+        notes = List.append(notes, string(note))
+    }
+    let keys = ["severity", "category", "code", "message", "label", "hint", "notes", "file", "line", "column", "end_line", "end_column"]
+    let values = [string(render.severity_of(problem.code)), string(titles.category_of(problem.code)), string(problem.code), string(title), string(problem.label), hint, json.Json.JList(notes), string(file), position(problem.line), position(problem.column), position(problem.end_line), position(problem.end_column)]
+    return json.Json.JObj(keys, values)
+}
+
+pub type Report = { problem: parser.Problem, file: Text }
+
+pub fn reports_of(results: List[project.Checked]) gives List[Report] {
+    var reports: List[Report] = []
+    for result in results {
+        for problem in result.problems {
+            reports = List.append(reports, Report(problem: problem, file: result.module.path))
+        }
+    }
+    return reports
+}
+
+pub fn diagnostics(reports: List[Report]) gives json.Json {
+    var items: List[json.Json] = []
+    for report in reports {
+        items = List.append(items, diagnostic(report.problem, report.file))
+    }
+    return json.Json.JList(items)
+}
+
+// The `nexora.diagnostics/1` document of `nex check --format json` (nexora/src/nexora/tooling.py, `diagnostics_document`): the
+// file of the program, whether it has no error, and every diagnostic with the file it belongs to.
+pub fn document(path: Text, reports: List[Report]) gives Text {
+    var ok = true
+    for report in reports {
+        if not Text.starts_with(report.problem.code, "W") {
+            ok = false
+        }
+    }
+    let keys = ["schema", "nexora_version", "file", "ok", "diagnostics"]
+    let values = [string("nexora.diagnostics/1"), string(info.version()), string(path), json.Json.JBool(ok), diagnostics(reports)]
+    return json.dump_indented(json.Json.JObj(keys, values))
+}

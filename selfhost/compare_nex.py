@@ -65,11 +65,13 @@ def first_difference(want: str, got: str) -> tuple[int, str, str]:
 def main(arguments: list[str]) -> int:
     command, paths = arguments[0], arguments[1:]
     strict = bool(os.environ.get("NEXORA_NEX"))
+    # NEXORA_FORMAT=json gives every command `--format json` (before the file).
+    extra = ("--format", "json") if os.environ.get("NEXORA_FORMAT") == "json" else ()
     same = different = 0
     for path in paths:
         posix = Path(path).as_posix()
-        want = command_python(command, posix)
-        got = command_nexora(command, posix)
+        want = command_python(command, posix, extra)
+        got = command_nexora(command, posix, extra)
         if strict:
             problems = []
             if want.out != got.out:

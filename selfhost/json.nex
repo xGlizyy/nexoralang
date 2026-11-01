@@ -463,6 +463,58 @@ pub fn dump(value: Json) gives Text {
     }
 }
 
+// What `json.dumps(value, indent=2, ensure_ascii=False)` writes: one item a line, two spaces for each level, `[]` and `{}` for
+// an empty list and object (the form of the documents `nex --format json` writes).
+pub fn dump_indented(value: Json) gives Text {
+    return indented(value, 0)
+}
+
+fn margin(level: Int) gives Text {
+    var spaces = ""
+    var i = 0
+    while i < level
+        shrinks level - i
+    {
+        spaces = spaces + "  "
+        i = i + 1
+    }
+    return spaces
+}
+
+fn indented(value: Json, level: Int) gives Text {
+    return match value {
+        Json.JList(items) => indented_list(items, level)
+        Json.JObj(keys, values) => indented_object(keys, values, level)
+        _ => dump(value)
+    }
+}
+
+fn indented_list(items: List[Json], level: Int) gives Text {
+    if List.length(items) == 0 {
+        return "[]"
+    }
+    var parts: List[Text] = []
+    for item in items {
+        parts = List.append(parts, margin(level + 1) + indented(item, level + 1))
+    }
+    return "[\n" + parser.join_texts(parts, ",\n") + "\n" + margin(level) + "]"
+}
+
+fn indented_object(keys: List[Text], values: List[Json], level: Int) gives Text {
+    if List.length(keys) == 0 {
+        return "\{}"
+    }
+    var parts: List[Text] = []
+    var i = 0
+    while i < List.length(keys)
+        shrinks List.length(keys) - i
+    {
+        parts = List.append(parts, margin(level + 1) + escaped(List.get(keys, i)) + ": " + indented(List.get(values, i), level + 1))
+        i = i + 1
+    }
+    return "\{\n" + parser.join_texts(parts, ",\n") + "\n" + margin(level) + "}"
+}
+
 fn dump_list(items: List[Json]) gives Text {
     var parts: List[Text] = []
     for item in items {

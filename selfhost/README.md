@@ -122,12 +122,24 @@ nex run selfhost/nex.nex --allow-read . --allow-write . -- test FILE [--function
 PYTHONPATH=nexora/src python selfhost/compare_nex.py check|run|test FILE [FILE ...]
 ```
 
-`compare_nex.py` joins what `nex` writes to the standard output and the standard error and compares it with what `nex.nex` writes:
-the same text on 41 projects and programs for `check`, on 46 for `run` and on 15 for `test`.
+`compare_nex.py` runs both and compares them. Run by Python, `nex.nex` has no standard error and no exit status, so what `nex` writes
+to both streams is compared with its standard output. Against the executable (`NEXORA_NEX=path`), the standard output, the standard
+error and the exit status are compared one by one, and `NEXORA_FORMAT=json` adds `--format json`: `check`, `run` and `test` are equal
+on 29 programs and projects (texts), and `check` and `run` with `--format json` too, byte for byte, including a file that does not exist.
+
+In the executable `nex.nex` does what `nex` does on the outside: the diagnostics and the summary of a failure go to the standard error,
+the results to the standard output, and the process ends with the status of `nex` (0, 1 invalid program, 2 usage, 3 the program failed,
+4 unreadable file, 5 a contract was broken, 6 a test did not pass; 70 for what this implementation cannot do yet). It also has
+`--version` and `--format json` (the `nexora.diagnostics/1` document, built by [`report.nex`](report.nex), the code the worker of the
+playground uses too). Three functions make that possible, `err`, `exit_with` and `file_problem`: NEXORA has no way to write on the
+standard error, to set a status or to ask why a file cannot be read, so the definitions in `nex.nex` (what Python runs) write to the
+standard output and set nothing, and `cgen.nex` replaces them with C ones.
 
 | Limit | Why |
 |---|---|
-| No exit status, no standard error | A program has neither. Everything goes to the standard output, in the order `nex` writes it, and the process ends with status 0. |
+| Run by Python, no exit status and no standard error | A program has neither: the three functions above only exist in the executable. |
+| `nex test --format json` and the commands `debug`, `inspect`, `context`, `symbols`, `migrate` | Not written yet; `test --format json` ends with status 70 and says so. |
+| Options that stop a program by time or memory (`--timeout`, `--max-memory`) | Not written yet. |
 | The input of `run` comes from `--stdin FILE` | A program cannot read the standard input without stopping at its end. |
 | The output limit stops in the middle of a line | `print` writes whole lines, so what fit of that line is printed with a line break. |
 | A file with syntax errors | Only its lexical and syntax errors are shown, as for the file that runs. `nex check` also checks the partial tree of an imported module. |
