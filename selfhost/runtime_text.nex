@@ -1765,6 +1765,7 @@ pub fn runtime_lines() gives List[Text] {
     lines = List.append(lines, "}")
     lines = List.append(lines, "")
     lines = List.append(lines, "static rv rt_input(RT_SPAN) \{")
+    lines = List.append(lines, "    fflush(stdout); /* what was printed reaches whoever answers this input (a controller that waits for it) */")
     lines = List.append(lines, "    size_t cap = 128, n = 0;")
     lines = List.append(lines, "    char *line = (char *)rt_alloc_raw(cap);")
     lines = List.append(lines, "    int ch;")

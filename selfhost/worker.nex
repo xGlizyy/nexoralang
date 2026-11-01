@@ -8,7 +8,7 @@
 //     {"action": "run", "code": "...", "limits": {"output_bytes": 65536, "text_chars": 262144}}
 //
 // A program that is run has no files, no network and no processes, whatever it declares, and no input (the environment
-// is the one of `LocalHost(files_allowed=False)`). `debug` is not answered yet.
+// is the one of `LocalHost(files_allowed=False)`). `debug` keeps a session open (see debug_session).
 //
 // What it cannot do yet, because a program written in the language cannot: it has no exit status (a request that is not
 // understood is answered with `internal_error` and the process ends with status 0), it has no clock (`duration_ms` is 0:
@@ -105,12 +105,13 @@ fn failed_request() {
 // What a request asks for, once it is known to be well formed.
 type Request = {
     ok: Bool, action: Text, code: Text, filename: Text, files: Bool, paths: List[Text], texts: List[Text],
-    output_bytes: Int, text_chars: Int
+    output_bytes: Int, text_chars: Int, breakpoints: json.Json
 }
 
 fn rejected() gives Request {
     return Request(
-        ok: false, action: "", code: "", filename: "", files: false, paths: [], texts: [], output_bytes: 0, text_chars: 0
+        ok: false, action: "", code: "", filename: "", files: false, paths: [], texts: [], output_bytes: 0, text_chars: 0,
+        breakpoints: json.Json.JNull()
     )
 }
 
@@ -187,9 +188,17 @@ fn replace_text(texts: List[Text], place: Int, value: Text) gives List[Text] {
     return out
 }
 
+// What `breakpoints` holds: nothing when the request has none.
+fn breakpoints_of(request: json.Json) gives json.Json {
+    if present(request, "breakpoints") {
+        return json.field_of(request, "breakpoints")
+    }
+    return json.Json.JList([])
+}
+
 fn read_request(request: json.Json) gives Request {
     let action = json.text_value(json.field_of(request, "action"), "")
-    if action != "check" and action != "run" {
+    if action != "check" and action != "run" and action != "debug" {
         return rejected()
     }
     let code = json.field_of(request, "code")
@@ -224,11 +233,14 @@ fn read_request(request: json.Json) gives Request {
     return Request(
         ok: true, action: action, code: json.text_value(code, ""), filename: filename, files: files, paths: paths,
         texts: texts, output_bytes: positive(json.field_of(limits, "output_bytes")),
-        text_chars: positive(json.field_of(limits, "text_chars"))
+        text_chars: positive(json.field_of(limits, "text_chars")), breakpoints: breakpoints_of(request)
     )
 }
 
-fn answer(request: Request) {
+// A request that has been loaded and checked: what the checker found, and the program that runs when it found no errors.
+type Analysis = { unsupported: Bool, reports: List[Report], node: parser.Node }
+
+fn analyse(request: Request) gives Analysis {
     var loaded = project.load_virtual(request.filename, [request.filename], [request.code], true)
     if request.files {
         loaded = project.load_virtual(request.filename, request.paths, request.texts, false)
@@ -236,11 +248,36 @@ fn answer(request: Request) {
     let results = project.check_all(loaded, true)
     for result in results {
         if result.unsupported != "" {
-            failed_request()
-            return
+            return Analysis(unsupported: true, reports: [], node: parser.Node.Null())
         }
     }
-    let reports = reports_of(results)
+    let last = List.get(results, List.length(results) - 1)
+    var node = last.node
+    if List.length(results) > 1 {
+        node = project.link(results)
+    }
+    return Analysis(unsupported: false, reports: reports_of(results), node: node)
+}
+
+// The options of a run: the limits of the request, and nothing else.
+fn run_options(request: Request) gives interpreter.RunOptions {
+    var words: List[Text] = []
+    if request.text_chars > 0 {
+        words = List.append(List.append(words, "--max-text"), to_text(request.text_chars))
+    }
+    if request.output_bytes > 0 {
+        words = List.append(List.append(words, "--max-output"), to_text(request.output_bytes))
+    }
+    return interpreter.parse_options(List.append(words, request.filename))
+}
+
+fn answer(request: Request) {
+    let analysis = analyse(request)
+    if analysis.unsupported {
+        failed_request()
+        return
+    }
+    let reports = analysis.reports
     if has_errors(reports) {
         print(result_line(request.action, "invalid", "", diagnostics_json(reports), json.Json.JNull()))
         return
@@ -249,19 +286,8 @@ fn answer(request: Request) {
         print(result_line("check", "success", "", diagnostics_json(reports), json.Json.JNull()))
         return
     }
-    let last = List.get(results, List.length(results) - 1)
-    var node = last.node
-    if List.length(results) > 1 {
-        node = project.link(results)
-    }
-    var words: List[Text] = []
-    if request.text_chars > 0 {
-        words = List.append(List.append(words, "--max-text"), to_text(request.text_chars))
-    }
-    if request.output_bytes > 0 {
-        words = List.append(List.append(words, "--max-output"), to_text(request.output_bytes))
-    }
-    let options = interpreter.parse_options(List.append(words, request.filename))
+    let node = analysis.node
+    let options = run_options(request)
     let done = interpreter.execute_locked(node, options)
     var output = ""
     for line in done.printed {
@@ -306,6 +332,316 @@ fn answer(request: Request) {
     print(result_line("run", status, output, one, json.Json.JNull()))
 }
 
+// The debug session (`nexora.debug/1`): the program stops before each statement, the controller answers with `step`,
+// `continue`, `stop` or `set_breakpoints`, and every answer of the worker is one line of JSON.
+
+fn max_command() gives Int {
+    return 8192
+}
+
+fn max_breakpoints() gives Int {
+    return 256
+}
+
+fn debug_doc(state: Text, keys: List[Text], values: List[json.Json], with_version: Bool) gives Text {
+    var all_keys = ["schema", "state"]
+    var all_values = [string("nexora.debug/1"), string(state)]
+    var i = 0
+    while i < List.length(keys)
+        shrinks List.length(keys) - i
+    {
+        all_keys = List.append(all_keys, List.get(keys, i))
+        all_values = List.append(all_values, List.get(values, i))
+        i = i + 1
+    }
+    if with_version {
+        all_keys = List.append(all_keys, "version")
+        all_values = List.append(all_values, string(info.version()))
+    }
+    return json.dump(json.Json.JObj(all_keys, all_values))
+}
+
+fn debug_error(message: Text) {
+    print(debug_doc("command_error", ["message"], [string(message)], false))
+}
+
+fn frame_json(row: interpreter.CallRow) gives json.Json {
+    if row.omitted {
+        return json.Json.JObj(["function", "call_site"], [string(row.function), json.Json.JNull()])
+    }
+    var site = json.Json.JNull()
+    if row.line > 0 {
+        site = json.Json.JObj(["line", "column"], [number(row.line), number(row.column)])
+    }
+    return json.Json.JObj(["function", "file", "call_site"], [string(row.function), string(row.file), site])
+}
+
+fn snapshot_json(snapshot: interpreter.Snapshot, delta: Text) gives json.Json {
+    var frames: List[json.Json] = []
+    for row in snapshot.frames {
+        frames = List.append(frames, frame_json(row))
+    }
+    var variables: List[json.Json] = []
+    var i = 0
+    while i < List.length(snapshot.names)
+        shrinks List.length(snapshot.names) - i
+    {
+        variables = List.append(
+            variables, json.Json.JObj(["name", "value"], [string(List.get(snapshot.names, i)), string(List.get(snapshot.values, i))])
+        )
+        i = i + 1
+    }
+    let keys = ["step", "line", "column", "function", "file", "call_stack", "variables", "output"]
+    let values = [number(snapshot.step), number(snapshot.line), number(snapshot.column), string(snapshot.function), string(snapshot.file), json.Json.JList(frames), json.Json.JList(variables), string(delta)]
+    return json.Json.JObj(keys, values)
+}
+
+// How many lines each file of the request has: the lines that can have a breakpoint.
+type Counts = { files: List[Text], sizes: List[Int] }
+
+fn newlines(text: Text) gives Int {
+    var count = 0
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.slice(text, i, i + 1) == "\n" {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+fn counts_of(request: Request) gives Counts {
+    if not request.files {
+        return Counts(files: [request.filename], sizes: [newlines(request.code) + 1])
+    }
+    var sizes: List[Int] = []
+    for text in request.texts {
+        sizes = List.append(sizes, newlines(text) + 1)
+    }
+    return Counts(files: request.paths, sizes: sizes)
+}
+
+// The lines of one file that can have a breakpoint: a list of at most 256 whole numbers inside the file.
+type Valid = { ok: Bool, lines: List[Int] }
+
+fn valid_lines(value: json.Json, size: Int) gives Valid {
+    if not json.is_list(value) or List.length(json.items_of(value)) > max_breakpoints() {
+        return Valid(ok: false, lines: [])
+    }
+    var lines: List[Int] = []
+    for item in json.items_of(value) {
+        let line = positive(item)
+        if line < 1 or line > size {
+            return Valid(ok: false, lines: [])
+        }
+        lines = List.append(lines, line)
+    }
+    return Valid(ok: true, lines: lines)
+}
+
+type BreakRead = { ok: Bool, breaks: interpreter.Breaks }
+
+fn bad_breaks() gives BreakRead {
+    return BreakRead(ok: false, breaks: interpreter.Breaks(files: [], lines: []))
+}
+
+// The breakpoints of the request: a list of lines for the program, or an object with a list for each file.
+fn read_breaks(request: Request, counts: Counts) gives BreakRead {
+    var given = request.breakpoints
+    var names: List[Text] = []
+    var lists: List[json.Json] = []
+    if json.is_list(given) {
+        names = [request.filename]
+        lists = [given]
+    } else if json.is_object(given) and List.length(json.keys_of(given)) <= 32 {
+        names = json.keys_of(given)
+        lists = json.values_of(given)
+    } else {
+        return bad_breaks()
+    }
+    var files: List[Text] = []
+    var all: List[List[Int]] = []
+    var total = 0
+    var i = 0
+    while i < List.length(names)
+        shrinks List.length(names) - i
+    {
+        let at = index_of_path(counts.files, List.get(names, i))
+        if at < 0 {
+            return bad_breaks()
+        }
+        let valid = valid_lines(List.get(lists, i), List.get(counts.sizes, at))
+        if not valid.ok {
+            return bad_breaks()
+        }
+        files = List.append(files, List.get(names, i))
+        all = List.append(all, valid.lines)
+        total = total + List.length(valid.lines)
+        i = i + 1
+    }
+    if total > max_breakpoints() {
+        return bad_breaks()
+    }
+    return BreakRead(ok: true, breaks: interpreter.Breaks(files: files, lines: all))
+}
+
+// The breakpoints of one file replaced.
+fn with_lines(breaks: interpreter.Breaks, file: Text, lines: List[Int]) gives interpreter.Breaks {
+    let at = index_of_path(breaks.files, file)
+    if at < 0 {
+        return interpreter.Breaks(files: List.append(breaks.files, file), lines: List.append(breaks.lines, lines))
+    }
+    var all: List[List[Int]] = []
+    var i = 0
+    while i < List.length(breaks.lines)
+        shrinks List.length(breaks.lines) - i
+    {
+        if i == at {
+            all = List.append(all, lines)
+        } else {
+            all = List.append(all, List.get(breaks.lines, i))
+        }
+        i = i + 1
+    }
+    return interpreter.Breaks(files: breaks.files, lines: all)
+}
+
+// What a controller asked, and what it changes.
+type Command = { kind: Text, breaks: interpreter.Breaks }
+
+// Reads the commands until one that moves the program, stops it or ends the session. `kind` is then "step", "continue" or
+// "stop". Every command that is not understood, and every change of the breakpoints, is answered with the same stop again.
+fn wait_for_command(
+    snapshot: interpreter.Snapshot, delta: Text, breaks: interpreter.Breaks, counts: Counts, filename: Text
+) gives Command {
+    var current = breaks
+    var shown = delta
+    var tries = 1000000000
+    while tries > 0
+        shrinks tries
+    {
+        tries = tries - 1
+        print(debug_doc("paused", ["snapshot"], [snapshot_json(snapshot, shown)], true))
+        shown = ""
+        let line = input()
+        if project.byte_length(line) > max_command() {
+            debug_error("The command is too large.")
+        } else {
+            let read = json.parse(line)
+            if not read.ok {
+                debug_error("The command is not valid JSON.")
+            } else if not json.is_object(read.value) {
+                debug_error("The command must be an object.")
+            } else {
+                let action = json.text_value(json.field_of(read.value, "command"), "")
+                if action == "step" or action == "continue" or action == "stop" {
+                    return Command(kind: action, breaks: current)
+                }
+                if action == "set_breakpoints" {
+                    var file = filename
+                    var named = true
+                    if present(read.value, "file") {
+                        named = json.is_text(json.field_of(read.value, "file"))
+                        file = json.text_value(json.field_of(read.value, "file"), "")
+                    }
+                    let at = index_of_path(counts.files, file)
+                    if not named or at < 0 {
+                        debug_error("Invalid breakpoint lines.")
+                    } else {
+                        let valid = valid_lines(json.field_of(read.value, "lines"), List.get(counts.sizes, at))
+                        if valid.ok {
+                            current = with_lines(current, file, valid.lines)
+                        } else {
+                            debug_error("Invalid breakpoint lines.")
+                        }
+                    }
+                } else {
+                    debug_error("Unknown debug command.")
+                }
+            }
+        }
+    }
+    return Command(kind: "stop", breaks: current)
+}
+
+fn debug_finished(request: Request, done: interpreter.Advance) {
+    let problem = done.problem
+    if done.kind == "completed" {
+        print(debug_doc("completed", ["output"], [string(done.delta)], true))
+        return
+    }
+    if done.kind == "out_of_fuel" {
+        print(debug_doc(
+            "runtime_error", ["diagnostics", "output", "message"],
+            [json.Json.JList([]), string(done.delta), string("The program used all the steps this interpreter allows.")], true
+        ))
+        return
+    }
+    if problem.code == "E3015" and Text.starts_with(problem.label, "output") {
+        print(debug_doc(
+            "output_limit", ["message", "output"],
+            [string("The program printed more than " + to_text(request.output_bytes) + " bytes and was stopped."), string(done.delta)],
+            true
+        ))
+        return
+    }
+    var state = "runtime_error"
+    if titles.category_of(problem.code) == "contract" {
+        state = "contract_violation"
+    }
+    let one = diagnostics_json([Report(problem: problem, file: done.file)])
+    print(debug_doc(state, ["diagnostics", "output"], [one, string(done.delta)], true))
+}
+
+fn debug_session(given: json.Json) {
+    let request = read_request(given)
+    if not request.ok {
+        print(debug_doc("internal_error", [], [], false))
+        return
+    }
+    let analysis = analyse(request)
+    let counts = counts_of(request)
+    let read = read_breaks(request, counts)
+    if analysis.unsupported or not read.ok {
+        print(debug_doc("internal_error", [], [], false))
+        return
+    }
+    if has_errors(analysis.reports) {
+        print(debug_doc("invalid", ["diagnostics"], [diagnostics_json(analysis.reports)], true))
+        return
+    }
+    var breaks = read.breaks
+    let session = interpreter.debug_start(analysis.node, run_options(request), request.filename)
+    var advance = interpreter.debug_advance(session, "step", breaks, true)
+    var budget = 1000000000
+    while budget > 0
+        shrinks budget
+    {
+        budget = budget - 1
+        if advance.kind == "limit" {
+            print(debug_doc(
+                "limit", ["message", "snapshot"],
+                [string("A debug session can inspect at most 10000 statements."), snapshot_json(advance.snapshot, advance.delta)], true
+            ))
+            return
+        }
+        if advance.kind != "paused" {
+            debug_finished(request, advance)
+            return
+        }
+        let command = wait_for_command(advance.snapshot, advance.delta, breaks, counts, request.filename)
+        if command.kind == "stop" {
+            print(debug_doc("stopped", ["snapshot"], [snapshot_json(advance.snapshot, "")], true))
+            return
+        }
+        breaks = command.breaks
+        advance = interpreter.debug_advance(advance.session, command.kind, breaks, false)
+    }
+}
+
 fn main() {
     let line = input()
     if project.byte_length(line) > max_request() {
@@ -320,6 +656,10 @@ fn main() {
     let action = json.text_value(json.field_of(read.value, "action"), "")
     if action == "info" {
         print(info.answer())
+        return
+    }
+    if action == "debug" {
+        debug_session(read.value)
         return
     }
     let request = read_request(read.value)

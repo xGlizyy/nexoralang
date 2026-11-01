@@ -1760,6 +1760,7 @@ static rv rt_write_file(rv path, rv text, RT_SPAN) {
 }
 
 static rv rt_input(RT_SPAN) {
+    fflush(stdout); /* what was printed reaches whoever answers this input (a controller that waits for it) */
     size_t cap = 128, n = 0;
     char *line = (char *)rt_alloc_raw(cap);
     int ch;
