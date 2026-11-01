@@ -98,6 +98,32 @@ fn result_line(action: Text, status: Text, output: Text, diagnostics: json.Json,
     return json.dump(json.Json.JObj(keys, values))
 }
 
+// The limits the process puts on itself before it reads anything of the program: memory, CPU seconds and clock seconds (0 leaves
+// one alone), and what to answer if memory runs out. It is written here only to say what it is for: the executables that
+// cgen.nex makes replace it with a C one (the limits are POSIX), and nothing is applied when this is run by Python.
+fn apply_limits(memory: Int, cpu: Int, wall: Int, reply: Text) {
+    print_nothing(memory + cpu + wall + Text.length(reply))
+}
+
+fn print_nothing(_size: Int) {
+}
+
+fn limit_reply(action: Text) gives Text {
+    let message = string("The program needed more memory than this environment allows.")
+    if action == "debug" {
+        return debug_doc("memory_limit", ["message", "output"], [message, string("")], true) + "\n"
+    }
+    return result_line("run", "memory_limit", "", json.Json.JList([]), message) + "\n"
+}
+
+// The lines a program printed, each with its line break.
+fn lines_output(lines: List[Text]) gives Text {
+    if List.length(lines) == 0 {
+        return ""
+    }
+    return parser.join_texts(lines, "\n") + "\n"
+}
+
 fn failed_request() {
     print("\{\"schema\": \"nexora.result/1\", \"status\": \"internal_error\"}")
 }
@@ -289,11 +315,7 @@ fn answer(request: Request) {
     let node = analysis.node
     let options = run_options(request)
     let done = interpreter.execute_locked(node, options)
-    var output = ""
-    for line in done.printed {
-        output = output + line + "\n"
-    }
-    output = output + done.partial
+    let output = lines_output(done.printed) + done.partial
     if done.out_of_fuel {
         print(result_line(
             "run", "runtime_error", output, json.Json.JList([]),
@@ -658,6 +680,12 @@ fn main() {
         print(info.answer())
         return
     }
+    let limits = json.field_of(read.value, "limits")
+    var wall = positive(json.field_of(limits, "wall_seconds"))
+    if action == "debug" {
+        wall = 0
+    }
+    apply_limits(positive(json.field_of(limits, "memory_bytes")), positive(json.field_of(limits, "cpu_seconds")), wall, limit_reply(action))
     if action == "debug" {
         debug_session(read.value)
         return

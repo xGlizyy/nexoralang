@@ -170,7 +170,7 @@ def comparable(answer: object) -> object:
 
 def main() -> int:
     native = [str(Path(os.environ["NEXORA_WORKER"]).resolve())]
-    python = [sys.executable, "-I", "-m", "nexora.worker"]
+    python = [sys.executable, *([] if os.environ.get("NEXORA_NO_ISOLATE") else ["-I"]), "-m", "nexora.worker"]
     env_path = str(ROOT / "nexora" / "src")
     os.environ["PYTHONPATH"] = env_path
     only = sys.argv[1] if len(sys.argv) > 1 else ""

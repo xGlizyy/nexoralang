@@ -129,7 +129,7 @@ def send(process: subprocess.Popen, command: object) -> None:
 
 
 def run(name: str, request: dict, commands: list) -> list[str]:
-    python = start([sys.executable, "-I", "-m", "nexora.worker"], request)
+    python = start([sys.executable, *([] if os.environ.get("NEXORA_NO_ISOLATE") else ["-I"]), "-m", "nexora.worker"], request)
     native = start([str(Path(os.environ["NEXORA_WORKER"]).resolve())], request)
     problems: list[str] = []
     index = 0

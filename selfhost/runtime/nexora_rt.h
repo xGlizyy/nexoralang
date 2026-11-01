@@ -109,7 +109,15 @@ typedef struct { char *p; size_t size; } rt_mark_item;
 static rt_mark_item *rt_mark_stack = 0;
 static size_t rt_mark_count = 0, rt_mark_cap = 0;
 
+/* What to write when memory runs out, if the program has one (the worker of the playground answers with a result that says so). */
+static const char *rt_oom_reply = 0;
+
 static void rt_out_of_memory(void) {
+    if (rt_oom_reply) {
+        fputs(rt_oom_reply, stdout);
+        fflush(stdout);
+        exit(0);
+    }
     fputs("error: out of memory\n", stderr);
     exit(3);
 }
@@ -1147,7 +1155,7 @@ static int64_t rt_byte_of_point(rt_text t, int64_t point) {
         if (rt_index_text != t.p || rt_index_bytes != t.bytes) {
             free(rt_index_offsets);
             rt_index_offsets = (int64_t *)malloc((size_t)(t.len / 32 + 2) * sizeof(int64_t));
-            if (!rt_index_offsets) { fputs("error: out of memory\n", stderr); exit(3); }
+            if (!rt_index_offsets) rt_out_of_memory();
             int64_t points = 0;
             for (int64_t i = 0; i < t.bytes; i++) {
                 if (((unsigned char)t.p[i] & 0xC0) != 0x80) {
@@ -1572,6 +1580,104 @@ static rv rt_intr_char_from_code(rv code) {
     memcpy(copy, buffer, (size_t)n + 1);
     rt_text t = {copy, n, 1};
     return rt_txt(t);
+}
+
+/* The limits the worker of the playground puts on itself (nexora/src/nexora/worker.py, `_apply_os_limits`): the address space,
+ * the seconds of CPU and of the clock, and no files, no core and no processes. The host (the container) imposes them too; this
+ * makes them a fact of the process. A value of 0 leaves that limit alone. They are POSIX: on Windows nothing is applied. */
+#ifndef _WIN32
+#include <signal.h>
+#include <sys/resource.h>
+#include <unistd.h>
+#endif
+
+static rv rt_intr_apply_limits(rv memory, rv cpu, rv wall, rv reply) {
+    rt_text r = reply.u.t;
+    char *copy = (char *)malloc((size_t)r.bytes + 1);
+    if (copy) {
+        memcpy(copy, r.p, (size_t)r.bytes);
+        copy[r.bytes] = 0;
+        rt_oom_reply = copy;
+    }
+#ifndef _WIN32
+    struct rlimit limit;
+    if (memory.u.i > 0) { limit.rlim_cur = limit.rlim_max = (rlim_t)memory.u.i; setrlimit(RLIMIT_AS, &limit); }
+    if (cpu.u.i > 0) { limit.rlim_cur = limit.rlim_max = (rlim_t)cpu.u.i; setrlimit(RLIMIT_CPU, &limit); }
+    limit.rlim_cur = limit.rlim_max = 0;
+    setrlimit(RLIMIT_FSIZE, &limit);
+    setrlimit(RLIMIT_CORE, &limit);
+#ifdef RLIMIT_NPROC
+    setrlimit(RLIMIT_NPROC, &limit);
+#endif
+    if (wall.u.i > 0) alarm((unsigned)wall.u.i);
+#else
+    (void)memory; (void)cpu; (void)wall;
+#endif
+    return rt_unit();
+}
+
+/* The JSON of a text (selfhost/json.nex, `escaped`) and the join of many texts (selfhost/parser.nex, `join_texts`), each in one
+ * pass: building them one piece at a time copies the text again at every piece, which for the output of a program is the
+ * longest thing the worker writes. */
+static rv rt_intr_json_escaped(rv text) {
+    rt_text t = text.u.t;
+    char *out = (char *)rt_alloc_raw((size_t)t.bytes * 6 + 3);
+    size_t n = 0;
+    int64_t points = 2;
+    out[n++] = '"';
+    for (int64_t i = 0; i < t.bytes; i++) {
+        unsigned char c = (unsigned char)t.p[i];
+        const char *escape = 0;
+        char hex[8];
+        if (c == '"') escape = "\\\"";
+        else if (c == '\\') escape = "\\\\";
+        else if (c == 10) escape = "\\n";
+        else if (c == 9) escape = "\\t";
+        else if (c == 13) escape = "\\r";
+        else if (c == 8) escape = "\\b";
+        else if (c == 12) escape = "\\f";
+        else if (c < 32) { snprintf(hex, sizeof hex, "\\u%04x", c); escape = hex; }
+        if (escape) {
+            size_t k = strlen(escape);
+            memcpy(out + n, escape, k);
+            n += k;
+            points += (int64_t)k;
+        } else {
+            out[n++] = (char)c;
+            if ((c & 0xC0) != 0x80) points++;
+        }
+    }
+    out[n++] = '"';
+    out[n] = 0; /* a Text is also read as a C string (file names) */
+    rt_text r = {out, (int64_t)n, points};
+    return rt_txt(r);
+}
+
+static rv rt_intr_join_texts(rv items, rv separator) {
+    int64_t count = rt_list_len(items);
+    rt_text s = separator.u.t;
+    size_t total = 0;
+    int64_t points = 0;
+    for (int64_t i = 0; i < count; i++) {
+        rt_text piece = rt_list_at(items, i).u.t;
+        total += (size_t)piece.bytes;
+        points += piece.len;
+    }
+    if (count > 1) {
+        total += (size_t)s.bytes * (size_t)(count - 1);
+        points += s.len * (count - 1);
+    }
+    char *out = (char *)rt_alloc_raw(total + 1);
+    size_t n = 0;
+    for (int64_t i = 0; i < count; i++) {
+        if (i > 0) { memcpy(out + n, s.p, (size_t)s.bytes); n += (size_t)s.bytes; }
+        rt_text piece = rt_list_at(items, i).u.t;
+        memcpy(out + n, piece.p, (size_t)piece.bytes);
+        n += (size_t)piece.bytes;
+    }
+    out[n] = 0;
+    rt_text r = {out, (int64_t)n, points};
+    return rt_txt(r);
 }
 
 static rv rt_intr_byte_length(rv text) { return rt_int(text.u.t.bytes); }
