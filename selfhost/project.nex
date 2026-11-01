@@ -26,9 +26,13 @@ pub type Module = {
 // with a `?` in front), and it stops the reading.
 pub type Project = { modules: List[Module], names: List[Text], over: Text }
 
+// The files of a project that is not on disk (the worker of the playground): `on` is true, and a path that is not in `paths`
+// is not part of the project.
+type Virtual = { on: Bool, solo: Bool, paths: List[Text], texts: List[Text] }
+
 type Loader = {
     modules: List[Module], stack: List[Text], keys: List[Text], names: List[Text], name_keys: List[Text],
-    limit: Int, over: Text
+    limit: Int, virt: Virtual, over: Text
 }
 
 // Reading the tree
@@ -191,6 +195,15 @@ fn leaves(paths: List[Text]) gives List[Text] {
 // Reading
 
 // Whether a text is made of ASCII characters only, which is the only case where its bytes can be counted.
+// The bytes of a text in UTF-8. This definition is the reference for a text that is all ASCII and answers -1 for another one
+// (it has no way to read a code); the executables that cgen.nex makes count the bytes of any text.
+pub fn byte_length(text: Text) gives Int {
+    if is_ascii_text(text) {
+        return Text.length(text)
+    }
+    return 0 - 1
+}
+
 pub fn is_ascii_text(text: Text) gives Bool {
     let ascii = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz\{|}~\t\n"
     var i = 0
@@ -205,22 +218,29 @@ pub fn is_ascii_text(text: Text) gives Bool {
     return true
 }
 
+fn source_of(virt: Virtual, path: Text) gives Text {
+    if virt.on {
+        return List.get(virt.texts, index_of(virt.paths, path))
+    }
+    return read_file(path)
+}
+
 fn read_module(loader: Loader, path: Text) gives Loader {
     if List.contains(loader.keys, path) or loader.over != "" {
         return loader
     }
-    let text = read_file(path)
+    let text = source_of(loader.virt, path)
     if loader.limit > 0 {
         if not is_ascii_text(text) {
             return Loader(
                 modules: loader.modules, stack: loader.stack, keys: loader.keys, names: loader.names,
-                name_keys: loader.name_keys, limit: loader.limit, over: "?" + path
+                name_keys: loader.name_keys, limit: loader.limit, virt: loader.virt, over: "?" + path
             )
         }
         if Text.length(text) > loader.limit {
             return Loader(
                 modules: loader.modules, stack: loader.stack, keys: loader.keys, names: loader.names,
-                name_keys: loader.name_keys, limit: loader.limit, over: path
+                name_keys: loader.name_keys, limit: loader.limit, virt: loader.virt, over: path
             )
         }
     }
@@ -248,7 +268,7 @@ fn read_module(loader: Loader, path: Text) gives Loader {
     }
     var current = Loader(
         modules: loader.modules, stack: List.append(loader.stack, path), keys: loader.keys, names: loader.names,
-        name_keys: loader.name_keys, limit: loader.limit, over: loader.over
+        name_keys: loader.name_keys, limit: loader.limit, virt: loader.virt, over: loader.over
     )
     var imports: List[Text] = []
     var pending: List[parser.Problem] = []
@@ -258,7 +278,24 @@ fn read_module(loader: Loader, path: Text) gives Loader {
             let span = span_of(field(declaration, "path_span"))
             let target = resolve_import(path, written)
             let name = namespace_of(target)
-            if List.contains(current.stack, target) {
+            if current.virt.solo {
+                pending = List.append(
+                    pending,
+                    problem_at(
+                        "E0001", "This program imports modules, and they cannot be read here",
+                        "An import names a file relative to the file that has it: run the program as 'nex run programa.nex', with the files beside it.",
+                        span
+                    )
+                )
+            } else if current.virt.on and (Text.starts_with(written, "/") or not List.contains(current.virt.paths, target)) {
+                pending = List.append(
+                    pending,
+                    problem_at(
+                        "E0001", "Module '" + written + "' is not part of this project",
+                        "Add the imported .nex file to this project.", span
+                    )
+                )
+            } else if List.contains(current.stack, target) {
                 let chain = List.append(current.stack, target)
                 pending = List.append(
                     pending,
@@ -283,7 +320,7 @@ fn read_module(loader: Loader, path: Text) gives Loader {
                 let registered = Loader(
                     modules: current.modules, stack: current.stack, keys: current.keys,
                     names: List.append(current.names, name), name_keys: List.append(current.name_keys, target),
-                    limit: current.limit, over: current.over
+                    limit: current.limit, virt: current.virt, over: current.over
                 )
                 current = read_module(registered, target)
                 imports = List.append(imports, target)
@@ -296,7 +333,7 @@ fn read_module(loader: Loader, path: Text) gives Loader {
     )
     return Loader(
         modules: List.append(current.modules, module), stack: loader.stack, keys: List.append(current.keys, path),
-        names: current.names, name_keys: current.name_keys, limit: current.limit, over: current.over
+        names: current.names, name_keys: current.name_keys, limit: current.limit, virt: current.virt, over: current.over
     )
 }
 
@@ -307,9 +344,86 @@ pub fn load(entry: Text) gives Project {
 
 // The same, stopping at the first file bigger than `limit` bytes (0 is no limit), in the order they are read.
 pub fn load_limited(entry: Text, limit: Int) gives Project {
-    let start = Loader(modules: [], stack: [], keys: [], names: [], name_keys: [], limit: limit, over: "")
+    let start = Loader(
+        modules: [], stack: [], keys: [], names: [], name_keys: [], limit: limit,
+        virt: Virtual(on: false, solo: false, paths: [], texts: []), over: ""
+    )
     let done = read_module(start, entry)
     return Project(modules: done.modules, names: done.names, over: done.over)
+}
+
+// A project that is in memory: the files are the paths and their texts, and the entry is one of them. `solo` is a single
+// program with no project around it (a request without `files`): an import in it cannot be read at all.
+pub fn load_virtual(entry: Text, paths: List[Text], texts: List[Text], solo: Bool) gives Project {
+    let start = Loader(
+        modules: [], stack: [], keys: [], names: [], name_keys: [], limit: 0,
+        virt: Virtual(on: true, solo: solo, paths: paths, texts: texts), over: ""
+    )
+    let done = read_module(start, entry)
+    return Project(modules: done.modules, names: done.names, over: done.over)
+}
+
+// A path with every "\\" written as "/".
+pub fn slashes(written: Text) gives Text {
+    var safe = ""
+    var i = 0
+    while i < Text.length(written)
+        shrinks Text.length(written) - i
+    {
+        let char = Text.slice(written, i, i + 1)
+        if char == "\\" {
+            safe = safe + "/"
+        } else {
+            safe = safe + char
+        }
+        i = i + 1
+    }
+    return safe
+}
+
+// The path of a file of a project with the separators as "/", or "" if the path cannot name a file of a project
+// (nexora/src/nexora/worker.py): .nex, at most 8 parts of at most 64 characters (letters, digits, _ and -), 256 in all.
+pub fn project_path(written: Text) gives Text {
+    let safe = slashes(written)
+    let parts = split_path(safe)
+    if Text.length(safe) > 256 or List.length(parts) > 8 or Text.starts_with(safe, "/") or Text.contains(safe, ":") {
+        return ""
+    }
+    if not Text.ends_with(safe, ".nex") {
+        return ""
+    }
+    var k = 0
+    while k < List.length(parts)
+        shrinks List.length(parts) - k
+    {
+        var part = List.get(parts, k)
+        if k == List.length(parts) - 1 {
+            part = Text.slice(part, 0, Text.length(part) - 4)
+        }
+        if List.get(parts, k) == "." or List.get(parts, k) == ".." or Text.length(part) == 0 or Text.length(part) > 64 {
+            return ""
+        }
+        if not is_name_text(part) {
+            return ""
+        }
+        k = k + 1
+    }
+    return safe
+}
+
+fn is_name_text(part: Text) gives Bool {
+    let allowed = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-"
+    var i = 0
+    while i < Text.length(part)
+        shrinks Text.length(part) - i
+    {
+        let char = Text.slice(part, i, i + 1)
+        if not Text.contains(allowed, char) and is_ascii_text(char) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
 }
 
 // The result of checking one module.
