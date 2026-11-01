@@ -109,6 +109,9 @@ typedef struct { char *p; size_t size; } rt_mark_item;
 static rt_mark_item *rt_mark_stack = 0;
 static size_t rt_mark_count = 0, rt_mark_cap = 0;
 
+/* The exit status of the process: what a command-line tool written in NEXORA (nex.nex) sets with `exit_with`. */
+static int rt_exit_status = 0;
+
 /* What to write when memory runs out, if the program has one (the worker of the playground answers with a result that says so). */
 static const char *rt_oom_reply = 0;
 
@@ -1724,6 +1727,39 @@ static rv rt_intr_join_texts(rv items, rv separator) {
     }
     out[n] = 0;
     rt_text r = {out, (int64_t)n, points};
+    return rt_txt(r);
+}
+
+/* Three things a command-line tool written in NEXORA needs and the language does not have (selfhost/nex.nex): a line on the
+ * standard error, the exit status of the process, and the reason why a file cannot be read ("" when it can). */
+static rv rt_intr_eprint(rv text) {
+    rt_text t = text.u.t;
+    fflush(stdout); /* what was printed before reaches the terminal before the error does */
+    fwrite(t.p, 1, (size_t)t.bytes, stderr);
+    fputc('\n', stderr);
+    return rt_unit();
+}
+
+static rv rt_intr_exit_with(rv code) {
+    rt_exit_status = (int)code.u.i;
+    return rt_unit();
+}
+
+static rv rt_intr_file_problem(rv path) {
+    rt_text t = path.u.t;
+    char *name = (char *)malloc((size_t)t.bytes + 1);
+    if (!name) return rt_str("");
+    memcpy(name, t.p, (size_t)t.bytes);
+    name[t.bytes] = 0;
+    errno = 0;
+    FILE *file = fopen(name, "rb");
+    free(name);
+    if (file) { fclose(file); return rt_str(""); }
+    const char *reason = strerror(errno);
+    size_t n = strlen(reason);
+    char *copy = (char *)rt_alloc_raw(n + 1);
+    memcpy(copy, reason, n + 1);
+    rt_text r = {copy, (int64_t)n, (int64_t)n};
     return rt_txt(r);
 }
 

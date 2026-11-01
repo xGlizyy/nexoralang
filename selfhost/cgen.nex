@@ -1040,6 +1040,18 @@ fn is_compiler_file(file: Text) gives Bool {
 
 fn intrinsic_of(function: parser.Node) gives Text {
     let file = text_of(field(function, "file"))
+    if file == "selfhost/nex.nex" {
+        let tool_name = text_of(field(function, "name"))
+        if tool_name == "err" {
+            return "rt_intr_eprint"
+        }
+        if tool_name == "exit_with" {
+            return "rt_intr_exit_with"
+        }
+        if tool_name == "file_problem" {
+            return "rt_intr_file_problem"
+        }
+    }
     if file == "selfhost/worker.nex" {
         if text_of(field(function, "name")) == "apply_limits" {
             return "rt_intr_apply_limits"
@@ -1280,7 +1292,7 @@ fn generate(program: parser.Node, path: Text, paths: List[Text], trusted: Bool) 
     code = code + declarations + "\n" + definitions
     code = code + "int main(int argc, char **argv) \{\nrt_gc_start(&argc);\nrt_setup(" + c_string(path) + ", " + to_text(List.length(paths))
     code = code + ", nx_paths, nx_files, nx_counts);\n" + uses_code(program) + "rt_options(argc, argv);\n"
-    code = code + "nx_main(0, 0, 0, 0);\nfflush(stdout);\nreturn 0;\n}\n"
+    code = code + "nx_main(0, 0, 0, 0);\nfflush(stdout);\nreturn rt_exit_status;\n}\n"
     return part(code, "", st)
 }
 
