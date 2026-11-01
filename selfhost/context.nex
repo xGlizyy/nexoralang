@@ -338,9 +338,29 @@ pub fn signature_of(function: parser.Node) gives Text {
 
 // The type the checker gave a variable: the annotation when the program declares that type, else the type of the value. A
 // value that is Void gives no type.
+// The name of a module from its path: the file without its folders and its extension.
+fn leaf_name(path: Text) gives Text {
+    var start = 0
+    var i = 0
+    while i < Text.length(path)
+        shrinks Text.length(path) - i
+    {
+        let c = Text.slice(path, i, i + 1)
+        if c == "/" or c == "\\" {
+            start = i + 1
+        }
+        i = i + 1
+    }
+    var name = Text.slice(path, start, Text.length(path))
+    if Text.ends_with(name, ".nex") {
+        name = Text.slice(name, 0, Text.length(name) - 4)
+    }
+    return name
+}
+
 fn variable_type(statement: parser.Node, known: List[Text]) gives Text {
     let declared = field(statement, "declared_type")
-    if not is_null(declared) and (List.contains(known, text_of(field(declared, "name"))) or text_of(field(declared, "qualifier")) != "") {
+    if not is_null(declared) and (List.contains(known, text_of(field(declared, "name"))) or List.contains(known, "module:" + text_of(field(declared, "qualifier")))) {
         return type_text(declared)
     }
     let found = text_of(field(field(statement, "value"), "type"))
@@ -976,6 +996,10 @@ pub fn declared_in(program: parser.Node, checked: project.Checked, prefix: Text)
     }
     for info in export.enums {
         known = List.append(known, bare(info.name, module))
+    }
+    // A type written with a module in front is known when that module was read ("module:" and its name).
+    for path in checked.module.imports {
+        known = List.append(known, "module:" + leaf_name(path))
     }
     let blocked = List.concat(List.concat(keys_of_names(functions, prefix), struct_names), builtin_list())
     return Declared(functions: functions, blocked: blocked, known: known)
