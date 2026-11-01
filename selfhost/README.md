@@ -260,7 +260,9 @@ line of JSON on the standard input and one `nexora.result/1` on the standard out
   time, so the session stops before the statement of a block that is next on its stack (`debug_start`, `debug_advance`).
 - [`info.nex`](info.nex) (keywords, builtins, version) is generated from Python by [`make_info.py`](make_info.py); run it when the
   language changes. The runtime applies the limits of the Python worker to itself on POSIX (address space, CPU and wall clock
-  seconds, no files, no processes) and answers `memory_limit` if memory runs out.
+  seconds, no files, no processes) and answers `memory_limit` if memory runs out. Inside a container it also reads the memory
+  limit of its cgroup and keeps its own address space 12.5% below it, so that a program that uses too much gets `memory_limit`
+  instead of being killed by the kernel without a word (a 256 MB cgroup: `memory_limit` in 0.3 s, no OOM kill).
 - [`compare_worker.py`](compare_worker.py) sends 121 requests to both workers and compares the answers (`duration_ms` aside, the
   executable has no clock; the server measures it); [`compare_debug.py`](compare_debug.py) drives 35 debug sessions on both and
   compares every line. Both run against a Linux executable built with `zig cc -target x86_64-linux-musl -static` too

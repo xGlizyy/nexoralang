@@ -164,10 +164,16 @@ static uint32_t rt_block_index(rt_page *page, uintptr_t address) {
 }
 static char *rt_page_first(rt_page *page) { return (char *)page + RT_PAGE_HEADER; }
 
+static void rt_collect(void);
+
 /* A new page of blocks of one size, all of them free. */
 static void rt_new_page(int raw, int class_index) {
     rt_page *page = (rt_page *)rt_page_alloc(RT_PAGE);
-    if (!page) rt_out_of_memory();
+    if (!page) {
+        rt_collect();
+        page = (rt_page *)rt_page_alloc(RT_PAGE);
+        if (!page) rt_out_of_memory();
+    }
     uint32_t size = (uint32_t)((class_index + 1) * 16);
     page->next = rt_pages;
     page->size = size;
@@ -1591,6 +1597,41 @@ static rv rt_intr_char_from_code(rv code) {
 #include <unistd.h>
 #endif
 
+#ifndef _WIN32
+/* The memory a container gives its processes, if the system says so (cgroup v2, then v1): 0 when there is no limit. A process that
+ * crosses it is killed by the kernel with nothing said; limiting the address space a little below makes the allocation fail
+ * inside the program, which can answer. */
+static int64_t rt_read_limit(const char *path) {
+    FILE *file = fopen(path, "r");
+    char text[64];
+    if (!file) return 0;
+    if (!fgets(text, sizeof text, file)) { fclose(file); return 0; }
+    fclose(file);
+    if (text[0] < '0' || text[0] > '9') return 0; /* "max" */
+    long long value = atoll(text);
+    return value > 0 && value < ((long long)1 << 50) ? (int64_t)value : 0;
+}
+
+static int64_t rt_cgroup_limit(void) {
+    char line[512], path[600];
+    FILE *file = fopen("/proc/self/cgroup", "r");
+    if (file) {
+        while (fgets(line, sizeof line, file)) {
+            if (strncmp(line, "0::", 3) != 0) continue;
+            size_t n = strlen(line);
+            while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = 0;
+            snprintf(path, sizeof path, "/sys/fs/cgroup%s/memory.max", line + 3);
+            int64_t value = rt_read_limit(path);
+            if (value) { fclose(file); return value; }
+        }
+        fclose(file);
+    }
+    int64_t value = rt_read_limit("/sys/fs/cgroup/memory.max");
+    if (value) return value;
+    return rt_read_limit("/sys/fs/cgroup/memory/memory.limit_in_bytes");
+}
+#endif
+
 static rv rt_intr_apply_limits(rv memory, rv cpu, rv wall, rv reply) {
     rt_text r = reply.u.t;
     char *copy = (char *)malloc((size_t)r.bytes + 1);
@@ -1601,7 +1642,13 @@ static rv rt_intr_apply_limits(rv memory, rv cpu, rv wall, rv reply) {
     }
 #ifndef _WIN32
     struct rlimit limit;
-    if (memory.u.i > 0) { limit.rlim_cur = limit.rlim_max = (rlim_t)memory.u.i; setrlimit(RLIMIT_AS, &limit); }
+    int64_t space = memory.u.i;
+    int64_t container = rt_cgroup_limit();
+    if (container > 0) {
+        int64_t room = container - container / 8;
+        if (room >= ((int64_t)64 << 20) && (space <= 0 || space > room)) space = room;
+    }
+    if (space > 0) { limit.rlim_cur = limit.rlim_max = (rlim_t)space; setrlimit(RLIMIT_AS, &limit); }
     if (cpu.u.i > 0) { limit.rlim_cur = limit.rlim_max = (rlim_t)cpu.u.i; setrlimit(RLIMIT_CPU, &limit); }
     limit.rlim_cur = limit.rlim_max = 0;
     setrlimit(RLIMIT_FSIZE, &limit);
