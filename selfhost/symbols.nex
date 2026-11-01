@@ -1,0 +1,401 @@
+// `nex symbols`: the names a program declares, with their type, where they are declared, the block where they are visible and
+// every place where the checker resolved a use of them (nexora/src/nexora/tooling.py, `symbols_document` and `render_symbols`).
+// The checker records them while it checks (checker.nex: `Sym`, `SymRef`); this module puts them in the order and the shape of
+// the document.
+
+import "json.nex"
+import "parser.nex"
+import "project.nex"
+import "checker.nex"
+import "report.nex"
+import "info.nex"
+import "context.nex"
+import "builtins.nex"
+
+pub type Place = { line: Int, column: Int, end_line: Int, end_column: Int }
+
+pub type Symbol = {
+    name: Text, category: Text, kind: Text, function: Text, declaration: Place, scoped: Bool, scope: Place,
+    references: List[Place], mutable: Bool, assignments: List[Place], signature: Text, params: List[Text],
+    param_types: List[Text], return_type: Text, file: Text
+}
+
+pub type Listing = { path: Text, complete: Bool, analysed: Bool, symbols: List[Symbol] }
+
+fn place_of(line: Int, column: Int, end_line: Int, end_column: Int) gives Place {
+    return Place(line: line, column: column, end_line: end_line, end_column: end_column)
+}
+
+fn name_place(node: parser.Node) gives Place {
+    return match context.field(node, "name_span") {
+        parser.Node.Place(line, column, end_line, end_column) => place_of(line, column, end_line, end_column)
+        _ => place_of(0, 0, 0, 0)
+    }
+}
+
+fn key_of(line: Int, column: Int) gives Text {
+    return to_text(line) + ":" + to_text(column)
+}
+
+// The functions of every module, in the order they were checked, and what the modules checked after them said about each one.
+type FunctionSlot = { module: Int, name: Text, node: parser.Node, references: List[Place] }
+
+fn target_module(modules: List[Text], index: Int, key: Text) gives Int {
+    if not Text.contains(key, ".") {
+        return index
+    }
+    var found = 0 - 1
+    var i = 0
+    while i < List.length(modules)
+        shrinks List.length(modules) - i
+    {
+        if Text.starts_with(key, List.get(modules, i) + ".") {
+            found = i
+        }
+        i = i + 1
+    }
+    return found
+}
+
+fn bare_name(key: Text, module: Text) gives Text {
+    if Text.starts_with(key, module + ".") {
+        return Text.slice(key, Text.length(module) + 1, Text.length(key))
+    }
+    return key
+}
+
+fn slot_index(slots: List[FunctionSlot], module: Int, name: Text) gives Int {
+    var i = 0
+    while i < List.length(slots)
+        shrinks List.length(slots) - i
+    {
+        let slot = List.get(slots, i)
+        if slot.module == module and slot.name == name {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn with_reference(slots: List[FunctionSlot], at: Int, place: Place) gives List[FunctionSlot] {
+    var out: List[FunctionSlot] = []
+    var i = 0
+    while i < List.length(slots)
+        shrinks List.length(slots) - i
+    {
+        let slot = List.get(slots, i)
+        if i == at {
+            out = List.append(
+                out,
+                FunctionSlot(module: slot.module, name: slot.name, node: slot.node, references: List.append(slot.references, place))
+            )
+        } else {
+            out = List.append(out, slot)
+        }
+        i = i + 1
+    }
+    return out
+}
+
+// The listing of a program: `results` are its modules, the entry file last.
+pub fn analyse(path: Text, results: List[project.Checked]) gives Listing {
+    let last = List.get(results, List.length(results) - 1)
+    if (last.module.reason == "lexical" and not last.module.clean) or context.is_null(last.typed) {
+        return Listing(path: path, complete: false, analysed: false, symbols: [])
+    }
+    var modules: List[Text] = []
+    for each in results {
+        modules = List.append(modules, each.module.name)
+    }
+    var slots: List[FunctionSlot] = []
+    var index = 0
+    for each in results {
+        var prefix = ""
+        if index < List.length(results) - 1 {
+            prefix = each.module.name + "."
+        }
+        let here = context.declared_in(each.typed, each, prefix)
+        for function in here.functions {
+            slots = List.append(
+                slots,
+                FunctionSlot(module: index, name: context.text_of(context.field(function, "name")), node: function, references: [])
+            )
+        }
+        index = index + 1
+    }
+    // The calls that resolved to a function, in the order of the modules.
+    index = 0
+    for each in results {
+        for reference in each.refs {
+            if reference.function {
+                let module = target_module(modules, index, reference.key)
+                if module >= 0 {
+                    var name = reference.key
+                    if Text.contains(reference.key, ".") {
+                        name = bare_name(reference.key, List.get(modules, module))
+                    }
+                    let at = slot_index(slots, module, name)
+                    if at >= 0 {
+                        slots = with_reference(
+                            slots, at, place_of(reference.line, reference.column, reference.end_line, reference.end_column)
+                        )
+                    }
+                }
+            }
+        }
+        index = index + 1
+    }
+    var symbols: List[Symbol] = []
+    index = 0
+    for each in results {
+        let file = each.module.path
+        // A module writes its own types bare, and the analysis knows them by the module in front (decision 0018).
+        var local: List[Text] = []
+        var module = ""
+        if index < List.length(results) - 1 {
+            module = each.module.name
+            for declaration in List.concat(
+                List.concat(context.items_of(context.field(each.typed, "types")), context.items_of(context.field(each.typed, "records"))),
+                context.items_of(context.field(each.typed, "enums"))
+            ) {
+                local = List.append(local, context.text_of(context.field(declaration, "name")))
+            }
+        }
+        for slot in slots {
+            if slot.module == index {
+                symbols = List.append(symbols, function_symbol(slot, declared_like(slots, slot), file, local, module))
+            }
+        }
+        for sym in each.symbols {
+            symbols = List.append(symbols, variable_symbol(sym, each.refs, file, local, module))
+        }
+        index = index + 1
+    }
+    return Listing(path: path, complete: last.module.clean, analysed: true, symbols: symbols)
+}
+
+// Python finds the declaration of a function by the place of its name, so two functions whose names are in the same place (in two
+// modules) are both described by the first one.
+fn declared_like(slots: List[FunctionSlot], slot: FunctionSlot) gives parser.Node {
+    let place = name_place(slot.node)
+    for other in slots {
+        let there = name_place(other.node)
+        if there.line == place.line and there.column == place.column and there.end_line == place.end_line and there.end_column == place.end_column {
+            return other.node
+        }
+    }
+    return slot.node
+}
+
+fn function_symbol(slot: FunctionSlot, declared: parser.Node, file: Text, local: List[Text], module: Text) gives Symbol {
+    let node = declared
+    var returned = "Void"
+    if not context.is_null(context.field(node, "return_type")) {
+        returned = context.text_of(context.field(context.field(node, "return_type"), "name"))
+    }
+    var written = "Void"
+    if not context.is_null(context.field(slot.node, "return_type")) {
+        written = context.type_text(context.field(slot.node, "return_type"))
+    }
+    if module != "" {
+        written = checker.qualify_type(written, local, module)
+    }
+    var params: List[Text] = []
+    var param_types: List[Text] = []
+    for param in context.items_of(context.field(node, "params")) {
+        params = List.append(params, context.text_of(context.field(param, "name")))
+        param_types = List.append(param_types, context.text_of(context.field(context.field(param, "type"), "name")))
+    }
+    return Symbol(
+        name: slot.name, category: "function", kind: written, function: "", declaration: name_place(node), scoped: false,
+        scope: place_of(0, 0, 0, 0), references: slot.references, mutable: false, assignments: [],
+        signature: context.signature_of(node), params: params, param_types: param_types, return_type: returned, file: file
+    )
+}
+
+fn variable_symbol(
+    sym: checker.Sym, refs: List[checker.SymRef], file: Text, local: List[Text], module: Text
+) gives Symbol {
+    let key = key_of(sym.line, sym.column)
+    var references: List[Place] = []
+    var assignments: List[Place] = []
+    for reference in refs {
+        if not reference.function and reference.key == key {
+            let place = place_of(reference.line, reference.column, reference.end_line, reference.end_column)
+            references = List.append(references, place)
+            if reference.assign {
+                assignments = List.append(assignments, place)
+            }
+        }
+    }
+    var category = sym.category
+    if category == "pattern variable" {
+        category = "variable"
+    }
+    var kind = sym.ty
+    if module != "" {
+        kind = checker.qualify_type(kind, local, module)
+    }
+    return Symbol(
+        name: sym.name, category: category, kind: kind, function: sym.function,
+        declaration: place_of(sym.line, sym.column, sym.end_line, sym.end_column), scoped: sym.scope_line > 0,
+        scope: place_of(sym.scope_line, sym.scope_column, sym.scope_end_line, sym.scope_end_column), references: references,
+        mutable: sym.mutable, assignments: assignments, signature: "", params: [], param_types: [], return_type: "", file: file
+    )
+}
+
+// The symbols that the filters keep.
+pub fn filtered(listing: Listing, name: Text, function: Text) gives List[Symbol] {
+    var kept: List[Symbol] = []
+    for symbol in listing.symbols {
+        var keep = true
+        if name != "" and symbol.name != name {
+            keep = false
+        }
+        if function != "" and not (symbol.function == function or (symbol.category == "function" and symbol.name == function)) {
+            keep = false
+        }
+        if keep {
+            kept = List.append(kept, symbol)
+        }
+    }
+    return kept
+}
+
+// JSON
+
+fn place_json(place: Place) gives json.Json {
+    return json.Json.JObj(
+        ["line", "column", "end_line", "end_column"],
+        [json.Json.JInt(place.line), json.Json.JInt(place.column), json.Json.JInt(place.end_line), json.Json.JInt(place.end_column)]
+    )
+}
+
+fn places_json(places: List[Place]) gives json.Json {
+    var out: List[json.Json] = []
+    for place in places {
+        out = List.append(out, place_json(place))
+    }
+    return json.Json.JList(out)
+}
+
+fn symbol_json(symbol: Symbol) gives json.Json {
+    var keys = ([
+        "name", "category", "type", "function", "declaration", "scope", "references", "mutable", "assignments"
+    ])
+    var scope = json.Json.JNull()
+    if symbol.scoped {
+        scope = place_json(symbol.scope)
+    }
+    var values = ([
+        json.Json.JStr(symbol.name), json.Json.JStr(symbol.category), context.opt(symbol.kind), context.opt(symbol.function),
+        place_json(symbol.declaration), scope, places_json(symbol.references), json.Json.JBool(symbol.mutable),
+        places_json(symbol.assignments)
+    ])
+    if symbol.category == "function" {
+        var params: List[json.Json] = []
+        var i = 0
+        while i < List.length(symbol.params)
+            shrinks List.length(symbol.params) - i
+        {
+            params = List.append(
+                params,
+                json.Json.JObj(
+                    ["name", "type"], [json.Json.JStr(List.get(symbol.params, i)), json.Json.JStr(List.get(symbol.param_types, i))]
+                )
+            )
+            i = i + 1
+        }
+        keys = List.concat(keys, ["signature", "params", "return_type"])
+        values = List.concat(
+            values, [json.Json.JStr(symbol.signature), json.Json.JList(params), json.Json.JStr(symbol.return_type)]
+        )
+    }
+    keys = List.append(keys, "file")
+    values = List.append(values, json.Json.JStr(symbol.file))
+    return json.Json.JObj(keys, values)
+}
+
+// The `nexora.symbols/2` document of `nex symbols --format json`.
+pub fn render_json(listing: Listing, reports: List[report.Report], name: Text, function: Text) gives Text {
+    var ok = true
+    for item in reports {
+        if not Text.starts_with(item.problem.code, "W") {
+            ok = false
+        }
+    }
+    var symbols = json.Json.JNull()
+    if listing.analysed {
+        var out: List[json.Json] = []
+        for symbol in filtered(listing, name, function) {
+            out = List.append(out, symbol_json(symbol))
+        }
+        symbols = json.Json.JList(out)
+    }
+    let known = json.parse(builtins.builtins_text())
+    let keys = ([
+        "schema", "nexora_version", "file", "ok", "diagnostics", "complete", "filter", "symbols", "builtins"
+    ])
+    let values = ([
+        json.Json.JStr("nexora.symbols/2"), json.Json.JStr(info.version()), json.Json.JStr(listing.path), json.Json.JBool(ok),
+        report.diagnostics(reports), json.Json.JBool(listing.complete),
+        json.Json.JObj(["name", "function"], [context.opt(name), context.opt(function)]), symbols, known.value
+    ])
+    return json.dump_indented(json.Json.JObj(keys, values))
+}
+
+// Text
+
+fn padded(text: Text, width: Int) gives Text {
+    var out = text
+    while Text.length(out) < width
+        shrinks width - Text.length(out)
+    {
+        out = out + " "
+    }
+    return out
+}
+
+// What `nex symbols` prints (tooling.py, `render_symbols`).
+pub fn render_text(listing: Listing, name: Text, function: Text) gives Text {
+    if not listing.analysed {
+        return "No symbols: the text could not be read as NEXORA code."
+    }
+    let partial = "Partial list: the program has syntax errors, and the code with errors is not included."
+    let symbols = filtered(listing, name, function)
+    if List.length(symbols) == 0 {
+        if listing.complete {
+            return "No symbols match."
+        }
+        return "No symbols match.\n" + partial
+    }
+    var lines: List[Text] = []
+    if not listing.complete {
+        lines = [partial]
+    }
+    for symbol in symbols {
+        let declared = to_text(symbol.declaration.line) + ":" + to_text(symbol.declaration.column)
+        var head = ""
+        if symbol.category == "function" {
+            head = "function   " + symbol.signature
+        } else {
+            var kind = symbol.kind
+            if kind == "" {
+                kind = "?"
+            }
+            head = padded(symbol.category, 10) + " " + symbol.name + ": " + kind + "    in " + symbol.function
+        }
+        var spots: List[Text] = []
+        for reference in symbol.references {
+            spots = List.append(spots, to_text(reference.line) + ":" + to_text(reference.column))
+        }
+        var used = "nowhere"
+        if List.length(spots) > 0 {
+            used = parser.join_texts(spots, ", ")
+        }
+        lines = List.append(lines, head + "    [declared at " + declared + "]")
+        lines = List.append(lines, "    used at: " + used)
+    }
+    return parser.join_texts(lines, "\n")
+}

@@ -9,6 +9,7 @@ import "info.nex"
 import "checker.nex"
 import "lexer.nex"
 import "render.nex"
+import "project.nex"
 import "titles.nex"
 
 // A clause of the header or of a loop. The empty text stands for the name or the message that was not written.
@@ -19,7 +20,7 @@ pub type Variable = { name: Text, kind: Text, line: Int, mutable: Bool }
 pub type Loop = { line: Int, kind: Text, condition: Text, invariants: List[Clause], measure: List[Clause] }
 
 pub type Func = {
-    name: Text, signature: Text, params: List[Text], param_types: List[Text], return_type: Text,
+    key: Text, file: Text, name: Text, signature: Text, params: List[Text], param_types: List[Text], return_type: Text,
     line: Int, end_line: Int, column: Int, end_column: Int,
     contracts: List[Clause], variables: List[Variable], calls: List[Text], builtins_called: List[Text],
     called_by: List[Text], recursive: Bool, examples: List[Clause], loops: List[Loop]
@@ -41,7 +42,7 @@ pub type Context = {
 
 // Reading the tree
 
-fn kind_of(node: parser.Node) gives Text {
+pub fn kind_of(node: parser.Node) gives Text {
     return match node {
         parser.Node.Obj(kind, names, values) => kind
         _ => ""
@@ -61,7 +62,7 @@ fn index_of(names: List[Text], name: Text) gives Int {
     return 0 - 1
 }
 
-fn field(node: parser.Node, name: Text) gives parser.Node {
+pub fn field(node: parser.Node, name: Text) gives parser.Node {
     return match node {
         parser.Node.Obj(kind, names, values) => field_at(names, values, name)
         _ => parser.Node.Null()
@@ -76,21 +77,21 @@ fn field_at(names: List[Text], values: List[parser.Node], name: Text) gives pars
     return List.get(values, index)
 }
 
-fn text_of(node: parser.Node) gives Text {
+pub fn text_of(node: parser.Node) gives Text {
     return match node {
         parser.Node.Str(value) => value
         _ => ""
     }
 }
 
-fn items_of(node: parser.Node) gives List[parser.Node] {
+pub fn items_of(node: parser.Node) gives List[parser.Node] {
     return match node {
         parser.Node.Items(items) => items
         _ => []
     }
 }
 
-fn is_null(node: parser.Node) gives Bool {
+pub fn is_null(node: parser.Node) gives Bool {
     return match node {
         parser.Node.Null => true
         _ => false
@@ -153,6 +154,23 @@ fn slice_of(lines: List[Text], node: parser.Node) gives Text {
     }
 }
 
+// Text.slice as Python slices: a position outside the text gives what is inside it.
+fn cut(text: Text, start: Int, end: Int) gives Text {
+    let size = Text.length(text)
+    var from = start
+    var to = end
+    if from < 0 {
+        from = 0
+    }
+    if to > size {
+        to = size
+    }
+    if from >= to {
+        return ""
+    }
+    return Text.slice(text, from, to)
+}
+
 fn line_text(lines: List[Text], number: Int) gives Text {
     if number >= 1 and number <= List.length(lines) {
         return List.get(lines, number - 1)
@@ -162,9 +180,9 @@ fn line_text(lines: List[Text], number: Int) gives Text {
 
 fn slice_span(lines: List[Text], line: Int, column: Int, end_line: Int, end_column: Int) gives Text {
     if line == end_line {
-        return Text.slice(line_text(lines, line), column - 1, end_column - 1)
+        return cut(line_text(lines, line), column - 1, end_column - 1)
     }
-    var parts = [Text.slice(line_text(lines, line), column - 1, Text.length(line_text(lines, line)))]
+    var parts = [cut(line_text(lines, line), column - 1, Text.length(line_text(lines, line)))]
     var number = line + 1
     while number < end_line
         shrinks end_line - number
@@ -172,12 +190,12 @@ fn slice_span(lines: List[Text], line: Int, column: Int, end_line: Int, end_colu
         parts = List.append(parts, line_text(lines, number))
         number = number + 1
     }
-    parts = List.append(parts, Text.slice(line_text(lines, end_line), 0, end_column - 1))
+    parts = List.append(parts, cut(line_text(lines, end_line), 0, end_column - 1))
     return parser.join_texts(parts, "\n")
 }
 
 // A type as it is written: `List[Int]`.
-fn type_text(node: parser.Node) gives Text {
+pub fn type_text(node: parser.Node) gives Text {
     var name = text_of(field(node, "name"))
     let qualifier = text_of(field(node, "qualifier"))
     if qualifier != "" {
@@ -305,7 +323,7 @@ fn clause_of(lines: List[Text], node: parser.Node) gives Clause {
     )
 }
 
-fn signature_of(function: parser.Node) gives Text {
+pub fn signature_of(function: parser.Node) gives Text {
     var params: List[Text] = []
     for param in items_of(field(function, "params")) {
         params = List.append(params, text_of(field(param, "name")) + ": " + text_of(field(field(param, "type"), "name")))
@@ -404,7 +422,7 @@ fn scan_branch(branch: parser.Node, env: List[Text], blocked: List[Text], known:
 }
 
 // One number of the position of a node: 0 line, 1 column, 2 end line, 3 end column.
-fn place_at(node: parser.Node, which: Int) gives Int {
+pub fn place_at(node: parser.Node, which: Int) gives Int {
     return match field(node, "span") {
         parser.Node.Place(line, column, end_line, end_column) => pick(which, line, column, end_line, end_column)
         _ => 0
@@ -431,29 +449,74 @@ fn line_of_name(node: parser.Node) gives Int {
     }
 }
 
-// The calls a function makes: its header (the examples apart) and its body. A call is an edge only when it names a built-in
-// or a function of the program.
-fn calls_of(function: parser.Node, functions: List[Text]) gives List[Text] {
+// What the calls of a function are resolved against: the keys of the functions (a name with its module in front, none for the entry
+// module), the ones marked `pub`, the keys of the types, and the keys of the enums.
+pub type Names = { keys: List[Text], public: List[Text], types: List[Text], enums: List[Text] }
+
+// The calls a function makes: its header (the examples apart) and its body, in the order the checker meets them. A call is an
+// edge when it names a built-in or a function of the program that the module may use.
+fn calls_of(function: parser.Node, prefix: Text, names: Names) gives List[Text] {
     var found: List[Text] = []
     for part in items_of(field(function, "header")) {
         if kind_of(part) != "Example" {
-            found = List.concat(found, call_names(part, functions))
+            found = List.concat(found, call_names(part, prefix, names))
         }
     }
-    return List.concat(found, call_names(field(function, "body"), functions))
+    return List.concat(found, call_names(field(function, "body"), prefix, names))
 }
 
-fn call_names(node: parser.Node, functions: List[Text]) gives List[Text] {
+fn call_names(node: parser.Node, prefix: Text, names: Names) gives List[Text] {
+    return match node {
+        parser.Node.Obj(kind, fields, values) => object_calls(node, kind, values, prefix, names)
+        parser.Node.Items(items) => items_calls(items, prefix, names)
+        _ => []
+    }
+}
+
+fn items_calls(items: List[parser.Node], prefix: Text, names: Names) gives List[Text] {
     var found: List[Text] = []
-    for item in walk(node) {
-        if kind_of(item) == "Call" {
-            let callee = text_of(field(item, "callee"))
-            if checker.is_builtin(callee) or List.contains(functions, callee) {
-                found = List.append(found, callee)
-            }
-        }
+    for item in items {
+        found = List.concat(found, call_names(item, prefix, names))
     }
     return found
+}
+
+fn object_calls(node: parser.Node, kind: Text, values: List[parser.Node], prefix: Text, names: Names) gives List[Text] {
+    if kind != "Call" {
+        return items_calls(values, prefix, names)
+    }
+    let callee = text_of(field(node, "callee"))
+    let inside = items_calls(values, prefix, names)
+    if checker.is_builtin(callee) {
+        return List.append(inside, callee)
+    }
+    if not Text.contains(callee, ".") {
+        let key = prefix + callee
+        if List.contains(names.keys, key) {
+            return List.append(inside, key)
+        }
+        return inside
+    }
+    // `Name.function(...)`: an enum variant, a function or a type of a module, or nothing the program has.
+    let dot = last_dot(callee)
+    let qualifier = Text.slice(callee, 0, dot)
+    var qualifier_key = qualifier
+    if not Text.contains(qualifier, ".") {
+        qualifier_key = prefix + qualifier
+    }
+    if List.contains(names.enums, qualifier_key) {
+        return inside
+    }
+    if List.contains(names.types, callee) {
+        return inside
+    }
+    if not List.contains(names.keys, callee) {
+        return []
+    }
+    if not List.contains(names.public, callee) {
+        return inside
+    }
+    return List.append(inside, callee)
 }
 
 fn loop_of(lines: List[Text], loop: parser.Node) gives Loop {
@@ -489,11 +552,15 @@ fn loops_of(lines: List[Text], function: parser.Node) gives List[Loop] {
     return found
 }
 
-fn function_entry(
-    lines: List[Text], function: parser.Node, names: List[Text], callees: List[List[Text]], keys: List[Text],
-    blocked: List[Text], known: List[Text]
-) gives Func {
+// What is known of a function before it is described: its key, where it is, the calls it makes and the variables it declares.
+pub type Slot = {
+    key: Text, function: parser.Node, path: Text, callees: List[Text], variables: List[Variable]
+}
+
+fn function_entry(lines: List[Text], slot: Slot, slots: List[Slot]) gives Func {
+    let function = slot.function
     let name = text_of(field(function, "name"))
+    let key = slot.key
     var contracts: List[Clause] = []
     var examples: List[Clause] = []
     for part in items_of(field(function, "header")) {
@@ -503,36 +570,36 @@ fn function_entry(
             examples = List.append(examples, clause_of(lines, part))
         }
     }
-    var called: List[Text] = []
-    var builtins: List[Text] = []
+    var keys: List[Text] = []
+    var callees: List[List[Text]] = []
     var graph: List[List[Text]] = []
-    for each in callees {
+    var variables: List[Variable] = []
+    var callers: List[Text] = []
+    for other in slots {
+        keys = List.append(keys, other.key)
+        callees = List.append(callees, other.callees)
         var user: List[Text] = []
-        for callee in each {
+        for callee in other.callees {
             if not checker.is_builtin(callee) {
                 user = List.append(user, callee)
             }
+            if callee == key and not checker.is_builtin(callee) {
+                callers = insert_sorted(callers, other.key)
+            }
         }
         graph = List.append(graph, user)
+        if text_of(field(other.function, "name")) == name {
+            variables = List.concat(variables, other.variables)
+        }
     }
-    for callee in targets_of(keys, callees, name) {
+    var called: List[Text] = []
+    var builtins: List[Text] = []
+    for callee in targets_of(keys, callees, key) {
         if checker.is_builtin(callee) {
             builtins = insert_sorted(builtins, callee)
         } else {
             called = insert_sorted(called, callee)
         }
-    }
-    var callers: List[Text] = []
-    var i = 0
-    while i < List.length(keys)
-        shrinks List.length(keys) - i
-    {
-        for callee in List.get(callees, i) {
-            if callee == name {
-                callers = insert_sorted(callers, List.get(keys, i))
-            }
-        }
-        i = i + 1
     }
     var params: List[Text] = []
     var param_types: List[Text] = []
@@ -545,10 +612,10 @@ fn function_entry(
         returned = text_of(field(field(function, "return_type"), "name"))
     }
     return Func(
-        name: name, signature: signature_of(function), params: params, param_types: param_types, return_type: returned,
-        line: place_at(function, 0), end_line: place_at(function, 2), column: place_at(function, 1), end_column: place_at(function, 3), contracts: contracts,
-        variables: variables_of(function, blocked, known), calls: called, builtins_called: builtins, called_by: callers,
-        recursive: reaches(keys, graph, name, name), examples: examples, loops: loops_of(lines, function)
+        key: key, file: slot.path, name: name, signature: signature_of(function), params: params, param_types: param_types,
+        return_type: returned, line: place_at(function, 0), end_line: place_at(function, 2), column: place_at(function, 1),
+        end_column: place_at(function, 3), contracts: contracts, variables: variables, calls: called, builtins_called: builtins,
+        called_by: callers, recursive: reaches(keys, graph, key, key), examples: examples, loops: loops_of(lines, function)
     )
 }
 
@@ -575,7 +642,17 @@ fn root_of(types: List[parser.Node], kind: Text) gives Text {
     return current
 }
 
-fn type_entries(lines: List[Text], types: List[parser.Node]) gives List[TypeEntry] {
+// The root type of a refined type the analysis kept, or the empty text.
+fn refined_root(export: checker.Export, module: Text, name: Text) gives Text {
+    for ref in export.refined {
+        if bare(ref.name, module) == name {
+            return bare_type(ref.root, module)
+        }
+    }
+    return ""
+}
+
+fn type_entries(lines: List[Text], types: List[parser.Node], export: checker.Export, module: Text) gives List[TypeEntry] {
     var found: List[TypeEntry] = []
     for declaration in types {
         let base = text_of(field(field(declaration, "base"), "name"))
@@ -583,7 +660,7 @@ fn type_entries(lines: List[Text], types: List[parser.Node]) gives List[TypeEntr
             found,
             TypeEntry(
                 name: text_of(field(declaration, "name")), base: text_of(field(field(declaration, "base"), "name")),
-                root: root_of(types, base), condition: slice_of(lines, field(declaration, "condition")),
+                root: refined_root(export, module, text_of(field(declaration, "name"))), condition: slice_of(lines, field(declaration, "condition")),
                 message: text_of(field(declaration, "message")), line: line_of(declaration)
             )
         )
@@ -591,38 +668,95 @@ fn type_entries(lines: List[Text], types: List[parser.Node]) gives List[TypeEntr
     return found
 }
 
-// Why a record cannot be used: the error found inside it (tooling.py, `_record_reason`).
+// Why a record cannot be used: the diagnostic found inside it, or one that names it (tooling.py, `_record_reason`).
 fn record_reason(problems: List[parser.Problem], declaration: parser.Node) gives Text {
     let first = place_at(declaration, 0)
     let last = place_at(declaration, 2)
     for problem in problems {
-        if problem.line > 0 and first <= problem.line and problem.line <= last and not Text.starts_with(problem.code, "W") {
+        if problem.line > 0 and first <= problem.line and problem.line <= last {
+            return problem.label
+        }
+    }
+    let name = text_of(field(declaration, "name"))
+    for problem in problems {
+        if Text.contains(problem.label, name) {
             return problem.label
         }
     }
     return ""
 }
 
-fn record_entries(records: List[parser.Node], problems: List[parser.Problem]) gives List[RecordEntry] {
+// The name a module declares, without the module the export put in front.
+fn bare(name: Text, module: Text) gives Text {
+    if module != "" and Text.starts_with(name, module + ".") {
+        return Text.slice(name, Text.length(module) + 1, Text.length(name))
+    }
+    return name
+}
+
+// A type as the export writes it, as the module writes it.
+fn bare_type(kind: Text, module: Text) gives Text {
+    if module == "" {
+        return kind
+    }
+    return replace_all(kind, module + ".", "")
+}
+
+fn replace_all(text: Text, old: Text, replacement: Text) gives Text {
+    var result = ""
+    var i = 0
+    let width = Text.length(old)
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if i + width <= Text.length(text) and Text.slice(text, i, i + width) == old {
+            result = result + replacement
+            i = i + width
+        } else {
+            result = result + Text.slice(text, i, i + 1)
+            i = i + 1
+        }
+    }
+    return result
+}
+
+// The record the analysis kept under a name, or none (a record that could not be used is not kept).
+fn kept_record(export: checker.Export, module: Text, name: Text) gives List[checker.Rec] {
+    for record in export.records {
+        if bare(record.name, module) == name {
+            return [record]
+        }
+    }
+    return []
+}
+
+fn record_entries(
+    records: List[parser.Node], problems: List[parser.Problem], export: checker.Export, module: Text
+) gives List[RecordEntry] {
     var found: List[RecordEntry] = []
     for declaration in records {
+        let name = text_of(field(declaration, "name"))
+        let kept = kept_record(export, module, name)
         var fields: List[Field] = []
         for item in items_of(field(declaration, "fields")) {
-            fields = List.append(fields, Field(name: text_of(field(item, "name")), kind: type_text(field(item, "type"))))
-        }
-        let reason = record_reason(problems, declaration)
-        if reason != "" {
-            var blank: List[Field] = []
-            for item in fields {
-                blank = List.append(blank, Field(name: item.name, kind: ""))
+            var kind = ""
+            if List.length(kept) > 0 {
+                let record = List.get(kept, 0)
+                let at = index_of(record.field_names, text_of(field(item, "name")))
+                if at >= 0 {
+                    kind = bare_type(List.get(record.field_types, at), module)
+                }
             }
-            fields = blank
+            fields = List.append(fields, Field(name: text_of(field(item, "name")), kind: kind))
+        }
+        var reason = ""
+        if List.length(kept) == 0 {
+            reason = record_reason(problems, declaration)
         }
         found = List.append(
             found,
             RecordEntry(
-                name: text_of(field(declaration, "name")), fields: fields, valid: reason == "", line: line_of(declaration),
-                reason: reason
+                name: name, fields: fields, valid: List.length(kept) > 0, line: line_of(declaration), reason: reason
             )
         )
     }
@@ -803,57 +937,133 @@ fn builtin_list() gives List[Text] {
     ])
 }
 
-// `program` is the tree with types, or null when the text has a lexical error.
-pub fn analyse(path: Text, source: Text, program: parser.Node, complete: Bool, problems: List[parser.Problem]) gives Context {
-    let lines = render.lines_of(source)
-    let reserved = reserved_used(source)
-    if is_null(program) {
-        return Context(
-            path: path, lines: count_lines(source), reserved: reserved, tokens: false, analysed: false, complete: false, entry_point: "",
-            types: [], records: [], capabilities: [], functions: [], features: [],
-            notes: notes_of(program, false, false, [], reserved)
-        )
-    }
-    let types = items_of(field(program, "types"))
+// What a module declares that matters here: its functions (not a built-in, not a type, not twice), the names of its types and the
+// types without error.
+pub type Declared = { functions: List[parser.Node], blocked: List[Text], known: List[Text] }
+
+pub fn declared_in(program: parser.Node, checked: project.Checked, prefix: Text) gives Declared {
+    let export = checked.export
+    let module = checked.module.name
     var type_names: List[Text] = []
-    for declaration in List.concat(List.concat(types, items_of(field(program, "records"))), items_of(field(program, "enums"))) {
+    for declaration in List.concat(items_of(field(program, "types")), items_of(field(program, "records"))) {
         type_names = List.append(type_names, text_of(field(declaration, "name")))
     }
-    var declared: List[parser.Node] = []
-    var keys: List[Text] = []
+    for declaration in items_of(field(program, "enums")) {
+        type_names = List.append(type_names, text_of(field(declaration, "name")))
+    }
+    var functions: List[parser.Node] = []
+    var seen: List[Text] = []
     for function in items_of(field(program, "functions")) {
         let name = text_of(field(function, "name"))
-        if not checker.is_builtin(name) and not List.contains(type_names, name) and not List.contains(keys, name) {
-            declared = List.append(declared, function)
-            keys = List.append(keys, name)
-        }
-    }
-    var valid_types: List[Text] = []
-    for declaration in List.concat(List.concat(types, items_of(field(program, "records"))), items_of(field(program, "enums"))) {
-        if record_reason(problems, declaration) == "" {
-            valid_types = List.append(valid_types, text_of(field(declaration, "name")))
+        if not checker.is_builtin(name) and not List.contains(type_names, name) and not List.contains(seen, name) {
+            functions = List.append(functions, function)
+            seen = List.append(seen, name)
         }
     }
     var struct_names: List[Text] = []
-    for declaration in List.concat(types, items_of(field(program, "records"))) {
+    for declaration in List.concat(items_of(field(program, "types")), items_of(field(program, "records"))) {
         struct_names = List.append(struct_names, text_of(field(declaration, "name")))
     }
-    let blocked = List.concat(List.concat(keys, struct_names), builtin_list())
-    let known = List.concat(valid_types, ["Int", "Float", "Bool", "Text", "Void", "List", "Option", "Result"])
-    var callees: List[List[Text]] = []
-    for function in declared {
-        callees = List.append(callees, calls_of(function, keys))
+    for name in export.type_names {
+        struct_names = List.append(struct_names, bare(name, module))
+    }
+    var known = ["Int", "Float", "Bool", "Text", "Void", "List", "Option", "Result"]
+    for record in export.records {
+        known = List.append(known, bare(record.name, module))
+    }
+    for ref in export.refined {
+        known = List.append(known, bare(ref.name, module))
+    }
+    for info in export.enums {
+        known = List.append(known, bare(info.name, module))
+    }
+    let blocked = List.concat(List.concat(keys_of_names(functions, prefix), struct_names), builtin_list())
+    return Declared(functions: functions, blocked: blocked, known: known)
+}
+
+// The summary of a program. `results` are its modules, the entry file last, each with the tree the checker typed. The text of
+// every condition is cut from the entry file, as Python does for all the modules (Source.text_of of the analysis).
+pub fn analyse(path: Text, source: Text, results: List[project.Checked]) gives Context {
+    let lines = render.lines_of(source)
+    let reserved = reserved_used(source)
+    let last = List.get(results, List.length(results) - 1)
+    let program = last.typed
+    let complete = last.module.clean
+    if (last.module.reason == "lexical" and not complete) or is_null(program) {
+        return Context(
+            path: path, lines: count_lines(source), reserved: reserved, tokens: false, analysed: false, complete: false, entry_point: "",
+            types: [], records: [], capabilities: [], functions: [], features: [],
+            notes: notes_of(parser.Node.Null(), false, false, [], reserved)
+        )
+    }
+    var problems: List[parser.Problem] = []
+    for result in results {
+        problems = List.concat(problems, result.problems)
+    }
+    var keys: List[Text] = []
+    var public_keys: List[Text] = []
+    var type_keys: List[Text] = []
+    var enum_keys: List[Text] = []
+    var pending: List[Slot] = []
+    var index = 0
+    for result in results {
+        var prefix = ""
+        if index < List.length(results) - 1 {
+            prefix = result.module.name + "."
+        }
+        let here = declared_in(result.typed, result, prefix)
+        let blocked = here.blocked
+        let known = here.known
+        for declaration in items_of(field(result.typed, "types")) {
+            type_keys = List.append(type_keys, prefix + text_of(field(declaration, "name")))
+        }
+        for declaration in items_of(field(result.typed, "records")) {
+            type_keys = List.append(type_keys, prefix + text_of(field(declaration, "name")))
+        }
+        for declaration in items_of(field(result.typed, "enums")) {
+            enum_keys = List.append(enum_keys, prefix + text_of(field(declaration, "name")))
+        }
+        for function in here.functions {
+            let key = prefix + text_of(field(function, "name"))
+            keys = List.append(keys, key)
+            if flag_of(field(function, "public")) {
+                public_keys = List.append(public_keys, key)
+            }
+            pending = List.append(
+                pending,
+                Slot(
+                    key: key, function: function, path: result.module.path, callees: [],
+                    variables: variables_of(function, blocked, known)
+                )
+            )
+        }
+        index = index + 1
+    }
+    let names = Names(keys: keys, public: public_keys, types: type_keys, enums: enum_keys)
+    var slots: List[Slot] = []
+    for slot in pending {
+        var prefix = ""
+        if Text.contains(slot.key, ".") {
+            prefix = Text.slice(slot.key, 0, last_dot(slot.key) + 1)
+        }
+        slots = List.append(
+            slots,
+            Slot(
+                key: slot.key, function: slot.function, path: slot.path,
+                callees: calls_of(slot.function, prefix, names), variables: slot.variables
+            )
+        )
     }
     var functions: List[Func] = []
     var entry = ""
     var recursive = false
-    for function in declared {
-        let described = function_entry(lines, function, keys, callees, keys, blocked, known)
+    for slot in slots {
+        let described = function_entry(lines, slot, slots)
         functions = List.append(functions, described)
         if described.recursive {
             recursive = true
         }
-        if described.name == "main" {
+        if described.key == "main" {
             entry = "main"
         }
     }
@@ -863,18 +1073,42 @@ pub fn analyse(path: Text, source: Text, program: parser.Node, complete: Bool, p
             capabilities, Capability(capability: text_of(field(use, "capability")), path: text_of(field(use, "path")))
         )
     }
+    let types = items_of(field(program, "types"))
     let features = features_of(program, types, recursive)
     return Context(
         path: path, lines: count_lines(source), reserved: reserved, tokens: true, analysed: true, complete: complete, entry_point: entry,
-        types: type_entries(lines, types), records: record_entries(items_of(field(program, "records")), problems),
+        types: type_entries(lines, types, last.export, last.module.name),
+        records: record_entries(items_of(field(program, "records")), problems, last.export, last.module.name),
         capabilities: capabilities, functions: functions, features: features,
         notes: notes_of(program, true, complete, features, reserved)
     )
 }
 
+fn keys_of_names(functions: List[parser.Node], prefix: Text) gives List[Text] {
+    var names: List[Text] = []
+    for function in functions {
+        names = List.append(names, prefix + text_of(field(function, "name")))
+    }
+    return names
+}
+
+fn last_dot(text: Text) gives Int {
+    var found = 0 - 1
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.slice(text, i, i + 1) == "." {
+            found = i
+        }
+        i = i + 1
+    }
+    return found
+}
+
 // JSON
 
-fn opt(value: Text) gives json.Json {
+pub fn opt(value: Text) gives json.Json {
     if value == "" {
         return json.Json.JNull()
     }
@@ -1067,7 +1301,7 @@ fn tail_values(context: Context) gives List[json.Json] {
     }
     var functions: List[json.Json] = []
     for function in context.functions {
-        functions = List.append(functions, function_json(function, context.path))
+        functions = List.append(functions, function_json(function, function.file))
     }
     var entry = json.Json.JNull()
     if context.entry_point != "" {

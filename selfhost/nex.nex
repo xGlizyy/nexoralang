@@ -26,6 +26,12 @@ import "interpreter.nex"
 import "info.nex"
 import "report.nex"
 import "context.nex"
+import "symbols.nex"
+import "testdoc.nex"
+import "lexer.nex"
+import "json.nex"
+import "legacy.nex"
+import "migrate.nex"
 
 uses read "."
 uses write "."
@@ -42,6 +48,15 @@ fn counted(count: Int, noun: Text) gives Text {
         return "1 " + noun
     }
     return to_text(count) + " " + noun + "s"
+}
+
+// The text of a source file as the tools read it: without the byte-order mark that some editors write first.
+fn source_of(path: Text) gives Text {
+    let raw = read_file(path)
+    if Text.length(raw) > 0 and Text.slice(raw, 0, 1) == json.char_from_code(65279) {
+        return Text.slice(raw, 1, Text.length(raw))
+    }
+    return raw
 }
 
 // A line on the standard error (replaced in the executable).
@@ -125,7 +140,7 @@ fn count_errors(reports: List[report.Report]) gives Int {
 }
 
 fn show(problem: parser.Problem, file: Text) {
-    err(render.render(problem, file, render.lines_of(read_file(file))))
+    err(render.render(problem, file, render.lines_of(source_of(file))))
 }
 
 fn show_reports(reports: List[report.Report]) {
@@ -326,6 +341,159 @@ fn padded(name: Text, width: Int) gives Text {
     return text
 }
 
+// How much two texts have in common, as difflib's SequenceMatcher counts it: the size of the longest block they share, plus what the
+// same rule finds on each side of it.
+fn shared_size(a: Text, alo: Int, ahi: Int, b: Text, blo: Int, bhi: Int) gives Int {
+    if alo >= ahi or blo >= bhi {
+        return 0
+    }
+    var best_size = 0
+    var best_a = alo
+    var best_b = blo
+    var previous: List[Int] = []
+    var column = 0
+    while column <= bhi - blo
+        shrinks bhi - blo + 1 - column
+    {
+        previous = List.append(previous, 0)
+        column = column + 1
+    }
+    var i = alo
+    while i < ahi
+        shrinks ahi - i
+    {
+        var row: List[Int] = [0]
+        var j = blo
+        while j < bhi
+            shrinks bhi - j
+        {
+            var size = 0
+            if Text.slice(a, i, i + 1) == Text.slice(b, j, j + 1) {
+                size = List.get(previous, j - blo) + 1
+            }
+            row = List.append(row, size)
+            if size > best_size {
+                best_size = size
+                best_a = i - size + 1
+                best_b = j - size + 1
+            }
+            j = j + 1
+        }
+        previous = row
+        i = i + 1
+    }
+    if best_size == 0 {
+        return 0
+    }
+    return best_size + shared_size(a, alo, best_a, b, blo, best_b) + shared_size(a, best_a + best_size, ahi, b, best_b + best_size, bhi)
+}
+
+// difflib.get_close_matches(word, options, n=1): the best option whose ratio is at least 0.6, the later one when two tie, or "".
+fn close_match(word: Text, options: List[Text]) gives Text {
+    var best = ""
+    var best_shared = 0
+    var best_total = 1
+    var found = false
+    for option in options {
+        let total = Text.length(option) + Text.length(word)
+        if total > 0 {
+            let shared = shared_size(option, 0, Text.length(option), word, 0, Text.length(word))
+            if 10 * shared >= 3 * total {
+                // 2 * shared / total is compared with the best so far without a division.
+                let better = shared * best_total > best_shared * total
+                let same = shared * best_total == best_shared * total
+                if not found or better or (same and option > best) {
+                    best = option
+                    best_shared = shared
+                    best_total = total
+                    found = true
+                }
+            }
+        }
+    }
+    return best
+}
+
+// `--function NAME` must name a function of the file that is tested (a usage error, status 2, with a suggestion when one is close).
+fn function_is_known(path: Text, program: parser.Node, only: Text) gives Bool {
+    if only == "" {
+        return true
+    }
+    var names: List[Text] = []
+    for function in context.items_of(context.field(program, "functions")) {
+        names = List.append(names, context.text_of(context.field(function, "name")))
+    }
+    if List.contains(names, only) {
+        return true
+    }
+    var sorted_names: List[Text] = []
+    for name in names {
+        var before: List[Text] = []
+        var after: List[Text] = []
+        for kept in sorted_names {
+            if kept < name {
+                before = List.append(before, kept)
+            } else {
+                after = List.append(after, kept)
+            }
+        }
+        sorted_names = List.concat(List.append(before, name), after)
+    }
+    let close = close_match(only, sorted_names)
+    var suggestion = ""
+    if close != "" {
+        suggestion = ". Did you mean '" + close + "'?"
+    }
+    err("error: " + path + " has no function named '" + only + "'" + suggestion)
+    exit_with(2)
+    return false
+}
+
+// `nex test FILE --format json`: the nexora.test/1 document. The diagnostics carry the name of the program, as Python writes them.
+fn test_json(path: Text, only: Text) {
+    let reason = file_problem(path)
+    if reason != "" {
+        let problem = parser.Problem(
+            code: "E0001", label: reason + ": " + path, hint: "", notes: [], line: 0, column: 0, end_line: 0, end_column: 0
+        )
+        print(testdoc.document(path, [report.Report(problem: problem, file: path)], false, only, []))
+        exit_with(4)
+        return
+    }
+    let loaded = load_and_check(path, false, 0, "json")
+    if loaded.stop != "" {
+        if loaded.stop != "limit" {
+            err("error: " + path + ": " + loaded.stop)
+        }
+        exit_with(70)
+        return
+    }
+    var shown: List[report.Report] = []
+    for each in report.reports_of(loaded.results) {
+        shown = List.append(shown, report.Report(problem: each.problem, file: path))
+    }
+    if count_errors(shown) > 0 {
+        print(testdoc.document(path, shown, false, only, []))
+        exit_with(1)
+        return
+    }
+    let entry_module = List.get(loaded.results, List.length(loaded.results) - 1)
+    if not function_is_known(path, entry_module.typed, only) {
+        return
+    }
+    let results = interpreter.evaluate_examples(loaded.node, source_of(path), only)
+    print(testdoc.document(path, shown, true, only, results))
+    var passed = List.length(results) > 0
+    for result in results {
+        if result.status != "passed" {
+            passed = false
+        }
+    }
+    if not passed {
+        exit_with(6)
+    }
+}
+
 fn test_command(path: Text, only: Text) {
     if not is_readable(path, "the file could not be read", "text", false) {
         return
@@ -346,7 +514,11 @@ fn test_command(path: Text, only: Text) {
         exit_with(1)
         return
     }
-    let text = read_file(path)
+    let entry_module = List.get(loaded.results, List.length(loaded.results) - 1)
+    if not function_is_known(path, entry_module.typed, only) {
+        return
+    }
+    let text = source_of(path)
     let results = interpreter.evaluate_examples(loaded.node, text, only)
     if List.length(results) == 0 {
         print(path + ": no examples to run")
@@ -428,15 +600,18 @@ fn usage() {
     err("usage: nex [-h] [--version] <command> ...")
     err("       nex check FILE")
     err("       nex run [OPTIONS] FILE [ARGUMENTS]")
+    err("       nex debug [OPTIONS] FILE [ARGUMENTS]")
+    err("       nex migrate [--write] FILE")
     err("       nex test FILE [--function NAME]")
     err("       nex inspect FILE")
     err("       nex context [--format text|json] FILE")
+    err("       nex symbols [--format text|json] [--name NAME] [--function NAME] FILE")
     exit_with(2)
 }
 
 // The options that take a value, to know where the file of a command starts.
 fn takes_value(word: Text) gives Bool {
-    for name in ["--allow-read", "--allow-write", "--allow-network", "--allow-process", "--stdin", "--cwd", "--max-text", "--max-output", "--max-input", "--max-source", "--function", "--format", "--timeout", "--max-memory"] {
+    for name in ["--allow-read", "--allow-write", "--allow-network", "--allow-process", "--stdin", "--cwd", "--max-text", "--max-output", "--max-input", "--max-source", "--function", "--format", "--timeout", "--max-memory", "--name", "--breakpoint", "--max-steps"] {
         if word == name {
             return true
         }
@@ -613,25 +788,1193 @@ fn context_command(path: Text, format: Text) {
         exit_with(70)
         return
     }
-    if List.length(loaded.results) > 1 {
-        err("error: nex context is not supported by this implementation yet for a program of several modules")
-        exit_with(70)
-        return
-    }
-    let last = List.get(loaded.results, List.length(loaded.results) - 1)
     let reports = report.reports_of(loaded.results)
-    var program = last.typed
-    if last.module.reason == "lexical" and not last.module.clean {
-        program = parser.Node.Null()
-    }
-    let described = context.analyse(path, read_file(path), program, last.module.clean, last.problems)
+    let described = context.analyse(path, source_of(path), loaded.results)
     if format == "json" {
-        print(context.to_json(described, reports))
+        // The diagnostics of this document carry the name of the program, as Python writes them.
+        var shown: List[report.Report] = []
+        for each in reports {
+            shown = List.append(shown, report.Report(problem: each.problem, file: path))
+        }
+        print(context.to_json(described, shown))
     } else {
         print(context.render_text(described, reports))
     }
     if count_errors(reports) > 0 {
         exit_with(1)
+    }
+}
+
+// An option with a value, taken out of the words wherever it is (the file comes first or last, as in argparse).
+fn take_anywhere(words: List[Text], name: Text) gives Taken {
+    var rest: List[Text] = []
+    var found = false
+    var value = ""
+    var i = 0
+    while i < List.length(words)
+        shrinks List.length(words) - i
+    {
+        let word = List.get(words, i)
+        if word == name and i + 1 < List.length(words) {
+            found = true
+            value = List.get(words, i + 1)
+            i = i + 1
+        } else if Text.starts_with(word, name + "=") {
+            found = true
+            value = Text.slice(word, Text.length(name) + 1, Text.length(word))
+        } else {
+            rest = List.append(rest, word)
+        }
+        i = i + 1
+    }
+    return Taken(found: found, value: value, rest: rest)
+}
+
+// `nex symbols FILE`: the names a program declares and where each is used (nexora.symbols/2 with --format json).
+fn symbols_command(path: Text, format: Text, name: Text, function: Text) {
+    let reason = file_problem(path)
+    if reason != "" {
+        let problem = parser.Problem(
+            code: "E0001", label: reason + ": " + path, hint: "", notes: [], line: 0, column: 0, end_line: 0, end_column: 0
+        )
+        let reports = [report.Report(problem: problem, file: path)]
+        if format == "json" {
+            print(symbols.render_json(symbols.Listing(path: path, complete: false, analysed: false, symbols: []), reports, name, function))
+        } else {
+            err(render.render(problem, path, []))
+        }
+        exit_with(4)
+        return
+    }
+    let loaded = load_and_check(path, true, 0, "json")
+    if loaded.stop != "" {
+        if loaded.stop != "limit" {
+            err("error: " + path + ": " + loaded.stop)
+        }
+        exit_with(70)
+        return
+    }
+    let reports = report.reports_of(loaded.results)
+    let listing = symbols.analyse(path, loaded.results)
+    if format == "json" {
+        // The diagnostics of this document carry the name of the program, as Python writes them.
+        var shown: List[report.Report] = []
+        for each in reports {
+            shown = List.append(shown, report.Report(problem: each.problem, file: path))
+        }
+        print(symbols.render_json(listing, shown, name, function))
+    } else {
+        print(symbols.render_text(listing, name, function))
+    }
+    if count_errors(reports) > 0 {
+        exit_with(1)
+    }
+}
+
+// `nex debug`: the program runs under the statement debugger and stops before each statement (nexora/src/nexora/cli.py, `_debug`).
+// The commands are read from the controlling terminal, so the program keeps the standard input; what the debugger says goes to the
+// standard error.
+
+// The terminal of the commands, and the time limit while they are read (all four are replaced in the executable).
+fn err_raw(text: Text) {
+    print(text)
+}
+
+fn console_open() gives Bool {
+    return false
+}
+
+fn console_line() gives List[Text] {
+    return []
+}
+
+fn pause_timeout() {
+}
+
+fn resume_timeout() {
+}
+
+fn slashes(text: Text) gives Text {
+    var out = ""
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c == "\\" {
+            out = out + "/"
+        } else {
+            out = out + c
+        }
+        i = i + 1
+    }
+    return out
+}
+
+fn is_blank(c: Text) gives Bool {
+    return c == " " or c == "\t" or c == "\n"
+}
+
+fn trimmed(text: Text) gives Text {
+    var start = 0
+    var end = Text.length(text)
+    while start < end and is_blank(Text.slice(text, start, start + 1))
+        shrinks end - start
+    {
+        start = start + 1
+    }
+    while end > start and is_blank(Text.slice(text, end - 1, end))
+        shrinks end - start
+    {
+        end = end - 1
+    }
+    return Text.slice(text, start, end)
+}
+
+// A file of the program, as the debugger names it (with `/`) and its lines.
+type DebugFile = { path: Text, key: Text, lines: List[Text] }
+
+fn debug_files(results: List[project.Checked]) gives List[DebugFile] {
+    var files: List[DebugFile] = []
+    for each in results {
+        files = List.append(
+            files,
+            DebugFile(path: each.module.path, key: slashes(each.module.path), lines: render.lines_of(source_of(each.module.path)))
+        )
+    }
+    return files
+}
+
+fn key_at(files: List[DebugFile], index: Int) gives Text {
+    let file = List.get(files, index)
+    return file.key
+}
+
+fn path_at(files: List[DebugFile], index: Int) gives Text {
+    let file = List.get(files, index)
+    return file.path
+}
+
+fn lines_at(files: List[DebugFile], index: Int) gives List[Text] {
+    let file = List.get(files, index)
+    return file.lines
+}
+
+fn file_at(files: List[DebugFile], key: Text) gives Int {
+    var i = 0
+    while i < List.length(files)
+        shrinks List.length(files) - i
+    {
+        if key_at(files, i) == key {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn file_key_of(path: Text, entry: Text) gives Text {
+    if path == "" {
+        return slashes(entry)
+    }
+    return slashes(path)
+}
+
+// The breakpoints, as the interpreter wants them (by the path of the file), and how to change them.
+fn points_of(breaks: interpreter.Breaks, path: Text) gives List[Int] {
+    var i = 0
+    while i < List.length(breaks.files)
+        shrinks List.length(breaks.files) - i
+    {
+        if List.get(breaks.files, i) == path {
+            return List.get(breaks.lines, i)
+        }
+        i = i + 1
+    }
+    return []
+}
+
+fn count_points(breaks: interpreter.Breaks) gives Int {
+    var total = 0
+    for lines in breaks.lines {
+        total = total + List.length(lines)
+    }
+    return total
+}
+
+fn with_points(breaks: interpreter.Breaks, path: Text, points: List[Int]) gives interpreter.Breaks {
+    var files: List[Text] = []
+    var lines: List[List[Int]] = []
+    var found = false
+    var i = 0
+    while i < List.length(breaks.files)
+        shrinks List.length(breaks.files) - i
+    {
+        if List.get(breaks.files, i) == path {
+            found = true
+            if List.length(points) > 0 {
+                files = List.append(files, path)
+                lines = List.append(lines, points)
+            }
+        } else {
+            files = List.append(files, List.get(breaks.files, i))
+            lines = List.append(lines, List.get(breaks.lines, i))
+        }
+        i = i + 1
+    }
+    if not found and List.length(points) > 0 {
+        files = List.append(files, path)
+        lines = List.append(lines, points)
+    }
+    return interpreter.Breaks(files: files, lines: lines)
+}
+
+fn sorted_ints(items: List[Int]) gives List[Int] {
+    var out: List[Int] = []
+    for item in items {
+        var before: List[Int] = []
+        var after: List[Int] = []
+        for kept in out {
+            if kept < item {
+                before = List.append(before, kept)
+            } else {
+                after = List.append(after, kept)
+            }
+        }
+        out = List.concat(List.append(before, item), after)
+    }
+    return out
+}
+
+fn ints_text(items: List[Int]) gives Text {
+    var parts: List[Text] = []
+    for item in sorted_ints(items) {
+        parts = List.append(parts, to_text(item))
+    }
+    if List.length(parts) == 0 {
+        return "(none)"
+    }
+    return parser.join_texts(parts, ", ")
+}
+
+// What the debugger shows when the program stops before a statement.
+fn show_event(files: List[DebugFile], snapshot: interpreter.Snapshot, breaks: interpreter.Breaks, entry: Text) {
+    var path = snapshot.file
+    if path == "" {
+        path = entry
+    }
+    let name = slashes(path)
+    err("")
+    err("Paused at " + name + ":" + to_text(snapshot.line) + ":" + to_text(snapshot.column) + " in " + snapshot.function)
+    let at = file_at(files, name)
+    if at >= 0 {
+        let lines = lines_at(files, at)
+        if snapshot.line >= 1 and snapshot.line <= List.length(lines) {
+            let text = List.get(lines, snapshot.line - 1)
+            if text != "" {
+                err("  > " + to_text(snapshot.line) + ": " + text)
+            }
+        }
+    }
+    err("Call stack:")
+    var index = 0
+    for row in snapshot.frames {
+        if row.omitted {
+            err("  … (more frames)")
+        } else {
+            var line = row.line
+            if index == 0 or row.line == 0 {
+                line = snapshot.line
+            }
+            err("  #" + to_text(index) + " " + row.function + " at " + slashes(file_key_of(row.file, entry)) + ":" + to_text(line))
+        }
+        index = index + 1
+    }
+    err("Variables:")
+    if List.length(snapshot.names) == 0 {
+        err("  (none)")
+    } else {
+        var i = 0
+        while i < List.length(snapshot.names)
+            shrinks List.length(snapshot.names) - i
+        {
+            err("  " + List.get(snapshot.names, i) + " = " + List.get(snapshot.values, i))
+            i = i + 1
+        }
+    }
+    var native = path
+    if at >= 0 {
+        native = path_at(files, at)
+    }
+    err("Breakpoints in " + name + ": " + ints_text(points_of(breaks, native)))
+}
+
+// A breakpoint named as `LINE` or `FILE:LINE`: the file and the line, when the program has them.
+type Target = { ok: Bool, key: Text, line: Int }
+
+fn breakpoint_target(files: List[DebugFile], argument: Text, current: Text) gives Target {
+    var key = current
+    var number = argument
+    var colon = 0 - 1
+    var i = 0
+    while i < Text.length(argument)
+        shrinks Text.length(argument) - i
+    {
+        if Text.slice(argument, i, i + 1) == ":" {
+            colon = i
+        }
+        i = i + 1
+    }
+    if colon >= 0 {
+        key = slashes(Text.slice(argument, 0, colon))
+        number = Text.slice(argument, colon + 1, Text.length(argument))
+    }
+    if not Int.can_parse(number) {
+        return Target(ok: false, key: "", line: 0)
+    }
+    let line = Int.parse(number)
+    let at = file_at(files, key)
+    if at < 0 or line < 1 or line > List.length(lines_at(files, at)) {
+        return Target(ok: false, key: "", line: 0)
+    }
+    return Target(ok: true, key: key, line: line)
+}
+
+// What the person at the prompt decided: "step", "continue", "quit", or "closed" when the commands ended.
+type Choice = { action: Text, breaks: interpreter.Breaks }
+
+fn first_word(text: Text) gives Text {
+    var i = 0
+    while i < Text.length(text) and not is_blank(Text.slice(text, i, i + 1))
+        shrinks Text.length(text) - i
+    {
+        i = i + 1
+    }
+    return Text.slice(text, 0, i)
+}
+
+fn read_commands(files: List[DebugFile], current: Text, entry: Text, start: interpreter.Breaks) gives Choice {
+    var breaks = start
+    var rounds = 0
+    while rounds < 1000000000
+        shrinks 1000000000 - rounds
+    {
+        rounds = rounds + 1
+        err_raw("debug> ")
+        let got = console_line()
+        if List.length(got) == 0 {
+            err("")
+            err("Debugger input closed; stopping the program.")
+            return Choice(action: "closed", breaks: breaks)
+        }
+        let stripped = trimmed(List.get(got, 0))
+        if stripped == "" {
+            return Choice(action: "step", breaks: breaks)
+        }
+        let command = parser.lower_text(first_word(stripped))
+        let argument = trimmed(Text.slice(stripped, Text.length(first_word(stripped)), Text.length(stripped)))
+        if (command == "s" or command == "step") and argument == "" {
+            return Choice(action: "step", breaks: breaks)
+        }
+        if (command == "c" or command == "continue") and argument == "" {
+            return Choice(action: "continue", breaks: breaks)
+        }
+        if (command == "q" or command == "quit") and argument == "" {
+            err("Program stopped by the debugger.")
+            return Choice(action: "quit", breaks: breaks)
+        }
+        if (command == "b" or command == "break") and argument != "" {
+            let target = breakpoint_target(files, argument, current)
+            if not target.ok {
+                err("Usage: break [FILE:]LINE; the file and line must exist in this program.")
+            } else {
+                let path = path_at(files, file_at(files, target.key))
+                let points = points_of(breaks, path)
+                if not List.contains(points, target.line) and count_points(breaks) >= 256 {
+                    err("At most 256 breakpoints are allowed.")
+                } else {
+                    if not List.contains(points, target.line) {
+                        breaks = with_points(breaks, path, List.append(points, target.line))
+                    }
+                    err("Breakpoint set at " + target.key + ":" + to_text(target.line) + ".")
+                }
+            }
+        } else if (command == "d" or command == "delete") and argument != "" {
+            let target = breakpoint_target(files, argument, current)
+            if not target.ok {
+                err("Usage: delete [FILE:]LINE")
+            } else {
+                let path = path_at(files, file_at(files, target.key))
+                var kept: List[Int] = []
+                for line in points_of(breaks, path) {
+                    if line != target.line {
+                        kept = List.append(kept, line)
+                    }
+                }
+                breaks = with_points(breaks, path, kept)
+                err("Breakpoint cleared at " + target.key + ":" + to_text(target.line) + ".")
+            }
+        } else if (command == "b" or command == "break" or command == "breakpoints") and argument == "" {
+            var any = false
+            var i = 0
+            while i < List.length(breaks.files)
+                shrinks List.length(breaks.files) - i
+            {
+                for line in sorted_ints(List.get(breaks.lines, i)) {
+                    err("  " + slashes(List.get(breaks.files, i)) + ":" + to_text(line))
+                    any = true
+                }
+                i = i + 1
+            }
+            if not any {
+                err("No breakpoints set.")
+            }
+        } else if (command == "h" or command == "help" or command == "?") and argument == "" {
+            err("Commands: step (s), continue (c), break [FILE:]LINE (b), delete [FILE:]LINE (d), breakpoints, quit (q).")
+        } else {
+            err("Unknown command. Type 'help' for the debugger commands.")
+        }
+    }
+    return Choice(action: "closed", breaks: breaks)
+}
+
+// Every occurrence of an option with a value, taken out of the words that come before the file.
+type Values = { values: List[Text], rest: List[Text] }
+
+fn take_values(words: List[Text], name: Text) gives Values {
+    var rest: List[Text] = []
+    var values: List[Text] = []
+    var in_file = false
+    var i = 0
+    while i < List.length(words)
+        shrinks List.length(words) - i
+    {
+        let word = List.get(words, i)
+        if not in_file and word == name and i + 1 < List.length(words) {
+            values = List.append(values, List.get(words, i + 1))
+            i = i + 1
+        } else if not in_file and Text.starts_with(word, name + "=") {
+            values = List.append(values, Text.slice(word, Text.length(name) + 1, Text.length(word)))
+        } else {
+            rest = List.append(rest, word)
+            if not in_file {
+                if takes_value(word) and i + 1 < List.length(words) {
+                    rest = List.append(rest, List.get(words, i + 1))
+                    i = i + 1
+                } else if not Text.starts_with(word, "-") {
+                    in_file = true
+                }
+            }
+        }
+        i = i + 1
+    }
+    return Values(values: values, rest: rest)
+}
+
+fn debug_command(given: List[Text], format: Text) {
+    if not limits_are_valid(given) {
+        return
+    }
+    let stops = take_values(given, "--max-steps")
+    var max_steps = 10000
+    if List.length(stops.values) > 0 {
+        let wanted = List.get(stops.values, List.length(stops.values) - 1)
+        if not Int.can_parse(wanted) or Int.parse(wanted) <= 0 {
+            err("error: --max-steps must be greater than zero")
+            exit_with(2)
+            return
+        }
+        max_steps = Int.parse(wanted)
+    }
+    let marked = take_values(stops.rest, "--breakpoint")
+    var initial: List[Int] = []
+    for text in marked.values {
+        if not Int.can_parse(text) {
+            err("nex debug: error: argument --breakpoint: invalid int value: '" + text + "'")
+            exit_with(2)
+            return
+        }
+        if not List.contains(initial, Int.parse(text)) {
+            initial = List.append(initial, Int.parse(text))
+        }
+    }
+    let timeout = take_option(marked.rest, "--timeout")
+    let memory = take_option(timeout.rest, "--max-memory")
+    let options = interpreter.parse_options(memory.rest)
+    let path = options.path
+    if timeout.found {
+        let limit = limit_problem("time limit exceeded (" + to_text(Float.parse(float_text(timeout.value))) + ")")
+        var message = render.render(limit, path, [])
+        if format == "json" {
+            message = report.document(path, [report.Report(problem: limit, file: path)])
+        }
+        if not prepare_timeout(float_text(timeout.value), message) {
+            err("error: --timeout requires a POSIX platform with interval timers")
+            exit_with(2)
+            return
+        }
+    }
+    if memory.found {
+        let exhausted = parser.Problem(
+            code: "E3007", label: "The process memory limit was exceeded (--max-memory " + memory.value + ")", hint: "", notes: [],
+            line: 0, column: 0, end_line: 0, end_column: 0
+        )
+        var message = render.render(exhausted, path, []) + "\n\nerror: " + path + ": the program stopped because of a runtime error"
+        if format == "json" {
+            message = report.document(path, [report.Report(problem: exhausted, file: path)])
+        }
+        if not set_memory_limit(Int.parse(memory.value), message) {
+            err("error: --max-memory is enforced only on Linux; use an OS supervisor on this platform")
+            exit_with(2)
+            return
+        }
+    }
+    if not is_readable(path, "the file could not be read", format, false) {
+        return
+    }
+    let loaded = load_and_check(path, true, options.max_source, format)
+    if loaded.stop != "" {
+        if loaded.stop == "limit" {
+            exit_with(3)
+        } else {
+            err("error: " + path + ": " + loaded.stop)
+            exit_with(70)
+        }
+        return
+    }
+    let reports = report.reports_of(loaded.results)
+    let errors = count_errors(reports)
+    if errors > 0 {
+        fail_with(path, reports, format, false, "not run because of " + plural(errors))
+        exit_with(1)
+        return
+    }
+    let files = debug_files(loaded.results)
+    if List.length(initial) > 256 {
+        err("error: at most 256 breakpoints are allowed")
+        exit_with(2)
+        return
+    }
+    let entry_lines = lines_at(files, List.length(files) - 1)
+    for line in initial {
+        if line < 1 or line > List.length(entry_lines) {
+            err("error: --breakpoint must name a line in the source file")
+            exit_with(2)
+            return
+        }
+    }
+    if not console_open() {
+        err("error: nex debug needs a controlling terminal for its commands")
+        exit_with(2)
+        return
+    }
+    var breaks = interpreter.Breaks(files: [], lines: [])
+    if List.length(initial) > 0 {
+        breaks = interpreter.Breaks(files: [path], lines: [initial])
+    }
+    var session = interpreter.debug_start_hosted(loaded.node, options, path, max_steps)
+    var mode = "step"
+    var fresh = true
+    var finished = false
+    start_timeout()
+    var rounds = 0
+    while not finished and rounds < max_steps + 10
+        shrinks max_steps + 10 - rounds
+    {
+        rounds = rounds + 1
+        let moved = interpreter.debug_advance(session, mode, breaks, fresh)
+        fresh = false
+        session = moved.session
+        if moved.delta != "" {
+            print(moved.delta)
+        }
+        if moved.kind == "paused" {
+            pause_timeout()
+            show_event(files, moved.snapshot, breaks, path)
+            var current = moved.snapshot.file
+            if current == "" {
+                current = path
+            }
+            let choice = read_commands(files, slashes(current), path, breaks)
+            breaks = choice.breaks
+            if choice.action == "step" or choice.action == "continue" {
+                mode = choice.action
+                resume_timeout()
+            } else {
+                finished = true
+            }
+        } else if moved.kind == "limit" {
+            err("")
+            err("Stopped: reached --max-steps (" + to_text(max_steps) + ").")
+            exit_with(3)
+            return
+        } else if moved.kind == "completed" {
+            err("")
+            err("Program completed.")
+            finished = true
+        } else if moved.kind == "out_of_fuel" {
+            err("error: " + path + ": the program used all the steps this interpreter allows")
+            exit_with(70)
+            return
+        } else {
+            var file = moved.file
+            if file == "" {
+                file = path
+            }
+            let failure = [report.Report(problem: moved.problem, file: file)]
+            if moved.problem.code == "E3015" {
+                if format == "json" {
+                    err(report.document(path, failure))
+                } else {
+                    show(moved.problem, file)
+                }
+                exit_with(3)
+                return
+            }
+            if titles.category_of(moved.problem.code) == "contract" {
+                fail_with(path, failure, format, false, "the program stopped because a contract was broken")
+                exit_with(5)
+            } else {
+                fail_with(path, failure, format, false, "the program stopped because of a runtime error")
+                exit_with(3)
+            }
+            return
+        }
+    }
+}
+
+// `nex migrate`: the edits that move a program of NEXORA 0.11 to the syntax of 0.12 (nexora/src/nexora/cli.py, `_migrate`, and
+// migrate_files.py; decision 0019, section 8). The front end of 0.11 is legacy.nex, the edits are computed by migrate.nex, and the
+// writing of the files is the only place where this tool writes anything but its answer.
+
+// What the system does to the files (replaced in the executable). Each answers "" when it worked, or the reason.
+fn write_exclusive(path: Text, text: Text) gives Text {
+    return ""
+}
+
+fn copy_permissions(source: Text, target: Text) gives Text {
+    return ""
+}
+
+fn replace_file(source: Text, target: Text) gives Text {
+    return ""
+}
+
+fn remove_file(path: Text) gives Text {
+    return ""
+}
+
+fn temp_name(path: Text) gives Text {
+    return path + ".tmp"
+}
+
+fn watch_interrupt() {
+}
+
+fn was_interrupted() gives Bool {
+    return false
+}
+
+// The text of a file with the line endings it has: a list with it, or an empty list (replaced in the executable).
+fn read_exact(path: Text) gives List[Text] {
+    return [read_file(path)]
+}
+
+fn exact_text(path: Text) gives Text {
+    let got = read_exact(path)
+    if List.length(got) == 0 {
+        return ""
+    }
+    return List.get(got, 0)
+}
+
+fn byte_order_mark() gives Text {
+    return json.char_from_code(65279)
+}
+
+fn module_errors(results: List[project.Checked]) gives Int {
+    var errors = 0
+    for each in results {
+        for problem in each.problems {
+            if is_error(problem) {
+                errors = errors + 1
+            }
+        }
+    }
+    return errors
+}
+
+// The modules in the order of their paths (G6, G7).
+fn by_path(results: List[project.Checked]) gives List[project.Checked] {
+    var out: List[project.Checked] = []
+    for each in results {
+        var before: List[project.Checked] = []
+        var after: List[project.Checked] = []
+        for kept in out {
+            if kept.module.path <= each.module.path {
+                before = List.append(before, kept)
+            } else {
+                after = List.append(after, kept)
+            }
+        }
+        out = List.concat(List.append(before, each), after)
+    }
+    return out
+}
+
+fn sorted_texts(items: List[Text]) gives List[Text] {
+    var out: List[Text] = []
+    for item in items {
+        var before: List[Text] = []
+        var after: List[Text] = []
+        for kept in out {
+            if kept <= item {
+                before = List.append(before, kept)
+            } else {
+                after = List.append(after, kept)
+            }
+        }
+        out = List.concat(List.append(before, item), after)
+    }
+    return out
+}
+
+// The text of a file as the first reading found it, and without its byte-order mark.
+fn text_without_mark(raw: Text) gives Text {
+    if Text.length(raw) > 0 and Text.slice(raw, 0, 1) == byte_order_mark() {
+        return Text.slice(raw, 1, Text.length(raw))
+    }
+    return raw
+}
+
+fn unsupported_in(results: List[project.Checked]) gives Text {
+    for each in results {
+        if each.unsupported != "" {
+            return each.unsupported
+        }
+    }
+    return ""
+}
+
+fn migrate_reports(results: List[project.Checked]) gives List[report.Report] {
+    return report.reports_of(results)
+}
+
+// 8.2: a program that is neither a program of 0.11 nor one of 0.12, and why (8.2.1).
+fn migrate_refused_both(path: Text, old_results: List[project.Checked], new_results: List[project.Checked]) {
+    err("error: " + path + ": this program passes neither the check of 0.11 nor the check of 0.12; nothing was written")
+    for each in by_path(new_results) {
+        let lexed = lexer.tokenize(legacy.lf_only(text_without_mark(exact_text(each.module.path))))
+        var found = ""
+        if List.length(lexed.diagnostics) > 0 {
+            found = "it has lexical errors"
+        } else {
+            found = migrate.describe_markers(migrate.markers(lexed.tokens))
+        }
+        err("  " + each.module.path + ": " + found)
+    }
+    err("")
+    err("With the front end of 0.11:")
+    err("")
+    var as_in_011: List[report.Report] = []
+    for each in report.reports_of(old_results) {
+        if legacy.old_could_say(each.problem) {
+            as_in_011 = List.append(as_in_011, report.Report(problem: legacy.old_problem(each.problem), file: each.file))
+        }
+    }
+    show_reports(as_in_011)
+    err("With the front end of 0.12:")
+    err("")
+    show_reports(report.reports_of(new_results))
+    exit_with(1)
+}
+
+fn migrate_refusals(path: Text, refusals: List[Text]) {
+    for refusal in refusals {
+        err(refusal)
+    }
+    var noun = "cases"
+    if List.length(refusals) == 1 {
+        noun = "case"
+    }
+    err("error: " + path + ": nex migrate cannot decide " + to_text(List.length(refusals)) + " " + noun + " for you; nothing was written")
+    exit_with(1)
+}
+
+fn migrate_defect(shown: Text, what: Text) {
+    err("internal error: " + shown + ": " + what + ". This is a bug in NEXORA; nothing was written.")
+    exit_with(70)
+}
+
+fn tree_of(results: List[project.Checked], path: Text) gives parser.Node {
+    for each in results {
+        if each.module.path == path {
+            return each.module.program
+        }
+    }
+    return parser.Node.Null()
+}
+
+// The plan of one module of 0.11.
+fn plan_of(checked: project.Checked) gives migrate.Plan {
+    let text = text_without_mark(exact_text(checked.module.path))
+    let lexed = lexer.tokenize(legacy.lf_only(text))
+    let tokens = legacy.plain(lexed.tokens)
+    return migrate.plan_file(text, tokens, checked.module.program)
+}
+
+fn refusal_lines(name: Text, plan: migrate.Plan) gives List[Text] {
+    var lines: List[Text] = []
+    for refusal in plan.refusals {
+        lines = List.append(lines, name + ":" + to_text(refusal.line) + ":" + to_text(refusal.column) + ": " + refusal.message)
+    }
+    return lines
+}
+
+// 8.2.2: both checks pass, so no file has a function. The two safety checks still run.
+fn migrate_nothing(path: Text, old_results: List[project.Checked], new_results: List[project.Checked]) {
+    var refusals: List[Text] = []
+    for each in by_path(old_results) {
+        let plan = plan_of(each)
+        if List.length(context.items_of(context.field(each.module.program, "functions"))) > 0 or List.length(plan.edits) > 0 {
+            err(
+                "internal error: " + each.module.path
+                + " passes both checks and has something to migrate. This is a bug in NEXORA; nothing was written."
+            )
+            exit_with(70)
+            return
+        }
+        refusals = List.concat(refusals, refusal_lines(each.module.path, plan))
+        if List.length(refusals) == 0 and not migrate.equivalent(each.module.program, tree_of(new_results, each.module.path)) {
+            err("error: " + each.module.path + ": 0.11 and 0.12 read this file differently; nothing was written")
+            exit_with(1)
+            return
+        }
+    }
+    if List.length(refusals) > 0 {
+        migrate_refusals(path, refusals)
+        return
+    }
+    print(path + ": nothing to migrate: the program reads the same in 0.11 and in 0.12")
+}
+
+fn verified() gives Text {
+    return "structure verified; text outside the edits verified; behaviour not checked by this command"
+}
+
+fn edits_noun(count: Int) gives Text {
+    if count == 1 {
+        return "edit"
+    }
+    return "edits"
+}
+
+// What writing the files did.
+type Written = {
+    replaced: List[Text], failed: Bool, failed_path: Text, failed_reason: Text, not_written: List[Text], changed: List[Text],
+    interrupted: Bool, left: Bool, left_path: Text, left_reason: Text
+}
+
+fn written_ok(replaced: List[Text]) gives Written {
+    return Written(
+        replaced: replaced, failed: false, failed_path: "", failed_reason: "", not_written: [], changed: [], interrupted: false,
+        left: false, left_path: "", left_reason: ""
+    )
+}
+
+// One file to write: its path, the text it had, and the text it will have.
+type Planned = { path: Text, original: Text, output: Text }
+
+fn rest_after(items: List[Text], position: Int) gives List[Text] {
+    var rest: List[Text] = []
+    var i = position + 1
+    while i < List.length(items)
+        shrinks List.length(items) - i
+    {
+        rest = List.append(rest, List.get(items, i))
+        i = i + 1
+    }
+    return rest
+}
+
+// G7: every file is read again before any is written; then each one is written beside the original and replaces it with one rename.
+fn write_all(planned: List[Planned]) gives Written {
+    var changed: List[Text] = []
+    var differing: List[Text] = []
+    for item in planned {
+        if exact_text(item.path) != item.original {
+            changed = List.append(changed, item.path)
+        }
+        if item.output != item.original {
+            differing = List.append(differing, item.path)
+        }
+    }
+    if List.length(changed) > 0 {
+        return Written(
+            replaced: [], failed: false, failed_path: "", failed_reason: "", not_written: sorted_texts(differing),
+            changed: changed, interrupted: false, left: false, left_path: "", left_reason: ""
+        )
+    }
+    let order = sorted_texts(differing)
+    var replaced: List[Text] = []
+    var position = 0
+    while position < List.length(order)
+        shrinks List.length(order) - position
+    {
+        let target = List.get(order, position)
+        var output = ""
+        for item in planned {
+            if item.path == target {
+                output = item.output
+            }
+        }
+        let temporary = temp_name(target)
+        var reason = write_exclusive(temporary, output)
+        var created = reason == ""
+        if reason == "" and was_interrupted() {
+            reason = "interrupted"
+        }
+        if reason == "" {
+            reason = copy_permissions(target, temporary)
+            if reason == "" and was_interrupted() {
+                reason = "interrupted"
+            }
+        }
+        if reason == "" {
+            reason = replace_file(temporary, target)
+            if reason == "" {
+                created = false
+            }
+        }
+        if reason != "" {
+            let rest = rest_after(order, position)
+            var left = false
+            var left_reason = ""
+            if created {
+                let removed = remove_file(temporary)
+                if removed != "" and removed != "missing" {
+                    left = true
+                    left_reason = removed
+                }
+            }
+            return Written(
+                replaced: replaced, failed: true, failed_path: target, failed_reason: reason, not_written: rest, changed: [],
+                interrupted: reason == "interrupted", left: left, left_path: temporary, left_reason: left_reason
+            )
+        }
+        replaced = List.append(replaced, target)
+        if was_interrupted() {
+            return Written(
+                replaced: replaced, failed: false, failed_path: "", failed_reason: "", not_written: rest_after(order, position),
+                changed: [], interrupted: true, left: false, left_path: "", left_reason: ""
+            )
+        }
+        position = position + 1
+    }
+    return written_ok(replaced)
+}
+
+// The route "migrate": the edits of every file (8.5), G2, G4 and G3, and then G7 or the text.
+fn migrate_files(path: Text, old_results: List[project.Checked], write: Bool) {
+    let modules = by_path(old_results)
+    var plans: List[migrate.Plan] = []
+    var refusals: List[Text] = []
+    for each in modules {
+        let plan = plan_of(each)
+        plans = List.append(plans, plan)
+        refusals = List.concat(refusals, refusal_lines(each.module.path, plan))
+    }
+    if List.length(refusals) > 0 {
+        migrate_refusals(path, refusals)
+        return
+    }
+    var originals: List[Text] = []
+    var texts: List[Text] = []
+    var outputs: List[Text] = []
+    var paths: List[Text] = []
+    var i = 0
+    while i < List.length(modules)
+        shrinks List.length(modules) - i
+    {
+        let each = List.get(modules, i)
+        let plan = List.get(plans, i)
+        let raw = exact_text(each.module.path)
+        let text = text_without_mark(raw)
+        if migrate.overlapping(plan.edits) {
+            migrate_defect(each.module.path, "two edits overlap")
+            return
+        }
+        let output = migrate.apply(text, plan.edits)
+        if not migrate.kept_outside(text, plan.edits, output) {
+            migrate_defect(each.module.path, "a character outside the edits changed (G2)")
+            return
+        }
+        originals = List.append(originals, raw)
+        texts = List.append(texts, text)
+        outputs = List.append(outputs, output)
+        paths = List.append(paths, each.module.path)
+        i = i + 1
+    }
+    // G4: the migrated program, read from memory, passes the check of 0.12.
+    var memory: List[Text] = []
+    for output in outputs {
+        memory = List.append(memory, legacy.lf_only(output))
+    }
+    let checked = project.check_all(project.load_virtual(path, paths, memory, false), false)
+    if module_errors(checked) > 0 {
+        show_reports(report.reports_of(checked))
+        migrate_defect(path, "the migrated program does not pass the check of 0.12 (G4)")
+        return
+    }
+    // G3: every file has the structure it had.
+    for each in modules {
+        if not migrate.equivalent(each.module.program, tree_of(checked, each.module.path)) {
+            migrate_defect(each.module.path, "the migrated file is not structurally equivalent (G3)")
+            return
+        }
+    }
+    if not write {
+        var at = 0
+        while at < List.length(modules)
+            shrinks List.length(modules) - at
+        {
+            let name = List.get(paths, at)
+            let plan = List.get(plans, at)
+            let text = List.get(texts, at)
+            if List.length(plan.edits) > 0 {
+                print("--- " + name + ": " + to_text(List.length(plan.edits)) + " " + edits_noun(List.length(plan.edits)))
+                let lines = migrate.lines_of(text)
+                for edit in plan.edits {
+                    let spot = migrate.position_of(lines, edit.start)
+                    print(
+                        "  " + to_text(List.get(spot, 0)) + ":" + to_text(List.get(spot, 1)) + "  " + edit.kind + "  "
+                        + migrate.py_repr(Text.slice(text, edit.start, edit.end)) + " -> " + migrate.py_repr(edit.text)
+                    )
+                }
+                print("--- " + name + ": migrated text")
+                let output = List.get(outputs, at)
+                interpreter.stream_text(output)
+                if not Text.ends_with(output, "\n") and not Text.ends_with(output, json.char_from_code(13)) {
+                    print("")
+                }
+            }
+            at = at + 1
+        }
+        print(verified())
+        print("Nothing was written. Run it again with --write to replace the files.")
+        return
+    }
+    var planned: List[Planned] = []
+    var k = 0
+    while k < List.length(paths)
+        shrinks List.length(paths) - k
+    {
+        var output = List.get(outputs, k)
+        if Text.length(List.get(originals, k)) > 0 and Text.slice(List.get(originals, k), 0, 1) == byte_order_mark() {
+            output = byte_order_mark() + output
+        }
+        planned = List.append(planned, Planned(path: List.get(paths, k), original: List.get(originals, k), output: output))
+        k = k + 1
+    }
+    watch_interrupt()
+    let done = write_all(planned)
+    if List.length(done.changed) > 0 {
+        for key in done.changed {
+            err(key + ": This file changed while it was being migrated: run nex migrate again")
+        }
+        err("error: " + path + ": nothing was written")
+        exit_with(1)
+        return
+    }
+    for key in done.replaced {
+        print("replaced: " + key)
+    }
+    if not done.failed and not done.interrupted {
+        if List.length(done.replaced) == 0 {
+            print(path + ": no file needed an edit")
+        }
+        print(verified())
+        return
+    }
+    if not done.failed {
+        err("error: " + path + ": interrupted; the files already replaced stay replaced")
+    } else {
+        var what = "could not be written"
+        if done.interrupted {
+            what = "was interrupted"
+        }
+        err("error: " + path + ": " + done.failed_path + " " + what + "; the files already replaced stay replaced")
+    }
+    var replaced_names = "(none)"
+    if List.length(done.replaced) > 0 {
+        replaced_names = parser.join_texts(done.replaced, ", ")
+    }
+    err("  replaced: " + replaced_names)
+    if done.failed {
+        err("  failed: " + done.failed_path + " (" + done.failed_reason + ")")
+    }
+    var not_written = "(none)"
+    if List.length(done.not_written) > 0 {
+        not_written = parser.join_texts(done.not_written, ", ")
+    }
+    err("  not written: " + not_written)
+    if done.left {
+        err(
+            "  left behind: " + done.left_path + ", a temporary file that could not be removed (" + done.left_reason
+            + "); it does not end in .nex, so no program reads it"
+        )
+    }
+    if done.interrupted {
+        exit_with(130)
+    } else {
+        exit_with(4)
+    }
+}
+
+fn migrate_command(path: Text, write: Bool) {
+    if not Text.ends_with(path, ".nex") {
+        err("error: nex migrate only migrates .nex files, not " + path)
+        exit_with(2)
+        return
+    }
+    let reason = file_problem(path)
+    if reason != "" {
+        let problem = parser.Problem(
+            code: "E0001", label: reason + ": " + path, hint: "", notes: [], line: 0, column: 0, end_line: 0, end_column: 0
+        )
+        err(render.render(problem, path, []))
+        err("")
+        exit_with(4)
+        return
+    }
+    if Text.starts_with(project.module_problem(path), "E0002") {
+        let invalid = parser.Problem(
+            code: "E0002", label: path + " must be saved as UTF-8 text", hint: "", notes: [], line: 0, column: 0, end_line: 0,
+            end_column: 0
+        )
+        err(render.render(invalid, path, []))
+        err("")
+        exit_with(4)
+        return
+    }
+    let old_results = project.check_all(project.load_legacy(path), false)
+    let new_results = project.check_all(project.load(path), false)
+    let blocked = unsupported_in(old_results) + unsupported_in(new_results)
+    if blocked != "" {
+        err("error: " + path + ": this implementation cannot check yet: " + blocked)
+        exit_with(70)
+        return
+    }
+    let old_ok = module_errors(old_results) == 0
+    let new_ok = module_errors(new_results) == 0
+    if not old_ok and new_ok {
+        print(path + ": the program is already written in the syntax of 0.12; nothing to migrate")
+    } else if not old_ok {
+        migrate_refused_both(path, old_results, new_results)
+    } else if new_ok {
+        migrate_nothing(path, old_results, new_results)
+    } else {
+        migrate_files(path, old_results, write)
     }
 }
 
@@ -658,7 +2001,7 @@ fn main() {
         return
     }
     let command = List.get(given, 0)
-    let taken = take_format(rest_of(given), command == "run")
+    let taken = take_format(rest_of(given), command == "run" or command == "debug")
     if taken.bad != "" {
         err("nex " + command + ": error: argument --format: invalid choice: '" + taken.bad + "' (choose from text, json)")
         exit_with(2)
@@ -669,6 +2012,23 @@ fn main() {
         check_command(List.get(words, 0), taken.format)
     } else if command == "run" and List.length(words) >= 1 {
         run_command(words, taken.format)
+    } else if command == "migrate" and List.length(words) >= 1 {
+        var flagged = false
+        var file = ""
+        for word in words {
+            if word == "--write" {
+                flagged = true
+            } else if file == "" {
+                file = word
+            }
+        }
+        if file == "" {
+            usage()
+        } else {
+            migrate_command(file, flagged)
+        }
+    } else if command == "debug" and List.length(words) >= 1 {
+        debug_command(words, taken.format)
     } else if command == "inspect" and List.length(words) >= 1 {
         if taken.format == "text" and has_format(rest_of(given)) {
             err("nex inspect: error: argument --format: invalid choice: 'text' (choose from json)")
@@ -678,17 +2038,24 @@ fn main() {
         }
     } else if command == "context" and List.length(words) >= 1 {
         context_command(List.get(words, 0), taken.format)
-    } else if command == "test" and List.length(words) >= 1 {
-        if taken.format == "json" {
-            err("error: nex test --format json is not supported by this implementation yet")
-            exit_with(70)
-            return
+    } else if command == "symbols" and List.length(words) >= 1 {
+        let by_name = take_anywhere(words, "--name")
+        let by_function = take_anywhere(by_name.rest, "--function")
+        if List.length(by_function.rest) >= 1 {
+            symbols_command(List.get(by_function.rest, 0), taken.format, by_name.value, by_function.value)
+        } else {
+            usage()
         }
+    } else if command == "test" and List.length(words) >= 1 {
         var only = ""
         if List.length(words) >= 3 and List.get(words, 1) == "--function" {
             only = List.get(words, 2)
         }
-        test_command(List.get(words, 0), only)
+        if taken.format == "json" {
+            test_json(List.get(words, 0), only)
+        } else {
+            test_command(List.get(words, 0), only)
+        }
     } else {
         usage()
     }

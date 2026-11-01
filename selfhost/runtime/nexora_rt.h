@@ -1754,6 +1754,15 @@ static rv rt_intr_eprint(rv text) {
     return rt_unit();
 }
 
+/* The prompt of `nex debug`: text on the standard error without a line break, shown at once. */
+static rv rt_intr_eprint_raw(rv text) {
+    rt_text t = text.u.t;
+    fflush(stdout);
+    fwrite(t.p, 1, (size_t)t.bytes, stderr);
+    fflush(stderr);
+    return rt_unit();
+}
+
 static rv rt_intr_exit_with(rv code) {
     rt_exit_status = (int)code.u.i;
     return rt_unit();
@@ -1863,6 +1872,271 @@ static rv rt_intr_start_timeout(void) {
 #endif
     return rt_unit();
 }
+
+/* `nex debug` (selfhost/nex.nex): the commands come from the controlling terminal, so the program keeps the standard input. The
+ * variable NEXORA_DEBUG_CONSOLE names a file to read them from instead, which is how the debugger is tested. `console_line` answers with
+ * a list with the line, without its line break, or with an empty list at the end of the commands. */
+static FILE *rt_console = 0;
+static bool rt_console_tried = false;
+
+static rv rt_intr_console_open(void) {
+    if (!rt_console_tried) {
+        rt_console_tried = true;
+        const char *named = getenv("NEXORA_DEBUG_CONSOLE");
+#ifdef _WIN32
+        rt_console = fopen(named && named[0] ? named : "CONIN$", "rb");
+#else
+        rt_console = fopen(named && named[0] ? named : "/dev/tty", "rb");
+#endif
+    }
+    return rt_bool(rt_console != 0);
+}
+
+static rv rt_intr_console_line(void) {
+    if (!rt_console) return rt_list_from(0, 0);
+    size_t cap = 128, n = 0;
+    char *line = (char *)rt_alloc_raw(cap);
+    int ch;
+    bool any = false;
+    while ((ch = getc(rt_console)) != EOF) {
+        any = true;
+        if (ch == '\n') break;
+        if (n + 2 > cap) {
+            char *bigger = (char *)rt_alloc_raw(cap * 2);
+            memcpy(bigger, line, n);
+            line = bigger;
+            cap *= 2;
+        }
+        line[n++] = (char)ch;
+    }
+    if (!any) return rt_list_from(0, 0);
+    if (n > 0 && line[n - 1] == '\r') n--;
+    line[n] = 0;
+    int64_t points = 0;
+    for (size_t i = 0; i < n; i++) if (((unsigned char)line[i] & 0xC0) != 0x80) points++;
+    rt_text t = {line, (int64_t)n, points};
+    rv item = rt_txt(t);
+    return rt_list_from(&item, 1);
+}
+
+/* The time limit counts the time the program runs, not the time at the prompt of the debugger: it is stopped while the commands are
+ * read and started again with what was left. */
+static double rt_timeout_left = -1.0;
+
+static rv rt_intr_pause_timeout(void) {
+#ifndef _WIN32
+    if (rt_timeout_text) {
+        struct itimerval timer;
+        if (getitimer(ITIMER_REAL, &timer) == 0) {
+            rt_timeout_left = (double)timer.it_value.tv_sec + (double)timer.it_value.tv_usec / 1e6;
+            memset(&timer, 0, sizeof timer);
+            setitimer(ITIMER_REAL, &timer, 0);
+        }
+    }
+#endif
+    return rt_unit();
+}
+
+static rv rt_intr_resume_timeout(void) {
+#ifndef _WIN32
+    if (rt_timeout_text && rt_timeout_left >= 0.0) {
+        struct itimerval timer;
+        timer.it_interval.tv_sec = 0;
+        timer.it_interval.tv_usec = 0;
+        timer.it_value.tv_sec = (time_t)rt_timeout_left;
+        timer.it_value.tv_usec = (suseconds_t)((rt_timeout_left - (double)(time_t)rt_timeout_left) * 1e6);
+        if (timer.it_value.tv_sec == 0 && timer.it_value.tv_usec == 0) timer.it_value.tv_usec = 1;
+        setitimer(ITIMER_REAL, &timer, 0);
+    }
+#endif
+    return rt_unit();
+}
+
+/* `nex migrate --write` (selfhost/nex.nex, decision 0019, G7): the only operations on files that the tool does besides reading. Each one
+ * answers "" when it worked, or the reason the system gives. A file is written as bytes, with no translation of line endings. */
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/stat.h>
+#ifdef _WIN32
+#include <io.h>
+#ifndef O_BINARY
+#define O_BINARY _O_BINARY
+#endif
+#else
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
+#endif
+
+static rv rt_from_cstr(const char *s) {
+    size_t n = strlen(s);
+    char *copy = (char *)rt_alloc_raw(n + 1);
+    memcpy(copy, s, n + 1);
+    int64_t points = 0;
+    for (size_t i = 0; i < n; i++) if (((unsigned char)copy[i] & 0xC0) != 0x80) points++;
+    rt_text r = {copy, (int64_t)n, points};
+    return rt_txt(r);
+}
+
+static bool rt_valid_utf8(const unsigned char *s, size_t n);
+
+/* The bytes of a file as they are, with no translation of line endings (`nex migrate` keeps the endings the file has): a list with the text,
+ * or an empty list when the file cannot be read or is not UTF-8. */
+static rv rt_intr_read_exact(rv path) {
+    char *name = rt_copy_text(path.u.t);
+    if (!name) return rt_list_from(0, 0);
+    FILE *f = fopen(name, "rb");
+    free(name);
+    if (!f) return rt_list_from(0, 0);
+    size_t cap = 4096, n = 0;
+    unsigned char *data = (unsigned char *)rt_alloc_raw(cap);
+    int ch;
+    while ((ch = fgetc(f)) != EOF) {
+        if (n + 1 >= cap) {
+            cap *= 2;
+            data = (unsigned char *)rt_grow_raw(data, cap / 2, cap);
+        }
+        data[n++] = (unsigned char)ch;
+    }
+    fclose(f);
+    data[n] = 0;
+    if (!rt_valid_utf8(data, n)) return rt_list_from(0, 0);
+    rt_text t = {(const char *)data, (int64_t)n, rt_count_points((const char *)data, (int64_t)n)};
+    rv item = rt_txt(t);
+    return rt_list_from(&item, 1);
+}
+
+/* Why a module cannot be read (selfhost/project.nex): "" when it can, `E0001|reason` when the system refuses, `E0002|` when it is not UTF-8. */
+static rv rt_intr_module_problem(rv path) {
+    char *name = rt_copy_text(path.u.t);
+    if (!name) return rt_str("");
+    FILE *f = fopen(name, "rb");
+    free(name);
+    if (!f) {
+        char buffer[512];
+        snprintf(buffer, sizeof buffer, "E0001|%s", strerror(errno));
+        return rt_from_cstr(buffer);
+    }
+    size_t cap = 4096, n = 0;
+    unsigned char *data = (unsigned char *)rt_alloc_raw(cap);
+    int ch;
+    while ((ch = fgetc(f)) != EOF) {
+        if (n + 1 >= cap) {
+            cap *= 2;
+            data = (unsigned char *)rt_grow_raw(data, cap / 2, cap);
+        }
+        data[n++] = (unsigned char)ch;
+    }
+    fclose(f);
+    if (!rt_valid_utf8(data, n)) return rt_str("E0002|");
+    return rt_str("");
+}
+
+static rv rt_intr_write_exclusive(rv path, rv text) {
+    char *name = rt_copy_text(path.u.t);
+    if (!name) return rt_from_cstr("Cannot allocate memory");
+    int fd = open(name, O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0600);
+    if (fd < 0) {
+        const char *why = strerror(errno);
+        free(name);
+        return rt_from_cstr(why);
+    }
+    rt_text t = text.u.t;
+    size_t done = 0;
+    while (done < (size_t)t.bytes) {
+        int k = (int)write(fd, t.p + done, (unsigned)((size_t)t.bytes - done));
+        if (k <= 0) {
+            const char *why = strerror(errno);
+            close(fd);
+            free(name);
+            return rt_from_cstr(why);
+        }
+        done += (size_t)k;
+    }
+    close(fd);
+    free(name);
+    return rt_str("");
+}
+
+static rv rt_intr_copy_permissions(rv source, rv target) {
+    char *from = rt_copy_text(source.u.t);
+    char *to = rt_copy_text(target.u.t);
+    rv answer = rt_str("");
+    struct stat info;
+    if (!from || !to) {
+        answer = rt_from_cstr("Cannot allocate memory");
+    } else if (stat(from, &info) != 0 || chmod(to, info.st_mode & 07777) != 0) {
+        answer = rt_from_cstr(strerror(errno));
+    }
+    free(from);
+    free(to);
+    return answer;
+}
+
+static rv rt_intr_replace_file(rv source, rv target) {
+    char *from = rt_copy_text(source.u.t);
+    char *to = rt_copy_text(target.u.t);
+    rv answer = rt_str("");
+    if (!from || !to) {
+        answer = rt_from_cstr("Cannot allocate memory");
+    } else {
+#ifdef _WIN32
+        remove(to);
+#endif
+        if (rename(from, to) != 0) answer = rt_from_cstr(strerror(errno));
+    }
+    free(from);
+    free(to);
+    return answer;
+}
+
+/* "" when the file is gone, "missing" when there was none, else the reason. */
+static rv rt_intr_remove_file(rv path) {
+    char *name = rt_copy_text(path.u.t);
+    rv answer = rt_str("");
+    if (!name) {
+        answer = rt_from_cstr("Cannot allocate memory");
+    } else if (remove(name) != 0) {
+        answer = errno == ENOENT ? rt_str("missing") : rt_from_cstr(strerror(errno));
+    }
+    free(name);
+    return answer;
+}
+
+/* The name of a temporary file beside `path`: the path, a random part and `.tmp`. */
+static rv rt_intr_temp_name(rv path) {
+    static unsigned long counter = 0;
+    char suffix[40];
+    unsigned long seed = (unsigned long)time(0) * 2654435761UL + (unsigned long)clock() + (++counter) * 40503UL;
+#ifndef _WIN32
+    seed += (unsigned long)getpid() * 7919UL;
+#endif
+    snprintf(suffix, sizeof suffix, ".%08lx.tmp", seed & 0xffffffffUL);
+    rt_text t = path.u.t;
+    size_t extra = strlen(suffix);
+    char *copy = (char *)rt_alloc_raw((size_t)t.bytes + extra + 1);
+    memcpy(copy, t.p, (size_t)t.bytes);
+    memcpy(copy + t.bytes, suffix, extra + 1);
+    rt_text r = {copy, (int64_t)((size_t)t.bytes + extra), t.len + (int64_t)extra};
+    return rt_txt(r);
+}
+
+/* Ctrl+C is noted and the tool decides where to stop, between two files. */
+static volatile int rt_interrupted = 0;
+static void rt_on_interrupt(int sig) { (void)sig; rt_interrupted = 1; }
+static rv rt_intr_watch_interrupt(void) {
+#ifdef _WIN32
+    signal(SIGINT, rt_on_interrupt);
+#else
+    struct sigaction action;
+    memset(&action, 0, sizeof action);
+    action.sa_handler = rt_on_interrupt;
+    sigemptyset(&action.sa_mask);
+    sigaction(SIGINT, &action, 0);
+#endif
+    return rt_unit();
+}
+static rv rt_intr_was_interrupted(void) { return rt_bool(rt_interrupted != 0); }
 
 static rv rt_intr_set_memory_limit(rv bytes, rv message) {
 #if defined(__linux__)

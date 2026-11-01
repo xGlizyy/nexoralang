@@ -1,0 +1,129 @@
+// The `nexora.test/1` document of `nex test --format json` (nexora/src/nexora/api.py, `test_document`): the static diagnostics, the
+// status of the run, and for every example what it said and what it did.
+
+import "json.nex"
+import "parser.nex"
+import "report.nex"
+import "info.nex"
+import "interpreter.nex"
+
+fn place_json(place: parser.Span) gives json.Json {
+    return json.Json.JObj(
+        ["line", "column", "end_line", "end_column"],
+        [json.Json.JInt(place.line), json.Json.JInt(place.column), json.Json.JInt(place.end_line), json.Json.JInt(place.end_column)]
+    )
+}
+
+fn opt(value: Text) gives json.Json {
+    if value == "" {
+        return json.Json.JNull()
+    }
+    return json.Json.JStr(value)
+}
+
+fn value_json(item: interpreter.ExampleValue) gives json.Json {
+    var shown = json.Json.JNull()
+    if item.status == "returned" {
+        shown = json.Json.JStr(item.value)
+    }
+    return json.Json.JObj(
+        ["call", "span", "type", "status", "value"],
+        [json.Json.JStr(item.call), place_json(item.place), opt(item.kind), json.Json.JStr(item.status), shown]
+    )
+}
+
+fn skip_json(item: interpreter.ExampleSkip) gives json.Json {
+    return json.Json.JObj(
+        ["call", "span", "type", "reason"],
+        [json.Json.JStr(item.call), place_json(item.place), opt(item.kind), json.Json.JStr(item.reason)]
+    )
+}
+
+fn joined(lines: List[Text]) gives Text {
+    var text = ""
+    for line in lines {
+        text = text + line + "\n"
+    }
+    return text
+}
+
+fn example_json(outcome: interpreter.ExampleResult, file: Text) gives json.Json {
+    var values: List[json.Json] = []
+    for item in outcome.values {
+        values = List.append(values, value_json(item))
+    }
+    var skipped: List[json.Json] = []
+    for item in outcome.skipped {
+        skipped = List.append(skipped, skip_json(item))
+    }
+    var diagnostic = json.Json.JNull()
+    if outcome.status != "passed" {
+        diagnostic = report.diagnostic(outcome.problem, file)
+    }
+    return json.Json.JObj(
+        [
+            "function", "index", "span", "expression", "message", "status", "values", "not_evaluated", "diagnostic", "output"
+        ],
+        [
+            json.Json.JStr(outcome.function), json.Json.JInt(outcome.index), place_json(outcome.place),
+            json.Json.JStr(outcome.expression), opt(outcome.message), json.Json.JStr(outcome.status), json.Json.JList(values),
+            json.Json.JList(skipped), diagnostic, json.Json.JStr(joined(outcome.out))
+        ]
+    )
+}
+
+fn count_of(results: List[interpreter.ExampleResult], status: Text) gives Int {
+    var count = 0
+    for result in results {
+        if result.status == status {
+            count = count + 1
+        }
+    }
+    return count
+}
+
+// `ran` is false when nothing was evaluated (a static error): `status` is then "not_run" and there is no summary and no list.
+pub fn document(
+    path: Text, reports: List[report.Report], ran: Bool, only: Text, results: List[interpreter.ExampleResult]
+) gives Text {
+    var ok = true
+    for item in reports {
+        if not Text.starts_with(item.problem.code, "W") {
+            ok = false
+        }
+    }
+    var status = "not_run"
+    var summary = json.Json.JNull()
+    var examples = json.Json.JNull()
+    if ran {
+        var all_passed = true
+        var items: List[json.Json] = []
+        for result in results {
+            if result.status != "passed" {
+                all_passed = false
+            }
+            items = List.append(items, example_json(result, path))
+        }
+        if List.length(results) == 0 {
+            status = "no_examples"
+        } else if all_passed {
+            status = "passed"
+        } else {
+            status = "failed"
+        }
+        summary = json.Json.JObj(
+            ["total", "passed", "failed", "error"],
+            [
+                json.Json.JInt(List.length(results)), json.Json.JInt(count_of(results, "passed")),
+                json.Json.JInt(count_of(results, "failed")), json.Json.JInt(count_of(results, "error"))
+            ]
+        )
+        examples = json.Json.JList(items)
+    }
+    let keys = (["schema", "nexora_version", "file", "ok", "diagnostics", "status", "filter", "summary", "examples"])
+    let values = ([
+        json.Json.JStr("nexora.test/1"), json.Json.JStr(info.version()), json.Json.JStr(path), json.Json.JBool(ok),
+        report.diagnostics(reports), json.Json.JStr(status), json.Json.JObj(["function"], [opt(only)]), summary, examples
+    ])
+    return json.dump_indented(json.Json.JObj(keys, values))
+}

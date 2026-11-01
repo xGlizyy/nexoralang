@@ -1,0 +1,371 @@
+// The front end of NEXORA 0.11, for `nex migrate` (decision 0019, section 8).
+//
+// 0.11 and 0.12 read the same words with the same lexer, but 0.11 knows four clause words (`requires`, `ensures`, `invariant`,
+// `decreases`) where 0.12 knows six keywords (`needs`, `gives`, `promises`, `keeps`, `shrinks`, `trust`), writes the type of a
+// function after `->` (`-> Void` for none), and puts the clauses of a function or a loop inside the block, after the `{`. This
+// module turns the tokens of a 0.11 file into the tokens of the 0.12 file that says the same, with the positions the words had in
+// the original, so that the parser and the checker of 0.12 read the program and every node points to where it is in the 0.11 text.
+// `plain` is the other view: the tokens as the 0.11 lexer made them, which is what the migration reads.
+
+import "lexer.nex"
+import "json.nex"
+import "parser.nex"
+
+// The kind a token has in 0.11: the words that 0.12 made keywords are names, and the ones it freed were reserved.
+fn old_kind(token: lexer.Token) gives Text {
+    if List.contains(["needs", "gives", "promises", "keeps", "shrinks", "trust"], token.kind) {
+        return "name"
+    }
+    if token.kind == "enum" or token.kind == "match" {
+        return "reserved word"
+    }
+    if token.kind == "name" and (token.lexeme == "ai" or token.lexeme == "tool") {
+        return "reserved word"
+    }
+    return token.kind
+}
+
+fn with_kind(token: lexer.Token, kind: Text) gives lexer.Token {
+    return lexer.Token(
+        kind: kind, lexeme: token.lexeme, value: token.value, line: token.line, column: token.column,
+        end_line: token.end_line, end_column: token.end_column
+    )
+}
+
+// The tokens as the lexer of 0.11 makes them.
+pub fn plain(tokens: List[lexer.Token]) gives List[lexer.Token] {
+    var out: List[lexer.Token] = []
+    for token in tokens {
+        out = List.append(out, with_kind(token, old_kind(token)))
+    }
+    return out
+}
+
+// The word of 0.12 that takes the place of a clause word of 0.11.
+fn new_word(lexeme: Text) gives Text {
+    if lexeme == "requires" {
+        return "needs"
+    }
+    if lexeme == "ensures" {
+        return "promises"
+    }
+    if lexeme == "invariant" {
+        return "keeps"
+    }
+    if lexeme == "decreases" {
+        return "shrinks"
+    }
+    return lexeme
+}
+
+// The token as the word of 0.12 that replaces it, in the same place.
+fn as_word(token: lexer.Token, word: Text) gives lexer.Token {
+    return lexer.Token(
+        kind: word, lexeme: word, value: token.value, line: token.line, column: token.column, end_line: token.end_line,
+        end_column: token.end_column
+    )
+}
+
+fn line_end_after(token: lexer.Token) gives lexer.Token {
+    return lexer.Token(
+        kind: "end of line", lexeme: "", value: "", line: token.end_line, column: token.end_column, end_line: token.end_line,
+        end_column: token.end_column
+    )
+}
+
+// The `{` that starts the body of the function or the loop that begins at `start`: on its line, outside parentheses. -1 when
+// there is none.
+fn brace_from(tokens: List[lexer.Token], start: Int) gives Int {
+    var depth = 0
+    var i = start + 1
+    while i < List.length(tokens)
+        shrinks List.length(tokens) - i
+    {
+        let token = List.get(tokens, i)
+        if token.kind == "end of file" or token.kind == "end of line" {
+            return 0 - 1
+        }
+        if token.kind == "(" or token.kind == "[" {
+            depth = depth + 1
+        } else if token.kind == ")" or token.kind == "]" {
+            depth = depth - 1
+        } else if token.kind == "\{" and depth == 0 {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn is_clause_start(token: lexer.Token, in_function: Bool) gives Bool {
+    if in_function {
+        return token.kind == "word of 0.11" and (token.lexeme == "requires" or token.lexeme == "ensures") or token.kind == "example"
+    }
+    return token.kind == "word of 0.11" and (token.lexeme == "invariant" or token.lexeme == "decreases")
+}
+
+// The functions of `Option` and `Result` that 0.12 calls otherwise: `Option.unwrap` is `Option.value`, `unwrap_or` is `value_or`.
+fn renamed(tokens: List[lexer.Token]) gives List[lexer.Token] {
+    var out: List[lexer.Token] = []
+    var i = 0
+    while i < List.length(tokens)
+        shrinks List.length(tokens) - i
+    {
+        let token = List.get(tokens, i)
+        var written = token
+        if token.kind == "name" and (token.lexeme == "unwrap" or token.lexeme == "unwrap_or") and i >= 2 {
+            let dot = List.get(tokens, i - 1)
+            let owner = List.get(tokens, i - 2)
+            if dot.kind == "." and (owner.lexeme == "Option" or owner.lexeme == "Result") {
+                if token.lexeme == "unwrap" {
+                    written = as_word(token, "value")
+                } else {
+                    written = as_word(token, "value_or")
+                }
+                written = with_kind(written, "name")
+            }
+        }
+        out = List.append(out, written)
+        i = i + 1
+    }
+    return out
+}
+
+// The tokens of a file of 0.11 as the parser of 0.12 reads them.
+pub fn stream(tokens: List[lexer.Token]) gives List[lexer.Token] {
+    let old = renamed(plain(tokens))
+    var out: List[lexer.Token] = []
+    var i = 0
+    while i < List.length(old)
+        shrinks List.length(old) - i
+    {
+        let token = List.get(old, i)
+        let in_function = token.kind == "fn"
+        var brace = 0 - 1
+        if in_function or token.kind == "while" or token.kind == "for" {
+            brace = brace_from(old, i)
+        }
+        if brace < 0 {
+            out = List.append(out, token)
+            i = i + 1
+        } else {
+            // The head: up to the `{`. In a function the `->` becomes `gives`, and `-> Void` disappears.
+            var head: List[lexer.Token] = []
+            var j = i
+            var depth = 0
+            while j < brace
+                shrinks brace - j
+            {
+                let each = List.get(old, j)
+                if each.kind == "(" or each.kind == "[" {
+                    depth = depth + 1
+                } else if each.kind == ")" or each.kind == "]" {
+                    depth = depth - 1
+                }
+                if in_function and each.kind == "->" and depth == 0 {
+                    let after = j + 1
+                    var written = ""
+                    if after < List.length(old) {
+                        let named = List.get(old, after)
+                        written = named.lexeme
+                    }
+                    if after == brace - 1 and written == "Void" {
+                        j = brace
+                    } else {
+                        head = List.append(head, as_word(each, "gives"))
+                        j = j + 1
+                    }
+                } else {
+                    head = List.append(head, each)
+                    j = j + 1
+                }
+            }
+            // After the `{`: a line end, then the clauses, each with its line end.
+            var k = brace + 1
+            var after_brace: List[lexer.Token] = []
+            if k < List.length(old) {
+                let first = List.get(old, k)
+                if first.kind == "end of line" {
+                    after_brace = [first]
+                    k = k + 1
+                }
+            }
+            var clauses: List[lexer.Token] = []
+            var more = true
+            while more and k < List.length(old)
+                shrinks List.length(old) - k
+            {
+                let candidate = List.get(old, k)
+                if is_clause_start(candidate, in_function) {
+                    var ended = false
+                    while not ended and k < List.length(old)
+                        shrinks List.length(old) - k
+                    {
+                        let piece = List.get(old, k)
+                        if piece.kind == "end of file" or piece.kind == "}" {
+                            ended = true
+                        } else {
+                            var added = piece
+                            if piece.kind == "word of 0.11" and clauses_start(clauses, piece) {
+                                added = as_word(piece, new_word(piece.lexeme))
+                            }
+                            clauses = List.append(clauses, added)
+                            k = k + 1
+                            if piece.kind == "end of line" {
+                                ended = true
+                            }
+                        }
+                    }
+                } else {
+                    more = false
+                }
+            }
+            out = List.concat(out, head)
+            if List.length(clauses) > 0 {
+                var last = token
+                if List.length(head) > 0 {
+                    last = List.get(head, List.length(head) - 1)
+                }
+                out = List.append(out, line_end_after(last))
+                out = List.concat(out, clauses)
+            }
+            out = List.append(out, List.get(old, brace))
+            out = List.concat(out, after_brace)
+            i = k
+        }
+    }
+    return out
+}
+
+// Whether the word is the first token of a clause: the one after a line end, or the first of the clauses.
+fn clauses_start(clauses: List[lexer.Token], piece: lexer.Token) gives Bool {
+    if List.length(clauses) == 0 {
+        return true
+    }
+    let before = List.get(clauses, List.length(clauses) - 1)
+    return before.kind == "end of line"
+}
+
+// The text with every line ending written as a line feed: the lexer reads a carriage return with a line feed, a line feed and a lone
+// carriage return as one line end each, and the positions of the tokens are the same.
+pub fn lf_only(text: Text) gives Text {
+    let carriage = json.char_from_code(13)
+    var out = ""
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c == carriage {
+            out = out + "\n"
+            if i + 1 < Text.length(text) and Text.slice(text, i + 1, i + 2) == "\n" {
+                i = i + 1
+            }
+        } else {
+            out = out + c
+        }
+        i = i + 1
+    }
+    return out
+}
+
+// The wording of 0.11
+
+// `text` with every `old` written as `new`.
+fn replaced(text: Text, old: Text, new: Text) gives Text {
+    var out = ""
+    var i = 0
+    let width = Text.length(old)
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if i + width <= Text.length(text) and Text.slice(text, i, i + width) == old {
+            out = out + new
+            i = i + width
+        } else {
+            out = out + Text.slice(text, i, i + 1)
+            i = i + 1
+        }
+    }
+    return out
+}
+
+// A signature the way 0.11 shows it: `fn f(x: Int) -> Int`, and `-> Void` for a function that gives nothing.
+fn old_signature(text: Text) gives Text {
+    var out = text
+    for lead in ["in: fn ", "is: fn "] {
+        var at = 0 - 1
+        var i = 0
+        while i + Text.length(lead) <= Text.length(out)
+            shrinks Text.length(out) - i
+        {
+            if Text.slice(out, i, i + Text.length(lead)) == lead {
+                at = i
+            }
+            i = i + 1
+        }
+        if at >= 0 {
+            let head = Text.slice(out, 0, at + Text.length(lead))
+            let signature = Text.slice(out, at + Text.length(lead), Text.length(out))
+            if Text.contains(signature, ") gives ") {
+                out = head + replaced(signature, ") gives ", ") -> ")
+            } else {
+                out = head + signature + " -> Void"
+            }
+        }
+    }
+    return out
+}
+
+// The words of 0.12 in a message, written as 0.11 wrote them.
+pub fn old_wording(text: Text) gives Text {
+    var out = old_signature(text)
+    out = replaced(
+        out,
+        "Add 'shrinks <expression>' to the header of the loop, with an Int that gets smaller on every turn and never goes below 0, for example 'shrinks n - i'.",
+        "Add 'decreases <expression>' with an Int that gets smaller on every turn and never goes below 0, for example 'decreases n - i'."
+    )
+    out = replaced(
+        out, "'result' only exists inside a 'promises' clause of a function that gives a value.",
+        "'result' only exists inside an 'ensures' clause of a function that returns a value."
+    )
+    out = replaced(
+        out, "'result' is the name of the value a function gives, inside a 'promises' clause.",
+        "'result' is the name of the return value inside an 'ensures' clause."
+    )
+    out = replaced(
+        out, "Void means 'no value', and it is never written: a function that gives nothing has no 'gives'.",
+        "Void means 'no value'. It can only be the return type of a function."
+    )
+    out = replaced(out, "'main' gives nothing", "'main' must return Void")
+    out = replaced(out, "Write: fn main() \{", "Write: fn main() -> Void")
+    out = replaced(out, "Add the entry point: fn main() \{ ... }", "Add the entry point: fn main() -> Void \{ ... }")
+    out = replaced(out, "'needs'", "'requires'")
+    out = replaced(out, "'promises'", "'ensures'")
+    out = replaced(out, "'keeps'", "'invariant'")
+    out = replaced(out, "'shrinks'", "'decreases'")
+    out = replaced(out, "Option.value_or", "Option.unwrap_or")
+    out = replaced(out, "Result.value_or", "Result.unwrap_or")
+    out = replaced(out, "Option.value", "Option.unwrap")
+    out = replaced(out, "Result.value", "Result.unwrap")
+    return out
+}
+
+// Whether 0.11 could have said it: it had no warnings, and none of the checks that came with 0.12.
+pub fn old_could_say(problem: parser.Problem) gives Bool {
+    if Text.starts_with(problem.code, "W") {
+        return false
+    }
+    return not List.contains(["E2031", "E2032", "E2033", "E2034", "E2035"], problem.code)
+}
+
+pub fn old_problem(problem: parser.Problem) gives parser.Problem {
+    var notes: List[Text] = []
+    for note in problem.notes {
+        notes = List.append(notes, old_wording(note))
+    }
+    return parser.Problem(
+        code: problem.code, label: old_wording(problem.label), hint: old_wording(problem.hint), notes: notes, line: problem.line,
+        column: problem.column, end_line: problem.end_line, end_column: problem.end_column
+    )
+}
