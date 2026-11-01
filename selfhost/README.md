@@ -122,6 +122,11 @@ nex run selfhost/nex.nex --allow-read . --allow-write . -- test FILE [--function
 PYTHONPATH=nexora/src python selfhost/compare_nex.py check|run|test FILE [FILE ...]
 ```
 
+Compiled with `--trusted --cli` (`nex.nex OUTPUT.c --trusted --cli` to `cgen.nex`), the executable is used as the command is, with no
+options of the runtime: `nex check FILE`, `nex run [OPTIONS] FILE [ARGUMENTS]`, `nex test FILE`, `nex --version`. Every argument belongs to
+the tool, and the tool may read and write the files it is asked to; the program that `nex run` starts has its own host, with the
+permissions given by `--allow-read` and the others, as in Python (`NEXORA_NEX_CLI=1` makes `compare_nex.py` call it that way).
+
 `compare_nex.py` runs both and compares them. Run by Python, `nex.nex` has no standard error and no exit status, so what `nex` writes
 to both streams is compared with its standard output. Against the executable (`NEXORA_NEX=path`), the standard output, the standard
 error and the exit status are compared one by one, and `NEXORA_FORMAT=json` adds `--format json`: `check`, `run` and `test` are equal
@@ -140,7 +145,7 @@ standard output and set nothing, and `cgen.nex` replaces them with C ones.
 | Run by Python, no exit status and no standard error | A program has neither: the three functions above only exist in the executable. |
 | `nex test --format json` and the commands `debug`, `inspect`, `context`, `symbols`, `migrate` | Not written yet; `test --format json` ends with status 70 and says so. |
 | Options that stop a program by time or memory (`--timeout`, `--max-memory`) | Not written yet. |
-| The input of `run` comes from `--stdin FILE` | A program cannot read the standard input without stopping at its end. |
+| `run` reads the standard input one line at a time, and `--max-input` is not applied to it yet | `--stdin FILE` still works and keeps the limit. A program cannot test for the end of the input without stopping at it, so a C function (`read_stdin_line`) answers with no line at the end. `compare_stdin.py` runs 3 programs with 8 inputs (LF, CRLF, no final break, none, empty lines, Unicode): all equal (Python in UTF-8 mode: on Windows `nex` decodes the input with the code page of the console). |
 | The output limit stops in the middle of a line | `print` writes whole lines, so what fit of that line is printed with a line break. |
 | A file with syntax errors | Only its lexical and syntax errors are shown, as for the file that runs. `nex check` also checks the partial tree of an imported module. |
 

@@ -2870,7 +2870,7 @@ fn run_example(prog: Prog, lines: List[Text], name: Text, index: Int, item: pars
 type HostCfg = {
     arguments: List[Text], declared_kinds: List[Text], declared_paths: List[Text],
     grant_kinds: List[Text], grant_paths: List[Text], cwd: Text,
-    max_text: Int, max_output: Int, max_input: Int, input_sizes: List[Int], locked: Bool, nohost: Bool
+    max_text: Int, max_output: Int, max_input: Int, input_sizes: List[Int], locked: Bool, nohost: Bool, live: Bool
 }
 
 // The host of a run where the user has allowed nothing: the program has declared what it needs, and that is all.
@@ -2878,14 +2878,14 @@ fn declared_host(program: parser.Node) gives HostCfg {
     return HostCfg(
         arguments: [], declared_kinds: declared_kinds_of(program), declared_paths: declared_paths_of(program),
         grant_kinds: [], grant_paths: [], cwd: "", max_text: 0, max_output: 0,
-        max_input: 0, input_sizes: [], locked: false, nohost: false
+        max_input: 0, input_sizes: [], locked: false, nohost: false, live: false
     )
 }
 
 fn no_host() gives HostCfg {
     return HostCfg(
         arguments: [], declared_kinds: [], declared_paths: [], grant_kinds: [], grant_paths: [], cwd: "",
-        max_text: 0, max_output: 0, max_input: 0, input_sizes: [], locked: false, nohost: false
+        max_text: 0, max_output: 0, max_input: 0, input_sizes: [], locked: false, nohost: false, live: false
     )
 }
 
@@ -3036,8 +3036,40 @@ fn input_limit(host: HostCfg, m: Machine, node: parser.Node, index: Int) gives I
     return InputLimit(stopped: false, machine: m)
 }
 
+// One line of the standard input: a list with it, or an empty list at the end of the input (a program cannot test for the end of
+// the input without stopping at it). This is the definition Python runs, which has no input; the executables that cgen.nex makes
+// replace it with a C one that reads.
+fn read_stdin_line() gives List[Text] {
+    return []
+}
+
+// `input()` of a program that is run with no --stdin file: the standard input, as `nex run` reads it.
+fn read_live_line(host: HostCfg, m: Machine, node: parser.Node) gives Machine {
+    if host.max_input > 0 {
+        return stop_with(
+            m, m.stack, 0, "E0000", "--max-input cannot be applied to the standard input by this interpreter yet", "", [],
+            place_of(node)
+        )
+    }
+    let got = read_stdin_line()
+    if List.length(got) == 0 {
+        return stop_with(
+            m, m.stack, 0, "E3009", "There is no more input to read",
+            "The standard input ended. Check it before reading again.", [], place_of(node)
+        )
+    }
+    let line = List.get(got, 0)
+    if text_too_long(host.max_text, line) {
+        return failed(m, text_limit_res(host.max_text, "node"), node)
+    }
+    return mk(m, Control.CValue(Val.VText(line)), m.env, m.stack)
+}
+
 fn read_input_line(host: HostCfg, m: Machine, node: parser.Node) gives Machine {
     let inputs = m.tracing.inputs
+    if List.length(inputs) == 0 and host.live {
+        return read_live_line(host, m, node)
+    }
     if List.length(inputs) == 0 {
         return stop_with(
             m, m.stack, 0, "E3009", "There is no more input to read",
@@ -3169,7 +3201,8 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
 // Reads what the command line gives a run: the grants, the input, the working directory and the arguments.
 pub type RunOptions = {
     grant_kinds: List[Text], grant_paths: List[Text], stdin: List[Text], cwd: Text, path: Text,
-    arguments: List[Text], max_text: Int, max_output: Int, max_input: Int, max_source: Int, stdin_text: Text
+    arguments: List[Text], max_text: Int, max_output: Int, max_input: Int, max_source: Int, stdin_text: Text,
+    live: Bool
 }
 
 // The bytes of each line of the input with its terminator, or -1 for a line that is not ASCII. The last line has none when
@@ -3228,6 +3261,7 @@ pub fn parse_options(words: List[Text]) gives RunOptions {
     var max_input = 0
     var max_source = 0
     var stdin_text = ""
+    var live = true
     var i = 0
     while i < List.length(words)
         shrinks List.length(words) - i
@@ -3243,6 +3277,7 @@ pub fn parse_options(words: List[Text]) gives RunOptions {
         } else if word == "--stdin" {
             stdin_text = read_file(List.get(words, i + 1))
             stdin = input_lines(stdin_text)
+            live = false
             i = i + 2
         } else if word == "--max-input" {
             max_input = Int.parse(List.get(words, i + 1))
@@ -3266,7 +3301,7 @@ pub fn parse_options(words: List[Text]) gives RunOptions {
     }
     return RunOptions(grant_kinds: kinds, grant_paths: paths, stdin: stdin, cwd: cwd, path: path, arguments: arguments,
         max_text: max_text, max_output: max_output, max_input: max_input, max_source: max_source,
-        stdin_text: stdin_text
+        stdin_text: stdin_text, live: live
     )
 }
 
@@ -3297,7 +3332,7 @@ fn run_hosted(words: List[Text]) {
         grant_paths: options.grant_paths, cwd: options.cwd,
         max_text: options.max_text, max_output: options.max_output, max_input: options.max_input,
         input_sizes: input_sizes_of(options.stdin_text, options.stdin), locked: false,
-        nohost: false
+        nohost: false, live: false
     )
     let prog = build_prog(built.node, host)
     let start = start_machine(prog, start_fuel())
@@ -3501,7 +3536,8 @@ fn host_for(node: parser.Node, options: RunOptions, locked: Bool, nohost: Bool) 
         declared_paths: declared_paths_of(node), grant_kinds: options.grant_kinds,
         grant_paths: options.grant_paths, cwd: options.cwd,
         max_text: options.max_text, max_output: options.max_output, max_input: options.max_input,
-        input_sizes: input_sizes_of(options.stdin_text, options.stdin), locked: locked, nohost: nohost
+        input_sizes: input_sizes_of(options.stdin_text, options.stdin), locked: locked, nohost: nohost,
+        live: options.live and not locked
     )
 }
 

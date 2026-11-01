@@ -1763,6 +1763,35 @@ static rv rt_intr_file_problem(rv path) {
     return rt_txt(r);
 }
 
+/* One line of the standard input for the program a tool runs (selfhost/interpreter.nex, `read_stdin_line`): a list with the line, without
+ * its line break, or an empty list at the end of the input. */
+static rv rt_intr_read_stdin_line(void) {
+    fflush(stdout);
+    size_t cap = 128, n = 0;
+    char *line = (char *)rt_alloc_raw(cap);
+    int ch;
+    bool any = false;
+    while ((ch = getc(stdin)) != EOF) {
+        any = true;
+        if (ch == '\n') break;
+        if (n + 2 > cap) {
+            char *bigger = (char *)rt_alloc_raw(cap * 2);
+            memcpy(bigger, line, n);
+            line = bigger;
+            cap *= 2;
+        }
+        line[n++] = (char)ch;
+    }
+    if (!any) return rt_list_from(0, 0);
+    if (n > 0 && line[n - 1] == '\r') n--;
+    line[n] = 0;
+    int64_t points = 0;
+    for (size_t i = 0; i < n; i++) if (((unsigned char)line[i] & 0xC0) != 0x80) points++;
+    rt_text t = {line, (int64_t)n, points};
+    rv item = rt_txt(t);
+    return rt_list_from(&item, 1);
+}
+
 static rv rt_intr_byte_length(rv text) { return rt_int(text.u.t.bytes); }
 
 static rv rt_intr_text_of(rv node) { return rt_intr_is(node, "Str") ? rt_arg(node, 0) : rt_str(""); }
@@ -1863,6 +1892,11 @@ static bool rt_inside(const char *scope, const char *path) {
 
 /* Why the program may not use a path, or 0 when it may. */
 static const char *rt_denied(const char *kind, const char *path) {
+#ifdef RT_CLI
+    /* A command-line tool (nex.nex) reads and writes the files it is asked to; what the program it runs may do is its own host. */
+    (void)kind; (void)path;
+    return 0;
+#endif
     bool declared = false, granted = false;
     for (int i = 0; i < rt_declared; i++) {
         if (strcmp(rt_declared_kind[i], kind) == 0 && rt_inside(rt_declared_path[i], path)) declared = true;
@@ -2108,6 +2142,12 @@ static rv rt_args(RT_SPAN) {
 /* The command line of an executable is the one of `nex run`: the options of the user, then `--`, then the arguments of the
  * program. */
 static void rt_options(int argc, char **argv) {
+#ifdef RT_CLI
+    /* Every argument belongs to the tool: `nex run --max-output 5 file` is not an option of the runtime. */
+    rt_args_list = (const char *const *)(argv + 1);
+    rt_args_count = argc - 1;
+    return;
+#endif
     int i = 1;
     for (; i < argc; i++) {
         const char *a = argv[i];

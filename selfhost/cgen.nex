@@ -1099,6 +1099,9 @@ fn intrinsic_of(function: parser.Node) gives Text {
     if count == 2 and name == "join_texts" and file == "selfhost/parser.nex" {
         return "rt_intr_join_texts"
     }
+    if count == 0 and name == "read_stdin_line" and file == "selfhost/interpreter.nex" {
+        return "rt_intr_read_stdin_line"
+    }
     if count == 1 and name == "byte_length" and file == "selfhost/project.nex" {
         return "rt_intr_byte_length"
     }
@@ -1233,10 +1236,15 @@ fn uses_code(program: parser.Node) gives Text {
 
 // `trusted` is for the tools of selfhost/ themselves: the stack of calls that explains an error of a program is not kept, and the
 // limit of 1,000 nested calls (which is a rule for the programs the language runs) does not apply to them.
-fn generate(program: parser.Node, path: Text, paths: List[Text], trusted: Bool) gives Part {
+// `cli` is for a command-line tool (nex.nex): the executable takes every argument of its command line as an argument of the program
+// and may read and write the files it is asked to (it is the tool, not the program it runs, that is trusted).
+fn generate(program: parser.Node, path: Text, paths: List[Text], trusted: Bool, cli: Bool) gives Part {
     var code = ""
     if trusted {
         code = "#define RT_NO_FRAMES\n"
+    }
+    if cli {
+        code = code + "#define RT_CLI\n"
     }
     for line in runtime_text.runtime_lines() {
         code = code + line + "\n"
@@ -1307,8 +1315,24 @@ fn has_errors(problems: List[parser.Problem]) gives Bool {
 
 fn main() {
     let words = args()
-    if List.length(words) != 2 and not (List.length(words) == 3 and List.get(words, 2) == "--trusted") {
-        print("usage: cgen.nex PROGRAM.nex OUTPUT.c [--trusted]")
+    var trusted = false
+    var cli = false
+    var known = List.length(words) >= 2
+    var k = 2
+    while k < List.length(words)
+        shrinks List.length(words) - k
+    {
+        if List.get(words, k) == "--trusted" {
+            trusted = true
+        } else if List.get(words, k) == "--cli" {
+            cli = true
+        } else {
+            known = false
+        }
+        k = k + 1
+    }
+    if not known {
+        print("usage: cgen.nex PROGRAM.nex OUTPUT.c [--trusted] [--cli]")
         return
     }
     let path = List.get(words, 0)
@@ -1333,7 +1357,7 @@ fn main() {
     if List.length(results) > 1 {
         program = project.link(results)
     }
-    let made = generate(program, path, paths, List.length(words) == 3)
+    let made = generate(program, path, paths, trusted, cli)
     if made.st.bad != "" {
         print("not supported yet: " + made.st.bad)
         return
