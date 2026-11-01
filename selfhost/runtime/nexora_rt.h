@@ -1574,6 +1574,8 @@ static rv rt_intr_char_from_code(rv code) {
     return rt_txt(t);
 }
 
+static rv rt_intr_byte_length(rv text) { return rt_int(text.u.t.bytes); }
+
 static rv rt_intr_text_of(rv node) { return rt_intr_is(node, "Str") ? rt_arg(node, 0) : rt_str(""); }
 static rv rt_intr_items_of(rv node) { return rt_intr_is(node, "Items") ? rt_arg(node, 0) : rt_list_from(0, 0); }
 static rv rt_intr_is_null(rv node) { return rt_bool(rt_intr_is(node, "Null")); }
