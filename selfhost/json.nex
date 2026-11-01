@@ -1,0 +1,569 @@
+// JSON, written in NEXORA: what the worker of the playground reads and writes (decision 0026).
+//
+// `parse` reads one JSON text and `dump` writes one. A number is a whole number (`Int`) when it has no fraction or exponent, and
+// a `Float` otherwise, as Python's json module reads it. `dump` writes what `json.dumps(value, ensure_ascii=False)` writes: the
+// quote, the backslash and the control characters are escaped, and every other character is written as it is.
+
+import "parser.nex"
+
+pub type Json = enum {
+    JNull,
+    JBool(value: Bool),
+    JInt(value: Int),
+    JFloat(value: Float),
+    JStr(value: Text),
+    JList(items: List[Json]),
+    JObj(keys: List[Text], values: List[Json])
+}
+
+// What reading gives: the value, where reading stopped, and whether it went well.
+pub type Read = { ok: Bool, value: Json, at: Int }
+
+// The code of the first character of a text, and the character of a code. The language has neither (a limit documented in
+// README.md), and JSON needs both: a carriage return, a unicode escape. The compiler replaces these two functions with C ones that
+// know all of Unicode; the definitions here, which are what Python runs, know the characters that can be typed.
+pub fn code_of(c: Text) gives Int {
+    if c == "" {
+        return 0
+    }
+    if c == "\n" {
+        return 10
+    }
+    if c == "\t" {
+        return 9
+    }
+    let table = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz\{|}~"
+    var i = 0
+    while i < Text.length(table)
+        shrinks Text.length(table) - i
+    {
+        if Text.slice(table, i, i + 1) == Text.slice(c, 0, 1) {
+            return 32 + i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+pub fn char_from_code(code: Int) gives Text {
+    if code == 10 {
+        return "\n"
+    }
+    if code == 9 {
+        return "\t"
+    }
+    let table = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz\{|}~"
+    if code >= 32 and code <= 126 {
+        return Text.slice(table, code - 32, code - 31)
+    }
+    return ""
+}
+
+fn failed(at: Int) gives Read {
+    return Read(ok: false, value: Json.JNull(), at: at)
+}
+
+fn done(value: Json, at: Int) gives Read {
+    return Read(ok: true, value: value, at: at)
+}
+
+fn char_at(text: Text, at: Int) gives Text {
+    if at < 0 or at >= Text.length(text) {
+        return ""
+    }
+    return Text.slice(text, at, at + 1)
+}
+
+fn is_space(c: Text) gives Bool {
+    let code = code_of(c)
+    return code == 32 or code == 9 or code == 10 or code == 13
+}
+
+fn skip_spaces(text: Text, at: Int) gives Int {
+    var i = at
+    while i < Text.length(text) and is_space(char_at(text, i))
+        shrinks Text.length(text) - i
+    {
+        i = i + 1
+    }
+    return i
+}
+
+fn is_digit(c: Text) gives Bool {
+    return c != "" and c >= "0" and c <= "9"
+}
+
+fn hex_value(c: Text) gives Int {
+    let digits = "0123456789abcdef"
+    let upper = "0123456789ABCDEF"
+    var i = 0
+    while i < 16
+        shrinks 16 - i
+    {
+        if Text.slice(digits, i, i + 1) == c or Text.slice(upper, i, i + 1) == c {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+// The four hex digits at `at`, or a negative number.
+fn hex_four(text: Text, at: Int) gives Int {
+    var code = 0
+    var k = 0
+    while k < 4
+        shrinks 4 - k
+    {
+        let h = hex_value(char_at(text, at + k))
+        if h < 0 {
+            return 0 - 1
+        }
+        code = code * 16 + h
+        k = k + 1
+    }
+    return code
+}
+
+// The character after a backslash, and how many characters of the text it takes (the backslash included).
+type Escape = { ok: Bool, text: Text, size: Int }
+
+fn read_escape(text: Text, at: Int) gives Escape {
+    let next = char_at(text, at + 1)
+    if next == "n" {
+        return Escape(ok: true, text: "\n", size: 2)
+    }
+    if next == "t" {
+        return Escape(ok: true, text: "\t", size: 2)
+    }
+    if next == "r" {
+        return Escape(ok: true, text: char_from_code(13), size: 2)
+    }
+    if next == "b" {
+        return Escape(ok: true, text: char_from_code(8), size: 2)
+    }
+    if next == "f" {
+        return Escape(ok: true, text: char_from_code(12), size: 2)
+    }
+    if next == "\"" or next == "\\" or next == "/" {
+        return Escape(ok: true, text: next, size: 2)
+    }
+    if next != "u" {
+        return Escape(ok: false, text: "", size: 0)
+    }
+    let code = hex_four(text, at + 2)
+    if code < 0 {
+        return Escape(ok: false, text: "", size: 0)
+    }
+    // A pair of surrogates is one character.
+    if code >= 55296 and code <= 56319 and char_at(text, at + 6) == "\\" and char_at(text, at + 7) == "u" {
+        let low = hex_four(text, at + 8)
+        if low >= 56320 and low <= 57343 {
+            return Escape(ok: true, text: char_from_code(65536 + (code - 55296) * 1024 + (low - 56320)), size: 12)
+        }
+    }
+    return Escape(ok: true, text: char_from_code(code), size: 6)
+}
+
+// A string, from the quote at `at`.
+fn read_string(text: Text, at: Int) gives Read {
+    var out = ""
+    var i = at + 1
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = char_at(text, i)
+        if c == "\"" {
+            return done(Json.JStr(out), i + 1)
+        }
+        if c == "\\" {
+            let escape = read_escape(text, i)
+            if not escape.ok {
+                return failed(i)
+            }
+            out = out + escape.text
+            i = i + escape.size
+        } else if code_of(c) < 32 {
+            return failed(i)
+        } else {
+            out = out + c
+            i = i + 1
+        }
+    }
+    return failed(i)
+}
+
+fn read_number(text: Text, at: Int) gives Read {
+    var i = at
+    if char_at(text, i) == "-" {
+        i = i + 1
+    }
+    if not is_digit(char_at(text, i)) {
+        return failed(at)
+    }
+    // A number does not start with a zero that has digits after it: "01" is a zero and then something else.
+    if char_at(text, i) == "0" {
+        i = i + 1
+    } else {
+        while is_digit(char_at(text, i))
+            shrinks Text.length(text) - i
+        {
+            i = i + 1
+        }
+    }
+    var is_float = false
+    if char_at(text, i) == "." and is_digit(char_at(text, i + 1)) {
+        is_float = true
+        i = i + 1
+        while is_digit(char_at(text, i))
+            shrinks Text.length(text) - i
+        {
+            i = i + 1
+        }
+    }
+    if char_at(text, i) == "e" or char_at(text, i) == "E" {
+        var j = i + 1
+        if char_at(text, j) == "+" or char_at(text, j) == "-" {
+            j = j + 1
+        }
+        if is_digit(char_at(text, j)) {
+            is_float = true
+            while is_digit(char_at(text, j))
+                shrinks Text.length(text) - j
+            {
+                j = j + 1
+            }
+            i = j
+        }
+    }
+    let written = Text.slice(text, at, i)
+    if is_float {
+        if not Float.can_parse(written) {
+            return failed(at)
+        }
+        return done(Json.JFloat(Float.parse(written)), i)
+    }
+    if not Int.can_parse(written) {
+        return failed(at)
+    }
+    return done(Json.JInt(Int.parse(written)), i)
+}
+
+fn read_word(text: Text, at: Int, word: Text, value: Json) gives Read {
+    let end = at + Text.length(word)
+    if end <= Text.length(text) and Text.slice(text, at, end) == word {
+        return done(value, end)
+    }
+    return failed(at)
+}
+
+fn read_list(text: Text, at: Int, depth: Int) gives Read {
+    var items: List[Json] = []
+    var i = skip_spaces(text, at + 1)
+    if char_at(text, i) == "]" {
+        return done(Json.JList(items), i + 1)
+    }
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let item = read_value(text, i, depth + 1)
+        if not item.ok {
+            return item
+        }
+        items = List.append(items, item.value)
+        i = skip_spaces(text, item.at)
+        let c = char_at(text, i)
+        if c == "]" {
+            return done(Json.JList(items), i + 1)
+        }
+        if c != "," {
+            return failed(i)
+        }
+        i = skip_spaces(text, i + 1)
+    }
+    return failed(i)
+}
+
+fn index_of_key(keys: List[Text], name: Text) gives Int {
+    var i = 0
+    while i < List.length(keys)
+        shrinks List.length(keys) - i
+    {
+        if List.get(keys, i) == name {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn replace_at(values: List[Json], place: Int, value: Json) gives List[Json] {
+    var out: List[Json] = []
+    var i = 0
+    while i < List.length(values)
+        shrinks List.length(values) - i
+    {
+        if i == place {
+            out = List.append(out, value)
+        } else {
+            out = List.append(out, List.get(values, i))
+        }
+        i = i + 1
+    }
+    return out
+}
+
+fn key_text(value: Json) gives Text {
+    return match value {
+        Json.JStr(text) => text
+        _ => ""
+    }
+}
+
+fn read_object(text: Text, at: Int, depth: Int) gives Read {
+    var keys: List[Text] = []
+    var values: List[Json] = []
+    var i = skip_spaces(text, at + 1)
+    if char_at(text, i) == "}" {
+        return done(Json.JObj(keys, values), i + 1)
+    }
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if char_at(text, i) != "\"" {
+            return failed(i)
+        }
+        let key = read_string(text, i)
+        if not key.ok {
+            return key
+        }
+        i = skip_spaces(text, key.at)
+        if char_at(text, i) != ":" {
+            return failed(i)
+        }
+        let value = read_value(text, skip_spaces(text, i + 1), depth + 1)
+        if not value.ok {
+            return value
+        }
+        // A key that comes twice keeps its place and takes the last value, as a dictionary does.
+        let name = key_text(key.value)
+        let place = index_of_key(keys, name)
+        if place >= 0 {
+            values = replace_at(values, place, value.value)
+        } else {
+            keys = List.append(keys, name)
+            values = List.append(values, value.value)
+        }
+        i = skip_spaces(text, value.at)
+        let c = char_at(text, i)
+        if c == "}" {
+            return done(Json.JObj(keys, values), i + 1)
+        }
+        if c != "," {
+            return failed(i)
+        }
+        i = skip_spaces(text, i + 1)
+    }
+    return failed(i)
+}
+
+// A value that is nested more than 64 levels is refused, so that a request cannot use the depth of the program.
+fn read_value(text: Text, at: Int, depth: Int) gives Read {
+    if depth > 64 {
+        return failed(at)
+    }
+    let c = char_at(text, at)
+    if c == "\"" {
+        return read_string(text, at)
+    }
+    if c == "\{" {
+        return read_object(text, at, depth)
+    }
+    if c == "[" {
+        return read_list(text, at, depth)
+    }
+    if c == "t" {
+        return read_word(text, at, "true", Json.JBool(true))
+    }
+    if c == "f" {
+        return read_word(text, at, "false", Json.JBool(false))
+    }
+    if c == "n" {
+        return read_word(text, at, "null", Json.JNull())
+    }
+    return read_number(text, at)
+}
+
+// The value of a whole text, or a failure when there is something wrong or anything left after it.
+pub fn parse(text: Text) gives Read {
+    let start = skip_spaces(text, 0)
+    let value = read_value(text, start, 0)
+    if not value.ok {
+        return value
+    }
+    let end = skip_spaces(text, value.at)
+    if end != Text.length(text) {
+        return failed(end)
+    }
+    return value
+}
+
+// Writing
+
+fn hex_digit(n: Int) gives Text {
+    return Text.slice("0123456789abcdef", n, n + 1)
+}
+
+// The escape of a control character that has no short one.
+fn control_escape(code: Int) gives Text {
+    return "\\u00" + hex_digit(code / 16) + hex_digit(code - (code / 16) * 16)
+}
+
+fn escaped(text: Text) gives Text {
+    var out = "\""
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        let code = code_of(c)
+        if c == "\"" {
+            out = out + "\\\""
+        } else if c == "\\" {
+            out = out + "\\\\"
+        } else if code == 10 {
+            out = out + "\\n"
+        } else if code == 9 {
+            out = out + "\\t"
+        } else if code == 13 {
+            out = out + "\\r"
+        } else if code == 8 {
+            out = out + "\\b"
+        } else if code == 12 {
+            out = out + "\\f"
+        } else if code >= 0 and code < 32 {
+            out = out + control_escape(code)
+        } else {
+            out = out + c
+        }
+        i = i + 1
+    }
+    return out + "\""
+}
+
+pub fn dump(value: Json) gives Text {
+    return match value {
+        Json.JNull => "null"
+        Json.JBool(flag) => to_text(flag)
+        Json.JInt(n) => to_text(n)
+        Json.JFloat(x) => to_text(x)
+        Json.JStr(text) => escaped(text)
+        Json.JList(items) => dump_list(items)
+        Json.JObj(keys, values) => dump_object(keys, values)
+    }
+}
+
+fn dump_list(items: List[Json]) gives Text {
+    var parts: List[Text] = []
+    for item in items {
+        parts = List.append(parts, dump(item))
+    }
+    return "[" + parser.join_texts(parts, ", ") + "]"
+}
+
+fn dump_object(keys: List[Text], values: List[Json]) gives Text {
+    var parts: List[Text] = []
+    var i = 0
+    while i < List.length(keys)
+        shrinks List.length(keys) - i
+    {
+        parts = List.append(parts, escaped(List.get(keys, i)) + ": " + dump(List.get(values, i)))
+        i = i + 1
+    }
+    return "\{" + parser.join_texts(parts, ", ") + "}"
+}
+
+// Reading a value that has the shape the caller expects
+
+pub fn field_of(value: Json, name: Text) gives Json {
+    return match value {
+        Json.JObj(keys, values) => field_in(keys, values, name)
+        _ => Json.JNull()
+    }
+}
+
+fn field_in(keys: List[Text], values: List[Json], name: Text) gives Json {
+    var i = 0
+    while i < List.length(keys)
+        shrinks List.length(keys) - i
+    {
+        if List.get(keys, i) == name {
+            return List.get(values, i)
+        }
+        i = i + 1
+    }
+    return Json.JNull()
+}
+
+pub fn text_value(value: Json, fallback: Text) gives Text {
+    return match value {
+        Json.JStr(text) => text
+        _ => fallback
+    }
+}
+
+pub fn is_text(value: Json) gives Bool {
+    return match value {
+        Json.JStr(text) => true
+        _ => false
+    }
+}
+
+pub fn is_object(value: Json) gives Bool {
+    return match value {
+        Json.JObj(keys, values) => true
+        _ => false
+    }
+}
+
+pub fn is_null(value: Json) gives Bool {
+    return match value {
+        Json.JNull => true
+        _ => false
+    }
+}
+
+pub fn is_list(value: Json) gives Bool {
+    return match value {
+        Json.JList(items) => true
+        _ => false
+    }
+}
+
+pub fn int_or_none(value: Json) gives Option[Int] {
+    return match value {
+        Json.JInt(n) => Some(n)
+        _ => None
+    }
+}
+
+pub fn keys_of(value: Json) gives List[Text] {
+    return match value {
+        Json.JObj(keys, values) => keys
+        _ => []
+    }
+}
+
+pub fn values_of(value: Json) gives List[Json] {
+    return match value {
+        Json.JObj(keys, values) => values
+        _ => []
+    }
+}
+
+pub fn items_of(value: Json) gives List[Json] {
+    return match value {
+        Json.JList(items) => items
+        _ => []
+    }
+}
