@@ -25,6 +25,7 @@ import "titles.nex"
 import "interpreter.nex"
 import "info.nex"
 import "report.nex"
+import "context.nex"
 
 uses read "."
 uses write "."
@@ -429,6 +430,7 @@ fn usage() {
     err("       nex run [OPTIONS] FILE [ARGUMENTS]")
     err("       nex test FILE [--function NAME]")
     err("       nex inspect FILE")
+    err("       nex context [--format text|json] FILE")
     exit_with(2)
 }
 
@@ -586,6 +588,53 @@ fn inspect_command(path: Text) {
     }
 }
 
+// `nex context FILE`: what the program declares and does, from the static analysis alone (nexora.context/2 with --format json).
+fn context_command(path: Text, format: Text) {
+    let reason = file_problem(path)
+    if reason != "" {
+        let problem = parser.Problem(
+            code: "E0001", label: reason + ": " + path, hint: "", notes: [], line: 0, column: 0, end_line: 0, end_column: 0
+        )
+        let reports = [report.Report(problem: problem, file: path)]
+        let empty = context.unreadable(path)
+        if format == "json" {
+            print(context.to_json(empty, reports))
+        } else {
+            err(render.render(problem, path, []))
+        }
+        exit_with(4)
+        return
+    }
+    let loaded = load_and_check(path, true, 0, "json")
+    if loaded.stop != "" {
+        if loaded.stop != "limit" {
+            err("error: " + path + ": " + loaded.stop)
+        }
+        exit_with(70)
+        return
+    }
+    if List.length(loaded.results) > 1 {
+        err("error: nex context is not supported by this implementation yet for a program of several modules")
+        exit_with(70)
+        return
+    }
+    let last = List.get(loaded.results, List.length(loaded.results) - 1)
+    let reports = report.reports_of(loaded.results)
+    var program = last.typed
+    if last.module.reason == "lexical" and not last.module.clean {
+        program = parser.Node.Null()
+    }
+    let described = context.analyse(path, read_file(path), program, last.module.clean, last.problems)
+    if format == "json" {
+        print(context.to_json(described, reports))
+    } else {
+        print(context.render_text(described, reports))
+    }
+    if count_errors(reports) > 0 {
+        exit_with(1)
+    }
+}
+
 fn rest_of(words: List[Text]) gives List[Text] {
     var rest: List[Text] = []
     var i = 1
@@ -627,6 +676,8 @@ fn main() {
         } else {
             inspect_command(List.get(words, 0))
         }
+    } else if command == "context" and List.length(words) >= 1 {
+        context_command(List.get(words, 0), taken.format)
     } else if command == "test" and List.length(words) >= 1 {
         if taken.format == "json" {
             err("error: nex test --format json is not supported by this implementation yet")
