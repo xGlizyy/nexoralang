@@ -5,6 +5,12 @@
  * the text of a diagnostic exactly as `nex` writes it (diagnostics.py, `render`). C11 and the overflow builtins of GCC and
  * Clang are all it needs.
  */
+/* The POSIX parts (signals, timers, limits of a process) are not declared by the headers of a system when the file is compiled as
+ * strict C11 (musl, for instance); this asks for them. Windows has none of them and the code that uses them is left out there. */
+#if !defined(_WIN32) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE 1
+#endif
+#include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -114,8 +120,16 @@ static int rt_exit_status = 0;
 
 /* What to write when memory runs out, if the program has one (the worker of the playground answers with a result that says so). */
 static const char *rt_oom_reply = 0;
+/* What a command-line tool writes on the standard error when memory runs out, and the status it ends with (nex run --max-memory). */
+static const char *rt_oom_stderr = 0;
 
 static void rt_out_of_memory(void) {
+    if (rt_oom_stderr) {
+        fflush(stdout);
+        fputs(rt_oom_stderr, stderr);
+        fputc('\n', stderr);
+        exit(3);
+    }
     if (rt_oom_reply) {
         fputs(rt_oom_reply, stdout);
         fflush(stdout);
@@ -1790,6 +1804,86 @@ static rv rt_intr_read_stdin_line(void) {
     rt_text t = {line, (int64_t)n, points};
     rv item = rt_txt(t);
     return rt_list_from(&item, 1);
+}
+
+/* `nex run --timeout` and `--max-memory` (selfhost/nex.nex). The time limit is a timer that stops the process with the message of
+ * the diagnostic and status 3; it counts from `start_timeout`, as Python's counts from the run. Both answer whether the system can do it
+ * (the timer needs POSIX, the address-space limit needs Linux), which is what Python's usage errors say. */
+static const char *rt_timeout_text = 0, *rt_timeout_message = 0;
+
+#ifndef _WIN32
+#include <sys/time.h>
+static void rt_on_timeout(int sig) {
+    (void)sig;
+    fflush(stdout);
+    if (rt_timeout_message) {
+        size_t n = strlen(rt_timeout_message);
+        if (write(2, rt_timeout_message, n) < 0) { /* nothing to do */ }
+        if (write(2, "\n", 1) < 0) { /* nothing to do */ }
+    }
+    _exit(3);
+}
+#endif
+
+static char *rt_copy_text(rt_text t) {
+    char *copy = (char *)malloc((size_t)t.bytes + 1);
+    if (!copy) return 0;
+    memcpy(copy, t.p, (size_t)t.bytes);
+    copy[t.bytes] = 0;
+    return copy;
+}
+
+static rv rt_intr_prepare_timeout(rv seconds, rv message) {
+#ifdef _WIN32
+    (void)seconds; (void)message;
+    return rt_bool(false);
+#else
+    rt_timeout_text = rt_copy_text(seconds.u.t);
+    rt_timeout_message = rt_copy_text(message.u.t);
+    return rt_bool(true);
+#endif
+}
+
+static rv rt_intr_start_timeout(void) {
+#ifndef _WIN32
+    if (!rt_timeout_text) return rt_unit();
+    struct sigaction action;
+    memset(&action, 0, sizeof action);
+    action.sa_handler = rt_on_timeout;
+    sigemptyset(&action.sa_mask);
+    sigaction(SIGALRM, &action, 0);
+    double value = strtod(rt_timeout_text, 0);
+    struct itimerval timer;
+    timer.it_interval.tv_sec = 0;
+    timer.it_interval.tv_usec = 0;
+    timer.it_value.tv_sec = (time_t)value;
+    timer.it_value.tv_usec = (suseconds_t)((value - (double)(time_t)value) * 1e6);
+    if (timer.it_value.tv_sec == 0 && timer.it_value.tv_usec == 0) timer.it_value.tv_usec = 1;
+    setitimer(ITIMER_REAL, &timer, 0);
+#endif
+    return rt_unit();
+}
+
+static rv rt_intr_set_memory_limit(rv bytes, rv message) {
+#if defined(__linux__)
+    struct rlimit limit;
+    limit.rlim_cur = limit.rlim_max = (rlim_t)bytes.u.i;
+    if (setrlimit(RLIMIT_AS, &limit) != 0) return rt_bool(false);
+    rt_oom_stderr = rt_copy_text(message.u.t);
+    return rt_bool(true);
+#else
+    (void)bytes; (void)message;
+    return rt_bool(false);
+#endif
+}
+
+/* What a program printed, written as it is printed (selfhost/interpreter.nex): without a line break of its own. */
+static rv rt_intr_can_stream(void) { return rt_bool(true); }
+
+static rv rt_intr_stream_text(rv text) {
+    rt_text t = text.u.t;
+    fwrite(t.p, 1, (size_t)t.bytes, stdout);
+    return rt_unit();
 }
 
 static rv rt_intr_byte_length(rv text) { return rt_int(text.u.t.bytes); }

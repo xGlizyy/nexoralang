@@ -76,6 +76,18 @@ fn fail_with(path: Text, reports: List[report.Report], format: Text, to_stdout: 
     }
 }
 
+// The time and memory limits of `nex run`, in the executable: whether the system can apply them (replaced in the executable).
+fn prepare_timeout(seconds: Text, message: Text) gives Bool {
+    return false
+}
+
+fn start_timeout() {
+}
+
+fn set_memory_limit(bytes: Int, message: Text) gives Bool {
+    return false
+}
+
 // A file that cannot be read is E0001, shown as `nex` shows it, and status 4. True when the file can be read.
 fn is_readable(path: Text, summary: Text, format: Text, to_stdout: Bool) gives Bool {
     let reason = file_problem(path)
@@ -196,11 +208,46 @@ fn check_command(path: Text, format: Text) {
     }
 }
 
-fn run_command(words: List[Text], format: Text) {
+fn run_command(given: List[Text], format: Text) {
+    if not limits_are_valid(given) {
+        return
+    }
+    let timeout = take_option(given, "--timeout")
+    let memory = take_option(timeout.rest, "--max-memory")
+    let words = memory.rest
     let options = interpreter.parse_options(words)
     let path = options.path
+    var timeout_seconds = 0.0
+    if timeout.found {
+        timeout_seconds = Float.parse(float_text(timeout.value))
+        let limit = limit_problem("time limit exceeded (" + to_text(timeout_seconds) + ")")
+        var message = render.render(limit, path, [])
+        if format == "json" {
+            message = report.document(path, [report.Report(problem: limit, file: path)])
+        }
+        if not prepare_timeout(float_text(timeout.value), message) {
+            err("error: --timeout requires a POSIX platform with interval timers")
+            exit_with(2)
+            return
+        }
+    }
     if not is_readable(path, "the file could not be read", format, false) {
         return
+    }
+    if memory.found {
+        let exhausted = parser.Problem(
+            code: "E3007", label: "The process memory limit was exceeded (--max-memory " + memory.value + ")", hint: "", notes: [],
+            line: 0, column: 0, end_line: 0, end_column: 0
+        )
+        var message = render.render(exhausted, path, []) + "\n\nerror: " + path + ": the program stopped because of a runtime error"
+        if format == "json" {
+            message = report.document(path, [report.Report(problem: exhausted, file: path)])
+        }
+        if not set_memory_limit(Int.parse(memory.value), message) {
+            err("error: --max-memory is enforced only on Linux; use an OS supervisor on this platform")
+            exit_with(2)
+            return
+        }
     }
     let loaded = load_and_check(path, true, options.max_source, format)
     if loaded.stop != "" {
@@ -219,6 +266,7 @@ fn run_command(words: List[Text], format: Text) {
         exit_with(1)
         return
     }
+    start_timeout()
     let done = interpreter.execute(loaded.node, options)
     for line in done.printed {
         print(line)
@@ -375,7 +423,7 @@ fn usage() {
 
 // The options that take a value, to know where the file of a command starts.
 fn takes_value(word: Text) gives Bool {
-    for name in ["--allow-read", "--allow-write", "--allow-network", "--allow-process", "--stdin", "--cwd", "--max-text", "--max-output", "--max-input", "--max-source", "--function", "--format"] {
+    for name in ["--allow-read", "--allow-write", "--allow-network", "--allow-process", "--stdin", "--cwd", "--max-text", "--max-output", "--max-input", "--max-source", "--function", "--format", "--timeout", "--max-memory"] {
         if word == name {
             return true
         }
@@ -429,6 +477,71 @@ fn take_format(words: List[Text], before_file: Bool) gives Format {
         i = i + 1
     }
     return Format(format: format, rest: rest, bad: bad)
+}
+
+// An option of `run` with a value, looked for before the file, and the words without it.
+type Taken = { found: Bool, value: Text, rest: List[Text] }
+
+fn take_option(words: List[Text], name: Text) gives Taken {
+    var rest: List[Text] = []
+    var found = false
+    var value = ""
+    var in_file = false
+    var i = 0
+    while i < List.length(words)
+        shrinks List.length(words) - i
+    {
+        let word = List.get(words, i)
+        if not in_file and word == name and i + 1 < List.length(words) {
+            found = true
+            value = List.get(words, i + 1)
+            i = i + 1
+        } else {
+            rest = List.append(rest, word)
+            if not in_file {
+                if takes_value(word) and i + 1 < List.length(words) {
+                    rest = List.append(rest, List.get(words, i + 1))
+                    i = i + 1
+                } else if not Text.starts_with(word, "-") {
+                    in_file = true
+                }
+            }
+        }
+        i = i + 1
+    }
+    return Taken(found: found, value: value, rest: rest)
+}
+
+// A number of seconds as a Float text: "1" is read as 1.0, as Python does for --timeout. "" when it is not a number.
+fn float_text(value: Text) gives Text {
+    if Float.can_parse(value) {
+        return value
+    }
+    if Int.can_parse(value) {
+        return value + ".0"
+    }
+    return ""
+}
+
+// The six limits of `run` must be greater than zero (a usage error, status 2, as in Python).
+fn limits_are_valid(words: List[Text]) gives Bool {
+    for name in ["--timeout", "--max-output", "--max-text", "--max-source", "--max-input", "--max-memory"] {
+        let taken = take_option(words, name)
+        if taken.found {
+            var positive = false
+            if name == "--timeout" {
+                positive = float_text(taken.value) != "" and Float.parse(float_text(taken.value)) > 0.0
+            } else {
+                positive = Int.can_parse(taken.value) and Int.parse(taken.value) > 0
+            }
+            if not positive {
+                err("error: " + name + " must be greater than zero")
+                exit_with(2)
+                return false
+            }
+        }
+    }
+    return true
 }
 
 fn rest_of(words: List[Text]) gives List[Text] {
