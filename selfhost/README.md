@@ -192,13 +192,41 @@ NEXORA_CC="cc" PYTHONPATH=nexora/src python selfhost/compare_cgen.py --host
 status: the 46 programs of [`cgen_cases/`](cgen_cases/) (each runtime error, a broken `needs`, `promises`, `keeps`, `shrinks` and
 refined type, with the chain of calls and loops in the notes), all 16 examples of the repository, 13 projects of modules and 18 cases of the host are equal.
 
+### Speed
+
+The native `nex` (`nex.nex` compiled by this generator) is as fast as the Python implementation on the programs of
+[`bench/`](bench/): `bench.py` runs each one with both and shows the ratio (native time over Python time, so below 1 is faster):
+
+| Program | Python | Native | Ratio |
+|---|---|---|---|
+| `fib(22)`, recursion | 0.77 s | 0.73 s | 0.96 |
+| a loop of 150,000 turns | 1.91 s | 1.95 s | 1.02 |
+| records and enums with `match` | 1.80 s | 1.53 s | 0.85 |
+| building and adding up lists | 0.42 s | 0.14 s | 0.33 |
+| text built and cut character by character | 0.71 s | 0.35 s | 0.49 |
+
+Checking the 13,000 lines of the compiler itself takes 3.5 s (Python: 1.7 s), and the compiler compiles itself in 28 s. These
+numbers came from five changes, each worth a large factor, and a profile (`-DRT_STATS`, which counts allocations, calls and each
+function) found every one of them:
+
+- Expressions that call no function of the program are worked out in one step by recursion instead of by the abstract machine.
+- A list shares a growing buffer with the lists made from it by adding to the end, so adding copies nothing (a loop that built a
+  list of n items was quadratic).
+- `Text.slice` finds a code point without reading the text from its start: the lexer cut one character at a time and was quadratic
+  in the size of the source (checking 6,000 lines took 17 s, it takes 0.3 s).
+- Values are zeroed: an `rv` is 32 bytes and wrote 16, and the rest kept old addresses, which made the collector believe that chains
+  of dead machines were alive.
+- For the files of `selfhost/` only, the accessors of the syntax tree and the update of a variable are done in C (`--trusted` also
+  leaves out the frames of calls, which only exist to explain the errors of a program). The NEXORA definitions are the reference:
+  they are what Python runs, and the comparisons check that both agree.
+
 ### The compiler compiles itself
 
 [`bootstrap.py`](bootstrap.py) builds the compiler as an executable and checks the fixed point:
 
 1. Python runs `cgen.nex` on its own source and writes C (generation 0, about 17 minutes).
-2. A C compiler turns it into an executable, the first compiler (45 seconds).
-3. That executable compiles `cgen.nex` and writes C (generation 1, no Python, about 6 minutes).
+2. A C compiler turns it into an executable, the first compiler (about a minute).
+3. That executable compiles `cgen.nex` and writes C (generation 1, no Python, 28 seconds).
 4. Generation 1 is the same text as generation 0, byte by byte (2,141,337 bytes). Then the C compiler builds the second compiler from
    it, and that one writes the same C again (generation 2: `bootstrap.py --seed` runs all of it from a C file).
 
