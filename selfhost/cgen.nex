@@ -1060,6 +1060,9 @@ fn intrinsic_of(function: parser.Node) gives Text {
         if tool_name == "set_memory_limit" {
             return "rt_intr_set_memory_limit"
         }
+        if tool_name == "absolute_path" {
+            return "rt_intr_absolute_path"
+        }
         if tool_name == "read_exact" {
             return "rt_intr_read_exact"
         }

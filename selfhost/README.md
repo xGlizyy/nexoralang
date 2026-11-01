@@ -152,7 +152,7 @@ the results to the standard output, and the process ends with the status of `nex
 | `context [--format text\|json]` | [`context.nex`](context.nex), `nexora.context/2`, also for a program of several modules | `compare_context.py`: 96 programs (examples, programs with errors, projects, a lexical error, a syntax error, a missing file), text and JSON |
 | `symbols [--name N] [--function F]` | [`symbols.nex`](symbols.nex), `nexora.symbols/2`; the checker records every name, its type, its scope and every use while it checks (`Sym`, `SymRef` in [`checker.nex`](checker.nex)); the built-ins are generated from Python by [`make_builtins.py`](make_builtins.py) | `compare_symbols.py`: 96 programs, 570 runs with and without the filters |
 | `test --format json` | [`testdoc.nex`](testdoc.nex), `nexora.test/1`; the machine already recorded the calls an example made | `compare_test.py`: 55 programs, 113 runs (also `--function` with a name that does not exist, with the suggestion of `difflib`) |
-| `debug` | `debug_command` in [`nex.nex`](nex.nex) on the session of the debugger of the worker (`debug_start_hosted`, `debug_advance`); the commands come from the controlling terminal (`CONIN$` or `/dev/tty`) | `compare_debug_cli.py`: 21 programs, 294 scripted sessions |
+| `debug` | `debug_command` in [`nex.nex`](nex.nex) on the session of the debugger of the worker (`debug_start_hosted`, `debug_advance`); the commands come from the controlling terminal (`CONIN$` or `/dev/tty`) | `compare_debug_cli.py`: 20 programs (one with a call stack of 71 frames), 280 scripted sessions |
 | `migrate [--write]` | [`legacy.nex`](legacy.nex) (the front end of 0.11), [`migrate.nex`](migrate.nex) (the edits), `migrate_command` in [`nex.nex`](nex.nex) (the routes, the checks and the writing of the files, with C functions for the system) | `compare_migrate.py`: the 118 programs of the 0.11 corpus of decision 0019, as they are, with CRLF, with CR, with a byte-order mark, without and with `--write`, comparing the files afterwards |
 
 The front end of 0.11 is not a second implementation. 0.11 and 0.12 share the lexer; they differ in the words (`requires`, `ensures`,
@@ -177,10 +177,7 @@ permissions, replace with one rename, remove, and note Ctrl+C).
 | Limit | Why |
 |---|---|
 | Run by Python, no exit status and no standard error | A program has neither: the functions above only exist in the executable. |
-| `debug` shows at most 64 frames of the call stack, and ends the list with `… (more frames)` | The snapshot of the debugger of the worker is capped; Python writes them all. |
 | `context` and `symbols` cut the text of a condition of a module from the file of the program | Python does the same (it uses the source of the analysis, not the one of the module): the executable repeats it so the output is equal. |
-| `migrate` orders the modules by the text of their path, not by the absolute path | NEXORA cannot ask for the absolute path. It is the same order when the modules are beside the program. |
-| `migrate` on Windows with an entry written with `\` | The paths of the imports are resolved with `/`; write the path with `/`. |
 | `migrate --write` does not inject failures | The hooks of Python (`Files`) are for its tests. Failures of the system, and Ctrl+C between two files, are reported with the three lists. |
 | `run` reads the standard input one line at a time, and `--max-input` is not applied to it yet | `--stdin FILE` still works and keeps the limit. A program cannot test for the end of the input without stopping at it, so a C function (`read_stdin_line`) answers with no line at the end. `compare_stdin.py` runs 3 programs with 8 inputs (LF, CRLF, no final break, none, empty lines, Unicode): all equal (Python in UTF-8 mode: on Windows `nex` decodes the input with the code page of the console). |
 | The output limit stops in the middle of a line | `print` writes whole lines, so what fit of that line is printed with a line break. |

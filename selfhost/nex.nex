@@ -1078,7 +1078,7 @@ fn show_event(files: List[DebugFile], snapshot: interpreter.Snapshot, breaks: in
     }
     err("Call stack:")
     var index = 0
-    for row in snapshot.frames {
+    for row in snapshot.all_frames {
         if row.omitted {
             err("  … (more frames)")
         } else {
@@ -1475,6 +1475,11 @@ fn was_interrupted() gives Bool {
     return false
 }
 
+// The absolute path of a file (replaced in the executable).
+fn absolute_path(path: Text) gives Text {
+    return path
+}
+
 // The text of a file with the line endings it has: a list with it, or an empty list (replaced in the executable).
 fn read_exact(path: Text) gives List[Text] {
     return [read_file(path)]
@@ -1511,7 +1516,7 @@ fn by_path(results: List[project.Checked]) gives List[project.Checked] {
         var before: List[project.Checked] = []
         var after: List[project.Checked] = []
         for kept in out {
-            if kept.module.path <= each.module.path {
+            if absolute_path(kept.module.path) <= absolute_path(each.module.path) {
                 before = List.append(before, kept)
             } else {
                 after = List.append(after, kept)

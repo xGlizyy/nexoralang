@@ -99,7 +99,8 @@ fn span_of(node: parser.Node) gives parser.Span {
 
 // Paths: the separator is "/", an import is relative to the file that has it, and `.` and `..` are resolved.
 
-fn split_path(path: Text) gives List[Text] {
+fn split_path(written_path: Text) gives List[Text] {
+    let path = slashes(written_path)
     var parts: List[Text] = []
     var start = 0
     var i = 0
@@ -117,6 +118,17 @@ fn split_path(path: Text) gives List[Text] {
 
 fn join_parts(parts: List[Text]) gives Text {
     return parser.join_texts(parts, "/")
+}
+
+// Whether a list has a path: `a\\b.nex` and `a/b.nex` are the same file.
+fn has_path(paths: List[Text], path: Text) gives Bool {
+    let wanted = slashes(path)
+    for each in paths {
+        if slashes(each) == wanted {
+            return true
+        }
+    }
+    return false
 }
 
 // The path of the file an import names, from the file that has the import.
@@ -237,7 +249,7 @@ pub fn module_problem(path: Text) gives Text {
 }
 
 fn read_module(loader: Loader, path: Text) gives Loader {
-    if List.contains(loader.keys, path) or loader.over != "" {
+    if has_path(loader.keys, path) or loader.over != "" {
         return loader
     }
     let text = source_of(loader.virt, path)
@@ -310,7 +322,7 @@ fn read_module(loader: Loader, path: Text) gives Loader {
                         "Add the imported .nex file to this project.", span
                     )
                 )
-            } else if List.contains(current.stack, target) {
+            } else if has_path(current.stack, target) {
                 let chain = List.append(current.stack, target)
                 pending = List.append(
                     pending,

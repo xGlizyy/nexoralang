@@ -3607,7 +3607,7 @@ pub type CallRow = { function: Text, file: Text, line: Int, column: Int, omitted
 // have the form the inspector shows.
 pub type Snapshot = {
     step: Int, line: Int, column: Int, function: Text, file: Text, frames: List[CallRow], names: List[Text],
-    values: List[Text]
+    values: List[Text], all_frames: List[CallRow]
 }
 
 // A program that is stopped, or has not started, and what is needed to go on with it.
@@ -3799,7 +3799,7 @@ fn capped_rows(rows: List[CallRow]) gives List[CallRow] {
 }
 
 fn no_snapshot() gives Snapshot {
-    return Snapshot(step: 0, line: 0, column: 0, function: "", file: "", frames: [], names: [], values: [])
+    return Snapshot(step: 0, line: 0, column: 0, function: "", file: "", frames: [], names: [], values: [], all_frames: [])
 }
 
 fn snapshot_of(m: Machine, step_number: Int, span: parser.Span, entry: Text) gives Snapshot {
@@ -3834,7 +3834,7 @@ fn snapshot_of(m: Machine, step_number: Int, span: parser.Span, entry: Text) giv
     }
     return Snapshot(
         step: step_number, line: span.line, column: span.column, function: function, file: file,
-        frames: capped_rows(rows), names: names, values: values
+        frames: capped_rows(rows), names: names, values: values, all_frames: rows
     )
 }
 
