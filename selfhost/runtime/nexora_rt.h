@@ -2032,6 +2032,21 @@ static rv rt_intr_module_problem(rv path) {
     return rt_str("");
 }
 
+/* The absolute path of a file, to order the modules of a program as Python does (selfhost/nex.nex, `nex migrate`). */
+static rv rt_intr_absolute_path(rv path) {
+    char *name = rt_copy_text(path.u.t);
+    if (!name) return path;
+    char buffer[4096];
+#ifdef _WIN32
+    char *full = _fullpath(buffer, name, sizeof buffer);
+#else
+    char *full = realpath(name, buffer);
+#endif
+    rv answer = full ? rt_from_cstr(full) : path;
+    free(name);
+    return answer;
+}
+
 static rv rt_intr_write_exclusive(rv path, rv text) {
     char *name = rt_copy_text(path.u.t);
     if (!name) return rt_from_cstr("Cannot allocate memory");

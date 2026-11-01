@@ -4,7 +4,7 @@
 
 Each .nex file of the corpus is the entry of a program, tried with its line endings as they are and (MIGRATE_VARIANTS, a list separated
 by commas, default `plain,crlf,bom,cr`) with CRLF endings, with a byte-order mark and with lone CR endings, each one without `--write`
-and with it (MIGRATE_WRITES, `0,1` by default). Standard output, standard error, status and, afterwards, every file of the tree must be
+and with it (MIGRATE_WRITES, `0,1` by default). MIGRATE_BACKSLASH=1 writes the path of the entry with the separator of the system. Standard output, standard error, status and, afterwards, every file of the tree must be
 equal. A carriage return is dropped from the two outputs before comparing them: Python on Windows translates the line endings of what it
 prints and the executable does not.
 """
@@ -75,7 +75,8 @@ def main(corpus):
                         with open(os.path.join(folder, entry), "wb") as handle:
                             handle.write(data)
                         command = [sys.executable, "-m", "nexora", "migrate"] if side == "python" else [native, "migrate"]
-                        command += [entry, "--write"] if write else [entry]
+                        shown = entry.replace("/", os.sep) if os.environ.get("MIGRATE_BACKSLASH") == "1" else entry
+                        command += [shown, "--write"] if write else [shown]
                         sides[side] = (run(command, folder), tree(folder))
                     if sides["python"] != sides["native"]:
                         different += 1

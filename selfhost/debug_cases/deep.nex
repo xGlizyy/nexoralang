@@ -1,0 +1,10 @@
+fn down(n: Int) gives Int {
+    if n == 0 {
+        return 0
+    }
+    return down(n - 1) + 1
+}
+
+fn main() {
+    print(down(70))
+}
