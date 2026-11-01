@@ -1539,6 +1539,41 @@ static rv rt_intr_assign(rv env, rv name, rv value) {
     return rt_list_view(copy, frames->n);
 }
 
+/* The code of the first character of a text, and the character of a code (selfhost/json.nex). */
+static rv rt_intr_code_of(rv text) {
+    rt_text t = text.u.t;
+    if (t.bytes == 0) return rt_int(0);
+    const unsigned char *p = (const unsigned char *)t.p;
+    int64_t code;
+    if (p[0] < 0x80) code = p[0];
+    else if ((p[0] >> 5) == 6 && t.bytes >= 2) code = ((p[0] & 0x1F) << 6) | (p[1] & 0x3F);
+    else if ((p[0] >> 4) == 14 && t.bytes >= 3) code = ((p[0] & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
+    else if ((p[0] >> 3) == 30 && t.bytes >= 4)
+        code = ((int64_t)(p[0] & 0x07) << 18) | ((p[1] & 0x3F) << 12) | ((p[2] & 0x3F) << 6) | (p[3] & 0x3F);
+    else code = -1;
+    return rt_int(code);
+}
+
+static rv rt_intr_char_from_code(rv code) {
+    int64_t c = code.u.i;
+    char buffer[5];
+    int n = 0;
+    if (c < 0 || c > 0x10FFFF || (c >= 0xD800 && c <= 0xDFFF)) return rt_str("");
+    if (c < 0x80) { buffer[n++] = (char)c; }
+    else if (c < 0x800) { buffer[n++] = (char)(0xC0 | (c >> 6)); buffer[n++] = (char)(0x80 | (c & 0x3F)); }
+    else if (c < 0x10000) {
+        buffer[n++] = (char)(0xE0 | (c >> 12)); buffer[n++] = (char)(0x80 | ((c >> 6) & 0x3F)); buffer[n++] = (char)(0x80 | (c & 0x3F));
+    } else {
+        buffer[n++] = (char)(0xF0 | (c >> 18)); buffer[n++] = (char)(0x80 | ((c >> 12) & 0x3F));
+        buffer[n++] = (char)(0x80 | ((c >> 6) & 0x3F)); buffer[n++] = (char)(0x80 | (c & 0x3F));
+    }
+    buffer[n] = 0;
+    char *copy = (char *)rt_alloc_raw((size_t)n + 1);
+    memcpy(copy, buffer, (size_t)n + 1);
+    rt_text t = {copy, n, 1};
+    return rt_txt(t);
+}
+
 static rv rt_intr_text_of(rv node) { return rt_intr_is(node, "Str") ? rt_arg(node, 0) : rt_str(""); }
 static rv rt_intr_items_of(rv node) { return rt_intr_is(node, "Items") ? rt_arg(node, 0) : rt_list_from(0, 0); }
 static rv rt_intr_is_null(rv node) { return rt_bool(rt_intr_is(node, "Null")); }

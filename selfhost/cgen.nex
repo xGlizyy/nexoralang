@@ -1040,6 +1040,16 @@ fn is_compiler_file(file: Text) gives Bool {
 
 fn intrinsic_of(function: parser.Node) gives Text {
     let file = text_of(field(function, "file"))
+    if file == "selfhost/json.nex" {
+        let json_name = text_of(field(function, "name"))
+        if json_name == "code_of" {
+            return "rt_intr_code_of"
+        }
+        if json_name == "char_from_code" {
+            return "rt_intr_char_from_code"
+        }
+        return ""
+    }
     if not is_compiler_file(file) {
         return ""
     }
