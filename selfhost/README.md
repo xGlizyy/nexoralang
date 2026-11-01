@@ -246,6 +246,34 @@ result as `nex run` in 73 seconds.
 | The collector is conservative | A word that looks like a pointer keeps a block alive; it never frees what is in use, but it may keep what is not. |
 | The compiler needs a large stack for deep recursion | A NEXORA program can nest 1,000 calls; the default stack of the system is enough for the programs tested. |
 
+## The worker of the playground (decision 0026)
+
+[`worker.nex`](worker.nex) is the process that answers the requests of nexoralang.org, written in NEXORA and compiled by the
+compiler above to one static executable. It has the protocol of `python -I -m nexora.worker` (`nexora/src/nexora/worker.py`): a
+line of JSON on the standard input and one `nexora.result/1` on the standard output for `info`, `check` and `run`, and the
+`nexora.debug/1` lines of a debug session (`step`, `continue`, `stop`, `set_breakpoints`), so the web server does not change.
+
+- A request carries one program or a project of up to 32 files; [`project.nex`](project.nex) loads it from memory with the paths
+  and the `E0001` of the Python worker. A run has no files, no network, no processes and no input, and the debugger has the host of
+  `NoHost`; the messages are the same.
+- The debugger needs nothing but the machine of [`interpreter.nex`](interpreter.nex): it is a value that moves one step at a
+  time, so the session stops before the statement of a block that is next on its stack (`debug_start`, `debug_advance`).
+- [`info.nex`](info.nex) (keywords, builtins, version) is generated from Python by [`make_info.py`](make_info.py); run it when the
+  language changes. The runtime applies the limits of the Python worker to itself on POSIX (address space, CPU and wall clock
+  seconds, no files, no processes) and answers `memory_limit` if memory runs out.
+- [`compare_worker.py`](compare_worker.py) sends 121 requests to both workers and compares the answers (`duration_ms` aside, the
+  executable has no clock; the server measures it); [`compare_debug.py`](compare_debug.py) drives 35 debug sessions on both and
+  compares every line. Both run against a Linux executable built with `zig cc -target x86_64-linux-musl -static` too
+  (`NEXORA_NO_ISOLATE=1` lets the reference worker find `nexora` through `PYTHONPATH`).
+- The image of the playground (`servidor/playground/Dockerfile.native` of the server repository) builds it from `seed/cgen.c`
+  with a C compiler and nothing else, and contains only the executable.
+
+| Difference | Why |
+|---|---|
+| `duration_ms` is 0 | A NEXORA program has no clock. |
+| A request that is not understood is answered with `internal_error` and exit status 0 | A NEXORA program has no exit status; the server discards the answer because it has no `action`. |
+| A debug controller that disconnects ends the worker with `E3009` instead of silently | There is no way to test for the end of the input. |
+
 ## Projects of modules
 
 [`project.nex`](project.nex) follows `modules.py` (decision 0018): it reads the program that runs and, before it, the files it
