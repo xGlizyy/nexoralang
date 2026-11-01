@@ -2870,7 +2870,7 @@ fn run_example(prog: Prog, lines: List[Text], name: Text, index: Int, item: pars
 type HostCfg = {
     arguments: List[Text], declared_kinds: List[Text], declared_paths: List[Text],
     grant_kinds: List[Text], grant_paths: List[Text], cwd: Text,
-    max_text: Int, max_output: Int, max_input: Int, input_sizes: List[Int], locked: Bool
+    max_text: Int, max_output: Int, max_input: Int, input_sizes: List[Int], locked: Bool, nohost: Bool
 }
 
 // The host of a run where the user has allowed nothing: the program has declared what it needs, and that is all.
@@ -2878,14 +2878,14 @@ fn declared_host(program: parser.Node) gives HostCfg {
     return HostCfg(
         arguments: [], declared_kinds: declared_kinds_of(program), declared_paths: declared_paths_of(program),
         grant_kinds: [], grant_paths: [], cwd: "", max_text: 0, max_output: 0,
-        max_input: 0, input_sizes: [], locked: false
+        max_input: 0, input_sizes: [], locked: false, nohost: false
     )
 }
 
 fn no_host() gives HostCfg {
     return HostCfg(
         arguments: [], declared_kinds: [], declared_paths: [], grant_kinds: [], grant_paths: [], cwd: "",
-        max_text: 0, max_output: 0, max_input: 0, input_sizes: [], locked: false
+        max_text: 0, max_output: 0, max_input: 0, input_sizes: [], locked: false, nohost: false
     )
 }
 
@@ -3100,6 +3100,12 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
         if callee == "read_file" {
             hint = read_hint()
         }
+        if host.nohost and callee == "read_file" {
+            return denied_machine(m, "this environment does not allow reading files, so '" + first + "' cannot be read", hint, node)
+        }
+        if host.nohost {
+            return denied_machine(m, "this environment does not allow writing files, so '" + first + "' cannot be written", hint, node)
+        }
         return denied_machine(m, "this environment does not allow files, so '" + first + "' cannot be used", hint, node)
     }
     if callee == "read_file" {
@@ -3122,6 +3128,10 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
         return mk(m, Control.CValue(Val.VUnit()), m.env, m.stack)
     }
     if callee == "Net.get" {
+        if host.nohost {
+            let hint = "A program needs 'uses network' and the matching --allow-network origin; the environment may still deny network access."
+            return denied_machine(m, "this environment does not allow network access", hint, node)
+        }
         let origin = https_origin(first)
         if origin.unsupported {
             return forwarding_machine(m, callee, node)
@@ -3286,7 +3296,8 @@ fn run_hosted(words: List[Text]) {
         declared_paths: declared_paths_of(built.node), grant_kinds: options.grant_kinds,
         grant_paths: options.grant_paths, cwd: options.cwd,
         max_text: options.max_text, max_output: options.max_output, max_input: options.max_input,
-        input_sizes: input_sizes_of(options.stdin_text, options.stdin), locked: false
+        input_sizes: input_sizes_of(options.stdin_text, options.stdin), locked: false,
+        nohost: false
     )
     let prog = build_prog(built.node, host)
     let start = start_machine(prog, start_fuel())
@@ -3484,18 +3495,26 @@ pub fn execute_locked(node: parser.Node, options: RunOptions) gives Execution {
     return execute_in(node, options, true)
 }
 
-fn execute_in(node: parser.Node, options: RunOptions, locked: Bool) gives Execution {
-    let host = HostCfg(
+fn host_for(node: parser.Node, options: RunOptions, locked: Bool, nohost: Bool) gives HostCfg {
+    return HostCfg(
         arguments: options.arguments, declared_kinds: declared_kinds_of(node),
         declared_paths: declared_paths_of(node), grant_kinds: options.grant_kinds,
         grant_paths: options.grant_paths, cwd: options.cwd,
         max_text: options.max_text, max_output: options.max_output, max_input: options.max_input,
-        input_sizes: input_sizes_of(options.stdin_text, options.stdin), locked: locked
+        input_sizes: input_sizes_of(options.stdin_text, options.stdin), locked: locked, nohost: nohost
     )
+}
+
+fn execute_in(node: parser.Node, options: RunOptions, locked: Bool) gives Execution {
+    let host = host_for(node, options, locked, false)
     let prog = build_prog(node, host)
     let start = start_machine(prog, start_fuel())
     let tracing = Tracing(watch: [], invoked: [], skipped: [], inputs: options.stdin)
     let done = run_machine(prog, with_tracing(start, tracing))
+    return execution_of(done)
+}
+
+fn execution_of(done: Machine) gives Execution {
     let printed = done.out
     let nothing = problem_at("", "", "", [], parser.no_span())
     return match done.control {
@@ -3505,6 +3524,327 @@ fn execute_in(node: parser.Node, options: RunOptions, locked: Bool) gives Execut
         _ => Execution(printed: printed, partial: "", failed: false, problem: nothing, file: "", out_of_fuel: true)
     }
 }
+
+// The debugger (the `debug` action of the worker, nexora/src/nexora/worker.py). The machine is a value that moves one step at a
+// time, so a debugger only has to look at it: just before a statement of a block runs (the value of the one before it is
+// in the machine and the next one is at the top of the stack) the session may stop and show what there is.
+
+// A function that is running: where it is, and where it was called from (the line is 0 for `main`).
+pub type CallRow = { function: Text, file: Text, line: Int, column: Int, omitted: Bool }
+
+// What the debugger shows when it stops before a statement: the variables are as many names and as many texts that already
+// have the form the inspector shows.
+pub type Snapshot = {
+    step: Int, line: Int, column: Int, function: Text, file: Text, frames: List[CallRow], names: List[Text],
+    values: List[Text]
+}
+
+// A program that is stopped, or has not started, and what is needed to go on with it.
+pub type Session = { prog: Prog, m: Machine, steps: Int, sent: Int, entry: Text }
+
+// The lines with a breakpoint, for each file that has some.
+pub type Breaks = { files: List[Text], lines: List[List[Int]] }
+
+// What happened until the program stopped again. `kind` is "paused", "limit" (too many statements for a session),
+// "completed", "failed" (`problem` and `file` say why) or "out_of_fuel". `delta` is what the program printed since the
+// last time the session stopped.
+pub type Advance = { kind: Text, session: Session, snapshot: Snapshot, problem: parser.Problem, file: Text, delta: Text }
+
+fn max_debug_steps() gives Int {
+    return 10000
+}
+
+fn clip(text: Text, size: Int) gives Text {
+    if Text.length(text) <= size {
+        return text
+    }
+    return Text.slice(text, 0, size)
+}
+
+// A value as the inspector shows it: nothing long is shown whole (nexora/src/nexora/debugging.py, `format_debug_value`).
+fn debug_text(v: Val, max_chars: Int, depth: Int) gives Text {
+    return match v {
+        Val.VText(t) => debug_string(t, max_chars)
+        _ => debug_other(v, max_chars, depth)
+    }
+}
+
+fn debug_string(t: Text, max_chars: Int) gives Text {
+    var limit = 96
+    if max_chars - 3 < limit {
+        limit = max_chars - 3
+    }
+    if limit < 1 {
+        limit = 1
+    }
+    var rendered = parser.quote(clip(t, limit))
+    if Text.length(t) > limit {
+        rendered = clip(rendered, Text.length(rendered) - 1) + "…\""
+    }
+    return clip(rendered, max_chars)
+}
+
+fn debug_other(v: Val, max_chars: Int, depth: Int) gives Text {
+    let composite = is_composite(v)
+    if depth >= 3 {
+        if composite {
+            return "…"
+        }
+        return clip(show_val(v), max_chars)
+    }
+    var rendered = ""
+    if composite {
+        rendered = debug_composite(v, depth)
+    } else {
+        rendered = show_val(v)
+    }
+    if Text.length(rendered) <= max_chars {
+        return rendered
+    }
+    return clip(rendered, max_chars - 1) + "…"
+}
+
+fn is_composite(v: Val) gives Bool {
+    return match v {
+        Val.VList(items) => true
+        Val.VRecord(name, names, vals) => true
+        Val.VVariant(owner, kind, items) => true
+        _ => false
+    }
+}
+
+fn debug_composite(v: Val, depth: Int) gives Text {
+    return match v {
+        Val.VList(items) => debug_list(items, depth)
+        Val.VRecord(name, names, vals) => debug_record(name, names, vals, depth)
+        Val.VVariant(owner, kind, items) => debug_variant(owner, kind, items, depth)
+        _ => show_val(v)
+    }
+}
+
+fn debug_list(items: List[Val], depth: Int) gives Text {
+    var parts: List[Text] = []
+    var i = 0
+    while i < List.length(items) and i < 8
+        shrinks List.length(items) - i
+    {
+        parts = List.append(parts, debug_text(List.get(items, i), 48, depth + 1))
+        i = i + 1
+    }
+    if List.length(items) > 8 {
+        parts = List.append(parts, "…")
+    }
+    return "[" + parser.join_texts(parts, ", ") + "]"
+}
+
+fn debug_record(name: Text, names: List[Text], vals: List[Val], depth: Int) gives Text {
+    var parts: List[Text] = []
+    var i = 0
+    while i < List.length(names) and i < 8
+        shrinks List.length(names) - i
+    {
+        parts = List.append(parts, List.get(names, i) + ": " + debug_text(List.get(vals, i), 48, depth + 1))
+        i = i + 1
+    }
+    if List.length(names) > 8 {
+        parts = List.append(parts, "…")
+    }
+    return name + "(" + parser.join_texts(parts, ", ") + ")"
+}
+
+// The inspector shows only the name of a variant of an enum of the program, and the payload of `Some`, `Ok` and `Err`.
+fn debug_variant(owner: Text, kind: Text, items: List[Val], depth: Int) gives Text {
+    if owner != "" or List.length(items) == 0 {
+        return kind
+    }
+    return kind + "(" + debug_text(List.get(items, 0), 48, depth + 1) + ")"
+}
+
+// The statement that runs next if the machine goes on, or null when it is not between two statements of a block.
+fn pending_statement(m: Machine) gives parser.Node {
+    return match m.control {
+        Control.CValue(v) => pending_on(m.stack)
+        _ => parser.Node.Null()
+    }
+}
+
+fn pending_on(stack: Stk) gives parser.Node {
+    return match stack {
+        Stk.Cons(top, rest) => match top {
+            Kont.KSeq(statements, next) => statement_at(statements, next)
+            _ => parser.Node.Null()
+        }
+        _ => parser.Node.Null()
+    }
+}
+
+fn statement_at(statements: List[parser.Node], next: Int) gives parser.Node {
+    if next < List.length(statements) {
+        return List.get(statements, next)
+    }
+    return parser.Node.Null()
+}
+
+fn file_or(file: Text, entry: Text) gives Text {
+    if file == "" {
+        return entry
+    }
+    return file
+}
+
+// The functions that are running, the innermost first.
+fn call_rows(stack: Stk, entry: Text, rows: List[CallRow]) gives List[CallRow] {
+    return match stack {
+        Stk.Nil => rows
+        Stk.Cons(top, rest) => match top {
+            Kont.KCall(saved, name, site, function, frame) => call_rows(
+                rest, entry,
+                List.append(
+                    rows,
+                    CallRow(
+                        function: name, file: file_or(text_of(field(function, "file")), entry), line: site.line,
+                        column: site.column, omitted: false
+                    )
+                )
+            )
+            _ => call_rows(rest, entry, rows)
+        }
+    }
+}
+
+fn capped_rows(rows: List[CallRow]) gives List[CallRow] {
+    if List.length(rows) <= 64 {
+        return rows
+    }
+    var kept: List[CallRow] = []
+    var i = 0
+    while i < 64
+        shrinks 64 - i
+    {
+        kept = List.append(kept, List.get(rows, i))
+        i = i + 1
+    }
+    return List.append(kept, CallRow(function: "…", file: "", line: 0, column: 0, omitted: true))
+}
+
+fn no_snapshot() gives Snapshot {
+    return Snapshot(step: 0, line: 0, column: 0, function: "", file: "", frames: [], names: [], values: [])
+}
+
+fn snapshot_of(m: Machine, step_number: Int, span: parser.Span, entry: Text) gives Snapshot {
+    let rows = call_rows(m.stack, entry, [])
+    var function = "<module>"
+    var file = entry
+    if List.length(rows) > 0 {
+        let innermost = List.get(rows, 0)
+        function = innermost.function
+        file = innermost.file
+    }
+    var names: List[Text] = []
+    var values: List[Text] = []
+    var more = false
+    for frame in m.env {
+        var i = 0
+        while i < List.length(frame.names)
+            shrinks List.length(frame.names) - i
+        {
+            if List.length(names) < 64 {
+                names = List.append(names, List.get(frame.names, i))
+                values = List.append(values, debug_text(List.get(frame.vals, i), 256, 0))
+            } else {
+                more = true
+            }
+            i = i + 1
+        }
+    }
+    if more {
+        names = List.append(names, "…")
+        values = List.append(values, "additional variables omitted")
+    }
+    return Snapshot(
+        step: step_number, line: span.line, column: span.column, function: function, file: file,
+        frames: capped_rows(rows), names: names, values: values
+    )
+}
+
+fn has_break(breaks: Breaks, file: Text, line: Int) gives Bool {
+    let at = index_of(breaks.files, file)
+    if at < 0 {
+        return false
+    }
+    return List.contains(List.get(breaks.lines, at), line)
+}
+
+// What the program printed from the line `sent` on.
+fn lines_since(out: List[Text], sent: Int) gives Text {
+    var text = ""
+    var i = sent
+    while i < List.length(out)
+        shrinks List.length(out) - i
+    {
+        text = text + List.get(out, i) + "\n"
+        i = i + 1
+    }
+    return text
+}
+
+fn stopped_at(kind: Text, session: Session, m: Machine, steps: Int, here: Snapshot) gives Advance {
+    let nothing = problem_at("", "", "", [], parser.no_span())
+    let moved = Session(prog: session.prog, m: m, steps: steps, sent: List.length(m.out), entry: session.entry)
+    return Advance(
+        kind: kind, session: moved, snapshot: here, problem: nothing, file: "", delta: lines_since(m.out, session.sent)
+    )
+}
+
+// Moves the program on. A session that is stopped runs the statement it is stopped before; a `fresh` one has not
+// started and stops before the first. `mode` is "step" (stop before every statement) or "continue" (only at a
+// breakpoint).
+pub fn debug_advance(session: Session, mode: Text, breaks: Breaks, fresh: Bool) gives Advance {
+    let prog = session.prog
+    var m = session.m
+    var steps = session.steps
+    if not fresh {
+        m = step(prog, m)
+    }
+    while m.fuel > 0 and not is_finished(m.control)
+        shrinks m.fuel
+    {
+        let statement = pending_statement(m)
+        if not is_null(statement) {
+            steps = steps + 1
+            let span = place_of(statement)
+            if steps > max_debug_steps() {
+                return stopped_at("limit", session, m, steps, snapshot_of(m, steps, span, session.entry))
+            }
+            if mode == "step" or has_break(breaks, file_or(running_file(m.stack, 0), session.entry), span.line) {
+                return stopped_at("paused", session, m, steps, snapshot_of(m, steps, span, session.entry))
+            }
+        }
+        m = step(prog, m)
+    }
+    let done = execution_of(m)
+    var kind = "completed"
+    if done.out_of_fuel {
+        kind = "out_of_fuel"
+    } else if done.failed {
+        kind = "failed"
+    }
+    let moved = Session(prog: prog, m: m, steps: steps, sent: List.length(m.out), entry: session.entry)
+    return Advance(
+        kind: kind, session: moved, snapshot: no_snapshot(), problem: done.problem, file: file_or(done.file, session.entry),
+        delta: lines_since(done.printed, session.sent) + done.partial
+    )
+}
+
+// A program ready to be debugged: nothing runs until `debug_advance`. The environment gives it nothing (`NoHost`).
+pub fn debug_start(node: parser.Node, options: RunOptions, entry: Text) gives Session {
+    let host = host_for(node, options, true, true)
+    let prog = build_prog(node, host)
+    let start = start_machine(prog, start_fuel())
+    let tracing = Tracing(watch: [], invoked: [], skipped: [], inputs: [])
+    return Session(prog: prog, m: with_tracing(start, tracing), steps: 0, sent: 0, entry: entry)
+}
+
 
 fn cut_execution(done: Machine, problem: parser.Problem) gives Execution {
     var printed = done.out
