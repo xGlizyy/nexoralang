@@ -166,7 +166,7 @@ jobs:
         if: matrix.suite == 'mcp'
         run: |
           python -m venv "$RUNNER_TEMP/mcp"
-          "$RUNNER_TEMP/mcp/bin/python" -m pip install --quiet mcp
+          "$RUNNER_TEMP/mcp/bin/python" -m pip install --quiet mcp -e nexora
           export NEXORA_MCP="$PWD/out/mcp" MCP_PYTHON="$RUNNER_TEMP/mcp/bin/python"
           python selfhost/compare_mcp.py nexora/examples/*.nex selfhost/checker_cases/*.nex selfhost/project_cases/*/main.nex selfhost/lsp_cases/*.nex
 
