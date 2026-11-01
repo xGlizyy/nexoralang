@@ -17,7 +17,13 @@ pub type Place = { line: Int, column: Int, end_line: Int, end_column: Int }
 pub type Symbol = {
     name: Text, category: Text, kind: Text, function: Text, declaration: Place, scoped: Bool, scope: Place,
     references: List[Place], mutable: Bool, assignments: List[Place], signature: Text, params: List[Text],
-    param_types: List[Text], return_type: Text, file: Text
+    param_types: List[Text], return_type: Text, file: Text,
+    // The module that declares it ("" for the file that runs) and the module where each reference is written (the language server).
+    module: Text, ref_modules: List[Text],
+    // How the language server writes a function: its signature, the type of each parameter and what it gives ("Void" if nothing).
+    editor_signature: Text, editor_param_types: List[Text], editor_return: Text,
+    // The category as the checker records it (a variable that a pattern declares is "pattern variable" there, "variable" in the document).
+    recorded: Text
 }
 
 pub type Listing = { path: Text, complete: Bool, analysed: Bool, symbols: List[Symbol] }
@@ -26,7 +32,7 @@ fn place_of(line: Int, column: Int, end_line: Int, end_column: Int) gives Place 
     return Place(line: line, column: column, end_line: end_line, end_column: end_column)
 }
 
-fn name_place(node: parser.Node) gives Place {
+pub fn name_place(node: parser.Node) gives Place {
     return match context.field(node, "name_span") {
         parser.Node.Place(line, column, end_line, end_column) => place_of(line, column, end_line, end_column)
         _ => place_of(0, 0, 0, 0)
@@ -38,7 +44,7 @@ fn key_of(line: Int, column: Int) gives Text {
 }
 
 // The functions of every module, in the order they were checked, and what the modules checked after them said about each one.
-type FunctionSlot = { module: Int, name: Text, node: parser.Node, references: List[Place] }
+type FunctionSlot = { module: Int, name: Text, node: parser.Node, references: List[Place], ref_modules: List[Text] }
 
 fn target_module(modules: List[Text], index: Int, key: Text) gives Int {
     if not Text.contains(key, ".") {
@@ -78,7 +84,7 @@ fn slot_index(slots: List[FunctionSlot], module: Int, name: Text) gives Int {
     return 0 - 1
 }
 
-fn with_reference(slots: List[FunctionSlot], at: Int, place: Place) gives List[FunctionSlot] {
+fn with_reference(slots: List[FunctionSlot], at: Int, place: Place, written_in: Text) gives List[FunctionSlot] {
     var out: List[FunctionSlot] = []
     var i = 0
     while i < List.length(slots)
@@ -88,7 +94,10 @@ fn with_reference(slots: List[FunctionSlot], at: Int, place: Place) gives List[F
         if i == at {
             out = List.append(
                 out,
-                FunctionSlot(module: slot.module, name: slot.name, node: slot.node, references: List.append(slot.references, place))
+                FunctionSlot(
+                    module: slot.module, name: slot.name, node: slot.node, references: List.append(slot.references, place),
+                    ref_modules: List.append(slot.ref_modules, written_in)
+                )
             )
         } else {
             out = List.append(out, slot)
@@ -119,7 +128,10 @@ pub fn analyse(path: Text, results: List[project.Checked]) gives Listing {
         for function in here.functions {
             slots = List.append(
                 slots,
-                FunctionSlot(module: index, name: context.text_of(context.field(function, "name")), node: function, references: [])
+                FunctionSlot(
+                    module: index, name: context.text_of(context.field(function, "name")), node: function, references: [],
+                    ref_modules: []
+                )
             )
         }
         index = index + 1
@@ -137,8 +149,13 @@ pub fn analyse(path: Text, results: List[project.Checked]) gives Listing {
                     }
                     let at = slot_index(slots, module, name)
                     if at >= 0 {
+                        var written_in = ""
+                        if index < List.length(results) - 1 {
+                            written_in = each.module.name
+                        }
                         slots = with_reference(
-                            slots, at, place_of(reference.line, reference.column, reference.end_line, reference.end_column)
+                            slots, at, place_of(reference.line, reference.column, reference.end_line, reference.end_column),
+                            written_in
                         )
                     }
                 }
@@ -189,6 +206,7 @@ fn declared_like(slots: List[FunctionSlot], slot: FunctionSlot) gives parser.Nod
 }
 
 fn function_symbol(slot: FunctionSlot, declared: parser.Node, file: Text, local: List[Text], module: Text) gives Symbol {
+    let owner = module
     let node = declared
     var returned = "Void"
     if not context.is_null(context.field(node, "return_type")) {
@@ -210,7 +228,9 @@ fn function_symbol(slot: FunctionSlot, declared: parser.Node, file: Text, local:
     return Symbol(
         name: slot.name, category: "function", kind: written, function: "", declaration: name_place(node), scoped: false,
         scope: place_of(0, 0, 0, 0), references: slot.references, mutable: false, assignments: [],
-        signature: context.signature_of(node), params: params, param_types: param_types, return_type: returned, file: file
+        signature: context.signature_of(node), params: params, param_types: param_types, return_type: returned, file: file,
+        module: owner, ref_modules: slot.ref_modules, editor_signature: editor_signature(slot.node),
+        editor_param_types: editor_param_types(slot.node), editor_return: editor_return(slot.node), recorded: "function"
     )
 }
 
@@ -241,8 +261,68 @@ fn variable_symbol(
         name: sym.name, category: category, kind: kind, function: sym.function,
         declaration: place_of(sym.line, sym.column, sym.end_line, sym.end_column), scoped: sym.scope_line > 0,
         scope: place_of(sym.scope_line, sym.scope_column, sym.scope_end_line, sym.scope_end_column), references: references,
-        mutable: sym.mutable, assignments: assignments, signature: "", params: [], param_types: [], return_type: "", file: file
+        mutable: sym.mutable, assignments: assignments, signature: "", params: [], param_types: [], return_type: "", file: file,
+        module: module, ref_modules: owned_by(module, List.length(references)), editor_signature: "", editor_param_types: [],
+        editor_return: "", recorded: sym.category
     )
+}
+
+// A type as the language server writes it: the name and the arguments, with no module in front.
+pub fn editor_type(node: parser.Node) gives Text {
+    let name = context.text_of(context.field(node, "name"))
+    let arguments = context.items_of(context.field(node, "arguments"))
+    if List.length(arguments) == 0 {
+        return name
+    }
+    var inner: List[Text] = []
+    for argument in arguments {
+        inner = List.append(inner, editor_type(argument))
+    }
+    return name + "[" + parser.join_texts(inner, ", ") + "]"
+}
+
+fn editor_param_types(function: parser.Node) gives List[Text] {
+    var out: List[Text] = []
+    for param in context.items_of(context.field(function, "params")) {
+        out = List.append(out, editor_type(context.field(param, "type")))
+    }
+    return out
+}
+
+pub fn editor_return(function: parser.Node) gives Text {
+    let returned = context.field(function, "return_type")
+    if context.is_null(returned) {
+        return "Void"
+    }
+    return editor_type(returned)
+}
+
+fn editor_signature(function: parser.Node) gives Text {
+    var params: List[Text] = []
+    let types = editor_param_types(function)
+    var i = 0
+    for param in context.items_of(context.field(function, "params")) {
+        params = List.append(params, context.text_of(context.field(param, "name")) + ": " + List.get(types, i))
+        i = i + 1
+    }
+    let head = "fn " + context.text_of(context.field(function, "name")) + "(" + parser.join_texts(params, ", ") + ")"
+    if context.is_null(context.field(function, "return_type")) {
+        return head
+    }
+    return head + " gives " + editor_return(function)
+}
+
+// The module written as the owner of each of `count` references.
+fn owned_by(module: Text, count: Int) gives List[Text] {
+    var out: List[Text] = []
+    var i = 0
+    while i < count
+        shrinks count - i
+    {
+        out = List.append(out, module)
+        i = i + 1
+    }
+    return out
 }
 
 // The symbols that the filters keep.

@@ -1,0 +1,5 @@
+import "missing.nex"
+
+fn main() {
+    print(missing.f())
+}

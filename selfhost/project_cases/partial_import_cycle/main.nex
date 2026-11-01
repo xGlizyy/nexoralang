@@ -1,0 +1,6 @@
+import "main.nex"
+
+fn main() {
+    print(1)
+}
+let x = 

@@ -3,15 +3,94 @@
 // It follows nexora/src/nexora/lexer.py branch by branch and in the same order, so that the two can
 // be compared token by token. Token kinds are the same texts as the values of TokenType.
 //
-// Known gaps, each one a missing language feature rather than a lexer decision:
-//   * A character that is not printable ASCII is always shown quoted in E1001. Python shows
-//     U+XXXX for the non-printable ones, which needs a code point function.
-//   * The hint "Names use the letters a-z..." for a non-ASCII letter needs a letter test.
-//   * There is no escape for a carriage return, so it cannot be written in a program: a file with
-//     CRLF line endings is not read like the Python lexer reads it. It needs a \r escape or a
-//     function that builds a character from its code point.
+// Line endings: this lexer takes "\n" as the end of a line. The project loader (project.nex) turns CRLF and a lone CR into "\n" before it
+// lexes a file, which is how Python reads them.
+
+import "unicode_tables.nex"
 
 uses read "."
+
+// The code point of the first character of a text. The compiler replaces this function with a C one that knows all of Unicode; the
+// definition here, which is what Python runs, knows only the characters that can be typed.
+fn code_of(c: Text) gives Int {
+    if c == "" {
+        return 0
+    }
+    let known = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz\{|}~"
+    var i = 0
+    while i < Text.length(known)
+        shrinks Text.length(known) - i
+    {
+        if Text.slice(known, i, i + 1) == c {
+            return 32 + i
+        }
+        i = i + 1
+    }
+    return 0
+}
+
+// Whether a code point is inside one of the ranges of a flat list [first, last, first, last, ...] (binary search).
+pub fn in_ranges(code: Int, ranges: List[Int]) gives Bool {
+    var low = 0
+    var high = List.length(ranges) / 2 - 1
+    while low <= high
+        shrinks high - low + 1
+    {
+        let middle = (low + high) / 2
+        if code < List.get(ranges, middle * 2) {
+            high = middle - 1
+        } else if code > List.get(ranges, middle * 2 + 1) {
+            low = middle + 1
+        } else {
+            return true
+        }
+    }
+    return false
+}
+
+// Python's str.isalpha() and str.isprintable() for one character.
+fn is_letter(c: Text) gives Bool {
+    let code = code_of(c)
+    if code < 128 {
+        return (c >= "a" and c <= "z") or (c >= "A" and c <= "Z")
+    }
+    return in_ranges(code, unicode_tables.letters())
+}
+
+pub fn is_printable(c: Text) gives Bool {
+    let code = code_of(c)
+    if code < 128 {
+        return code >= 32 and code <= 126
+    }
+    return not in_ranges(code, unicode_tables.unprintable())
+}
+
+fn hex_digits(code: Int) gives Text {
+    let digits = "0123456789ABCDEF"
+    var out = ""
+    var rest = code
+    while rest > 0
+        shrinks rest
+    {
+        let digit = rest - (rest / 16) * 16
+        out = Text.slice(digits, digit, digit + 1) + out
+        rest = rest / 16
+    }
+    while Text.length(out) < 4
+        shrinks 4 - Text.length(out)
+    {
+        out = "0" + out
+    }
+    return out
+}
+
+// How a message shows a character: quoted when it can be printed, as U+XXXX when not.
+fn shown(c: Text) gives Text {
+    if is_printable(c) {
+        return "'" + c + "'"
+    }
+    return "U+" + hex_digits(code_of(c))
+}
 
 pub type Token = {
     kind: Text, lexeme: Text, value: Text,
@@ -126,6 +205,9 @@ fn hint_for(c: Text) gives Text {
     }
     if c == "&" or c == "|" {
         return "The logical operators are the words 'and', 'or' and 'not'."
+    }
+    if is_letter(c) {
+        return "Names use the letters a-z and A-Z, digits and '_'."
     }
     return ""
 }
@@ -394,7 +476,7 @@ pub fn tokenize(text: Text) gives LexResult {
             column = column + 1
         } else {
             diagnostics = List.append(diagnostics, make_diagnostic(
-                "E1001", "'" + c + "' is not part of NEXORA syntax", hint_for(c), line, column, column + 1
+                "E1001", shown(c) + " is not part of NEXORA syntax", hint_for(c), line, column, column + 1
             ))
             pos = pos + 1
             column = column + 1

@@ -423,7 +423,7 @@ fn builtin_expression(callee: Text, values: List[Text], here: Text, node: parser
         return "rt_net_get(" + List.get(values, 0) + ", " + node_span(arg_node(node, 0)) + ")"
     }
     if callee == "Process.run" {
-        return "rt_process_run(" + List.get(values, 0) + ", " + node_span(arg_node(node, 0)) + ")"
+        return "rt_process_run(" + List.get(values, 0) + ", " + List.get(values, 1) + ", " + node_span(arg_node(node, 0)) + ")"
     }
     if callee == "read_file" {
         return "rt_read_file(" + List.get(values, 0) + ", " + node_span(arg_node(node, 0)) + ")"
@@ -1032,7 +1032,7 @@ fn is_compiler_file(file: Text) gives Bool {
     return List.contains(
         [
             "selfhost/lexer.nex", "selfhost/parser.nex", "selfhost/checker.nex", "selfhost/project.nex",
-            "selfhost/interpreter.nex", "selfhost/render.nex", "selfhost/cgen.nex", "selfhost/nex.nex"
+            "selfhost/interpreter.nex", "selfhost/render.nex", "selfhost/cgen.nex", "selfhost/nex.nex", "selfhost/lsp.nex", "selfhost/mcp.nex"
         ],
         file
     )
@@ -1131,6 +1131,9 @@ fn intrinsic_of(function: parser.Node) gives Text {
     let name = text_of(field(function, "name"))
     let count = List.length(items_of(field(function, "params")))
     if count == 1 {
+        if name == "code_of" and file == "selfhost/lexer.nex" {
+            return "rt_intr_code_of"
+        }
         if name == "kind_of" {
             return "rt_intr_kind_of"
         }
@@ -1161,6 +1164,27 @@ fn intrinsic_of(function: parser.Node) gives Text {
     }
     if count == 0 and name == "read_stdin_line" and file == "selfhost/interpreter.nex" {
         return "rt_intr_read_stdin_line"
+    }
+    if count == 1 and name == "host_get" and file == "selfhost/interpreter.nex" {
+        return "rt_intr_host_get"
+    }
+    if count == 2 and name == "host_run" and file == "selfhost/interpreter.nex" {
+        return "rt_intr_host_run"
+    }
+    if count == 0 and name == "mcp_line" and file == "selfhost/mcp.nex" {
+        return "rt_intr_read_stdin_line"
+    }
+    if count == 1 and name == "mcp_send" and file == "selfhost/mcp.nex" {
+        return "rt_intr_mcp_send"
+    }
+    if count == 0 and name == "lsp_line" and file == "selfhost/lsp.nex" {
+        return "rt_intr_read_stdin_line"
+    }
+    if count == 1 and name == "lsp_body" and file == "selfhost/lsp.nex" {
+        return "rt_intr_lsp_body"
+    }
+    if count == 1 and name == "lsp_send" and file == "selfhost/lsp.nex" {
+        return "rt_intr_lsp_send"
     }
     if count == 1 and name == "byte_length" and file == "selfhost/project.nex" {
         return "rt_intr_byte_length"

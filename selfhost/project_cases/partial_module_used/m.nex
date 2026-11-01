@@ -1,0 +1,4 @@
+pub type Pair = { a: Int, b: Text }
+pub fn add(x: Int, y: Int) gives Int {
+    return x + y
+}
