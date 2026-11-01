@@ -61,12 +61,18 @@ jobs:
           cc -std=c11 -O2 -static out/worker.c -o out/worker -lm
           printf '%s\n' '{"action": "info"}' | ./out/worker | grep -qF '"status": "success"'
 
+      - name: The formatter (its test driver)
+        run: |
+          ./out/compiler --allow-read . --allow-write . -- selfhost/formatter.nex out/formatter.c --trusted
+          cc -std=c11 -O2 out/formatter.c -o out/formatter -lm
+
       - uses: actions/upload-artifact@v4
         with:
           name: native
           path: |
             out/nex
             out/worker
+            out/formatter
           retention-days: 3
 
   compare:
@@ -97,7 +103,7 @@ jobs:
           path: out
 
       - name: Make the tools executable
-        run: chmod +x out/nex out/worker
+        run: chmod +x out/nex out/worker out/formatter
 
       - name: check, run and test (nex.nex against nex)
         if: matrix.suite == 'commands'
@@ -113,7 +119,7 @@ jobs:
           echo "== limits (time and memory exist on Linux)"
           python selfhost/compare_limits.py
 
-      - name: inspect, context, symbols, check --evidence and test --format json
+      - name: inspect, context, symbols, check --evidence, format and test --format json
         if: matrix.suite == 'tooling'
         run: |
           export NEXORA_NEX="$PWD/out/nex"
@@ -121,6 +127,10 @@ jobs:
           echo "== context"; python selfhost/compare_context.py $files
           echo "== symbols"; python selfhost/compare_symbols.py $files
           echo "== check --evidence"; python selfhost/compare_evidence.py $files
+          echo "== format (the files of the repository; the collector runs very often on the first ones)"
+          files=$(git ls-files 'selfhost/*.nex' 'nexora/examples/*.nex' 'selfhost/*_cases/*.nex' 'selfhost/*_cases/*/*.nex')
+          NEXORA_FORMATTER="$PWD/out/formatter" python selfhost/compare_format.py $files
+          NEXORA_GC_FLOOR=3000 NEXORA_FORMATTER="$PWD/out/formatter" python selfhost/compare_format.py $(echo $files | cut -d' ' -f1-80)
           echo "== test --format json"
           python selfhost/compare_test.py nexora/examples/*.nex selfhost/checker_cases/*.nex /nonexistent.nex
 

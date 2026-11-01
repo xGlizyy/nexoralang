@@ -266,7 +266,33 @@ static void rt_mark_words(const char *lo, const char *hi) {
     }
 }
 
-static void rt_collect(void) {
+/* The scan of the stack. It starts from a function of its own that cannot be inlined, and not from the buffer of registers of
+ * rt_collect: when the compiler inlines the collector into the function that allocates, the slots where that function keeps its values
+ * can be below the buffer, and a scan that starts at the buffer would not see them (a text that only such a slot pointed to was freed
+ * while the program still used it). A function that is called from the collector has its frame below all of that. */
+#if defined(__GNUC__) || defined(__clang__)
+#define RT_NOINLINE __attribute__((noinline))
+#else
+#define RT_NOINLINE __declspec(noinline)
+#endif
+static RT_NOINLINE void rt_scan_stack(const void *registers_buffer) {
+    volatile char marker = 0;
+    const char *here = (const char *)&marker;
+    const char *base = (const char *)rt_stack_base;
+    const char *buffer_end = (const char *)registers_buffer + sizeof(jmp_buf);
+    if (here < base) {
+        rt_mark_words(here, base + sizeof(void *));
+        if (buffer_end > base + sizeof(void *)) rt_mark_words(base + sizeof(void *), buffer_end);
+    } else {
+        rt_mark_words(base, here + sizeof marker);
+    }
+}
+
+/* The table of code points of the last long text (see rt_byte_of_point) is keyed by the address of that text, which can be reused. */
+static const char *rt_index_text;
+
+static RT_NOINLINE void rt_collect(void) {
+    rt_index_text = 0;
     RT_COUNT(2);
 #ifdef RT_STATS
     clock_t gc_started = clock();
@@ -276,9 +302,7 @@ static void rt_collect(void) {
     for (size_t i = 0; i < rt_nblocks; i++) rt_blocks[i].mark = 0;
     jmp_buf registers;
     setjmp(registers);
-    const char *here = (const char *)&registers;
-    const char *base = (const char *)rt_stack_base;
-    if (here < base) rt_mark_words(here, base + sizeof(void *)); else rt_mark_words(base, here + sizeof registers);
+    rt_scan_stack(&registers);
     while (rt_mark_count > 0) {
         rt_mark_item item = rt_mark_stack[--rt_mark_count];
         rt_mark_words(item.p, item.p + item.size);
@@ -338,6 +362,16 @@ static void rt_collect(void) {
     fprintf(stderr, "gc: live %zu bytes, %zu big blocks, %.1f ms\n", live, rt_nblocks, (double)(clock() - gc_started) * 1000.0 / CLOCKS_PER_SEC);
 #endif
 }
+
+/* The top of the stack that the collector scans. It cannot be the address of a variable of main: the compiler may keep the values of the
+ * program (functions inlined into main, spilled registers) in slots of the frame of main that are above that variable, and a scan that
+ * stops there would not see them (a text that only such a slot pointed to was freed while the program still used it). The address of the
+ * frame itself, plus the words above it that belong to the caller, is above every slot of main. */
+#if defined(__GNUC__) || defined(__clang__)
+#define RT_STACK_TOP(fallback) ((void *)((char *)__builtin_frame_address(0) + 64))
+#else
+#define RT_STACK_TOP(fallback) ((void *)((char *)(fallback) + 256))
+#endif
 
 /* NEXORA_GC_FLOOR=<bytes> makes it collect much more often, which is how the collector is tested. */
 static void rt_gc_start(void *stack_base) {

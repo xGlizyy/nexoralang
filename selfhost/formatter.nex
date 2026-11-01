@@ -1,0 +1,404 @@
+// The formatter of NEXORA, written in NEXORA (nexora/src/nexora/formatter.py): it rewrites a program with a canonical shape.
+//
+// It works on the tokens of the real lexer, never on the raw text: the same words and the same literals come out, only their
+// spacing and their indentation change. A program that checks keeps checking, and formatting it twice gives the same result as
+// formatting it once. The language is written line by line, so the formatter works on each line as it is: it never joins two lines
+// nor splits one, and the result has the same lines as the source, each with its own line ending. The lexer does not keep comments,
+// so they are taken from the text. If a line holds anything that is neither a token nor a comment, the program is not formatted.
+//
+// This is what the language server uses (lsp.nex). `main` is a test driver: `FILE` is formatted and written.
+
+import "json.nex"
+import "lexer.nex"
+import "legacy.nex"
+
+uses read "."
+
+pub type FormatResult = { text: Text, ok: Bool }
+
+fn indent() gives Text {
+    return "    "
+}
+
+fn repeated(text: Text, times: Int) gives Text {
+    var out = ""
+    var i = 0
+    while i < times
+        shrinks times - i
+    {
+        out = out + text
+        i = i + 1
+    }
+    return out
+}
+
+fn is_one_of(kind: Text, kinds: List[Text]) gives Bool {
+    return List.contains(kinds, kind)
+}
+
+fn no_space_after() gives List[Text] {
+    return ["(", "[", "."]
+}
+
+fn no_space_before() gives List[Text] {
+    return [")", "]", ",", ".", ":", "("]
+}
+
+fn binary() gives List[Text] {
+    return ["+", "-", "*", "/", "=", "==", "!=", "<", "<=", ">", ">=", "->", "=>"]
+}
+
+fn space_after() gives List[Text] {
+    return (
+        [
+            "fn", "let", "var", "return", "if", "else", "while", "for", "in", "and", "or", "not", "needs", "gives", "promises",
+            "trust", "example", "keeps", "shrinks", "uses", "type", "where"
+        ]
+    )
+}
+
+fn clauses() gives List[Text] {
+    return ["needs", "promises", "trust", "keeps", "shrinks"]
+}
+
+fn is_blank(c: Text) gives Bool {
+    return c == " " or c == "\t" or c == "\n" or c == json.char_from_code(13)
+}
+
+fn trimmed(text: Text) gives Text {
+    var start = 0
+    var end = Text.length(text)
+    while start < end and is_blank(Text.slice(text, start, start + 1))
+        shrinks end - start
+    {
+        start = start + 1
+    }
+    while end > start and is_blank(Text.slice(text, end - 1, end))
+        shrinks end - start
+    {
+        end = end - 1
+    }
+    return Text.slice(text, start, end)
+}
+
+// A line of the text and the ending it has.
+type Physical = { text: Text, ending: Text }
+
+// Each line of the text and its ending, as the lexer counts them: a carriage return with a line feed, a line feed, or a lone carriage
+// return. The last ending may be empty.
+fn physical_lines(source: Text) gives List[Physical] {
+    let cr = json.char_from_code(13)
+    var lines: List[Physical] = []
+    var start = 0
+    var i = 0
+    while i < Text.length(source)
+        shrinks Text.length(source) - i
+    {
+        let c = Text.slice(source, i, i + 1)
+        if c == "\n" {
+            lines = List.append(lines, Physical(text: Text.slice(source, start, i), ending: "\n"))
+            start = i + 1
+        } else if c == cr {
+            if i + 1 < Text.length(source) and Text.slice(source, i + 1, i + 2) == "\n" {
+                lines = List.append(lines, Physical(text: Text.slice(source, start, i), ending: cr + "\n"))
+                i = i + 1
+            } else {
+                lines = List.append(lines, Physical(text: Text.slice(source, start, i), ending: cr))
+            }
+            start = i + 1
+        }
+        i = i + 1
+    }
+    if start < Text.length(source) {
+        lines = List.append(lines, Physical(text: Text.slice(source, start, Text.length(source)), ending: ""))
+    }
+    return lines
+}
+
+// The tokens of every line, without the line ends and the end of the file.
+fn tokens_of_line(tokens: List[lexer.Token], number: Int) gives List[lexer.Token] {
+    var line: List[lexer.Token] = []
+    for token in tokens {
+        if token.line == number and token.kind != "end of line" and token.kind != "end of file" {
+            line = List.append(line, token)
+        }
+    }
+    return line
+}
+
+fn kind_at(tokens: List[lexer.Token], index: Int) gives Text {
+    let token = List.get(tokens, index)
+    return token.kind
+}
+
+fn is_unary(tokens: List[lexer.Token], index: Int) gives Bool {
+    if index == 0 {
+        return true
+    }
+    let previous = kind_at(tokens, index - 1)
+    if previous == "name" or previous == "integer" or previous == "float" or previous == "text" {
+        return false
+    }
+    if previous == "true" or previous == "false" {
+        return false
+    }
+    if previous == ")" or previous == "]" or previous == "}" {
+        return false
+    }
+    return true
+}
+
+// Whether a space goes between the token written last and this one.
+fn needs_space(tokens: List[lexer.Token], index: Int) gives Bool {
+    let previous = kind_at(tokens, index - 1)
+    let current = kind_at(tokens, index)
+    let named_clause = index >= 3 and is_one_of(kind_at(tokens, index - 3), clauses())
+    if current == "(" and previous == ":" and named_clause {
+        return true
+    }
+    if is_one_of(previous, no_space_after()) or is_one_of(current, no_space_before()) {
+        return false
+    }
+    if current == "[" and previous == "name" {
+        return false
+    }
+    if current == "\{" {
+        return true
+    }
+    if previous == "\{" {
+        return true
+    }
+    if is_one_of(previous, binary()) or is_one_of(current, binary()) {
+        if previous == "-" and is_unary(tokens, index - 1) {
+            return false
+        }
+        return true
+    }
+    if is_one_of(previous, space_after()) or is_one_of(current, space_after()) {
+        return true
+    }
+    if previous == "(" or current == ")" {
+        return false
+    }
+    if previous == "[" or current == "]" {
+        return false
+    }
+    if previous == "," {
+        return true
+    }
+    if current == "," {
+        return false
+    }
+    if current == ":" {
+        return false
+    }
+    if previous == ":" {
+        return true
+    }
+    return true
+}
+
+// One line, with its tokens separated the canonical way.
+fn render_line(tokens: List[lexer.Token], depth: Int) gives Text {
+    var body = ""
+    var index = 0
+    while index < List.length(tokens)
+        shrinks List.length(tokens) - index
+    {
+        let token = List.get(tokens, index)
+        if index > 0 and needs_space(tokens, index) {
+            body = body + " "
+        }
+        body = body + token.lexeme
+        index = index + 1
+    }
+    if trimmed(body) == "" {
+        return ""
+    }
+    return repeated(indent(), depth) + body
+}
+
+// Whether a line is the head of a function or a loop whose header follows on the next lines: `fn`, `pub fn`, `while` or `for`,
+// without the `{` of its body at the end.
+fn opens_a_header(line: List[lexer.Token]) gives Bool {
+    if List.length(line) == 0 {
+        return false
+    }
+    if kind_at(line, List.length(line) - 1) == "\{" {
+        return false
+    }
+    var first = kind_at(line, 0)
+    if first == "pub" and List.length(line) > 1 {
+        first = kind_at(line, 1)
+    }
+    if kind_at(line, 0) == "pub" {
+        return first == "fn"
+    }
+    return first == "fn" or first == "while" or first == "for"
+}
+
+// The text with the canonical shape, or none (an empty list) if a line holds something it cannot place.
+fn render(source: Text, tokens: List[lexer.Token]) gives List[Text] {
+    var out = ""
+    var depth = 0
+    var group = 0
+    var header = 0
+    var number = 0
+    for physical in physical_lines(source) {
+        number = number + 1
+        let line = tokens_of_line(tokens, number)
+        if header > 0 and List.length(line) > 0 and kind_at(line, 0) == "\{" {
+            header = 0
+        }
+        var own = depth + header
+        if List.length(line) > 0 and kind_at(line, 0) == "}" {
+            own = depth - 1
+            if own < 0 {
+                own = 0
+            }
+        } else if group > 0 and not (List.length(line) > 0 and (kind_at(line, 0) == ")" or kind_at(line, 0) == "]")) {
+            own = depth + header + 1
+        }
+        var rendered = ""
+        if List.length(line) > 0 {
+            let last = List.get(line, List.length(line) - 1)
+            let rest = trimmed(Text.slice(physical.text, last.end_column - 1, Text.length(physical.text)))
+            if rest != "" and not Text.starts_with(rest, "//") {
+                return []
+            }
+            rendered = render_line(line, own)
+            if rest != "" {
+                rendered = rendered + " " + rest
+            }
+        } else {
+            let rest = trimmed(physical.text)
+            if rest != "" and not Text.starts_with(rest, "//") {
+                return []
+            }
+            if rest != "" {
+                rendered = repeated(indent(), own) + rest
+            }
+        }
+        out = out + rendered + physical.ending
+        for token in line {
+            if token.kind == "\{" {
+                depth = depth + 1
+            } else if token.kind == "}" {
+                depth = depth - 1
+                if depth < 0 {
+                    depth = 0
+                }
+            } else if token.kind == "(" or token.kind == "[" {
+                group = group + 1
+            } else if token.kind == ")" or token.kind == "]" {
+                group = group - 1
+                if group < 0 {
+                    group = 0
+                }
+            }
+        }
+        if opens_a_header(line) and group == 0 {
+            header = 1
+        }
+    }
+    if out != "" and not Text.ends_with(out, "\n") and not Text.ends_with(out, json.char_from_code(13)) {
+        out = out + "\n"
+    }
+    return [out]
+}
+
+// The program written with the canonical shape. A program with lexical errors is returned unchanged, and so is a program with a
+// line the formatter cannot account for.
+pub fn format_source(source: Text) gives FormatResult {
+    let lexed = lexer.tokenize(legacy.lf_only(source))
+    if List.length(lexed.diagnostics) > 0 {
+        return FormatResult(text: source, ok: false)
+    }
+    let rendered = render(source, lexed.tokens)
+    if List.length(rendered) == 0 {
+        return FormatResult(text: source, ok: false)
+    }
+    return FormatResult(text: List.get(rendered, 0), ok: true)
+}
+
+fn split_lf(text: Text) gives List[Text] {
+    var parts: List[Text] = []
+    var start = 0
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.slice(text, i, i + 1) == "\n" {
+            parts = List.append(parts, Text.slice(text, start, i))
+            start = i + 1
+        }
+        i = i + 1
+    }
+    return List.append(parts, Text.slice(text, start, Text.length(text)))
+}
+
+fn joined_lf(parts: List[Text]) gives Text {
+    var out = ""
+    var i = 0
+    while i < List.length(parts)
+        shrinks List.length(parts) - i
+    {
+        if i > 0 {
+            out = out + "\n"
+        }
+        out = out + List.get(parts, i)
+        i = i + 1
+    }
+    return out
+}
+
+fn slice_of_lines(parts: List[Text], from: Int, to: Int) gives List[Text] {
+    var out: List[Text] = []
+    var i = from
+    while i < to and i < List.length(parts)
+        shrinks to - i
+    {
+        out = List.append(out, List.get(parts, i))
+        i = i + 1
+    }
+    return out
+}
+
+// Only the lines between `start_line` and `end_line`, both counted from 1. The whole program is formatted first, so the indentation
+// of the chosen lines is the one they have in the program, and only those lines are written back.
+pub fn format_range(source: Text, start_line: Int, end_line: Int) gives FormatResult {
+    let lines = split_lf(source)
+    if start_line < 1 or end_line > List.length(lines) or start_line > end_line {
+        return FormatResult(text: source, ok: false)
+    }
+    let whole = format_source(source)
+    if not whole.ok {
+        return FormatResult(text: source, ok: false)
+    }
+    var formatted = split_lf(whole.text)
+    if List.length(formatted) > 0 and List.get(formatted, List.length(formatted) - 1) == "" {
+        formatted = slice_of_lines(formatted, 0, List.length(formatted) - 1)
+    }
+    let pieces = List.concat(
+        List.concat(slice_of_lines(lines, 0, start_line - 1), slice_of_lines(formatted, start_line - 1, end_line)),
+        slice_of_lines(lines, end_line, List.length(lines))
+    )
+    return FormatResult(text: joined_lf(pieces), ok: true)
+}
+
+// Test driver: `FILE` is formatted. It writes `TEXT-BEGIN`, the text exactly as the formatter gives it, a line end, and then
+// `TEXT-END ok` or `TEXT-END unchanged`.
+fn main() {
+    let given = args()
+    if List.length(given) > 0 {
+        let raw = read_file(List.get(given, 0))
+        let result = format_source(raw)
+        print("TEXT-BEGIN")
+        print(result.text)
+        if result.ok {
+            print("TEXT-END ok")
+        } else {
+            print("TEXT-END unchanged")
+        }
+    }
+}
