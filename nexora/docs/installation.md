@@ -3,6 +3,40 @@
 NEXORA is installed from the source code or from the registry: the `nexora-lang` package is
 published on PyPI and on npm ([packages for pip and npm](#packages-for-pip-and-npm)).
 
+## The native programs (no Python)
+
+The default way to use NEXORA is the set of native programs written in NEXORA itself and compiled by its own compiler
+([decision 0027](decisions/0027-herramientas-nativas-por-defecto.md)). They need no Python and no Node.js: one release file per system,
+published on the [releases page](https://github.com/xGlizyy/nexoralang/releases) under tags `native-v*`.
+
+| System | File |
+|--------|------|
+| Linux x64 | `nexora-native-linux-x64.tar.gz` |
+| Linux arm64 | `nexora-native-linux-arm64.tar.gz` |
+| macOS (Apple silicon) | `nexora-native-macos-arm64.tar.gz` |
+| macOS (Intel) | `nexora-native-macos-x64.tar.gz` |
+| Windows x64 | `nexora-native-windows-x64.zip` |
+
+Each file has a `.sha256` with its checksum. Check it, unpack the file and put the folder on your `PATH`:
+
+```bash
+sha256sum -c nexora-native-linux-x64.sha256
+tar -xzf nexora-native-linux-x64.tar.gz
+export PATH="$PWD/nexora-native-linux-x64:$PATH"
+nex check program.nex
+```
+
+It holds five programs: `nex` (the command line), `nexora-lsp` (language server), `nex-mcp` (MCP server), `nexora-format` (formatter) and
+`nexora-worker` (the Playground worker). They give the same output, diagnostics and exit status as the Python implementation, which the
+continuous integration compares on every change.
+
+- **HTTPS** (`Net.get`) uses the TLS of the system: SChannel on Windows, and OpenSSL or LibreSSL, loaded when a request is made, on Linux
+  and macOS. The certificate and the host name are always verified.
+- **Windows:** the programs are built without inlining because of a known limit of the garbage collector (decision 0027, section 4).
+- **Building them yourself** needs only a C compiler: see [`selfhost/README.md`](../../selfhost/README.md).
+
+The sections below describe the Python implementation, which stays as the reference and as the installation through `pip` and `npm`.
+
 ## Requirements
 
 - **Python 3.11 or newer.** Check it with `python --version` (on some systems, `python3 --version`).

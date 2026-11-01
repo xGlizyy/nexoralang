@@ -1,6 +1,6 @@
 # 0026 — A code generator to C, written in NEXORA
 
-- **Status:** proposed.
+- **Status:** accepted (2 November 2026, with [0027](0027-herramientas-nativas-por-defecto.md)).
 - **Date:** 2026-10-31.
 - **Decision owner:** NEXORA maintainer.
 - **Affects:** stage 4 of decision 0025 (leaving Python), the meaning of "the reference
@@ -71,8 +71,8 @@ modules and 58 cases of the host and the limits `--max-text`, `--max-output` and
 same output, diagnostics and exit status as `nex run`. The compiler compiles itself: from Python alone it takes about 40 minutes, and
 the executable built from the C that Python wrote compiles `cgen.nex` into byte-identical C, twice. `selfhost/seed/cgen.c` keeps that C,
 so the compiler can be rebuilt with a C compiler and no NEXORA run by Python (this answers the last open question). The same generator
-builds `nex.nex` as a native `nex check`, `nex run` and `nex test`. Not done: `Net.get` and `Process.run` run nothing (they make the
-same permission decisions and then say that a compiled program cannot make the operation yet). The C compiler used was `zig cc`, from a
+builds `nex.nex` as a native `nex check`, `nex run` and `nex test`. At that date `Net.get` and `Process.run` ran nothing (they made the
+same permission decisions and then said that a compiled program could not make the operation yet); they do since the release `native-v0.15.0`. The C compiler used was `zig cc`, from a
 virtual environment. Speed (2026-11-01): the native `nex` runs the programs of `selfhost/bench/` in 0.33 to 1.02 times the time of the Python implementation, and the compiler compiles itself in 28 seconds (it took 6 minutes), so the self-hosted implementation is no longer slower than the one it is meant to replace.
 
 ### 3.2 What the generated program must do
