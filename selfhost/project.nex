@@ -11,6 +11,8 @@
 
 import "lexer.nex"
 import "parser.nex"
+import "legacy.nex"
+import "json.nex"
 import "checker.nex"
 
 uses read "."
@@ -28,7 +30,7 @@ pub type Project = { modules: List[Module], names: List[Text], over: Text }
 
 // The files of a project that is not on disk (the worker of the playground): `on` is true, and a path that is not in `paths`
 // is not part of the project.
-type Virtual = { on: Bool, solo: Bool, paths: List[Text], texts: List[Text] }
+type Virtual = { on: Bool, solo: Bool, paths: List[Text], texts: List[Text], legacy: Bool }
 
 type Loader = {
     modules: List[Module], stack: List[Text], keys: List[Text], names: List[Text], name_keys: List[Text],
@@ -222,7 +224,16 @@ fn source_of(virt: Virtual, path: Text) gives Text {
     if virt.on {
         return List.get(virt.texts, index_of(virt.paths, path))
     }
-    return read_file(path)
+    let raw = read_file(path)
+    if Text.length(raw) > 0 and Text.slice(raw, 0, 1) == json.char_from_code(65279) {
+        return Text.slice(raw, 1, Text.length(raw))
+    }
+    return raw
+}
+
+// Why a module cannot be read: "" when it can, `E0001|reason` or `E0002|` (replaced in the executable, which asks the system).
+pub fn module_problem(path: Text) gives Text {
+    return ""
 }
 
 fn read_module(loader: Loader, path: Text) gives Loader {
@@ -244,7 +255,11 @@ fn read_module(loader: Loader, path: Text) gives Loader {
             )
         }
     }
-    let lexed = lexer.tokenize(text)
+    var lexed = lexer.tokenize(text)
+    if loader.virt.legacy {
+        let plain = lexer.tokenize(legacy.lf_only(text))
+        lexed = lexer.LexResult(tokens: legacy.stream(plain.tokens), diagnostics: plain.diagnostics)
+    }
     var program = parser.Node.Null()
     var clean = false
     var reason = "lexical"
@@ -316,6 +331,21 @@ fn read_module(loader: Loader, path: Text) gives Loader {
                         span
                     )
                 )
+            } else if not current.virt.on and module_problem(target) != "" {
+                let trouble = module_problem(target)
+                if Text.starts_with(trouble, "E0002") {
+                    pending = List.append(pending, problem_at("E0002", target + " is not valid UTF-8", "", span))
+                } else {
+                    pending = List.append(
+                        pending,
+                        problem_at(
+                            "E0001", Text.slice(trouble, 6, Text.length(trouble)) + ": " + target,
+                            "An import names a file relative to the file that has it: import " + json.char_from_code(34)
+                            + "app/models.nex" + json.char_from_code(34) + ".",
+                            span
+                        )
+                    )
+                }
             } else {
                 let registered = Loader(
                     modules: current.modules, stack: current.stack, keys: current.keys,
@@ -346,7 +376,17 @@ pub fn load(entry: Text) gives Project {
 pub fn load_limited(entry: Text, limit: Int) gives Project {
     let start = Loader(
         modules: [], stack: [], keys: [], names: [], name_keys: [], limit: limit,
-        virt: Virtual(on: false, solo: false, paths: [], texts: []), over: ""
+        virt: Virtual(on: false, solo: false, paths: [], texts: [], legacy: false), over: ""
+    )
+    let done = read_module(start, entry)
+    return Project(modules: done.modules, names: done.names, over: done.over)
+}
+
+// A project written for 0.11, on disk: every file is read with the front end of 0.11 (legacy.nex), `nex migrate` checks it that way.
+pub fn load_legacy(entry: Text) gives Project {
+    let start = Loader(
+        modules: [], stack: [], keys: [], names: [], name_keys: [], limit: 0,
+        virt: Virtual(on: false, solo: false, paths: [], texts: [], legacy: true), over: ""
     )
     let done = read_module(start, entry)
     return Project(modules: done.modules, names: done.names, over: done.over)
@@ -357,7 +397,7 @@ pub fn load_limited(entry: Text, limit: Int) gives Project {
 pub fn load_virtual(entry: Text, paths: List[Text], texts: List[Text], solo: Bool) gives Project {
     let start = Loader(
         modules: [], stack: [], keys: [], names: [], name_keys: [], limit: 0,
-        virt: Virtual(on: true, solo: solo, paths: paths, texts: texts), over: ""
+        virt: Virtual(on: true, solo: solo, paths: paths, texts: texts, legacy: false), over: ""
     )
     let done = read_module(start, entry)
     return Project(modules: done.modules, names: done.names, over: done.over)
@@ -430,7 +470,10 @@ fn is_name_text(part: Text) gives Bool {
 // `typed` is the tree with the type of each expression the checker could give one: for a module with syntax errors it is the partial
 // tree checked anyway (what it can tell about the code that did parse; its errors are dropped), as the Python implementation does for
 // `nex inspect`. `node` is what the rest uses.
-pub type Checked = { module: Module, node: parser.Node, typed: parser.Node, problems: List[parser.Problem], unsupported: Text }
+pub type Checked = {
+    module: Module, node: parser.Node, typed: parser.Node, problems: List[parser.Problem], unsupported: Text,
+    export: checker.Export, symbols: List[checker.Sym], refs: List[checker.SymRef]
+}
 
 fn has_errors(problems: List[parser.Problem]) gives Bool {
     for problem in problems {
@@ -441,7 +484,27 @@ fn has_errors(problems: List[parser.Problem]) gives Bool {
     return false
 }
 
-// Checks every module in order, each one with the exports of the modules before it.
+// What a module may use of the modules before it: the exports of the modules it imports, and nothing else (decision 0018). The rest
+// would only make every lookup of the checker longer.
+fn visible_to(modules: List[Module], module: Module, exports: List[checker.Export]) gives List[checker.Export] {
+    var names: List[Text] = []
+    for target in module.imports {
+        for other in modules {
+            if other.path == target {
+                names = List.append(names, other.name)
+            }
+        }
+    }
+    var visible: List[checker.Export] = []
+    for export in exports {
+        if List.contains(names, export.name) {
+            visible = List.append(visible, export)
+        }
+    }
+    return visible
+}
+
+// Checks every module in order, each one with the exports of the modules it imports.
 pub fn check_all(project: Project, require_main: Bool) gives List[Checked] {
     let modules = project.modules
     var results: List[Checked] = []
@@ -454,21 +517,30 @@ pub fn check_all(project: Project, require_main: Bool) gives List[Checked] {
         let module = List.get(modules, i)
         if not module.clean {
             var typed = module.program
+            var partial_export = checker.empty_export()
+            var partial_symbols: List[checker.Sym] = []
+            var partial_refs: List[checker.SymRef] = []
             if module.reason != "lexical" {
                 let last_one = i == List.length(modules) - 1
                 let partial = checker.analyze_module(
-                    module.program, module.name, last_one and require_main, false, exports, project.names
+                    module.program, module.name, last_one and require_main, false, visible_to(modules, module, exports), project.names
                 )
                 typed = partial.node
+                partial_export = partial.export
+                partial_symbols = partial.symbols
+                partial_refs = partial.refs
             }
             results = List.append(
                 results,
-                Checked(module: module, node: module.program, typed: typed, problems: module.problems, unsupported: "")
+                Checked(
+                    module: module, node: module.program, typed: typed, problems: module.problems, unsupported: "",
+                    export: partial_export, symbols: partial_symbols, refs: partial_refs
+                )
             )
         } else {
             let last = i == List.length(modules) - 1
             let analysis = checker.analyze_module(
-                module.program, module.name, last and require_main, not errors, exports, project.names
+                module.program, module.name, last and require_main, not errors, visible_to(modules, module, exports), project.names
             )
             exports = List.append(exports, analysis.export)
             errors = errors or has_errors(analysis.problems) or List.length(module.pending) > 0
@@ -476,7 +548,8 @@ pub fn check_all(project: Project, require_main: Bool) gives List[Checked] {
                 results,
                 Checked(
                     module: module, node: analysis.node, typed: analysis.node,
-                    problems: List.concat(module.pending, analysis.problems), unsupported: analysis.unsupported
+                    problems: List.concat(module.pending, analysis.problems), unsupported: analysis.unsupported,
+                    export: analysis.export, symbols: analysis.symbols, refs: analysis.refs
                 )
             )
         }

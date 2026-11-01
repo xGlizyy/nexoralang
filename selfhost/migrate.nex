@@ -1,0 +1,864 @@
+// `nex migrate`: the edits that move a file written for NEXORA 0.11 to the syntax of 0.12 (nexora/src/nexora/migrate.py, decision 0019,
+// section 8). This module only computes. It receives the text of one file and what the front end of 0.11 (legacy.nex) made of it, and
+// answers with the edits of 8.5 or the refusals of 8.6. Reading and writing files is the command's job.
+//
+// The edits never write the program again: each one is a range of the original text and its replacement, and every character outside
+// them is kept (G2). Positions are offsets in the text, counted in characters, with the line endings the lexer reads: a carriage
+// return with a line feed, a line feed, or a lone carriage return.
+
+import "json.nex"
+import "lexer.nex"
+import "parser.nex"
+import "context.nex"
+
+pub type Edit = { start: Int, end: Int, text: Text, kind: Text }
+
+pub type Refusal = { line: Int, column: Int, message: Text }
+
+pub type Plan = { edits: List[Edit], refusals: List[Refusal] }
+
+// For every line of the text: where it starts, where its content ends and where its line ending ends.
+pub type Lines = { starts: List[Int], contents: List[Int], ends: List[Int] }
+
+// What the planner works with.
+type Planner = { text: Text, lines: Lines, tokens: List[lexer.Token] }
+
+fn carriage() gives Text {
+    return json.char_from_code(13)
+}
+
+pub fn lines_of(text: Text) gives Lines {
+    let cr = carriage()
+    var starts: List[Int] = []
+    var contents: List[Int] = []
+    var ends: List[Int] = []
+    var start = 0
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c == "\n" {
+            starts = List.append(starts, start)
+            contents = List.append(contents, i)
+            ends = List.append(ends, i + 1)
+            start = i + 1
+        } else if c == cr {
+            let at = i
+            var after = i + 1
+            if i + 1 < Text.length(text) and Text.slice(text, i + 1, i + 2) == "\n" {
+                after = i + 2
+                i = i + 1
+            }
+            starts = List.append(starts, start)
+            contents = List.append(contents, at)
+            ends = List.append(ends, after)
+            start = after
+        }
+        i = i + 1
+    }
+    if start < Text.length(text) or List.length(starts) == 0 {
+        starts = List.append(starts, start)
+        contents = List.append(contents, Text.length(text))
+        ends = List.append(ends, Text.length(text))
+    }
+    return Lines(starts: starts, contents: contents, ends: ends)
+}
+
+fn offset_of(lines: Lines, line: Int, column: Int) gives Int {
+    if line < 1 or line > List.length(lines.starts) {
+        return 0
+    }
+    return List.get(lines.starts, line - 1) + column - 1
+}
+
+fn start_of(p: Planner, token: lexer.Token) gives Int {
+    return offset_of(p.lines, token.line, token.column)
+}
+
+fn end_of(p: Planner, token: lexer.Token) gives Int {
+    return offset_of(p.lines, token.end_line, token.end_column)
+}
+
+fn indentation(p: Planner, line: Int) gives Text {
+    let start = List.get(p.lines.starts, line - 1)
+    let content_end = List.get(p.lines.contents, line - 1)
+    let content = Text.slice(p.text, start, content_end)
+    var i = 0
+    while i < Text.length(content) and (Text.slice(content, i, i + 1) == " " or Text.slice(content, i, i + 1) == "\t")
+        shrinks Text.length(content) - i
+    {
+        i = i + 1
+    }
+    return Text.slice(content, 0, i)
+}
+
+fn ending(p: Planner, line: Int) gives Text {
+    return Text.slice(p.text, List.get(p.lines.contents, line - 1), List.get(p.lines.ends, line - 1))
+}
+
+// Tokens
+
+fn token_at(p: Planner, line: Int, column: Int) gives Int {
+    var i = 0
+    while i < List.length(p.tokens)
+        shrinks List.length(p.tokens) - i
+    {
+        let token = List.get(p.tokens, i)
+        if token.line == line and token.column == column {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn token_ending_at(p: Planner, line: Int, column: Int) gives Int {
+    var i = 0
+    while i < List.length(p.tokens)
+        shrinks List.length(p.tokens) - i
+    {
+        let token = List.get(p.tokens, i)
+        if token.end_line == line and token.end_column == column {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn token_of(p: Planner, index: Int) gives lexer.Token {
+    return List.get(p.tokens, index)
+}
+
+fn kind_at(p: Planner, index: Int) gives Text {
+    let token = List.get(p.tokens, index)
+    return token.kind
+}
+
+fn line_at(p: Planner, index: Int) gives Int {
+    let token = List.get(p.tokens, index)
+    return token.line
+}
+
+fn end_at(edits: List[Edit], index: Int) gives Int {
+    let edit = List.get(edits, index)
+    return edit.end
+}
+
+fn start_at(edits: List[Edit], index: Int) gives Int {
+    let edit = List.get(edits, index)
+    return edit.start
+}
+
+fn refuse_at(token: lexer.Token, message: Text) gives Refusal {
+    return Refusal(line: token.line, column: token.column, message: message)
+}
+
+fn place_line(node: parser.Node, which: Int) gives Int {
+    return context.place_at(node, which)
+}
+
+fn clause_word_of(lexeme: Text) gives Text {
+    if lexeme == "requires" {
+        return "needs"
+    }
+    if lexeme == "ensures" {
+        return "promises"
+    }
+    if lexeme == "invariant" {
+        return "keeps"
+    }
+    if lexeme == "decreases" {
+        return "shrinks"
+    }
+    return ""
+}
+
+fn renamed_function(name: Text) gives Text {
+    if name == "unwrap" {
+        return "value"
+    }
+    if name == "unwrap_or" {
+        return "value_or"
+    }
+    return ""
+}
+
+fn new_keywords() gives List[Text] {
+    return ["needs", "gives", "promises", "keeps", "shrinks", "trust"]
+}
+
+fn nothing() gives Plan {
+    return Plan(edits: [], refusals: [])
+}
+
+fn joined(a: Plan, b: Plan) gives Plan {
+    return Plan(edits: List.concat(a.edits, b.edits), refusals: List.concat(a.refusals, b.refusals))
+}
+
+fn only_edit(edit: Edit) gives Plan {
+    return Plan(edits: [edit], refusals: [])
+}
+
+fn only_refusal(refusal: Refusal) gives Plan {
+    return Plan(edits: [], refusals: [refusal])
+}
+
+// Every node of a tree.
+fn nodes_of(node: parser.Node) gives List[parser.Node] {
+    return match node {
+        parser.Node.Obj(kind, names, values) => List.concat([node], nodes_in(values))
+        parser.Node.Items(items) => nodes_in(items)
+        _ => []
+    }
+}
+
+fn nodes_in(nodes: List[parser.Node]) gives List[parser.Node] {
+    var found: List[parser.Node] = []
+    for each in nodes {
+        found = List.concat(found, nodes_of(each))
+    }
+    return found
+}
+
+// 8.6: a name that is a keyword in 0.12 is the person's to change.
+fn plan_names(p: Planner, program: parser.Node) gives Plan {
+    var plan = nothing()
+    for token in p.tokens {
+        if token.kind == "name" and List.contains(new_keywords(), token.lexeme) {
+            plan = joined(plan, only_refusal(refuse_at(token, "'" + token.lexeme + "' is a keyword from 0.12: rename it")))
+        }
+    }
+    for declaration in context.items_of(context.field(program, "imports")) {
+        let written = slash_path(context.text_of(context.field(declaration, "path")))
+        var stem = written
+        let cut = last_slash(written)
+        if cut >= 0 {
+            stem = Text.slice(written, cut + 1, Text.length(written))
+        }
+        if Text.ends_with(stem, ".nex") {
+            stem = Text.slice(stem, 0, Text.length(stem) - 4)
+        }
+        let line = place_line(context.field(declaration, "path_span"), 0)
+        let column = place_line(context.field(declaration, "path_span"), 1)
+        if List.contains(new_keywords(), stem) {
+            plan = joined(
+                plan,
+                only_refusal(
+                    Refusal(line: line, column: column, message: "'" + stem + "' is a keyword from 0.12: rename the file '" + stem + ".nex'")
+                )
+            )
+        } else if stem == "Option" or stem == "Result" {
+            plan = joined(
+                plan,
+                only_refusal(
+                    Refusal(
+                        line: line, column: column,
+                        message: "A module named '" + stem + "' hides the built-in type: rename the file '" + stem + ".nex'"
+                    )
+                )
+            )
+        }
+    }
+    return plan
+}
+
+fn slash_path(text: Text) gives Text {
+    var out = ""
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c == json.char_from_code(92) {
+            out = out + "/"
+        } else {
+            out = out + c
+        }
+        i = i + 1
+    }
+    return out
+}
+
+fn last_slash(text: Text) gives Int {
+    var found = 0 - 1
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.slice(text, i, i + 1) == "/" {
+            found = i
+        }
+        i = i + 1
+    }
+    return found
+}
+
+// The word of a clause: `requires` becomes `needs`, and so on (E3).
+fn plan_clause_word(p: Planner, line: Int, column: Int) gives Plan {
+    let at = token_at(p, line, column)
+    if at < 0 {
+        return nothing()
+    }
+    let keyword = token_of(p, at)
+    let word = clause_word_of(keyword.lexeme)
+    if word == "" {
+        return nothing()
+    }
+    return only_edit(Edit(start: start_of(p, keyword), end: end_of(p, keyword), text: word, kind: "E3"))
+}
+
+// The clauses of a function or a loop sorted by their place.
+fn sorted_by_place(nodes: List[parser.Node]) gives List[parser.Node] {
+    var out: List[parser.Node] = []
+    for node in nodes {
+        var before: List[parser.Node] = []
+        var after: List[parser.Node] = []
+        for kept in out {
+            if place_line(kept, 0) < place_line(node, 0) or (place_line(kept, 0) == place_line(node, 0) and place_line(kept, 1) <= place_line(node, 1)) {
+                before = List.append(before, kept)
+            } else {
+                after = List.append(after, kept)
+            }
+        }
+        out = List.concat(List.append(before, node), after)
+    }
+    return out
+}
+
+fn plan_function(p: Planner, function: parser.Node) gives Plan {
+    var fn_index = token_at(p, place_line(function, 0), place_line(function, 1))
+    if fn_index < 0 {
+        return nothing()
+    }
+    if kind_at(p, fn_index) == "pub" {
+        fn_index = fn_index + 1
+    }
+    let body = context.field(function, "body")
+    let brace_index = token_at(p, place_line(body, 0), place_line(body, 1))
+    if brace_index < 0 {
+        return nothing()
+    }
+    var arrow_index = 0 - 1
+    var i = fn_index
+    while i < brace_index and arrow_index < 0
+        shrinks brace_index - i
+    {
+        if kind_at(p, i) == "->" {
+            arrow_index = i
+        }
+        i = i + 1
+    }
+    if arrow_index < 0 {
+        return nothing()
+    }
+    let arrow = token_of(p, arrow_index)
+    let type_end = token_of(p, brace_index - 1)
+    var plan = nothing()
+    if brace_index - arrow_index == 2 and type_end.lexeme == "Void" {
+        let closing = token_of(p, arrow_index - 1)
+        plan = only_edit(Edit(start: end_of(p, closing), end: end_of(p, type_end), text: "", kind: "E2"))
+    } else {
+        plan = only_edit(Edit(start: start_of(p, arrow), end: end_of(p, arrow), text: "gives", kind: "E1"))
+    }
+    var contracts: List[parser.Node] = []
+    var clauses: List[parser.Node] = []
+    for item in context.items_of(context.field(function, "header")) {
+        if context.kind_of(item) == "Contract" {
+            contracts = List.append(contracts, item)
+        }
+        clauses = List.append(clauses, item)
+    }
+    for contract in contracts {
+        plan = joined(plan, plan_clause_word(p, place_line(contract, 0), place_line(contract, 1)))
+    }
+    let ordered = sorted_by_place(clauses)
+    let first = token_of(p, fn_index)
+    var signature_line = first.line
+    if fn_index > 0 and kind_at(p, fn_index - 1) == "pub" {
+        signature_line = line_at(p, fn_index - 1)
+    }
+    if List.length(ordered) > 0 {
+        return joined(plan, plan_header(p, brace_index, ordered, signature_line))
+    }
+    return joined(plan, plan_no_header(p, brace_index, type_end))
+}
+
+fn plan_loop(p: Planner, loop: parser.Node) gives Plan {
+    let clauses = context.items_of(context.field(loop, "clauses"))
+    if List.length(clauses) == 0 {
+        return nothing()
+    }
+    var plan = nothing()
+    for clause in clauses {
+        plan = joined(plan, plan_clause_word(p, place_line(clause, 0), place_line(clause, 1)))
+    }
+    let body = context.field(loop, "body")
+    let brace_index = token_at(p, place_line(body, 0), place_line(body, 1))
+    if brace_index < 0 {
+        return plan
+    }
+    return joined(plan, plan_header(p, brace_index, sorted_by_place(clauses), place_line(loop, 0)))
+}
+
+// The `{` goes after the last clause, alone on its line, and the clauses have to start and end their lines.
+fn plan_header(p: Planner, brace_index: Int, clauses: List[parser.Node], signature_line: Int) gives Plan {
+    let brace = token_of(p, brace_index)
+    let first_clause = List.get(clauses, 0)
+    let last_clause = List.get(clauses, List.length(clauses) - 1)
+    let first_index = token_at(p, place_line(first_clause, 0), place_line(first_clause, 1))
+    if first_index < 0 {
+        return nothing()
+    }
+    let first = token_of(p, first_index)
+    if first.line == brace.line {
+        return only_refusal(refuse_at(first, "Put '" + first.lexeme + "' on its own line, then run nex migrate again"))
+    }
+    let last_index = token_ending_at(p, place_line(last_clause, 2), place_line(last_clause, 3))
+    if last_index < 0 or last_index + 1 >= List.length(p.tokens) {
+        return nothing()
+    }
+    let last = token_of(p, last_index)
+    let following = token_of(p, last_index + 1)
+    if following.line == last.end_line {
+        let keyword_index = token_at(p, place_line(last_clause, 0), place_line(last_clause, 1))
+        let keyword = token_of(p, keyword_index)
+        return only_refusal(refuse_at(keyword, "Put '" + keyword.lexeme + "' on its own line, then run nex migrate again"))
+    }
+    let line = last.end_line
+    let insertion = List.get(p.lines.ends, line - 1)
+    return joined(
+        only_edit(remove_brace(p, brace_index)),
+        only_edit(
+            Edit(start: insertion, end: insertion, text: indentation(p, signature_line) + "\{" + ending(p, line), kind: "E6")
+        )
+    )
+}
+
+fn remove_brace(p: Planner, brace_index: Int) gives Edit {
+    let brace = token_of(p, brace_index)
+    let before = token_of(p, brace_index - 1)
+    if before.end_line == brace.line {
+        return Edit(start: end_of(p, before), end: end_of(p, brace), text: "", kind: "E5a")
+    }
+    let start = List.get(p.lines.starts, brace.line - 1)
+    let content_end = List.get(p.lines.contents, brace.line - 1)
+    let end = List.get(p.lines.ends, brace.line - 1)
+    let rest = Text.slice(p.text, end_of(p, brace), content_end)
+    if blank(rest) {
+        return Edit(start: start, end: end, text: "", kind: "E5b")
+    }
+    var skipped = 0
+    while skipped < Text.length(rest) and (Text.slice(rest, skipped, skipped + 1) == " " or Text.slice(rest, skipped, skipped + 1) == "\t")
+        shrinks Text.length(rest) - skipped
+    {
+        skipped = skipped + 1
+    }
+    return Edit(start: start_of(p, brace), end: end_of(p, brace) + skipped, text: "", kind: "E5c")
+}
+
+fn blank(text: Text) gives Bool {
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c != " " and c != "\t" {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+fn trim_blanks(text: Text) gives Text {
+    var start = 0
+    var end = Text.length(text)
+    while start < end and (Text.slice(text, start, start + 1) == " " or Text.slice(text, start, start + 1) == "\t")
+        shrinks end - start
+    {
+        start = start + 1
+    }
+    while end > start and (Text.slice(text, end - 1, end) == " " or Text.slice(text, end - 1, end) == "\t")
+        shrinks end - start
+    {
+        end = end - 1
+    }
+    return Text.slice(text, start, end)
+}
+
+// A function with no clauses: the `{` goes on the line of the head.
+fn plan_no_header(p: Planner, brace_index: Int, type_end: lexer.Token) gives Plan {
+    let brace = token_of(p, brace_index)
+    let before = token_of(p, brace_index - 1)
+    if before.end_line == brace.line {
+        return nothing()
+    }
+    let start = List.get(p.lines.starts, brace.line - 1)
+    let content_end = List.get(p.lines.contents, brace.line - 1)
+    let end = List.get(p.lines.ends, brace.line - 1)
+    let rest = trim_blanks(Text.slice(p.text, end_of(p, brace), content_end))
+    if Text.starts_with(rest, "//") {
+        return only_refusal(refuse_at(brace, "Move this comment, then run nex migrate again"))
+    }
+    if rest != "" {
+        return only_refusal(refuse_at(brace, "Put the first statement on its own line, then run nex migrate again"))
+    }
+    let insertion = end_of(p, type_end)
+    return joined(
+        only_edit(Edit(start: start, end: end, text: "", kind: "E7")),
+        only_edit(Edit(start: insertion, end: insertion, text: " \{", kind: "E7"))
+    )
+}
+
+// E4: `Option.unwrap` and `Option.unwrap_or` (and the ones of `Result`) are renamed. A call is the owner, a dot, the name and a `(`.
+fn plan_renames(p: Planner) gives Plan {
+    var plan = nothing()
+    var i = 2
+    while i + 1 < List.length(p.tokens)
+        shrinks List.length(p.tokens) - i
+    {
+        let owner = token_of(p, i - 2)
+        let dot = token_of(p, i - 1)
+        let name = token_of(p, i)
+        let open = token_of(p, i + 1)
+        if (owner.lexeme == "Option" or owner.lexeme == "Result") and owner.kind == "name" and dot.kind == "." and open.kind == "(" {
+            let renamed = renamed_function(name.lexeme)
+            if renamed != "" and name.kind == "name" {
+                plan = joined(
+                    plan, only_edit(Edit(start: start_of(p, name), end: end_of(p, name), text: renamed, kind: "E4"))
+                )
+            }
+        }
+        i = i + 1
+    }
+    return plan
+}
+
+fn last_dot_of(text: Text) gives Int {
+    var found = 0 - 1
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        if Text.slice(text, i, i + 1) == "." {
+            found = i
+        }
+        i = i + 1
+    }
+    return found
+}
+
+// The edits sorted by position (8.5.3), the ones that start at the same place in the order they were found.
+fn in_order(edits: List[Edit]) gives List[Edit] {
+    var out: List[Edit] = []
+    for edit in edits {
+        var before: List[Edit] = []
+        var after: List[Edit] = []
+        for kept in out {
+            if kept.start < edit.start or (kept.start == edit.start and kept.end <= edit.end) {
+                before = List.append(before, kept)
+            } else {
+                after = List.append(after, kept)
+            }
+        }
+        out = List.concat(List.append(before, edit), after)
+    }
+    return out
+}
+
+fn sorted_refusals(refusals: List[Refusal]) gives List[Refusal] {
+    var out: List[Refusal] = []
+    for refusal in refusals {
+        var before: List[Refusal] = []
+        var after: List[Refusal] = []
+        for kept in out {
+            if kept.line < refusal.line or (kept.line == refusal.line and kept.column <= refusal.column) {
+                before = List.append(before, kept)
+            } else {
+                after = List.append(after, kept)
+            }
+        }
+        out = List.concat(List.append(before, refusal), after)
+    }
+    return out
+}
+
+// Whether two edits overlap: a defect of this tool, never of the program.
+pub fn overlapping(edits: List[Edit]) gives Bool {
+    var i = 1
+    while i < List.length(edits)
+        shrinks List.length(edits) - i
+    {
+        if end_at(edits, i - 1) > start_at(edits, i) {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+// The plan of one file: `tokens` are the tokens the lexer of 0.11 made of `text`, `program` the tree of the file.
+pub fn plan_file(text: Text, tokens: List[lexer.Token], program: parser.Node) gives Plan {
+    var kept: List[lexer.Token] = []
+    for token in tokens {
+        if token.kind != "end of line" and token.kind != "end of file" {
+            kept = List.append(kept, token)
+        }
+    }
+    let p = Planner(text: text, lines: lines_of(text), tokens: kept)
+    var result = plan_names(p, program)
+    for function in context.items_of(context.field(program, "functions")) {
+        result = joined(result, plan_function(p, function))
+    }
+    for node in nodes_of(program) {
+        let kind = context.kind_of(node)
+        if kind == "While" or kind == "For" {
+            result = joined(result, plan_loop(p, node))
+        }
+    }
+    result = joined(result, plan_renames(p))
+    if List.length(result.refusals) > 0 {
+        return Plan(edits: [], refusals: sorted_refusals(result.refusals))
+    }
+    return Plan(edits: in_order(result.edits), refusals: [])
+}
+
+// The text with the edits applied, in their order.
+pub fn apply(text: Text, edits: List[Edit]) gives Text {
+    var out = ""
+    var position = 0
+    for edit in edits {
+        out = out + Text.slice(text, position, edit.start) + edit.text
+        position = edit.end
+    }
+    return out + Text.slice(text, position, Text.length(text))
+}
+
+// G2 (8.5.4): every character outside the edits is in the output, unchanged and in order.
+pub fn kept_outside(text: Text, edits: List[Edit], output: Text) gives Bool {
+    var position = 0
+    var at = 0
+    for edit in edits {
+        let gap = Text.slice(text, position, edit.start)
+        if Text.slice(output, at, at + Text.length(gap)) != gap {
+            return false
+        }
+        at = at + Text.length(gap)
+        if Text.slice(output, at, at + Text.length(edit.text)) != edit.text {
+            return false
+        }
+        at = at + Text.length(edit.text)
+        position = edit.end
+    }
+    return Text.slice(output, at, Text.length(output)) == Text.slice(text, position, Text.length(text))
+}
+
+// 8.4: structural equivalence. The tree of the 0.11 file (as 0.12 reads it, legacy.nex) and the tree of the migrated text are equal,
+// field by field, after the rename of 8.4: positions are never compared.
+pub fn equivalent(old: parser.Node, new: parser.Node) gives Bool {
+    return same_tree(old, new, true)
+}
+
+fn skipped_field(name: Text) gives Bool {
+    return name == "span" or Text.ends_with(name, "_span")
+}
+
+fn kept_fields(names: List[Text], values: List[parser.Node]) gives List[Int] {
+    var kept: List[Int] = []
+    var i = 0
+    while i < List.length(names)
+        shrinks List.length(names) - i
+    {
+        if not skipped_field(List.get(names, i)) {
+            kept = List.append(kept, i)
+        }
+        i = i + 1
+    }
+    return kept
+}
+
+fn same_tree(a: parser.Node, b: parser.Node, old_side: Bool) gives Bool {
+    return match a {
+        parser.Node.Obj(kind_a, names_a, values_a) => same_object(kind_a, names_a, values_a, b, old_side)
+        parser.Node.Items(items_a) => same_items(items_a, b, old_side)
+        parser.Node.Null => context.is_null(b)
+        parser.Node.Flag(value_a) => match b {
+            parser.Node.Flag(value_b) => value_a == value_b
+            _ => false
+        }
+        parser.Node.Whole(value_a) => match b {
+            parser.Node.Whole(value_b) => value_a == value_b
+            _ => false
+        }
+        parser.Node.Real(text_a) => match b {
+            parser.Node.Real(text_b) => text_a == text_b
+            _ => false
+        }
+        parser.Node.Str(text_a) => match b {
+            parser.Node.Str(text_b) => text_a == text_b
+            _ => false
+        }
+        parser.Node.Place(l1, c1, l2, c2) => match b {
+            parser.Node.Place(m1, d1, m2, d2) => true
+            _ => false
+        }
+    }
+}
+
+fn same_items(items_a: List[parser.Node], b: parser.Node, old_side: Bool) gives Bool {
+    let items_b = context.items_of(b)
+    if List.length(items_a) != List.length(items_b) {
+        return false
+    }
+    var i = 0
+    while i < List.length(items_a)
+        shrinks List.length(items_a) - i
+    {
+        if not same_tree(List.get(items_a, i), List.get(items_b, i), old_side) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+fn same_object(kind_a: Text, names_a: List[Text], values_a: List[parser.Node], b: parser.Node, old_side: Bool) gives Bool {
+    return match b {
+        parser.Node.Obj(kind_b, names_b, values_b) => same_fields(kind_a, names_a, values_a, kind_b, names_b, values_b, old_side)
+        _ => false
+    }
+}
+
+// The name of a call as the migrated text writes it: the old `Option.unwrap` is `Option.value`.
+fn renamed_callee(callee: Text) gives Text {
+    let dot = last_dot_of(callee)
+    if dot < 0 {
+        return callee
+    }
+    let owner = Text.slice(callee, 0, dot)
+    let function = Text.slice(callee, dot + 1, Text.length(callee))
+    if (owner == "Option" or owner == "Result") and renamed_function(function) != "" {
+        return owner + "." + renamed_function(function)
+    }
+    return callee
+}
+
+fn same_fields(
+    kind_a: Text, names_a: List[Text], values_a: List[parser.Node], kind_b: Text, names_b: List[Text], values_b: List[parser.Node],
+    old_side: Bool
+) gives Bool {
+    if kind_a != kind_b {
+        return false
+    }
+    let used_a = kept_fields(names_a, values_a)
+    let used_b = kept_fields(names_b, values_b)
+    if List.length(used_a) != List.length(used_b) {
+        return false
+    }
+    var i = 0
+    while i < List.length(used_a)
+        shrinks List.length(used_a) - i
+    {
+        let name = List.get(names_a, List.get(used_a, i))
+        if name != List.get(names_b, List.get(used_b, i)) {
+            return false
+        }
+        let left = List.get(values_a, List.get(used_a, i))
+        let right = List.get(values_b, List.get(used_b, i))
+        if kind_a == "Call" and name == "callee" {
+            if renamed_callee(context.text_of(left)) != context.text_of(right) {
+                return false
+            }
+        } else if not same_tree(left, right, old_side) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// 8.2.1: markers, for the diagnosis only. The tokens come from the lexer of 0.12. They explain a refusal; they never decide a route.
+pub fn markers(tokens: List[lexer.Token]) gives List[Bool] {
+    var old = false
+    var new = false
+    for token in tokens {
+        if token.kind == "->" or token.kind == "word of 0.11" {
+            old = true
+        }
+        if List.contains(new_keywords(), token.kind) {
+            new = true
+        }
+    }
+    return [old, new]
+}
+
+pub fn describe_markers(seen: List[Bool]) gives Text {
+    let old = List.get(seen, 0)
+    let new = List.get(seen, 1)
+    if old and new {
+        return "mixed: it has markers of 0.11 and of 0.12"
+    }
+    if old {
+        return "markers of 0.11"
+    }
+    if new {
+        return "markers of 0.12"
+    }
+    return "neutral: no marker of either syntax"
+}
+
+// How Python writes a text with `repr`.
+pub fn py_repr(text: Text) gives Text {
+    var quote = "'"
+    if Text.contains(text, "'") and not Text.contains(text, "\"") {
+        quote = "\""
+    }
+    var out = quote
+    let slash = json.char_from_code(92)
+    let cr = carriage()
+    var i = 0
+    while i < Text.length(text)
+        shrinks Text.length(text) - i
+    {
+        let c = Text.slice(text, i, i + 1)
+        if c == slash {
+            out = out + slash + slash
+        } else if c == quote {
+            out = out + slash + quote
+        } else if c == "\n" {
+            out = out + slash + "n"
+        } else if c == "\t" {
+            out = out + slash + "t"
+        } else if c == cr {
+            out = out + slash + "r"
+        } else if json.code_of(c) < 32 or json.code_of(c) == 127 {
+            out = out + slash + "x" + hex2(json.code_of(c))
+        } else {
+            out = out + c
+        }
+        i = i + 1
+    }
+    return out + quote
+}
+
+fn hex2(code: Int) gives Text {
+    let digits = "0123456789abcdef"
+    return Text.slice(digits, code / 16, code / 16 + 1) + Text.slice(digits, code - code / 16 * 16, code - code / 16 * 16 + 1)
+}
+
+// The line and the column of an offset, with the line endings the lexer reads.
+pub fn position_of(lines: Lines, offset: Int) gives List[Int] {
+    var line = 0
+    var i = 0
+    while i < List.length(lines.starts)
+        shrinks List.length(lines.starts) - i
+    {
+        if List.get(lines.starts, i) <= offset {
+            line = i
+        }
+        i = i + 1
+    }
+    return [line + 1, offset - List.get(lines.starts, line) + 1]
+}

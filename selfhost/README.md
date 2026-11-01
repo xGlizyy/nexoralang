@@ -142,17 +142,46 @@ on 29 programs and projects (texts), and `check` and `run` with `--format json` 
 
 In the executable `nex.nex` does what `nex` does on the outside: the diagnostics and the summary of a failure go to the standard error,
 the results to the standard output, and the process ends with the status of `nex` (0, 1 invalid program, 2 usage, 3 the program failed,
-4 unreadable file, 5 a contract was broken, 6 a test did not pass; 70 for what this implementation cannot do yet). It also has
-`--version`, `--format json`, `--timeout`, `--max-memory` `nex context FILE [--format text|json]` (the summary of [`context.nex`](context.nex), `nexora.context/2`; `compare_context.py` finds it equal to Python on 16 examples, 37 programs with errors and a file with a lexical error) and the command `inspect` (the `nexora.diagnostics/1` document, built by [`report.nex`](report.nex), the code the worker of the
-playground uses too). Three functions make that possible, `err`, `exit_with` and `file_problem`: NEXORA has no way to write on the
+4 unreadable file, 5 a contract was broken, 6 a test did not pass; 70 for what this implementation cannot do yet; 130 for Ctrl+C in
+`migrate --write`). It has every command of the Python `nex`:
+
+| Command | Where it is | Checked against Python with |
+|---|---|---|
+| `check`, `run`, `test`, `--version`, `--format json`, `--timeout`, `--max-memory` | [`nex.nex`](nex.nex) | `compare_nex.py`, `compare_limits.py`, `compare_stdin.py` |
+| `inspect` | the `nexora.inspect/3` tree, [`report.nex`](report.nex) | 29 programs, byte for byte |
+| `context [--format text\|json]` | [`context.nex`](context.nex), `nexora.context/2`, also for a program of several modules | `compare_context.py`: 96 programs (examples, programs with errors, projects, a lexical error, a syntax error, a missing file), text and JSON |
+| `symbols [--name N] [--function F]` | [`symbols.nex`](symbols.nex), `nexora.symbols/2`; the checker records every name, its type, its scope and every use while it checks (`Sym`, `SymRef` in [`checker.nex`](checker.nex)); the built-ins are generated from Python by [`make_builtins.py`](make_builtins.py) | `compare_symbols.py`: 96 programs, 570 runs with and without the filters |
+| `test --format json` | [`testdoc.nex`](testdoc.nex), `nexora.test/1`; the machine already recorded the calls an example made | `compare_test.py`: 55 programs, 113 runs (also `--function` with a name that does not exist, with the suggestion of `difflib`) |
+| `debug` | `debug_command` in [`nex.nex`](nex.nex) on the session of the debugger of the worker (`debug_start_hosted`, `debug_advance`); the commands come from the controlling terminal (`CONIN$` or `/dev/tty`) | `compare_debug_cli.py`: 21 programs, 294 scripted sessions |
+| `migrate [--write]` | [`legacy.nex`](legacy.nex) (the front end of 0.11), [`migrate.nex`](migrate.nex) (the edits), `migrate_command` in [`nex.nex`](nex.nex) (the routes, the checks and the writing of the files, with C functions for the system) | `compare_migrate.py`: the 118 programs of the 0.11 corpus of decision 0019, as they are, with CRLF, with CR, with a byte-order mark, without and with `--write`, comparing the files afterwards |
+
+The front end of 0.11 is not a second implementation. 0.11 and 0.12 share the lexer; they differ in the words (`requires`, `ensures`,
+`invariant`, `decreases` become `needs`, `promises`, `keeps`, `shrinks`; `->` becomes `gives` and `-> Void` disappears), in where the
+clauses go (inside the block in 0.11, in the header in 0.12) and in `Option.unwrap`/`unwrap_or`. `legacy.nex` turns the tokens of a file of
+0.11 into the tokens of the 0.12 file that says the same, with the positions the words had, and the parser and the checker of 0.12 do the
+rest; the messages of 0.12 are written back with the words of 0.11 (`old_wording`) when the command shows what 0.11 said. The plan of the
+edits reads the tokens of 0.11 as the lexer made them (`legacy.plain`).
+
+`debug` reads the commands from the file named by `NEXORA_DEBUG_CONSOLE` when that variable is set (that is how it is tested); without it,
+from the terminal, so the program keeps the standard input for `input()`. `--timeout` counts the time the program runs, not the time at the
+prompt. `symbols`, `context` and `migrate` check a program of several modules with the exports of the modules it imports and nothing
+else (`visible_to` in [`project.nex`](project.nex)); an `import` of a file that does not exist or is not UTF-8 is E0001 or E0002 at the
+import, as in Python.
+
+Three functions make `err`, the status and the reasons possible, `err`, `exit_with` and `file_problem`: NEXORA has no way to write on the
 standard error, to set a status or to ask why a file cannot be read, so the definitions in `nex.nex` (what Python runs) write to the
-standard output and set nothing, and `cgen.nex` replaces them with C ones.
+standard output and set nothing, and `cgen.nex` replaces them with C ones (so it does with the reading of the commands of the debugger, the
+time limit while they are read, the exact reading of a file, and the operations of `migrate --write`: write beside the original, copy the
+permissions, replace with one rename, remove, and note Ctrl+C).
 
 | Limit | Why |
 |---|---|
-| Run by Python, no exit status and no standard error | A program has neither: the three functions above only exist in the executable. |
-| `nex context` of a program of several modules, and of a program whose type declarations are invalid in a way that changes what its fields and variables have (a record that contains itself, a name declared twice) | It ends with status 70 for several modules; for invalid declarations the types of the fields and variables may differ from Python's (3 of the 37 programs with errors). |
-| `nex test --format json` and the commands `debug`, `symbols`, `migrate` | Not written yet; `test --format json` ends with status 70 and says so. `symbols` needs the checker to record every resolved reference with its position, and `test --format json` the calls an example made, with their types: both are changes of the checker and of the machine. |
+| Run by Python, no exit status and no standard error | A program has neither: the functions above only exist in the executable. |
+| `debug` shows at most 64 frames of the call stack, and ends the list with `… (more frames)` | The snapshot of the debugger of the worker is capped; Python writes them all. |
+| `context` and `symbols` cut the text of a condition of a module from the file of the program | Python does the same (it uses the source of the analysis, not the one of the module): the executable repeats it so the output is equal. |
+| `migrate` orders the modules by the text of their path, not by the absolute path | NEXORA cannot ask for the absolute path. It is the same order when the modules are beside the program. |
+| `migrate` on Windows with an entry written with `\` | The paths of the imports are resolved with `/`; write the path with `/`. |
+| `migrate --write` does not inject failures | The hooks of Python (`Files`) are for its tests. Failures of the system, and Ctrl+C between two files, are reported with the three lists. |
 | `run` reads the standard input one line at a time, and `--max-input` is not applied to it yet | `--stdin FILE` still works and keeps the limit. A program cannot test for the end of the input without stopping at it, so a C function (`read_stdin_line`) answers with no line at the end. `compare_stdin.py` runs 3 programs with 8 inputs (LF, CRLF, no final break, none, empty lines, Unicode): all equal (Python in UTF-8 mode: on Windows `nex` decodes the input with the code page of the console). |
 | The output limit stops in the middle of a line | `print` writes whole lines, so what fit of that line is printed with a line break. |
 | A file with syntax errors | Only its lexical and syntax errors are shown, as for the file that runs. `nex check` also checks the partial tree of an imported module. |

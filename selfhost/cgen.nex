@@ -1060,6 +1060,48 @@ fn intrinsic_of(function: parser.Node) gives Text {
         if tool_name == "set_memory_limit" {
             return "rt_intr_set_memory_limit"
         }
+        if tool_name == "read_exact" {
+            return "rt_intr_read_exact"
+        }
+        if tool_name == "write_exclusive" {
+            return "rt_intr_write_exclusive"
+        }
+        if tool_name == "copy_permissions" {
+            return "rt_intr_copy_permissions"
+        }
+        if tool_name == "replace_file" {
+            return "rt_intr_replace_file"
+        }
+        if tool_name == "remove_file" {
+            return "rt_intr_remove_file"
+        }
+        if tool_name == "temp_name" {
+            return "rt_intr_temp_name"
+        }
+        if tool_name == "watch_interrupt" {
+            return "rt_intr_watch_interrupt"
+        }
+        if tool_name == "was_interrupted" {
+            return "rt_intr_was_interrupted"
+        }
+        if tool_name == "err_raw" {
+            return "rt_intr_eprint_raw"
+        }
+        if tool_name == "console_open" {
+            return "rt_intr_console_open"
+        }
+        if tool_name == "console_line" {
+            return "rt_intr_console_line"
+        }
+        if tool_name == "pause_timeout" {
+            return "rt_intr_pause_timeout"
+        }
+        if tool_name == "resume_timeout" {
+            return "rt_intr_resume_timeout"
+        }
+    }
+    if file == "selfhost/project.nex" and text_of(field(function, "name")) == "module_problem" {
+        return "rt_intr_module_problem"
     }
     if file == "selfhost/worker.nex" {
         if text_of(field(function, "name")) == "apply_limits" {

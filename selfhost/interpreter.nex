@@ -1855,7 +1855,7 @@ fn can_stream() gives Bool {
     return false
 }
 
-fn stream_text(text: Text) {
+pub fn stream_text(text: Text) {
 }
 
 // What a program printed so far with one line more: written now when the output is streamed, kept otherwise.
@@ -3607,7 +3607,7 @@ pub type Snapshot = {
 }
 
 // A program that is stopped, or has not started, and what is needed to go on with it.
-pub type Session = { prog: Prog, m: Machine, steps: Int, sent: Int, entry: Text }
+pub type Session = { prog: Prog, m: Machine, steps: Int, sent: Int, entry: Text, limit: Int }
 
 // The lines with a breakpoint, for each file that has some.
 pub type Breaks = { files: List[Text], lines: List[List[Int]] }
@@ -3857,7 +3857,7 @@ fn lines_since(out: List[Text], sent: Int) gives Text {
 
 fn stopped_at(kind: Text, session: Session, m: Machine, steps: Int, here: Snapshot) gives Advance {
     let nothing = problem_at("", "", "", [], parser.no_span())
-    let moved = Session(prog: session.prog, m: m, steps: steps, sent: List.length(m.out), entry: session.entry)
+    let moved = Session(prog: session.prog, m: m, steps: steps, sent: List.length(m.out), entry: session.entry, limit: session.limit)
     return Advance(
         kind: kind, session: moved, snapshot: here, problem: nothing, file: "", delta: lines_since(m.out, session.sent)
     )
@@ -3880,7 +3880,7 @@ pub fn debug_advance(session: Session, mode: Text, breaks: Breaks, fresh: Bool) 
         if not is_null(statement) {
             steps = steps + 1
             let span = place_of(statement)
-            if steps > max_debug_steps() {
+            if steps > session.limit {
                 return stopped_at("limit", session, m, steps, snapshot_of(m, steps, span, session.entry))
             }
             if mode == "step" or has_break(breaks, file_or(running_file(m.stack, 0), session.entry), span.line) {
@@ -3896,7 +3896,7 @@ pub fn debug_advance(session: Session, mode: Text, breaks: Breaks, fresh: Bool) 
     } else if done.failed {
         kind = "failed"
     }
-    let moved = Session(prog: prog, m: m, steps: steps, sent: List.length(m.out), entry: session.entry)
+    let moved = Session(prog: prog, m: m, steps: steps, sent: List.length(m.out), entry: session.entry, limit: session.limit)
     return Advance(
         kind: kind, session: moved, snapshot: no_snapshot(), problem: done.problem, file: file_or(done.file, session.entry),
         delta: lines_since(done.printed, session.sent) + done.partial
@@ -3909,7 +3909,17 @@ pub fn debug_start(node: parser.Node, options: RunOptions, entry: Text) gives Se
     let prog = build_prog(node, host)
     let start = start_machine(prog, start_fuel())
     let tracing = Tracing(watch: [], invoked: [], skipped: [], inputs: [])
-    return Session(prog: prog, m: with_tracing(start, tracing), steps: 0, sent: 0, entry: entry)
+    return Session(prog: prog, m: with_tracing(start, tracing), steps: 0, sent: 0, entry: entry, limit: max_debug_steps())
+}
+
+// A program ready to be debugged by `nex debug`: it has the host of `nex run` (the arguments, the files it may use, the standard input)
+// and writes what it prints as it prints it. `limit` is the most statements the session inspects.
+pub fn debug_start_hosted(node: parser.Node, options: RunOptions, entry: Text, limit: Int) gives Session {
+    let host = host_for(node, options, false, false)
+    let prog = build_prog(node, host)
+    let start = start_machine(prog, start_fuel())
+    let tracing = Tracing(watch: [], invoked: [], skipped: [], inputs: options.stdin)
+    return Session(prog: prog, m: with_tracing(start, tracing), steps: 0, sent: 0, entry: entry, limit: limit)
 }
 
 
@@ -3931,7 +3941,49 @@ fn cut_execution(done: Machine, problem: parser.Problem) gives Execution {
 }
 
 // What an example gave: "passed", "failed" (the condition was false) or "error" (it stopped with a diagnostic).
-pub type ExampleResult = { function: Text, index: Int, status: Text, problem: parser.Problem, out: List[Text] }
+pub type ExampleValue = { call: Text, place: parser.Span, kind: Text, status: Text, value: Text }
+
+pub type ExampleSkip = { call: Text, place: parser.Span, kind: Text, reason: Text }
+
+// What `nex test --format json` shows of an example besides its status: where its condition is and how it reads, the own calls it
+// made (in the order they were invoked, with what they returned) and the ones it never made.
+pub type ExampleResult = {
+    function: Text, index: Int, status: Text, problem: parser.Problem, out: List[Text], place: parser.Span, expression: Text,
+    message: Text, values: List[ExampleValue], skipped: List[ExampleSkip]
+}
+
+type Traced = { values: List[ExampleValue], skipped: List[ExampleSkip] }
+
+fn traced_calls(done: Machine, calls: List[parser.Node], lines: List[Text]) gives Traced {
+    var values: List[ExampleValue] = []
+    var invoked_keys: List[Text] = []
+    for seen in done.tracing.invoked {
+        let call = call_for_key(calls, seen.key)
+        values = List.append(
+            values,
+            ExampleValue(
+                call: text_of_span(lines, place_of(call)), place: place_of(call), kind: type_text(call), status: seen.status,
+                value: show_status_value(seen)
+            )
+        )
+        invoked_keys = List.append(invoked_keys, seen.key)
+    }
+    var skipped: List[ExampleSkip] = []
+    for call in calls {
+        let key = span_key(place_of(call))
+        if not List.contains(invoked_keys, key) {
+            var reason = "stopped_before"
+            if List.contains(done.tracing.skipped, key) {
+                reason = "short_circuit"
+            }
+            skipped = List.append(
+                skipped,
+                ExampleSkip(call: text_of_span(lines, place_of(call)), place: place_of(call), kind: type_text(call), reason: reason)
+            )
+        }
+    }
+    return Traced(values: values, skipped: skipped)
+}
 
 pub fn evaluate_examples(node: parser.Node, text: Text, only: Text) gives List[ExampleResult] {
     let prog = build_prog(node, declared_host(node))
@@ -3970,6 +4022,7 @@ fn evaluate_example(prog: Prog, lines: List[Text], name: Text, index: Int, item:
         message = text_of(field(item, "message"))
     }
     let none = problem_at("", "", "", [], parser.no_span())
+    let during = traced_calls(done, calls, lines)
     return match done.control {
         Control.CFail(raised) => ExampleResult(
             function: name, index: index, status: "error",
@@ -3981,7 +4034,8 @@ fn evaluate_example(prog: Prog, lines: List[Text], name: Text, index: Int, item:
                 ),
                 line: raised.line, column: raised.column, end_line: raised.end_line, end_column: raised.end_column
             ),
-            out: done.out
+            out: done.out, place: at, expression: text_of_span(lines, at), message: message,
+            values: during.values, skipped: during.skipped
         )
         Control.CDone(outcome) => finished_example(name, index, truth(outcome), done, calls, lines, message, at)
         _ => finished_example(name, index, false, done, calls, lines, message, at)
@@ -3993,8 +4047,12 @@ fn finished_example(
     at: parser.Span
 ) gives ExampleResult {
     let none = problem_at("", "", "", [], parser.no_span())
+    let seen_calls = traced_calls(done, calls, lines)
     if passed {
-        return ExampleResult(function: name, index: index, status: "passed", problem: none, out: done.out)
+        return ExampleResult(
+            function: name, index: index, status: "passed", problem: none, out: done.out, place: at,
+            expression: text_of_span(lines, at), message: message, values: seen_calls.values, skipped: seen_calls.skipped
+        )
     }
     var notes: List[Text] = []
     for seen in done.tracing.invoked {
@@ -4009,7 +4067,8 @@ fn finished_example(
     }
     return ExampleResult(
         function: name, index: index, status: "failed",
-        problem: problem_at("E4004", "This example of '" + name + "' is false", "", notes, at), out: done.out
+        problem: problem_at("E4004", "This example of '" + name + "' is false", "", notes, at), out: done.out, place: at,
+        expression: text_of_span(lines, at), message: message, values: seen_calls.values, skipped: seen_calls.skipped
     )
 }
 

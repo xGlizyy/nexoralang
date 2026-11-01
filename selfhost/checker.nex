@@ -24,7 +24,7 @@ type Binding = {
 
 // What a call needs to know about a function. `generic` marks the built-ins of List, whose types
 // mention the type variable T.
-type Sig = {
+pub type Sig = {
     name: Text, param_names: List[Text], param_types: List[Text], return_type: Text, builtin: Bool,
     generic: Bool, line: Int, column: Int
 }
@@ -634,7 +634,7 @@ fn check_name(state: State, env: List[Binding], node: parser.Node, expected: Tex
     let index = binding_index(env, name)
     if index >= 0 {
         let binding = List.get(env, index)
-        return checked(node, binding.ty, mark_read(state, binding))
+        return checked(node, binding.ty, mark_read(state, binding, span_of(node)))
     }
     if is_type_name(state, name) or is_enum_name(state, name) {
         return checked(
@@ -989,6 +989,12 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
     if not sig.builtin and is_private(given.state, callee) {
         return checked(rebuilt, "", report_private(given.state, callee, callee_span))
     }
+    var tracked = given
+    if not sig.builtin {
+        tracked = ArgList(
+            nodes: given.nodes, types: given.types, state: mark_function(given.state, sig.name, callee_span)
+        )
+    }
     let expected_count = List.length(sig.param_types)
     let count = List.length(arguments)
     if count != expected_count {
@@ -1007,16 +1013,16 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
         return checked(
             rebuilt, result,
             report(
-                given.state, "E2009",
+                tracked.state, "E2009",
                 "'" + shown_name(sig) + "' takes " + to_text(expected_count) + " argument" + plural + ", but "
                 + to_text(count) + " " + verb + " given",
                 "", ["Its signature is: " + describe(sig)], span_of(node)
             )
         )
     }
-    var after_caps = given
+    var after_caps = tracked
     if capability_of(callee) != "" {
-        after_caps = ArgList(nodes: given.nodes, types: given.types, state: check_capability(given.state, node))
+        after_caps = ArgList(nodes: tracked.nodes, types: tracked.types, state: check_capability(tracked.state, node))
     }
     if sig.generic {
         return check_generic_call(after_caps, rebuilt, sig, arguments, expected)
@@ -1026,7 +1032,7 @@ fn check_call(state: State, env: List[Binding], node: parser.Node, expected: Tex
     while i < count
         shrinks count - i
     {
-        let found = List.get(given.types, i)
+        let found = List.get(tracked.types, i)
         let wanted = List.get(sig.param_types, i)
         if found != "" and wanted != "" {
             if found == "Void" {
@@ -1245,7 +1251,7 @@ fn check_let(state: State, env: List[Binding], node: parser.Node) gives Flow {
     if free.free {
         let binding = make_binding(name, "variable", variable_type, kind_of(node) == "Var", false, name_span)
         next_env = List.append(env, binding)
-        next_state = add_symbol(free.state, binding)
+        next_state = add_symbol(free.state, binding, free.state.usage.scope)
     }
     return flow(with_field(node, "value", value.node), next_state, next_env, false)
 }
@@ -1308,7 +1314,7 @@ fn check_assign(state: State, env: List[Binding], node: parser.Node) gives Flow 
             ["'" + name + "' is declared as " + target.ty + "."]
         )
     }
-    return flow(rebuilt, mark_assigned(current, target), env, false)
+    return flow(rebuilt, mark_assigned(current, target, span), env, false)
 }
 
 fn check_return(state: State, env: List[Binding], node: parser.Node) gives Typed {
@@ -1394,7 +1400,8 @@ fn check_expression_statement(state: State, env: List[Binding], node: parser.Nod
 // block and whether it always returns; its environment is the one it received.
 fn check_block(state: State, env: List[Binding], node: parser.Node) gives Flow {
     let statements = items_of(field(node, "statements"))
-    var current = state
+    let outer = state.usage.scope
+    var current = with_scope(state, span_of(node))
     var scope = env
     var typed: List[parser.Node] = []
     var returned = false
@@ -1420,7 +1427,7 @@ fn check_block(state: State, env: List[Binding], node: parser.Node) gives Flow {
         }
         i = i + 1
     }
-    return flow(with_field(node, "statements", parser.Node.Items(typed)), current, env, returned)
+    return flow(with_field(node, "statements", parser.Node.Items(typed)), with_scope(current, outer), env, returned)
 }
 
 fn check_statement(state: State, env: List[Binding], node: parser.Node) gives Flow {
@@ -1616,7 +1623,7 @@ fn check_for(state: State, env: List[Binding], node: parser.Node) gives Flow {
     if free.free {
         let binding = make_binding(name, "variable", item, false, true, name_span)
         body_env = List.append(env, binding)
-        body_state = add_symbol(free.state, binding)
+        body_state = add_symbol(free.state, binding, span_of(field(node, "body")))
     }
     let body = check_block(body_state, body_env, field(node, "body"))
     let rebuilt = with_field(
@@ -1627,7 +1634,9 @@ fn check_for(state: State, env: List[Binding], node: parser.Node) gives Flow {
 
 // Functions
 
-fn declare_param(state: State, env: List[Binding], name: Text, span: parser.Span, ty: Text) gives Flow {
+fn declare_param(
+    state: State, env: List[Binding], name: Text, span: parser.Span, ty: Text, scope: parser.Span
+) gives Flow {
     let binding = make_binding(name, "parameter", ty, false, false, span)
     if name == "result" {
         return flow(
@@ -1637,7 +1646,7 @@ fn declare_param(state: State, env: List[Binding], name: Text, span: parser.Span
                     state, "E2013", "A parameter cannot be named 'result'",
                     "'result' is the name of the value a function gives, inside a 'promises' clause.", [], span
                 ),
-                binding
+                binding, scope
             ),
             List.append(env, binding),
             false
@@ -1647,7 +1656,7 @@ fn declare_param(state: State, env: List[Binding], name: Text, span: parser.Span
     if not free.free {
         return flow(parser.Node.Null(), free.state, env, false)
     }
-    return flow(parser.Node.Null(), add_symbol(free.state, binding), List.append(env, binding), false)
+    return flow(parser.Node.Null(), add_symbol(free.state, binding, scope), List.append(env, binding), false)
 }
 
 // The signature of a function: the types of its parameters and what it gives.
@@ -1851,7 +1860,7 @@ fn check_function(state: State, node: parser.Node, sig: Sig) gives Typed {
         let param = List.get(params, i)
         let declared = declare_param(
             current, env, text_of(field(param, "name")), place_span(field(param, "name_span")),
-            List.get(sig.param_types, i)
+            List.get(sig.param_types, i), span_of(field(node, "body"))
         )
         current = declared.state
         env = declared.env
@@ -1995,13 +2004,21 @@ pub type Export = {
     private: List[Text]
 }
 
+// The export of a module that could not be analysed (a lexical error): it declares nothing.
+pub fn empty_export() gives Export {
+    return Export(
+        name: "", user: [], declared: [], records: [], type_names: [], type_decls: [], refined: [], enum_names: [],
+        enums: [], private: []
+    )
+}
+
 fn is_word_char(c: Text) gives Bool {
     return (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9") or c == "_"
 }
 
 // A type as another module sees it: each name the module declares gets the module in front. A name that is already
 // qualified (it comes from a third module) and the built-in ones stay as they are.
-fn qualify_type(ty: Text, names: List[Text], module: Text) gives Text {
+pub fn qualify_type(ty: Text, names: List[Text], module: Text) gives Text {
     var result = ""
     var i = 0
     while i < Text.length(ty)
@@ -2495,7 +2512,7 @@ fn known_type_names() gives List[Text] {
 
 // Records
 
-type Rec = { name: Text, field_names: List[Text], field_types: List[Text], line: Int, column: Int }
+pub type Rec = { name: Text, field_names: List[Text], field_types: List[Text], line: Int, column: Int }
 
 fn rec_index(state: State, name: Text) gives Int {
     var i = 0
@@ -3070,7 +3087,7 @@ fn unknown_qualified_call(state: State, env: List[Binding], node: parser.Node) g
 
 // A declared refined type once its base is resolved: the type it refines, the built-in type at the end of
 // its chain, and the names of the declarations whose conditions a value must satisfy, from the root outwards.
-type Ref = { name: Text, base: Text, root: Text, chain: List[Text] }
+pub type Ref = { name: Text, base: Text, root: Text, chain: List[Text] }
 
 type Tables = {
     declared: List[Text], records: List[Rec], type_names: List[Text], type_decls: List[parser.Node],
@@ -4083,7 +4100,7 @@ fn refinement_check(given: ArgList, node: parser.Node, name: Text, arguments: Li
 
 // Enums
 
-type EnumInfo = {
+pub type EnumInfo = {
     name: Text, variant_names: List[Text], variant_field_names: List[List[Text]],
     variant_field_types: List[List[Text]]
 }
@@ -4425,12 +4442,15 @@ fn check_pattern(state: State, env: List[Binding], pattern: parser.Node, expecte
         let name = text_of(field(pattern, "name"))
         let free = name_is_free(state, env, name, place_span(field(pattern, "name_span")))
         var next_env = env
+        var next_state = free.state
         if free.free {
-            next_env = List.append(
-                env, make_binding(name, "pattern variable", expected, false, false, place_span(field(pattern, "name_span")))
+            let binding = make_binding(
+                name, "pattern variable", expected, false, false, place_span(field(pattern, "name_span"))
             )
+            next_env = List.append(env, binding)
+            next_state = add_pattern_symbol(free.state, binding)
         }
-        return PatOut(pat: Pat.PAny(), env: next_env, state: free.state)
+        return PatOut(pat: Pat.PAny(), env: next_env, state: next_state)
     }
     if kind == "LiteralPattern" {
         let value = field(pattern, "value")
@@ -5610,15 +5630,28 @@ fn check_capability(state: State, node: parser.Node) gives State {
 // A name the program declares (a variable, a parameter or the iterator of a `for`), and, apart, every place
 // where the checker read it or gave it a new value. Warnings are decided from them once the program is known to
 // have no errors.
-type Sym = {
+//
+// The same list is what `nex symbols` shows: `ty` is the type the checker gave the name, the scope is the block where it is
+// visible (none for a pattern variable, which is declared before its block is entered), and `pattern` marks a name that a pattern
+// binds, which no warning is about.
+pub type Sym = {
     name: Text, category: Text, mutable: Bool, loop_variable: Bool,
-    line: Int, column: Int, end_line: Int, end_column: Int, function: Text
+    line: Int, column: Int, end_line: Int, end_column: Int, function: Text,
+    ty: Text, scope_line: Int, scope_column: Int, scope_end_line: Int, scope_end_column: Int, pattern: Bool
 }
 
-type Usage = { symbols: List[Sym], reads: List[Text], assigns: List[Text] }
+// A place where the checker resolved a use of a name, in the order it met them. `key` is the position of the declaration of a
+// variable or a parameter, or the name of the function that a call resolved to; `assign` marks the write of `name = value`.
+pub type SymRef = {
+    key: Text, function: Bool, assign: Bool, line: Int, column: Int, end_line: Int, end_column: Int
+}
+
+type Usage = {
+    symbols: List[Sym], reads: List[Text], assigns: List[Text], refs: List[SymRef], scope: parser.Span
+}
 
 fn empty_usage() gives Usage {
-    return Usage(symbols: [], reads: [], assigns: [])
+    return Usage(symbols: [], reads: [], assigns: [], refs: [], scope: parser.no_span())
 }
 
 fn with_usage(state: State, usage: Usage) gives State {
@@ -5632,40 +5665,92 @@ fn symbol_key(line: Int, column: Int) gives Text {
     return to_text(line) + ":" + to_text(column)
 }
 
-fn add_symbol(state: State, binding: Binding) gives State {
+fn add_symbol(state: State, binding: Binding, scope: parser.Span) gives State {
     if binding.category != "variable" and binding.category != "parameter" {
         return state
     }
+    return with_usage(state, with_new_symbol(state.usage, binding, scope, false, state.function))
+}
+
+// A name that a pattern binds: no warning is about it, but `nex symbols` lists it.
+fn add_pattern_symbol(state: State, binding: Binding) gives State {
+    return with_usage(state, with_new_symbol(state.usage, binding, parser.no_span(), true, state.function))
+}
+
+fn with_new_symbol(usage: Usage, binding: Binding, scope: parser.Span, pattern: Bool, function: Text) gives Usage {
     let sym = Sym(
         name: binding.name, category: binding.category, mutable: binding.mutable,
         loop_variable: binding.loop_variable, line: binding.line, column: binding.column,
-        end_line: binding.end_line, end_column: binding.end_column, function: state.function
+        end_line: binding.end_line, end_column: binding.end_column, function: function,
+        ty: binding.ty, scope_line: scope.line, scope_column: scope.column, scope_end_line: scope.end_line,
+        scope_end_column: scope.end_column, pattern: pattern
     )
+    return Usage(
+        symbols: List.append(usage.symbols, sym), reads: usage.reads, assigns: usage.assigns, refs: usage.refs,
+        scope: usage.scope
+    )
+}
+
+fn with_scope(state: State, scope: parser.Span) gives State {
+    let usage = state.usage
+    return with_usage(
+        state, Usage(symbols: usage.symbols, reads: usage.reads, assigns: usage.assigns, refs: usage.refs, scope: scope)
+    )
+}
+
+fn mark_read(state: State, binding: Binding, at: parser.Span) gives State {
+    let usage = state.usage
     return with_usage(
         state,
         Usage(
-            symbols: List.append(state.usage.symbols, sym), reads: state.usage.reads, assigns: state.usage.assigns
+            symbols: usage.symbols, reads: List.append(usage.reads, symbol_key(binding.line, binding.column)),
+            assigns: usage.assigns,
+            refs: List.append(
+                usage.refs,
+                SymRef(
+                    key: symbol_key(binding.line, binding.column), function: false, assign: false, line: at.line,
+                    column: at.column, end_line: at.end_line, end_column: at.end_column
+                )
+            ),
+            scope: usage.scope
         )
     )
 }
 
-fn mark_read(state: State, binding: Binding) gives State {
+fn mark_assigned(state: State, binding: Binding, at: parser.Span) gives State {
+    let usage = state.usage
     return with_usage(
         state,
         Usage(
-            symbols: state.usage.symbols,
-            reads: List.append(state.usage.reads, symbol_key(binding.line, binding.column)),
-            assigns: state.usage.assigns
+            symbols: usage.symbols, reads: usage.reads,
+            assigns: List.append(usage.assigns, symbol_key(binding.line, binding.column)),
+            refs: List.append(
+                usage.refs,
+                SymRef(
+                    key: symbol_key(binding.line, binding.column), function: false, assign: true, line: at.line,
+                    column: at.column, end_line: at.end_line, end_column: at.end_column
+                )
+            ),
+            scope: usage.scope
         )
     )
 }
 
-fn mark_assigned(state: State, binding: Binding) gives State {
+// A call that resolved to a function of the program.
+fn mark_function(state: State, name: Text, at: parser.Span) gives State {
+    let usage = state.usage
     return with_usage(
         state,
         Usage(
-            symbols: state.usage.symbols, reads: state.usage.reads,
-            assigns: List.append(state.usage.assigns, symbol_key(binding.line, binding.column))
+            symbols: usage.symbols, reads: usage.reads, assigns: usage.assigns,
+            refs: List.append(
+                usage.refs,
+                SymRef(
+                    key: name, function: true, assign: false, line: at.line, column: at.column,
+                    end_line: at.end_line, end_column: at.end_column
+                )
+            ),
+            scope: usage.scope
         )
     )
 }
@@ -5844,7 +5929,7 @@ fn warnings_of(state: State, program: parser.Node) gives List[parser.Problem] {
         }
     }
     for sym in state.usage.symbols {
-        if sym.name != "_" {
+        if sym.name != "_" and not sym.pattern {
             var kind = "variable"
             if sym.category == "parameter" {
                 kind = "parameter"
@@ -5912,7 +5997,10 @@ fn warnings_of(state: State, program: parser.Node) gives List[parser.Problem] {
 pub type Analysis = { node: parser.Node, problems: List[parser.Problem], unsupported: Text }
 
 // One module of a project: what analyze gives, and what the modules that import it need.
-pub type ModuleAnalysis = { node: parser.Node, problems: List[parser.Problem], unsupported: Text, export: Export }
+pub type ModuleAnalysis = {
+    node: parser.Node, problems: List[parser.Problem], unsupported: Text, export: Export, symbols: List[Sym],
+    refs: List[SymRef]
+}
 
 // `warn` is false when a module before this one had an error: a warning only helps in a program that is correct.
 pub fn analyze_module(
@@ -5921,7 +6009,8 @@ pub fn analyze_module(
     let result = check_with(program, require_main, warn, imports, modules)
     return ModuleAnalysis(
         node: result.node, problems: result.state.problems, unsupported: result.state.unsupported,
-        export: export_module(result.state, program, name)
+        export: export_module(result.state, program, name), symbols: result.state.usage.symbols,
+        refs: result.state.usage.refs
     )
 }
 
