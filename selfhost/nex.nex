@@ -24,6 +24,7 @@ import "render.nex"
 import "titles.nex"
 import "interpreter.nex"
 import "info.nex"
+import "report.nex"
 
 uses read "."
 uses write "."
@@ -60,8 +61,23 @@ fn file_problem(path: Text) gives Text {
     return ""
 }
 
+// What a failure writes: the diagnostics and a summary line as text, or the `nexora.diagnostics/1` document with --format json (on
+// the standard output for `check`, on the standard error for `run`, as `nex` does).
+fn fail_with(path: Text, reports: List[report.Report], format: Text, to_stdout: Bool, summary: Text) {
+    if format == "json" {
+        if to_stdout {
+            print(report.document(path, reports))
+        } else {
+            err(report.document(path, reports))
+        }
+    } else {
+        show_reports(reports)
+        err("error: " + path + ": " + summary)
+    }
+}
+
 // A file that cannot be read is E0001, shown as `nex` shows it, and status 4. True when the file can be read.
-fn is_readable(path: Text, summary: Text) gives Bool {
+fn is_readable(path: Text, summary: Text, format: Text, to_stdout: Bool) gives Bool {
     let reason = file_problem(path)
     if reason == "" {
         return true
@@ -69,9 +85,14 @@ fn is_readable(path: Text, summary: Text) gives Bool {
     let problem = parser.Problem(
         code: "E0001", label: reason + ": " + path, hint: "", notes: [], line: 0, column: 0, end_line: 0, end_column: 0
     )
-    err(render.render(problem, path, []))
-    err("")
-    err("error: " + path + ": " + summary)
+    if format == "json" {
+        fail_with(path, [report.Report(problem: problem, file: path)], format, to_stdout, summary)
+    } else {
+        // There is no text of the file to quote.
+        err(render.render(problem, path, []))
+        err("")
+        err("error: " + path + ": " + summary)
+    }
     exit_with(4)
     return false
 }
@@ -80,20 +101,7 @@ fn is_error(problem: parser.Problem) gives Bool {
     return not Text.starts_with(problem.code, "W")
 }
 
-// A diagnostic with the file it belongs to.
-type Report = { problem: parser.Problem, file: Text }
-
-fn reports_of(results: List[project.Checked]) gives List[Report] {
-    var reports: List[Report] = []
-    for result in results {
-        for problem in result.problems {
-            reports = List.append(reports, Report(problem: problem, file: result.module.path))
-        }
-    }
-    return reports
-}
-
-fn count_errors(reports: List[Report]) gives Int {
+fn count_errors(reports: List[report.Report]) gives Int {
     var errors = 0
     for report in reports {
         if is_error(report.problem) {
@@ -107,7 +115,7 @@ fn show(problem: parser.Problem, file: Text) {
     err(render.render(problem, file, render.lines_of(read_file(file))))
 }
 
-fn show_reports(reports: List[Report]) {
+fn show_reports(reports: List[report.Report]) {
     for report in reports {
         show(report.problem, report.file)
         err("")
@@ -123,7 +131,7 @@ fn limit_problem(label: Text) gives parser.Problem {
 // The modules of the program, checked. `stop` says why it cannot go on, or is empty.
 type Loaded = { results: List[project.Checked], stop: Text, node: parser.Node }
 
-fn load_and_check(path: Text, require_main: Bool, max_source: Int) gives Loaded {
+fn load_and_check(path: Text, require_main: Bool, max_source: Int, format: Text) gives Loaded {
     let loaded = project.load_limited(path, max_source)
     if loaded.over != "" {
         if Text.starts_with(loaded.over, "?") {
@@ -132,7 +140,12 @@ fn load_and_check(path: Text, require_main: Bool, max_source: Int) gives Loaded 
                 node: parser.Node.Null()
             )
         }
-        err(render.render(limit_problem("--max-source limit exceeded (" + to_text(max_source) + ")"), loaded.over, []))
+        let limit = limit_problem("--max-source limit exceeded (" + to_text(max_source) + ")")
+        if format == "json" {
+            err(report.document(path, [report.Report(problem: limit, file: loaded.over)]))
+        } else {
+            err(render.render(limit, loaded.over, []))
+        }
         return Loaded(results: [], stop: "limit", node: parser.Node.Null())
     }
     let results = project.check_all(loaded, require_main)
@@ -151,11 +164,11 @@ fn load_and_check(path: Text, require_main: Bool, max_source: Int) gives Loaded 
     return Loaded(results: results, stop: "", node: project.link(results))
 }
 
-fn check_command(path: Text) {
-    if not is_readable(path, "check failed with 1 error") {
+fn check_command(path: Text, format: Text) {
+    if not is_readable(path, "check failed with 1 error", format, true) {
         return
     }
-    let loaded = load_and_check(path, true, 0)
+    let loaded = load_and_check(path, true, 0, format)
     if loaded.stop != "" {
         if loaded.stop != "limit" {
             err("error: " + path + ": " + loaded.stop)
@@ -163,9 +176,16 @@ fn check_command(path: Text) {
         exit_with(70)
         return
     }
-    let reports = reports_of(loaded.results)
-    show_reports(reports)
+    let reports = report.reports_of(loaded.results)
     let errors = count_errors(reports)
+    if format == "json" {
+        print(report.document(path, reports))
+        if errors > 0 {
+            exit_with(1)
+        }
+        return
+    }
+    show_reports(reports)
     if errors > 0 {
         err("error: " + path + ": check failed with " + plural(errors))
         exit_with(1)
@@ -176,13 +196,13 @@ fn check_command(path: Text) {
     }
 }
 
-fn run_command(words: List[Text]) {
+fn run_command(words: List[Text], format: Text) {
     let options = interpreter.parse_options(words)
     let path = options.path
-    if not is_readable(path, "the file could not be read") {
+    if not is_readable(path, "the file could not be read", format, false) {
         return
     }
-    let loaded = load_and_check(path, true, options.max_source)
+    let loaded = load_and_check(path, true, options.max_source, format)
     if loaded.stop != "" {
         if loaded.stop == "limit" {
             exit_with(3)
@@ -192,11 +212,10 @@ fn run_command(words: List[Text]) {
         }
         return
     }
-    let reports = reports_of(loaded.results)
+    let reports = report.reports_of(loaded.results)
     let errors = count_errors(reports)
     if errors > 0 {
-        show_reports(reports)
-        err("error: " + path + ": not run because of " + plural(errors))
+        fail_with(path, reports, format, false, "not run because of " + plural(errors))
         exit_with(1)
         return
     }
@@ -219,17 +238,21 @@ fn run_command(words: List[Text]) {
     if file == "" {
         file = path
     }
-    show(done.problem, file)
+    let failure = [report.Report(problem: done.problem, file: file)]
     if done.problem.code == "E3015" {
+        if format == "json" {
+            err(report.document(path, failure))
+        } else {
+            show(done.problem, file)
+        }
         exit_with(3)
         return
     }
-    err("")
     if titles.category_of(done.problem.code) == "contract" {
-        err("error: " + path + ": the program stopped because a contract was broken")
+        fail_with(path, failure, format, false, "the program stopped because a contract was broken")
         exit_with(5)
     } else {
-        err("error: " + path + ": the program stopped because of a runtime error")
+        fail_with(path, failure, format, false, "the program stopped because of a runtime error")
         exit_with(3)
     }
 }
@@ -255,10 +278,10 @@ fn padded(name: Text, width: Int) gives Text {
 }
 
 fn test_command(path: Text, only: Text) {
-    if not is_readable(path, "the file could not be read") {
+    if not is_readable(path, "the file could not be read", "text", false) {
         return
     }
-    let loaded = load_and_check(path, false, 0)
+    let loaded = load_and_check(path, false, 0, "text")
     if loaded.stop != "" {
         if loaded.stop != "limit" {
             err("error: " + path + ": " + loaded.stop)
@@ -266,7 +289,7 @@ fn test_command(path: Text, only: Text) {
         exit_with(70)
         return
     }
-    let reports = reports_of(loaded.results)
+    let reports = report.reports_of(loaded.results)
     let errors = count_errors(reports)
     if errors > 0 {
         show_reports(reports)
@@ -350,6 +373,64 @@ fn usage() {
     exit_with(2)
 }
 
+// The options that take a value, to know where the file of a command starts.
+fn takes_value(word: Text) gives Bool {
+    for name in ["--allow-read", "--allow-write", "--allow-network", "--allow-process", "--stdin", "--cwd", "--max-text", "--max-output", "--max-input", "--max-source", "--function", "--format"] {
+        if word == name {
+            return true
+        }
+    }
+    return false
+}
+
+// `--format` (or `--format=...`) taken out of the words of a command. For `run` it is looked for only before the file: what comes
+// after the file belongs to the program.
+type Format = { format: Text, rest: List[Text], bad: Text }
+
+fn take_format(words: List[Text], before_file: Bool) gives Format {
+    var format = "text"
+    var rest: List[Text] = []
+    var bad = ""
+    var i = 0
+    var in_file = false
+    while i < List.length(words)
+        shrinks List.length(words) - i
+    {
+        let word = List.get(words, i)
+        var value = ""
+        var found = false
+        if not (before_file and in_file) {
+            if word == "--format" and i + 1 < List.length(words) {
+                value = List.get(words, i + 1)
+                found = true
+                i = i + 1
+            } else if Text.starts_with(word, "--format=") {
+                value = Text.slice(word, 9, Text.length(word))
+                found = true
+            }
+        }
+        if found {
+            if value == "text" or value == "json" {
+                format = value
+            } else {
+                bad = value
+            }
+        } else {
+            rest = List.append(rest, word)
+            if before_file and not in_file {
+                if takes_value(word) and i + 1 < List.length(words) {
+                    rest = List.append(rest, List.get(words, i + 1))
+                    i = i + 1
+                } else if not Text.starts_with(word, "-") {
+                    in_file = true
+                }
+            }
+        }
+        i = i + 1
+    }
+    return Format(format: format, rest: rest, bad: bad)
+}
+
 fn rest_of(words: List[Text]) gives List[Text] {
     var rest: List[Text] = []
     var i = 1
@@ -363,21 +444,38 @@ fn rest_of(words: List[Text]) gives List[Text] {
 }
 
 fn main() {
-    let words = args()
-    if List.length(words) == 1 and List.get(words, 0) == "--version" {
+    let given = args()
+    if List.length(given) == 1 and List.get(given, 0) == "--version" {
         print("NEXORA " + info.version())
-    } else if List.length(words) < 2 {
+        return
+    }
+    if List.length(given) < 2 {
         usage()
-    } else if List.get(words, 0) == "check" {
-        check_command(List.get(words, 1))
-    } else if List.get(words, 0) == "run" {
-        run_command(rest_of(words))
-    } else if List.get(words, 0) == "test" {
-        var only = ""
-        if List.length(words) >= 4 and List.get(words, 2) == "--function" {
-            only = List.get(words, 3)
+        return
+    }
+    let command = List.get(given, 0)
+    let taken = take_format(rest_of(given), command == "run")
+    if taken.bad != "" {
+        err("nex " + command + ": error: argument --format: invalid choice: '" + taken.bad + "' (choose from text, json)")
+        exit_with(2)
+        return
+    }
+    let words = taken.rest
+    if command == "check" and List.length(words) >= 1 {
+        check_command(List.get(words, 0), taken.format)
+    } else if command == "run" and List.length(words) >= 1 {
+        run_command(words, taken.format)
+    } else if command == "test" and List.length(words) >= 1 {
+        if taken.format == "json" {
+            err("error: nex test --format json is not supported by this implementation yet")
+            exit_with(70)
+            return
         }
-        test_command(List.get(words, 1), only)
+        var only = ""
+        if List.length(words) >= 3 and List.get(words, 1) == "--function" {
+            only = List.get(words, 2)
+        }
+        test_command(List.get(words, 0), only)
     } else {
         usage()
     }
