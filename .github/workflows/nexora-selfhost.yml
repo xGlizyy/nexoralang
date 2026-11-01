@@ -1,0 +1,140 @@
+# Continuous integration for the NEXORA written in NEXORA (selfhost/): the compiler, the `nex` tool and the worker of the playground.
+#
+# The Python implementation (nexora/) is the reference. This workflow builds the native tools from the seed of the compiler
+# (selfhost/seed/cgen.c) with a C compiler, nothing else, and compares them with the reference on the programs of the repository:
+# the same input must give the same standard output, the same standard error and the same exit status.
+#
+#   build     the seed is the fixed point of the sources (the compiler compiles itself to the same C), the runtime text is up to
+#             date, and `nex` and the worker build.
+#   compare   the native tools against Python, in four suites that run in parallel.
+#
+# It uses no secrets and no paid services: only free GitHub runners.
+
+name: nexora-selfhost
+
+on:
+  push:
+    branches: [main]
+    paths: ["selfhost/**", "nexora/src/**", "nexora/examples/**", "nexora/tests/migration/**", ".github/workflows/nexora-selfhost.yml"]
+  pull_request:
+    paths: ["selfhost/**", "nexora/src/**", "nexora/examples/**", "nexora/tests/migration/**", ".github/workflows/nexora-selfhost.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build from the seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: The compiler, from the seed
+        run: |
+          mkdir -p out
+          cc -std=c11 -O2 selfhost/seed/cgen.c -o out/compiler -lm
+
+      - name: The text of the runtime is up to date
+        run: |
+          PYTHONPATH=nexora/src python selfhost/make_runtime.py
+          git diff --exit-code -- selfhost/runtime_text.nex
+
+      - name: The seed is the fixed point of the sources
+        run: |
+          ./out/compiler --allow-read . --allow-write . -- selfhost/cgen.nex out/generation.c --trusted
+          cmp out/generation.c selfhost/seed/cgen.c
+          echo "the compiler compiles itself to the C of the seed"
+
+      - name: The `nex` tool
+        run: |
+          ./out/compiler --allow-read . --allow-write . -- selfhost/nex.nex out/nex.c --trusted --cli
+          cc -std=c11 -O2 out/nex.c -o out/nex -lm
+
+      - name: The worker of the playground
+        run: |
+          ./out/compiler --allow-read . --allow-write . -- selfhost/worker.nex out/worker.c --trusted
+          cc -std=c11 -O2 -static out/worker.c -o out/worker -lm
+          printf '%s\n' '{"action": "info"}' | ./out/worker | grep -qF '"status": "success"'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native
+          path: |
+            out/nex
+            out/worker
+          retention-days: 3
+
+  compare:
+    name: Against Python · ${{ matrix.suite }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [commands, tooling, debugger, migrate]
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: The reference
+        run: python -m pip install -e nexora
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: native
+          path: out
+
+      - name: Make the tools executable
+        run: chmod +x out/nex out/worker
+
+      - name: check, run and test (nex.nex against nex)
+        if: matrix.suite == 'commands'
+        run: |
+          export NEXORA_NEX="$PWD/out/nex" NEXORA_NEX_CLI=1
+          files="nexora/examples/*.nex selfhost/checker_cases/*.nex selfhost/project_cases/*/main.nex"
+          for command in check run test; do
+            echo "== $command"
+            python selfhost/compare_nex.py $command $files
+          done
+          echo "== stdin"
+          python selfhost/compare_stdin.py
+          echo "== limits (time and memory exist on Linux)"
+          python selfhost/compare_limits.py
+
+      - name: inspect, context, symbols and test --format json
+        if: matrix.suite == 'tooling'
+        run: |
+          export NEXORA_NEX="$PWD/out/nex"
+          files="nexora/examples/*.nex selfhost/checker_cases/*.nex selfhost/project_cases/*/main.nex /nonexistent.nex"
+          echo "== context"; python selfhost/compare_context.py $files
+          echo "== symbols"; python selfhost/compare_symbols.py $files
+          echo "== test --format json"
+          python selfhost/compare_test.py nexora/examples/*.nex selfhost/checker_cases/*.nex /nonexistent.nex
+
+      - name: debug and the worker of the playground
+        if: matrix.suite == 'debugger'
+        run: |
+          export NEXORA_NEX="$PWD/out/nex" NEXORA_WORKER="$PWD/out/worker"
+          echo "== nex debug"
+          python selfhost/compare_debug_cli.py selfhost/debug_cases/deep.nex nexora/examples/*.nex \
+            selfhost/checker_cases/calls.nex selfhost/project_cases/run_basic/main.nex /nonexistent.nex
+          echo "== worker"; python selfhost/compare_worker.py
+          echo "== worker, debug sessions"; python selfhost/compare_debug.py
+
+      - name: migrate, on the 0.11 corpus of decision 0019
+        if: matrix.suite == 'migrate'
+        run: |
+          export NEXORA_NEX="$PWD/out/nex"
+          MIGRATE_VARIANTS=plain,crlf,bom,cr MIGRATE_WRITES=0,1 python selfhost/compare_migrate.py
