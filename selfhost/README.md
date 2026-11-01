@@ -143,7 +143,7 @@ on 29 programs and projects (texts), and `check` and `run` with `--format json` 
 In the executable `nex.nex` does what `nex` does on the outside: the diagnostics and the summary of a failure go to the standard error,
 the results to the standard output, and the process ends with the status of `nex` (0, 1 invalid program, 2 usage, 3 the program failed,
 4 unreadable file, 5 a contract was broken, 6 a test did not pass; 70 for what this implementation cannot do yet). It also has
-`--version`, `--format json`, `--timeout`, `--max-memory` and the command `inspect` (the `nexora.diagnostics/1` document, built by [`report.nex`](report.nex), the code the worker of the
+`--version`, `--format json`, `--timeout`, `--max-memory` `nex context FILE [--format text|json]` (the summary of [`context.nex`](context.nex), `nexora.context/2`; `compare_context.py` finds it equal to Python on 16 examples, 37 programs with errors and a file with a lexical error) and the command `inspect` (the `nexora.diagnostics/1` document, built by [`report.nex`](report.nex), the code the worker of the
 playground uses too). Three functions make that possible, `err`, `exit_with` and `file_problem`: NEXORA has no way to write on the
 standard error, to set a status or to ask why a file cannot be read, so the definitions in `nex.nex` (what Python runs) write to the
 standard output and set nothing, and `cgen.nex` replaces them with C ones.
@@ -151,7 +151,8 @@ standard output and set nothing, and `cgen.nex` replaces them with C ones.
 | Limit | Why |
 |---|---|
 | Run by Python, no exit status and no standard error | A program has neither: the three functions above only exist in the executable. |
-| `nex test --format json` and the commands `debug`, `context`, `symbols`, `migrate` | Not written yet; `test --format json` ends with status 70 and says so. `symbols` needs the checker to record every resolved reference with its position, and `test --format json` the calls an example made, with their types: both are changes of the checker and of the machine. |
+| `nex context` of a program of several modules, and of a program whose type declarations are invalid in a way that changes what its fields and variables have (a record that contains itself, a name declared twice) | It ends with status 70 for several modules; for invalid declarations the types of the fields and variables may differ from Python's (3 of the 37 programs with errors). |
+| `nex test --format json` and the commands `debug`, `symbols`, `migrate` | Not written yet; `test --format json` ends with status 70 and says so. `symbols` needs the checker to record every resolved reference with its position, and `test --format json` the calls an example made, with their types: both are changes of the checker and of the machine. |
 | `run` reads the standard input one line at a time, and `--max-input` is not applied to it yet | `--stdin FILE` still works and keeps the limit. A program cannot test for the end of the input without stopping at it, so a C function (`read_stdin_line`) answers with no line at the end. `compare_stdin.py` runs 3 programs with 8 inputs (LF, CRLF, no final break, none, empty lines, Unicode): all equal (Python in UTF-8 mode: on Windows `nex` decodes the input with the code page of the console). |
 | The output limit stops in the middle of a line | `print` writes whole lines, so what fit of that line is printed with a line break. |
 | A file with syntax errors | Only its lexical and syntax errors are shown, as for the file that runs. `nex check` also checks the partial tree of an imported module. |
