@@ -1,0 +1,312 @@
+// `nex check --evidence`: what backs every `needs`, `promises`, `trust`, `keeps` and `shrinks` of a program (nexora/src/nexora/tooling.py,
+// `evidence_document` and `render_evidence`; decision 0019, section 5). Only the enforcement is computed: nothing is run, nothing is
+// decided about a call site and nothing is observed.
+
+import "json.nex"
+import "parser.nex"
+import "project.nex"
+import "report.nex"
+import "info.nex"
+import "render.nex"
+import "context.nex"
+
+// One clause of the program, with the function and the module it belongs to.
+pub type Entry = { module: Text, function: Text, name: Text, kind: Text, condition: Text, message: Text }
+
+fn path_parts(written: Text) gives List[Text] {
+    let slashed = project.slashes(written)
+    var raw: List[Text] = []
+    var start = 0
+    var i = 0
+    while i < Text.length(slashed)
+        shrinks Text.length(slashed) - i
+    {
+        if Text.slice(slashed, i, i + 1) == "/" {
+            raw = List.append(raw, Text.slice(slashed, start, i))
+            start = i + 1
+        }
+        i = i + 1
+    }
+    raw = List.append(raw, Text.slice(slashed, start, Text.length(slashed)))
+    // `.` and `..` are resolved on the text: no file is looked at.
+    var parts: List[Text] = []
+    for part in raw {
+        if part == ".." {
+            if List.length(parts) > 0 and last_of(parts) != ".." {
+                parts = without_last(parts)
+            } else {
+                parts = List.append(parts, part)
+            }
+        } else if part != "." {
+            parts = List.append(parts, part)
+        }
+    }
+    return parts
+}
+
+fn last_of(items: List[Text]) gives Text {
+    return List.get(items, List.length(items) - 1)
+}
+
+fn without_last(items: List[Text]) gives List[Text] {
+    var out: List[Text] = []
+    var i = 0
+    while i < List.length(items) - 1
+        shrinks List.length(items) - i
+    {
+        out = List.append(out, List.get(items, i))
+        i = i + 1
+    }
+    return out
+}
+
+// A module as 7.1 identifies it: its path relative to the directory of the entry file, with `/`; "" for the entry file.
+pub fn module_id(path: Text, entry_path: Text) gives Text {
+    if path == entry_path {
+        return ""
+    }
+    let target = path_parts(path)
+    let entry_parts = path_parts(entry_path)
+    var base: List[Text] = []
+    if List.length(entry_parts) > 0 {
+        base = without_last(entry_parts)
+    }
+    var shared = 0
+    while shared < List.length(target) and shared < List.length(base) and List.get(target, shared) == List.get(base, shared)
+        shrinks List.length(target) - shared
+    {
+        shared = shared + 1
+    }
+    if shared == 0 and List.length(target) > 0 {
+        let first = List.get(target, 0)
+        if first == "" or Text.ends_with(first, ":") {
+            return parser.join_texts(target, "/")
+        }
+    }
+    var out: List[Text] = []
+    var up = 0
+    while up < List.length(base) - shared
+        shrinks List.length(base) - shared - up
+    {
+        out = List.append(out, "..")
+        up = up + 1
+    }
+    var i = shared
+    while i < List.length(target)
+        shrinks List.length(target) - i
+    {
+        out = List.append(out, List.get(target, i))
+        i = i + 1
+    }
+    return parser.join_texts(out, "/")
+}
+
+fn clause_entry(module: Text, function: Text, clause: parser.Node, lines: List[Text]) gives Entry {
+    return Entry(
+        module: module, function: function, name: context.text_of(context.field(clause, "name")),
+        kind: context.text_of(context.field(clause, "clause")), condition: context.slice_of(lines, context.field(clause, "condition")),
+        message: context.text_of(context.field(clause, "message"))
+    )
+}
+
+// The `needs`, `promises` and `trust` of the header, then the clauses of the loops of the body, in the order of the file.
+fn entries_of(module: Text, program: parser.Node, lines: List[Text]) gives List[Entry] {
+    var found: List[Entry] = []
+    for function in context.items_of(context.field(program, "functions")) {
+        let name = context.text_of(context.field(function, "name"))
+        for item in context.items_of(context.field(function, "header")) {
+            if context.kind_of(item) == "Contract" {
+                found = List.append(found, clause_entry(module, name, item, lines))
+            }
+        }
+        for node in context.preorder(context.field(function, "body")) {
+            let kind = context.kind_of(node)
+            if kind == "While" or kind == "For" {
+                for clause in context.items_of(context.field(node, "clauses")) {
+                    found = List.append(found, clause_entry(module, name, clause, lines))
+                }
+            }
+        }
+    }
+    return found
+}
+
+// Every clause of the program, the modules ordered by their identity (7.2). `texts` are the texts of the modules, in the order of
+// `results`. The entry file is the last.
+pub fn collect(results: List[project.Checked], texts: List[Text]) gives List[Entry] {
+    let last_one = List.get(results, List.length(results) - 1)
+    let entry_path = last_one.module.path
+    var ids: List[Text] = []
+    var groups: List[List[Entry]] = []
+    var i = 0
+    while i < List.length(results)
+        shrinks List.length(results) - i
+    {
+        let each = List.get(results, i)
+        let id = module_id(each.module.path, entry_path)
+        let lines = render.lines_of(List.get(texts, i))
+        // The modules in order of their identity, a module after the ones that sort before it.
+        var before_ids: List[Text] = []
+        var before_groups: List[List[Entry]] = []
+        var after_ids: List[Text] = []
+        var after_groups: List[List[Entry]] = []
+        var at = 0
+        while at < List.length(ids)
+            shrinks List.length(ids) - at
+        {
+            if List.get(ids, at) <= id {
+                before_ids = List.append(before_ids, List.get(ids, at))
+                before_groups = List.append(before_groups, List.get(groups, at))
+            } else {
+                after_ids = List.append(after_ids, List.get(ids, at))
+                after_groups = List.append(after_groups, List.get(groups, at))
+            }
+            at = at + 1
+        }
+        ids = List.concat(List.append(before_ids, id), after_ids)
+        groups = List.concat(List.append(before_groups, entries_of(id, each.typed, lines)), after_groups)
+        i = i + 1
+    }
+    var all: List[Entry] = []
+    for group in groups {
+        all = List.concat(all, group)
+    }
+    return all
+}
+
+fn enforcement_of(kind: Text) gives Text {
+    if kind == "trust" {
+        return "trusted"
+    }
+    return "checked"
+}
+
+fn status(label: Text) gives json.Json {
+    return json.Json.JObj(["status"], [json.Json.JStr(label)])
+}
+
+fn not_computed(reason: Text) gives json.Json {
+    return json.Json.JObj(["status", "reason"], [json.Json.JStr("not_computed"), json.Json.JStr(reason)])
+}
+
+fn optional(text: Text) gives json.Json {
+    if text == "" {
+        return json.Json.JNull()
+    }
+    return json.Json.JStr(text)
+}
+
+fn entry_json(entry: Entry) gives json.Json {
+    var static_part = status("not_applicable")
+    if entry.kind == "needs" {
+        static_part = not_computed("phase_not_implemented")
+    }
+    var observed = not_computed("analysis_only")
+    if entry.kind == "trust" {
+        observed = status("not_applicable")
+    }
+    let id = json.Json.JObj(
+        ["module", "function", "name", "kind", "stable"],
+        [
+            json.Json.JStr(entry.module), json.Json.JStr(entry.function), optional(entry.name), json.Json.JStr(entry.kind),
+            json.Json.JBool(entry.name != "")
+        ]
+    )
+    return json.Json.JObj(
+        ["id", "condition", "message", "enforcement", "static", "observed", "summary"],
+        [
+            id, json.Json.JStr(entry.condition), optional(entry.message), json.Json.JStr(enforcement_of(entry.kind)), static_part,
+            observed, json.Json.JStr(enforcement_of(entry.kind))
+        ]
+    )
+}
+
+// The `nexora.evidence/1` document. `clauses` is null when the program has errors (`ran` is false then).
+pub fn document(path: Text, reports: List[report.Report], clauses: List[Entry], ran: Bool) gives Text {
+    var ok = true
+    for item in reports {
+        if not Text.starts_with(item.problem.code, "W") {
+            ok = false
+        }
+    }
+    var list = json.Json.JNull()
+    if ran {
+        var items: List[json.Json] = []
+        for entry in clauses {
+            items = List.append(items, entry_json(entry))
+        }
+        list = json.Json.JList(items)
+    }
+    let keys = (["schema", "nexora_version", "file", "ok", "diagnostics", "computed", "clauses"])
+    let values = ([
+        json.Json.JStr("nexora.evidence/1"), json.Json.JStr(info.version()), json.Json.JStr(path), json.Json.JBool(ok),
+        report.diagnostics(reports), json.Json.JObj(["static", "observed"], [json.Json.JBool(false), json.Json.JBool(false)]), list
+    ])
+    return json.dump_indented(json.Json.JObj(keys, values))
+}
+
+fn count_of(number: Int, noun: Text) gives Text {
+    if number == 1 {
+        return to_text(number) + " " + noun
+    }
+    return to_text(number) + " " + noun + "s"
+}
+
+fn label_of(entry: Entry) gives Text {
+    var rest = entry.name
+    if rest == "" {
+        rest = entry.condition
+    }
+    return entry.kind + " " + rest
+}
+
+fn padded(text: Text, width: Int) gives Text {
+    var out = text
+    while Text.length(out) < width
+        shrinks width - Text.length(out)
+    {
+        out = out + " "
+    }
+    return out
+}
+
+// What `nex check --evidence` prints (tooling.py, `render_evidence`).
+pub fn render_text(path: Text, clauses: List[Entry]) gives Text {
+    // The functions, in the order their first clause appears.
+    var keys: List[Text] = []
+    for entry in clauses {
+        let key = entry.module + "|" + entry.function
+        if not List.contains(keys, key) {
+            keys = List.append(keys, key)
+        }
+    }
+    var width = 0
+    for entry in clauses {
+        if Text.length(label_of(entry)) > width {
+            width = Text.length(label_of(entry))
+        }
+    }
+    width = width + 4
+    var lines = [path + ": " + count_of(List.length(clauses), "promise") + " in " + count_of(List.length(keys), "function") + " (computed: enforcement)"]
+    for key in keys {
+        var head = ""
+        var shown = ""
+        for entry in clauses {
+            if entry.module + "|" + entry.function == key and head == "" {
+                if entry.module == "" {
+                    head = "  " + entry.function
+                } else {
+                    head = "  " + entry.function + " (" + entry.module + ")"
+                }
+            }
+        }
+        shown = head
+        lines = List.append(lines, shown)
+        for entry in clauses {
+            if entry.module + "|" + entry.function == key {
+                lines = List.append(lines, "    " + padded(label_of(entry), width) + enforcement_of(entry.kind))
+            }
+        }
+    }
+    return parser.join_texts(lines, "\n")
+}

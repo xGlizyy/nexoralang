@@ -32,6 +32,7 @@ import "lexer.nex"
 import "json.nex"
 import "legacy.nex"
 import "migrate.nex"
+import "evidence.nex"
 
 uses read "."
 uses write "."
@@ -192,7 +193,16 @@ fn load_and_check(path: Text, require_main: Bool, max_source: Int, format: Text)
     return Loaded(results: results, stop: "", node: project.link(results))
 }
 
-fn check_command(path: Text, format: Text) {
+fn check_command(path: Text, format: Text, with_evidence: Bool) {
+    if with_evidence and format == "json" and file_problem(path) != "" {
+        // The evidence document starts with the same fields as the diagnostics one, and has no clauses.
+        let problem = parser.Problem(
+            code: "E0001", label: file_problem(path) + ": " + path, hint: "", notes: [], line: 0, column: 0, end_line: 0, end_column: 0
+        )
+        print(evidence.document(path, [report.Report(problem: problem, file: path)], [], false))
+        exit_with(4)
+        return
+    }
     if not is_readable(path, "check failed with 1 error", format, true) {
         return
     }
@@ -206,6 +216,26 @@ fn check_command(path: Text, format: Text) {
     }
     let reports = report.reports_of(loaded.results)
     let errors = count_errors(reports)
+    if with_evidence and (format == "json" or errors == 0) {
+        var clauses: List[evidence.Entry] = []
+        if errors == 0 {
+            var texts: List[Text] = []
+            for each in loaded.results {
+                texts = List.append(texts, source_of(each.module.path))
+            }
+            clauses = evidence.collect(loaded.results, texts)
+        }
+        if format == "json" {
+            print(evidence.document(path, reports, clauses, errors == 0))
+            if errors > 0 {
+                exit_with(1)
+            }
+        } else {
+            show_reports(reports)
+            print(evidence.render_text(path, clauses))
+        }
+        return
+    }
     if format == "json" {
         print(report.document(path, reports))
         if errors > 0 {
@@ -598,7 +628,7 @@ fn has_format(words: List[Text]) gives Bool {
 
 fn usage() {
     err("usage: nex [-h] [--version] <command> ...")
-    err("       nex check FILE")
+    err("       nex check [--evidence] FILE")
     err("       nex run [OPTIONS] FILE [ARGUMENTS]")
     err("       nex debug [OPTIONS] FILE [ARGUMENTS]")
     err("       nex migrate [--write] FILE")
@@ -2014,7 +2044,20 @@ fn main() {
     }
     let words = taken.rest
     if command == "check" and List.length(words) >= 1 {
-        check_command(List.get(words, 0), taken.format)
+        var with_evidence = false
+        var checked_file = ""
+        for word in words {
+            if word == "--evidence" {
+                with_evidence = true
+            } else if checked_file == "" {
+                checked_file = word
+            }
+        }
+        if checked_file == "" {
+            usage()
+        } else {
+            check_command(checked_file, taken.format, with_evidence)
+        }
     } else if command == "run" and List.length(words) >= 1 {
         run_command(words, taken.format)
     } else if command == "migrate" and List.length(words) >= 1 {

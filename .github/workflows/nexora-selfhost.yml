@@ -113,13 +113,14 @@ jobs:
           echo "== limits (time and memory exist on Linux)"
           python selfhost/compare_limits.py
 
-      - name: inspect, context, symbols and test --format json
+      - name: inspect, context, symbols, check --evidence and test --format json
         if: matrix.suite == 'tooling'
         run: |
           export NEXORA_NEX="$PWD/out/nex"
           files="nexora/examples/*.nex selfhost/checker_cases/*.nex selfhost/project_cases/*/main.nex /nonexistent.nex"
           echo "== context"; python selfhost/compare_context.py $files
           echo "== symbols"; python selfhost/compare_symbols.py $files
+          echo "== check --evidence"; python selfhost/compare_evidence.py $files
           echo "== test --format json"
           python selfhost/compare_test.py nexora/examples/*.nex selfhost/checker_cases/*.nex /nonexistent.nex
 

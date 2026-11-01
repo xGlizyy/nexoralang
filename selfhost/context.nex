@@ -130,7 +130,7 @@ fn walk_all(nodes: List[parser.Node]) gives List[parser.Node] {
 }
 
 // Like `walk`, but in the order of the source: the node first, then what it holds.
-fn preorder(node: parser.Node) gives List[parser.Node] {
+pub fn preorder(node: parser.Node) gives List[parser.Node] {
     return match node {
         parser.Node.Obj(kind, names, values) => List.concat([node], preorder_all(values))
         parser.Node.Items(items) => preorder_all(items)
@@ -147,7 +147,7 @@ fn preorder_all(nodes: List[parser.Node]) gives List[parser.Node] {
 }
 
 // The source text a span covers, exactly as it was written (Source.text_of).
-fn slice_of(lines: List[Text], node: parser.Node) gives Text {
+pub fn slice_of(lines: List[Text], node: parser.Node) gives Text {
     return match field(node, "span") {
         parser.Node.Place(line, column, end_line, end_column) => slice_span(lines, line, column, end_line, end_column)
         _ => ""
