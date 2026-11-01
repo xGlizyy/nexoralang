@@ -48,14 +48,14 @@ def main(arguments: list[str]) -> int:
     if seed is None:
         step("generation 0 (Python runs the compiler on itself)",
              [sys.executable, "-m", "nexora", "run", (HERE / "cgen.nex").as_posix(), "--allow-read", ".", "--allow-write", ".",
-              "--max-output", "1000000000", "--", SOURCE, generation0.relative_to(HERE.parent).as_posix()])
+              "--max-output", "1000000000", "--", SOURCE, generation0.relative_to(HERE.parent).as_posix(), "--trusted"])
     else:
         generation0.write_bytes(seed.read_bytes())
     first = BUILD / f"compiler1{exe}"
-    step("the C compiler builds the first compiler", [*compiler, "-std=c11", "-O1", generation0.as_posix(), "-o", first.as_posix()])
+    step("the C compiler builds the first compiler", [*compiler, "-std=c11", "-O2", generation0.as_posix(), "-o", first.as_posix()])
     generation1 = BUILD / "generation1.c"
     step("generation 1 (the first compiler compiles itself)",
-         [first.as_posix(), "--allow-read", ".", "--allow-write", ".", "--", SOURCE, generation1.relative_to(HERE.parent).as_posix()])
+         [first.as_posix(), "--allow-read", ".", "--allow-write", ".", "--", SOURCE, generation1.relative_to(HERE.parent).as_posix(), "--trusted"])
     if seed is None:
         if generation0.read_bytes() != generation1.read_bytes():
             print("DIFFERENT: the compiler does not produce the C it was built from")
@@ -66,10 +66,10 @@ def main(arguments: list[str]) -> int:
     else:
         print("the seed is older than the source (it built a compiler that writes different C); it can be replaced with generation 1")
     second = BUILD / f"compiler2{exe}"
-    step("the C compiler builds the second compiler", [*compiler, "-std=c11", "-O1", generation1.as_posix(), "-o", second.as_posix()])
+    step("the C compiler builds the second compiler", [*compiler, "-std=c11", "-O2", generation1.as_posix(), "-o", second.as_posix()])
     generation2 = BUILD / "generation2.c"
     step("generation 2 (the second compiler compiles itself)",
-         [second.as_posix(), "--allow-read", ".", "--allow-write", ".", "--", SOURCE, generation2.relative_to(HERE.parent).as_posix()])
+         [second.as_posix(), "--allow-read", ".", "--allow-write", ".", "--", SOURCE, generation2.relative_to(HERE.parent).as_posix(), "--trusted"])
     if generation1.read_bytes() != generation2.read_bytes():
         print("DIFFERENT: generation 2 is not generation 1")
         return 1

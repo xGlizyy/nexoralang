@@ -21,7 +21,9 @@ def main(arguments: list[str]) -> int:
     source = Path(arguments[0]).read_text(encoding="utf-8")
     at = MARKER.search(source).start()
     header = (HERE / "runtime" / "nexora_rt.h").read_text(encoding="utf-8")
-    Path(arguments[1]).write_text(header.rstrip("\n") + "\n" + source[at:], encoding="utf-8", newline="\n")
+    # A tool built with --trusted starts with `#define RT_NO_FRAMES`: that line stays.
+    first = "#define RT_NO_FRAMES\n" if source.startswith("#define RT_NO_FRAMES\n") else ""
+    Path(arguments[1]).write_text(first + header.rstrip("\n") + "\n" + source[at:], encoding="utf-8", newline="\n")
     return 0
 
 
