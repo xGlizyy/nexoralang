@@ -1832,18 +1832,36 @@ fn is_ascii_text(text: Text) gives Bool {
 // E3015: the output of the program is limited (--max-output) in UTF-8 bytes, and the line break counts.
 // What fits is printed first. There is no way to count the bytes of a character that is not ASCII, so the run
 // stops with E0000 when the output has one.
+// The longest start of a text that fits in `room` bytes, without cutting a character in half.
+fn cut_to_bytes(line: Text, room: Int) gives Text {
+    var used = 0
+    var i = 0
+    while i < Text.length(line)
+        shrinks Text.length(line) - i
+    {
+        let width = project.byte_length(Text.slice(line, i, i + 1))
+        if width < 0 or used + width > room {
+            return Text.slice(line, 0, i)
+        }
+        used = used + width
+        i = i + 1
+    }
+    return line
+}
+
 fn print_line(prog: Prog, m: Machine, line: Text) gives Machine {
     let limit = prog.host.max_output
     if limit <= 0 {
         return mk_out(m, Control.CValue(Val.VUnit()), m.stack, List.append(m.out, line))
     }
-    if not is_ascii_text(line) {
+    let bytes = project.byte_length(line)
+    if bytes < 0 {
         return fail_at(m, "E0000", "the bytes of a line with characters that are not ASCII cannot be counted", parser.no_span())
     }
-    let size = Text.length(line) + 1
+    let size = bytes + 1
     let room = limit - m.written
     if size > room {
-        let shown = Text.slice(line, 0, room)
+        let shown = cut_to_bytes(line, room)
         let stopped = Machine(
             control: Control.CFail(problem_at("E3015", "output limit exceeded (" + to_text(limit) + ")", "", [], parser.no_span())),
             env: m.env, stack: m.stack, out: List.append(m.out, shown), written: limit, depth: m.depth,
@@ -2852,7 +2870,7 @@ fn run_example(prog: Prog, lines: List[Text], name: Text, index: Int, item: pars
 type HostCfg = {
     arguments: List[Text], declared_kinds: List[Text], declared_paths: List[Text],
     grant_kinds: List[Text], grant_paths: List[Text], cwd: Text,
-    max_text: Int, max_output: Int, max_input: Int, input_sizes: List[Int]
+    max_text: Int, max_output: Int, max_input: Int, input_sizes: List[Int], locked: Bool
 }
 
 // The host of a run where the user has allowed nothing: the program has declared what it needs, and that is all.
@@ -2860,14 +2878,14 @@ fn declared_host(program: parser.Node) gives HostCfg {
     return HostCfg(
         arguments: [], declared_kinds: declared_kinds_of(program), declared_paths: declared_paths_of(program),
         grant_kinds: [], grant_paths: [], cwd: "", max_text: 0, max_output: 0,
-        max_input: 0, input_sizes: []
+        max_input: 0, input_sizes: [], locked: false
     )
 }
 
 fn no_host() gives HostCfg {
     return HostCfg(
         arguments: [], declared_kinds: [], declared_paths: [], grant_kinds: [], grant_paths: [], cwd: "",
-        max_text: 0, max_output: 0, max_input: 0, input_sizes: []
+        max_text: 0, max_output: 0, max_input: 0, input_sizes: [], locked: false
     )
 }
 
@@ -3077,6 +3095,13 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
         return read_input_line(host, m, node)
     }
     let first = text_val(List.get(a, 0))
+    if host.locked and (callee == "read_file" or callee == "write_file") {
+        var hint = write_hint()
+        if callee == "read_file" {
+            hint = read_hint()
+        }
+        return denied_machine(m, "this environment does not allow files, so '" + first + "' cannot be used", hint, node)
+    }
     if callee == "read_file" {
         let denied = file_denied(host, "read", first)
         if denied != "" {
@@ -3107,6 +3132,9 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
             )
         }
         let network_hint = "A program needs 'uses network' and the matching --allow-network origin; the environment may still deny network access."
+        if host.locked {
+            return denied_machine(m, "this environment does not allow network access", network_hint, node)
+        }
         if not origin_declared(host, host.declared_kinds, host.declared_paths, origin.origin) {
             return denied_machine(m, "this program does not declare network access to '" + origin.origin + "'", network_hint, node)
         }
@@ -3116,6 +3144,9 @@ fn host_call(prog: Prog, m: Machine, node: parser.Node, callee: Text, a: List[Va
         return forwarding_machine(m, callee, node)
     }
     let process_hint = "A program needs 'uses process' and the matching --allow-process command; the environment may still deny external processes."
+    if host.locked {
+        return denied_machine(m, "this environment does not allow external processes", process_hint, node)
+    }
     if not List.contains(scopes_for(host.declared_kinds, host.declared_paths, "process"), first) {
         return denied_machine(m, "this program does not declare permission to run '" + first + "'", process_hint, node)
     }
@@ -3255,7 +3286,7 @@ fn run_hosted(words: List[Text]) {
         declared_paths: declared_paths_of(built.node), grant_kinds: options.grant_kinds,
         grant_paths: options.grant_paths, cwd: options.cwd,
         max_text: options.max_text, max_output: options.max_output, max_input: options.max_input,
-        input_sizes: input_sizes_of(options.stdin_text, options.stdin)
+        input_sizes: input_sizes_of(options.stdin_text, options.stdin), locked: false
     )
     let prog = build_prog(built.node, host)
     let start = start_machine(prog, start_fuel())
@@ -3444,12 +3475,22 @@ fn running_in(function: parser.Node, rest: Stk, skip: Int) gives Text {
 }
 
 pub fn execute(node: parser.Node, options: RunOptions) gives Execution {
+    return execute_in(node, options, false)
+}
+
+// The run of the worker of the playground (nexora/src/nexora/worker.py): the environment allows no files, no network and no
+// processes, whatever the program declares.
+pub fn execute_locked(node: parser.Node, options: RunOptions) gives Execution {
+    return execute_in(node, options, true)
+}
+
+fn execute_in(node: parser.Node, options: RunOptions, locked: Bool) gives Execution {
     let host = HostCfg(
         arguments: options.arguments, declared_kinds: declared_kinds_of(node),
         declared_paths: declared_paths_of(node), grant_kinds: options.grant_kinds,
         grant_paths: options.grant_paths, cwd: options.cwd,
         max_text: options.max_text, max_output: options.max_output, max_input: options.max_input,
-        input_sizes: input_sizes_of(options.stdin_text, options.stdin)
+        input_sizes: input_sizes_of(options.stdin_text, options.stdin), locked: locked
     )
     let prog = build_prog(node, host)
     let start = start_machine(prog, start_fuel())

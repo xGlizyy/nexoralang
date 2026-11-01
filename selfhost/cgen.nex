@@ -1075,6 +1075,9 @@ fn intrinsic_of(function: parser.Node) gives Text {
             return "rt_intr_int_of"
         }
     }
+    if count == 1 and name == "byte_length" and file == "selfhost/project.nex" {
+        return "rt_intr_byte_length"
+    }
     if count == 2 and name == "field" {
         return "rt_intr_field"
     }

@@ -1579,6 +1579,8 @@ pub fn runtime_lines() gives List[Text] {
     lines = List.append(lines, "    return rt_txt(t);")
     lines = List.append(lines, "}")
     lines = List.append(lines, "")
+    lines = List.append(lines, "static rv rt_intr_byte_length(rv text) \{ return rt_int(text.u.t.bytes); }")
+    lines = List.append(lines, "")
     lines = List.append(lines, "static rv rt_intr_text_of(rv node) \{ return rt_intr_is(node, \"Str\") ? rt_arg(node, 0) : rt_str(\"\"); }")
     lines = List.append(lines, "static rv rt_intr_items_of(rv node) \{ return rt_intr_is(node, \"Items\") ? rt_arg(node, 0) : rt_list_from(0, 0); }")
     lines = List.append(lines, "static rv rt_intr_is_null(rv node) \{ return rt_bool(rt_intr_is(node, \"Null\")); }")

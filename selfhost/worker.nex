@@ -1,0 +1,331 @@
+// The worker of the playground, written in NEXORA: the same protocol as `python -I -m nexora.worker` (nexora/src/nexora/worker.py),
+// so that the server of nexoralang.org does not have to change to use it (decision 0026).
+//
+// It reads one line of JSON from the standard input and writes one JSON document, the `nexora.result/1` of docs/playground.md:
+//
+//     {"action": "info"}
+//     {"action": "check", "code": "...", "filename": "playground.nex", "files": {"playground.nex": "..."}}
+//     {"action": "run", "code": "...", "limits": {"output_bytes": 65536, "text_chars": 262144}}
+//
+// A program that is run has no files, no network and no processes, whatever it declares, and no input (the environment
+// is the one of `LocalHost(files_allowed=False)`). `debug` is not answered yet.
+//
+// What it cannot do yet, because a program written in the language cannot: it has no exit status (a request that is not
+// understood is answered with `internal_error` and the process ends with status 0), it has no clock (`duration_ms` is 0:
+// the server of the playground measures the time itself), and the limits of CPU, wall time and memory are the ones
+// the host (the container) applies from outside.
+
+import "json.nex"
+import "parser.nex"
+import "project.nex"
+import "render.nex"
+import "titles.nex"
+import "interpreter.nex"
+import "info.nex"
+
+// What the process is willing to read of a request.
+fn max_request() gives Int {
+    return 1048576
+}
+
+fn string(text: Text) gives json.Json {
+    return json.Json.JStr(text)
+}
+
+fn number(value: Int) gives json.Json {
+    return json.Json.JInt(value)
+}
+
+fn position(value: Int) gives json.Json {
+    if value <= 0 {
+        return json.Json.JNull()
+    }
+    return json.Json.JInt(value)
+}
+
+// A diagnostic as `Diagnostic.to_dict` writes it.
+fn diagnostic_json(problem: parser.Problem, file: Text) gives json.Json {
+    var title = titles.title_of(problem.code)
+    if title == "" {
+        title = "Not supported by this implementation yet"
+    }
+    var hint = json.Json.JNull()
+    if problem.hint != "" {
+        hint = string(problem.hint)
+    }
+    var notes: List[json.Json] = []
+    for note in problem.notes {
+        notes = List.append(notes, string(note))
+    }
+    let keys = ["severity", "category", "code", "message", "label", "hint", "notes", "file", "line", "column", "end_line", "end_column"]
+    let values = [string(render.severity_of(problem.code)), string(titles.category_of(problem.code)), string(problem.code), string(title), string(problem.label), hint, json.Json.JList(notes), string(file), position(problem.line), position(problem.column), position(problem.end_line), position(problem.end_column)]
+    return json.Json.JObj(keys, values)
+}
+
+type Report = { problem: parser.Problem, file: Text }
+
+fn reports_of(results: List[project.Checked]) gives List[Report] {
+    var reports: List[Report] = []
+    for result in results {
+        for problem in result.problems {
+            reports = List.append(reports, Report(problem: problem, file: result.module.path))
+        }
+    }
+    return reports
+}
+
+fn has_errors(reports: List[Report]) gives Bool {
+    for report in reports {
+        if not Text.starts_with(report.problem.code, "W") {
+            return true
+        }
+    }
+    return false
+}
+
+fn diagnostics_json(reports: List[Report]) gives json.Json {
+    var items: List[json.Json] = []
+    for report in reports {
+        items = List.append(items, diagnostic_json(report.problem, report.file))
+    }
+    return json.Json.JList(items)
+}
+
+// A `nexora.result/1`.
+fn result_line(action: Text, status: Text, output: Text, diagnostics: json.Json, message: json.Json) gives Text {
+    let keys = ["schema", "action", "status", "output", "diagnostics", "message", "duration_ms", "version"]
+    let values = [string("nexora.result/1"), string(action), string(status), string(output), diagnostics, message, number(0), string(info.version())]
+    return json.dump(json.Json.JObj(keys, values))
+}
+
+fn failed_request() {
+    print("\{\"schema\": \"nexora.result/1\", \"status\": \"internal_error\"}")
+}
+
+// What a request asks for, once it is known to be well formed.
+type Request = {
+    ok: Bool, action: Text, code: Text, filename: Text, files: Bool, paths: List[Text], texts: List[Text],
+    output_bytes: Int, text_chars: Int
+}
+
+fn rejected() gives Request {
+    return Request(
+        ok: false, action: "", code: "", filename: "", files: false, paths: [], texts: [], output_bytes: 0, text_chars: 0
+    )
+}
+
+fn positive(value: json.Json) gives Int {
+    return match json.int_or_none(value) {
+        Some(n) => n
+        None => 0
+    }
+}
+
+// Whether a name is one of the fields of an object, even when it holds null.
+fn present(value: json.Json, name: Text) gives Bool {
+    return List.contains(json.keys_of(value), name)
+}
+
+// The files of a project: each path must name a file of a project, and a path that comes twice keeps the last text.
+type Files = { ok: Bool, paths: List[Text], texts: List[Text] }
+
+fn read_files(value: json.Json) gives Files {
+    let names = json.keys_of(value)
+    let contents = json.values_of(value)
+    if not json.is_object(value) or List.length(names) < 1 or List.length(names) > 32 {
+        return Files(ok: false, paths: [], texts: [])
+    }
+    var paths: List[Text] = []
+    var texts: List[Text] = []
+    var i = 0
+    while i < List.length(names)
+        shrinks List.length(names) - i
+    {
+        let content = List.get(contents, i)
+        let path = project.project_path(List.get(names, i))
+        if not json.is_text(content) or path == "" {
+            return Files(ok: false, paths: [], texts: [])
+        }
+        let place = index_of_path(paths, path)
+        if place >= 0 {
+            texts = replace_text(texts, place, json.text_value(content, ""))
+        } else {
+            paths = List.append(paths, path)
+            texts = List.append(texts, json.text_value(content, ""))
+        }
+        i = i + 1
+    }
+    return Files(ok: true, paths: paths, texts: texts)
+}
+
+fn index_of_path(paths: List[Text], path: Text) gives Int {
+    var i = 0
+    while i < List.length(paths)
+        shrinks List.length(paths) - i
+    {
+        if List.get(paths, i) == path {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn replace_text(texts: List[Text], place: Int, value: Text) gives List[Text] {
+    var out: List[Text] = []
+    var i = 0
+    while i < List.length(texts)
+        shrinks List.length(texts) - i
+    {
+        if i == place {
+            out = List.append(out, value)
+        } else {
+            out = List.append(out, List.get(texts, i))
+        }
+        i = i + 1
+    }
+    return out
+}
+
+fn read_request(request: json.Json) gives Request {
+    let action = json.text_value(json.field_of(request, "action"), "")
+    if action != "check" and action != "run" {
+        return rejected()
+    }
+    let code = json.field_of(request, "code")
+    var filename = "playground.nex"
+    var filename_ok = true
+    if present(request, "filename") {
+        filename_ok = json.is_text(json.field_of(request, "filename"))
+        filename = json.text_value(json.field_of(request, "filename"), "")
+    }
+    let limits = json.field_of(request, "limits")
+    if not json.is_text(code) or not filename_ok or not (json.is_object(limits) or json.is_null(limits)) {
+        return rejected()
+    }
+    var paths: List[Text] = []
+    var texts: List[Text] = []
+    var files = false
+    let given = json.field_of(request, "files")
+    if not json.is_null(given) {
+        let read = read_files(given)
+        if not read.ok {
+            return rejected()
+        }
+        let entry = project.slashes(filename)
+        if not List.contains(read.paths, entry) {
+            return rejected()
+        }
+        files = true
+        paths = read.paths
+        texts = read.texts
+        filename = entry
+    }
+    return Request(
+        ok: true, action: action, code: json.text_value(code, ""), filename: filename, files: files, paths: paths,
+        texts: texts, output_bytes: positive(json.field_of(limits, "output_bytes")),
+        text_chars: positive(json.field_of(limits, "text_chars"))
+    )
+}
+
+fn answer(request: Request) {
+    var loaded = project.load_virtual(request.filename, [request.filename], [request.code], true)
+    if request.files {
+        loaded = project.load_virtual(request.filename, request.paths, request.texts, false)
+    }
+    let results = project.check_all(loaded, true)
+    for result in results {
+        if result.unsupported != "" {
+            failed_request()
+            return
+        }
+    }
+    let reports = reports_of(results)
+    if has_errors(reports) {
+        print(result_line(request.action, "invalid", "", diagnostics_json(reports), json.Json.JNull()))
+        return
+    }
+    if request.action == "check" {
+        print(result_line("check", "success", "", diagnostics_json(reports), json.Json.JNull()))
+        return
+    }
+    let last = List.get(results, List.length(results) - 1)
+    var node = last.node
+    if List.length(results) > 1 {
+        node = project.link(results)
+    }
+    var words: List[Text] = []
+    if request.text_chars > 0 {
+        words = List.append(List.append(words, "--max-text"), to_text(request.text_chars))
+    }
+    if request.output_bytes > 0 {
+        words = List.append(List.append(words, "--max-output"), to_text(request.output_bytes))
+    }
+    let options = interpreter.parse_options(List.append(words, request.filename))
+    let done = interpreter.execute_locked(node, options)
+    var output = ""
+    for line in done.printed {
+        output = output + line + "\n"
+    }
+    output = output + done.partial
+    if done.out_of_fuel {
+        print(result_line(
+            "run", "runtime_error", output, json.Json.JList([]),
+            string("The program used all the steps this interpreter allows.")
+        ))
+        return
+    }
+    if not done.failed {
+        print(result_line("run", "success", output, json.Json.JList([]), json.Json.JNull()))
+        return
+    }
+    let problem = done.problem
+    if problem.code == "E3015" and Text.starts_with(problem.label, "output") {
+        print(result_line(
+            "run", "output_limit", output, json.Json.JList([]),
+            string("The program printed more than " + to_text(request.output_bytes) + " bytes and was stopped.")
+        ))
+        return
+    }
+    var file = done.file
+    if file == "" {
+        file = request.filename
+    }
+    let one = diagnostics_json([Report(problem: problem, file: file)])
+    if problem.code == "E3007" and not request.files {
+        print(result_line(
+            "run", "memory_limit", output, one,
+            string("The program needed more memory than this environment allows and was stopped.")
+        ))
+        return
+    }
+    var status = "runtime_error"
+    if titles.category_of(problem.code) == "contract" {
+        status = "contract_violation"
+    }
+    print(result_line("run", status, output, one, json.Json.JNull()))
+}
+
+fn main() {
+    let line = input()
+    if project.byte_length(line) > max_request() {
+        failed_request()
+        return
+    }
+    let read = json.parse(line)
+    if not read.ok or not json.is_object(read.value) {
+        failed_request()
+        return
+    }
+    let action = json.text_value(json.field_of(read.value, "action"), "")
+    if action == "info" {
+        print(info.answer())
+        return
+    }
+    let request = read_request(read.value)
+    if not request.ok {
+        failed_request()
+        return
+    }
+    answer(request)
+}
