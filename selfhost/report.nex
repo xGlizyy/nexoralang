@@ -75,3 +75,57 @@ pub fn document(path: Text, reports: List[Report]) gives Text {
     let values = [string("nexora.diagnostics/1"), string(info.version()), string(path), json.Json.JBool(ok), diagnostics(reports)]
     return json.dump_indented(json.Json.JObj(keys, values))
 }
+
+// A syntax tree as `ast.to_dict` writes it (nexora/src/nexora/ast_nodes.py): the kind of the node, then its fields in order (the
+// position as an object with line, column, end_line and end_column), and "type" at the end of an expression the checker typed.
+pub fn node_json(node: parser.Node) gives json.Json {
+    return match node {
+        parser.Node.Null => json.Json.JNull()
+        parser.Node.Flag(value) => json.Json.JBool(value)
+        parser.Node.Whole(value) => json.Json.JInt(value)
+        parser.Node.Real(text) => json.Json.JFloat(Float.parse(text))
+        parser.Node.Str(value) => json.Json.JStr(value)
+        parser.Node.Place(line, column, end_line, end_column) => json.Json.JObj(
+            ["line", "column", "end_line", "end_column"],
+            [json.Json.JInt(line), json.Json.JInt(column), json.Json.JInt(end_line), json.Json.JInt(end_column)]
+        )
+        parser.Node.Items(items) => node_list(items)
+        parser.Node.Obj(kind, names, values) => node_object(kind, names, values)
+    }
+}
+
+fn node_list(items: List[parser.Node]) gives json.Json {
+    var out: List[json.Json] = []
+    for item in items {
+        out = List.append(out, node_json(item))
+    }
+    return json.Json.JList(out)
+}
+
+fn node_object(kind: Text, names: List[Text], values: List[parser.Node]) gives json.Json {
+    var keys = ["kind"]
+    var out = [string(kind)]
+    var i = 0
+    while i < List.length(names)
+        shrinks List.length(names) - i
+    {
+        keys = List.append(keys, List.get(names, i))
+        out = List.append(out, node_json(List.get(values, i)))
+        i = i + 1
+    }
+    return json.Json.JObj(keys, out)
+}
+
+// The `nexora.inspect/3` document of `nex inspect`: the header of every document, whether the tree covers the whole file, and the tree
+// (`null` when the text has a lexical error).
+pub fn inspect_document(path: Text, reports: List[Report], complete: Bool, program: parser.Node) gives Text {
+    var ok = true
+    for report in reports {
+        if not Text.starts_with(report.problem.code, "W") {
+            ok = false
+        }
+    }
+    let keys = ["schema", "nexora_version", "file", "ok", "diagnostics", "complete", "program"]
+    let values = [string("nexora.inspect/3"), string(info.version()), string(path), json.Json.JBool(ok), diagnostics(reports), json.Json.JBool(complete), node_json(program)]
+    return json.dump_indented(json.Json.JObj(keys, values))
+}

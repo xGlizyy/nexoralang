@@ -413,11 +413,22 @@ fn test_command(path: Text, only: Text) {
     }
 }
 
+// Whether `--format` was written at all.
+fn has_format(words: List[Text]) gives Bool {
+    for word in words {
+        if word == "--format" or Text.starts_with(word, "--format=") {
+            return true
+        }
+    }
+    return false
+}
+
 fn usage() {
     err("usage: nex [-h] [--version] <command> ...")
     err("       nex check FILE")
     err("       nex run [OPTIONS] FILE [ARGUMENTS]")
     err("       nex test FILE [--function NAME]")
+    err("       nex inspect FILE")
     exit_with(2)
 }
 
@@ -544,6 +555,37 @@ fn limits_are_valid(words: List[Text]) gives Bool {
     return true
 }
 
+// `nex inspect FILE`: the syntax tree as JSON (nexora.inspect/3), with the type of every expression the checker could type.
+fn inspect_command(path: Text) {
+    let reason = file_problem(path)
+    if reason != "" {
+        let problem = parser.Problem(
+            code: "E0001", label: reason + ": " + path, hint: "", notes: [], line: 0, column: 0, end_line: 0, end_column: 0
+        )
+        print(report.inspect_document(path, [report.Report(problem: problem, file: path)], false, parser.Node.Null()))
+        exit_with(4)
+        return
+    }
+    let loaded = load_and_check(path, true, 0, "json")
+    if loaded.stop != "" {
+        if loaded.stop != "limit" {
+            err("error: " + path + ": " + loaded.stop)
+        }
+        exit_with(70)
+        return
+    }
+    let last = List.get(loaded.results, List.length(loaded.results) - 1)
+    let reports = report.reports_of(loaded.results)
+    var program = last.typed
+    if last.module.reason == "lexical" and not last.module.clean {
+        program = parser.Node.Null()
+    }
+    print(report.inspect_document(path, reports, last.module.clean, program))
+    if count_errors(reports) > 0 {
+        exit_with(1)
+    }
+}
+
 fn rest_of(words: List[Text]) gives List[Text] {
     var rest: List[Text] = []
     var i = 1
@@ -578,6 +620,13 @@ fn main() {
         check_command(List.get(words, 0), taken.format)
     } else if command == "run" and List.length(words) >= 1 {
         run_command(words, taken.format)
+    } else if command == "inspect" and List.length(words) >= 1 {
+        if taken.format == "text" and has_format(rest_of(given)) {
+            err("nex inspect: error: argument --format: invalid choice: 'text' (choose from json)")
+            exit_with(2)
+        } else {
+            inspect_command(List.get(words, 0))
+        }
     } else if command == "test" and List.length(words) >= 1 {
         if taken.format == "json" {
             err("error: nex test --format json is not supported by this implementation yet")
