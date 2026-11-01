@@ -427,7 +427,10 @@ fn is_name_text(part: Text) gives Bool {
 }
 
 // The result of checking one module.
-pub type Checked = { module: Module, node: parser.Node, problems: List[parser.Problem], unsupported: Text }
+// `typed` is the tree with the type of each expression the checker could give one: for a module with syntax errors it is the partial
+// tree checked anyway (what it can tell about the code that did parse; its errors are dropped), as the Python implementation does for
+// `nex inspect`. `node` is what the rest uses.
+pub type Checked = { module: Module, node: parser.Node, typed: parser.Node, problems: List[parser.Problem], unsupported: Text }
 
 fn has_errors(problems: List[parser.Problem]) gives Bool {
     for problem in problems {
@@ -450,9 +453,17 @@ pub fn check_all(project: Project, require_main: Bool) gives List[Checked] {
     {
         let module = List.get(modules, i)
         if not module.clean {
+            var typed = module.program
+            if module.reason != "lexical" {
+                let last_one = i == List.length(modules) - 1
+                let partial = checker.analyze_module(
+                    module.program, module.name, last_one and require_main, false, exports, project.names
+                )
+                typed = partial.node
+            }
             results = List.append(
                 results,
-                Checked(module: module, node: module.program, problems: module.problems, unsupported: "")
+                Checked(module: module, node: module.program, typed: typed, problems: module.problems, unsupported: "")
             )
         } else {
             let last = i == List.length(modules) - 1
@@ -464,8 +475,8 @@ pub fn check_all(project: Project, require_main: Bool) gives List[Checked] {
             results = List.append(
                 results,
                 Checked(
-                    module: module, node: analysis.node, problems: List.concat(module.pending, analysis.problems),
-                    unsupported: analysis.unsupported
+                    module: module, node: analysis.node, typed: analysis.node,
+                    problems: List.concat(module.pending, analysis.problems), unsupported: analysis.unsupported
                 )
             )
         }
