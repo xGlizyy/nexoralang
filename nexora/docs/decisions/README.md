@@ -34,8 +34,9 @@ whose rules it replaces say so at the top.
 | [0021](0021-alcance-nexora-1-0.md) | NEXORA 1.0 scope: CLI and local automation, support target, compatibility policy and release gates | Accepted | No |
 | [0023](0023-despliegue-aplicaciones.md) | Exact runtime pins and external configuration for deployed applications | Accepted | No |
 | [0024](0024-enumeraciones-y-match-exhaustivo.md) | Closed enums, `match`, `if let` and recursive static exhaustiveness for enums, `Option`, `Result` and `Bool` | Accepted; implemented in the 0.16.0 development line | No |
-| [0025](0025-interprete-autoalojado.md) | A self-hosted interpreter written in NEXORA, in stages; leaving Python is a later decision | Proposed | No |
-| [0026](0026-generador-a-c.md) | A code generator to C written in NEXORA, so a program runs without Python; the compiler compiles itself | Proposed | No |
+| [0025](0025-interprete-autoalojado.md) | A self-hosted interpreter written in NEXORA, in stages; leaving Python is a later decision | Accepted; stage 4 closed by 0026 and 0027 | No |
+| [0026](0026-generador-a-c.md) | A code generator to C written in NEXORA, so a program runs without Python; the compiler compiles itself | Accepted; implemented and released as `native-v0.15.0` | No |
+| [0027](0027-herramientas-nativas-por-defecto.md) | The native tools are the default way to use NEXORA; the Python implementation stays as the reference and the `pip`/`npm` install | Accepted | No |
 
 ## Possible incompatible changes in the future
 

@@ -21,6 +21,11 @@ Each version groups its changes into these sections, when they contain content:
 
 ### Added
 
+- The native tools as the default way to use NEXORA (decision 0027): `nex`, `nexora-lsp`, `nex-mcp`, `nexora-format` and `nexora-worker`,
+  written in NEXORA and compiled by its own compiler, published as the release `native-v0.15.0` for Linux (x64, arm64), macOS (x64, arm64) and
+  Windows (x64). `Net.get` and `Process.run` perform the operation in them, with the limits of decision 0020 and the TLS of the system.
+  The Python implementation stays as the reference and as the `pip` and `npm` installation.
+
 - The Playground worker written in NEXORA (`selfhost/worker.nex`): `info`, `check`, `run` and the debugger
   with the protocol of `nexora.worker`, compiled by the NEXORA compiler to one static executable. It is the
   worker of the public site since 1 November 2026 (see `docs/playground.md`); the Python worker remains the

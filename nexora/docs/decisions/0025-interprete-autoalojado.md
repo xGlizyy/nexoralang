@@ -1,6 +1,6 @@
 # 0025 — A self-hosted interpreter written in NEXORA
 
-- **Status:** proposed.
+- **Status:** accepted (2 November 2026); stage 4 is closed by [0026](0026-generador-a-c.md) and [0027](0027-herramientas-nativas-por-defecto.md).
 - **Date:** 2026-10-31.
 - **Decision owner:** NEXORA maintainer.
 - **Affects:** the implementation strategy of the language, the language features needed to write
