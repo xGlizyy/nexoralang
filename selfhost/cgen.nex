@@ -1051,6 +1051,15 @@ fn intrinsic_of(function: parser.Node) gives Text {
         if tool_name == "file_problem" {
             return "rt_intr_file_problem"
         }
+        if tool_name == "prepare_timeout" {
+            return "rt_intr_prepare_timeout"
+        }
+        if tool_name == "start_timeout" {
+            return "rt_intr_start_timeout"
+        }
+        if tool_name == "set_memory_limit" {
+            return "rt_intr_set_memory_limit"
+        }
     }
     if file == "selfhost/worker.nex" {
         if text_of(field(function, "name")) == "apply_limits" {
@@ -1098,6 +1107,12 @@ fn intrinsic_of(function: parser.Node) gives Text {
     }
     if count == 2 and name == "join_texts" and file == "selfhost/parser.nex" {
         return "rt_intr_join_texts"
+    }
+    if count == 0 and name == "can_stream" and file == "selfhost/interpreter.nex" {
+        return "rt_intr_can_stream"
+    }
+    if count == 1 and name == "stream_text" and file == "selfhost/interpreter.nex" {
+        return "rt_intr_stream_text"
     }
     if count == 0 and name == "read_stdin_line" and file == "selfhost/interpreter.nex" {
         return "rt_intr_read_stdin_line"

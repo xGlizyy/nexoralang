@@ -1849,10 +1849,38 @@ fn cut_to_bytes(line: Text, room: Int) gives Text {
     return line
 }
 
+// Whether what a program prints goes out as it is printed instead of being collected (replaced in the executable that cgen.nex
+// makes: `nex run` shows the output while the program runs, as Python does) and the function that writes it, without a line break.
+fn can_stream() gives Bool {
+    return false
+}
+
+fn stream_text(text: Text) {
+}
+
+// What a program printed so far with one line more: written now when the output is streamed, kept otherwise.
+fn with_line(prog: Prog, out: List[Text], line: Text) gives List[Text] {
+    if prog.host.stream {
+        stream_text(line)
+        stream_text("\n")
+        return out
+    }
+    return List.append(out, line)
+}
+
+// The start of the line that did not fit in the output limit.
+fn with_part(prog: Prog, out: List[Text], shown: Text) gives List[Text] {
+    if prog.host.stream {
+        stream_text(shown)
+        return out
+    }
+    return List.append(out, shown)
+}
+
 fn print_line(prog: Prog, m: Machine, line: Text) gives Machine {
     let limit = prog.host.max_output
     if limit <= 0 {
-        return mk_out(m, Control.CValue(Val.VUnit()), m.stack, List.append(m.out, line))
+        return mk_out(m, Control.CValue(Val.VUnit()), m.stack, with_line(prog, m.out, line))
     }
     let bytes = project.byte_length(line)
     if bytes < 0 {
@@ -1864,12 +1892,12 @@ fn print_line(prog: Prog, m: Machine, line: Text) gives Machine {
         let shown = cut_to_bytes(line, room)
         let stopped = Machine(
             control: Control.CFail(problem_at("E3015", "output limit exceeded (" + to_text(limit) + ")", "", [], parser.no_span())),
-            env: m.env, stack: m.stack, out: List.append(m.out, shown), written: limit, depth: m.depth,
+            env: m.env, stack: m.stack, out: with_part(prog, m.out, shown), written: limit, depth: m.depth,
             fuel: m.fuel - 1, tracing: m.tracing
         )
         return stopped
     }
-    let printed = mk_out(m, Control.CValue(Val.VUnit()), m.stack, List.append(m.out, line))
+    let printed = mk_out(m, Control.CValue(Val.VUnit()), m.stack, with_line(prog, m.out, line))
     return Machine(
         control: printed.control, env: printed.env, stack: printed.stack, out: printed.out, written: m.written + size,
         depth: printed.depth, fuel: printed.fuel, tracing: printed.tracing
@@ -2870,7 +2898,8 @@ fn run_example(prog: Prog, lines: List[Text], name: Text, index: Int, item: pars
 type HostCfg = {
     arguments: List[Text], declared_kinds: List[Text], declared_paths: List[Text],
     grant_kinds: List[Text], grant_paths: List[Text], cwd: Text,
-    max_text: Int, max_output: Int, max_input: Int, input_sizes: List[Int], locked: Bool, nohost: Bool, live: Bool
+    max_text: Int, max_output: Int, max_input: Int, input_sizes: List[Int], locked: Bool, nohost: Bool, live: Bool,
+    stream: Bool
 }
 
 // The host of a run where the user has allowed nothing: the program has declared what it needs, and that is all.
@@ -2878,14 +2907,16 @@ fn declared_host(program: parser.Node) gives HostCfg {
     return HostCfg(
         arguments: [], declared_kinds: declared_kinds_of(program), declared_paths: declared_paths_of(program),
         grant_kinds: [], grant_paths: [], cwd: "", max_text: 0, max_output: 0,
-        max_input: 0, input_sizes: [], locked: false, nohost: false, live: false
+        max_input: 0, input_sizes: [], locked: false, nohost: false, live: false,
+        stream: false
     )
 }
 
 fn no_host() gives HostCfg {
     return HostCfg(
         arguments: [], declared_kinds: [], declared_paths: [], grant_kinds: [], grant_paths: [], cwd: "",
-        max_text: 0, max_output: 0, max_input: 0, input_sizes: [], locked: false, nohost: false, live: false
+        max_text: 0, max_output: 0, max_input: 0, input_sizes: [], locked: false, nohost: false, live: false,
+        stream: false
     )
 }
 
@@ -3332,7 +3363,7 @@ fn run_hosted(words: List[Text]) {
         grant_paths: options.grant_paths, cwd: options.cwd,
         max_text: options.max_text, max_output: options.max_output, max_input: options.max_input,
         input_sizes: input_sizes_of(options.stdin_text, options.stdin), locked: false,
-        nohost: false, live: false
+        nohost: false, live: false, stream: false
     )
     let prog = build_prog(built.node, host)
     let start = start_machine(prog, start_fuel())
@@ -3537,7 +3568,7 @@ fn host_for(node: parser.Node, options: RunOptions, locked: Bool, nohost: Bool) 
         grant_paths: options.grant_paths, cwd: options.cwd,
         max_text: options.max_text, max_output: options.max_output, max_input: options.max_input,
         input_sizes: input_sizes_of(options.stdin_text, options.stdin), locked: locked, nohost: nohost,
-        live: options.live and not locked
+        live: options.live and not locked, stream: can_stream() and not locked
     )
 }
 

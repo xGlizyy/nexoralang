@@ -125,7 +125,13 @@ PYTHONPATH=nexora/src python selfhost/compare_nex.py check|run|test FILE [FILE .
 Compiled with `--trusted --cli` (`nex.nex OUTPUT.c --trusted --cli` to `cgen.nex`), the executable is used as the command is, with no
 options of the runtime: `nex check FILE`, `nex run [OPTIONS] FILE [ARGUMENTS]`, `nex test FILE`, `nex --version`. Every argument belongs to
 the tool, and the tool may read and write the files it is asked to; the program that `nex run` starts has its own host, with the
-permissions given by `--allow-read` and the others, as in Python (`NEXORA_NEX_CLI=1` makes `compare_nex.py` call it that way).
+permissions given by `--allow-read` and the others, as in Python (`NEXORA_NEX_CLI=1` makes `compare_nex.py` call it that way). The output of the program is written while it runs (a C function,
+`stream_text`, instead of collecting it and printing it at the end), so a prompt appears before `input()` waits and what a program
+printed is not lost when `--timeout` stops it; the part of a line that fits in `--max-output` is written without a line break, as Python
+does. `--timeout` and `--max-memory` exist on Linux (`--timeout` on any POSIX system), as in Python, and anywhere else they are the same
+usage error with status 2; `--max-memory` stops the program with E3007, worded as this implementation words it. `compare_limits.py`
+(run on Linux, with an executable built with `zig cc -target x86_64-linux-musl -static`) compares 13 cases of the limits of `run`: all equal,
+and `compare_nex.py` and `compare_stdin.py` are equal for that executable too.
 
 `compare_nex.py` runs both and compares them. Run by Python, `nex.nex` has no standard error and no exit status, so what `nex` writes
 to both streams is compared with its standard output. Against the executable (`NEXORA_NEX=path`), the standard output, the standard
@@ -135,7 +141,7 @@ on 29 programs and projects (texts), and `check` and `run` with `--format json` 
 In the executable `nex.nex` does what `nex` does on the outside: the diagnostics and the summary of a failure go to the standard error,
 the results to the standard output, and the process ends with the status of `nex` (0, 1 invalid program, 2 usage, 3 the program failed,
 4 unreadable file, 5 a contract was broken, 6 a test did not pass; 70 for what this implementation cannot do yet). It also has
-`--version` and `--format json` (the `nexora.diagnostics/1` document, built by [`report.nex`](report.nex), the code the worker of the
+`--version`, `--format json`, `--timeout` and `--max-memory` (the `nexora.diagnostics/1` document, built by [`report.nex`](report.nex), the code the worker of the
 playground uses too). Three functions make that possible, `err`, `exit_with` and `file_problem`: NEXORA has no way to write on the
 standard error, to set a status or to ask why a file cannot be read, so the definitions in `nex.nex` (what Python runs) write to the
 standard output and set nothing, and `cgen.nex` replaces them with C ones.
@@ -144,7 +150,6 @@ standard output and set nothing, and `cgen.nex` replaces them with C ones.
 |---|---|
 | Run by Python, no exit status and no standard error | A program has neither: the three functions above only exist in the executable. |
 | `nex test --format json` and the commands `debug`, `inspect`, `context`, `symbols`, `migrate` | Not written yet; `test --format json` ends with status 70 and says so. |
-| Options that stop a program by time or memory (`--timeout`, `--max-memory`) | Not written yet. |
 | `run` reads the standard input one line at a time, and `--max-input` is not applied to it yet | `--stdin FILE` still works and keeps the limit. A program cannot test for the end of the input without stopping at it, so a C function (`read_stdin_line`) answers with no line at the end. `compare_stdin.py` runs 3 programs with 8 inputs (LF, CRLF, no final break, none, empty lines, Unicode): all equal (Python in UTF-8 mode: on Windows `nex` decodes the input with the code page of the console). |
 | The output limit stops in the middle of a line | `print` writes whole lines, so what fit of that line is printed with a line break. |
 | A file with syntax errors | Only its lexical and syntax errors are shown, as for the file that runs. `nex check` also checks the partial tree of an imported module. |
