@@ -1,0 +1,27 @@
+fn a(t: Text) gives Result[Int, Text] {
+    return Ok(1)
+}
+fn bad1(t: Text) gives Int {
+    let n = a(t)?
+    return n
+}
+fn bad2(t: Text) gives Option[Int] {
+    let n = a(t)?
+    return Some(n)
+}
+fn bad3(t: Text) gives Result[Int, Int] {
+    let n = a(t)?
+    return Ok(n)
+}
+fn bad4(t: Text) gives Int {
+    let n = 5?
+    return n
+}
+fn bad5(t: Text) gives Int
+needs a(t)? == 1
+{
+    return 1
+}
+fn main() {
+    let n = a("1")?
+}

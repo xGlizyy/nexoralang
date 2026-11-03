@@ -339,6 +339,9 @@
               },
               {
                 "$ref": "#/$defs/MatchExpr"
+              },
+              {
+                "$ref": "#/$defs/Try"
               }
             ]
           }
@@ -438,8 +441,85 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The type the checker computed: Int, Float, Bool, Text, Void, a list type such as List[Int], or the name of a refined type the program declares. Null if the expression has an error."
+        }
+      }
+    },
+    "Try": {
+      "type": "object",
+      "required": [
+        "kind",
+        "span",
+        "operand",
+        "operator_span",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "Try"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "operand": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntLiteral"
+            },
+            {
+              "$ref": "#/$defs/FloatLiteral"
+            },
+            {
+              "$ref": "#/$defs/TextLiteral"
+            },
+            {
+              "$ref": "#/$defs/BoolLiteral"
+            },
+            {
+              "$ref": "#/$defs/ListLiteral"
+            },
+            {
+              "$ref": "#/$defs/Name"
+            },
+            {
+              "$ref": "#/$defs/Unary"
+            },
+            {
+              "$ref": "#/$defs/Binary"
+            },
+            {
+              "$ref": "#/$defs/Group"
+            },
+            {
+              "$ref": "#/$defs/Call"
+            },
+            {
+              "$ref": "#/$defs/RecordConstruction"
+            },
+            {
+              "$ref": "#/$defs/FieldAccess"
+            },
+            {
+              "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
+            }
+          ]
+        },
+        "operator_span": {
+          "$ref": "#/$defs/span"
         },
         "type": {
           "type": [
@@ -514,6 +594,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -557,6 +640,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -624,6 +710,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -702,6 +791,9 @@
               },
               {
                 "$ref": "#/$defs/MatchExpr"
+              },
+              {
+                "$ref": "#/$defs/Try"
               }
             ]
           }
@@ -787,6 +879,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         }
@@ -898,6 +993,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -1145,6 +1243,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -1411,6 +1512,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         }
@@ -1489,6 +1593,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         }
@@ -1556,6 +1663,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         }
@@ -1618,6 +1728,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -1667,6 +1780,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         }
@@ -1726,6 +1842,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             },
             {
               "type": "null"
@@ -1790,6 +1909,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -1887,6 +2009,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -1965,6 +2090,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         }
@@ -2096,6 +2224,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -2167,6 +2298,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -2245,6 +2379,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -2332,6 +2469,9 @@
               "$ref": "#/$defs/MatchExpr"
             },
             {
+              "$ref": "#/$defs/Try"
+            },
+            {
               "$ref": "#/$defs/Block"
             }
           ]
@@ -2394,6 +2534,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -2509,6 +2652,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },
@@ -2579,6 +2725,9 @@
             },
             {
               "$ref": "#/$defs/MatchExpr"
+            },
+            {
+              "$ref": "#/$defs/Try"
             }
           ]
         },

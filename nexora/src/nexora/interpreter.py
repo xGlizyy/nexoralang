@@ -30,6 +30,7 @@ from .values import (
     INT_MIN,
     NONE,
     OK,
+    SOME,
     RecordValue,
     Value,
     VariantValue,
@@ -54,6 +55,14 @@ class _Returned:
     __slots__ = ("value",)
 
     def __init__(self, value: Value | None) -> None:
+        self.value = value
+
+
+class _EarlyReturn(Exception):
+    """Signals that a `?` met a `None` or an `Err`: the running function gives that value back."""
+
+    def __init__(self, value: Value) -> None:
+        super().__init__()
         self.value = value
 
 
@@ -273,8 +282,11 @@ class Interpreter:
                     skip_frames=1,
                 )
 
-        outcome = self._block(function.body, Environment(parameters))
-        result = outcome.value if outcome is not None else None
+        try:
+            outcome = self._block(function.body, Environment(parameters))
+            result = outcome.value if outcome is not None else None
+        except _EarlyReturn as early:
+            result = early.value
 
         for contract in function.contracts:
             if contract.clause != "promises":
@@ -581,6 +593,12 @@ class Interpreter:
             raise RuntimeError("an exhaustive match had no matching arm")
         if isinstance(node, ast.Binary):
             return self._binary(node, environment)
+        if isinstance(node, ast.Try):
+            operand = self._evaluate(node.operand, environment)
+            if operand.kind in (SOME, OK):
+                return operand.payload
+            # A None or an Err: the function that is running gives it back as it is.
+            raise _EarlyReturn(operand)
         if isinstance(node, ast.Unary):
             operand = self._evaluate(node.operand, environment)
             if node.operator == "not":
@@ -976,7 +994,7 @@ class Interpreter:
                 pending.extend(current.arguments)
             elif isinstance(current, ast.Binary):
                 pending.extend((current.left, current.right))
-            elif isinstance(current, ast.Unary):
+            elif isinstance(current, (ast.Unary, ast.Try)):
                 pending.append(current.operand)
             elif isinstance(current, ast.Group):
                 pending.append(current.expression)
@@ -998,6 +1016,8 @@ def unparse(node: ast.Expr) -> str:
         return node.name
     if isinstance(node, ast.Group):
         return f"({unparse(node.expression)})"
+    if isinstance(node, ast.Try):
+        return f"{unparse(node.operand)}?"
     if isinstance(node, ast.Unary):
         separator = " " if node.operator == "not" else ""
         return f"{node.operator}{separator}{unparse(node.operand)}"

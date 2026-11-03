@@ -129,6 +129,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "E2033": ("Invalid enum pattern", TYPE),
     "E2034": ("Unreachable match arm", TYPE),
     "E2035": ("Invalid enum construction", TYPE),
+    "E2036": ("Invalid use of '?'", TYPE),
 
     # Warnings. They have their own prefix, so a tool can tell them apart from an error
     # without reading the severity. Their number follows the same stage ranges as the errors.

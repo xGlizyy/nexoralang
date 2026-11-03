@@ -33,6 +33,7 @@ _NO_SPACE_AFTER = frozenset({TokenType.LPAREN, TokenType.LBRACKET, TokenType.DOT
 # The tokens before which no space is written.
 _NO_SPACE_BEFORE = frozenset({
     TokenType.RPAREN, TokenType.RBRACKET, TokenType.COMMA, TokenType.DOT, TokenType.COLON, TokenType.LPAREN,
+    TokenType.QUESTION,
 })
 # The tokens that are written as they are, with a space on both sides.
 _BINARY = frozenset({
@@ -256,7 +257,7 @@ def _is_unary(tokens: list[Token], index: int) -> bool:
         return False
     if previous.type in (TokenType.TRUE, TokenType.FALSE):
         return False
-    if previous.type in (TokenType.RPAREN, TokenType.RBRACKET, TokenType.RBRACE):
+    if previous.type in (TokenType.RPAREN, TokenType.RBRACKET, TokenType.RBRACE, TokenType.QUESTION):
         return False
     return True
 

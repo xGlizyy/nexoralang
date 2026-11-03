@@ -146,6 +146,9 @@ pub fn title_of(code: Text) gives Text {
     if code == "E2035" {
         return "Invalid enum construction"
     }
+    if code == "E2036" {
+        return "Invalid use of '?'"
+    }
     if code == "W2001" {
         return "Unused variable"
     }
@@ -364,6 +367,9 @@ pub fn category_of(code: Text) gives Text {
         return "type"
     }
     if code == "E2035" {
+        return "type"
+    }
+    if code == "E2036" {
         return "type"
     }
     if code == "W2001" {

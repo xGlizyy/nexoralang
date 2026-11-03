@@ -306,6 +306,8 @@ def _size(node: ast.Expr) -> int:
         return 1 + _size(node.left) + _size(node.right)
     if isinstance(node, ast.Unary):
         return 1 + _size(node.operand)
+    if isinstance(node, ast.Try):
+        return 1 + _size(node.operand)
     if isinstance(node, ast.Group):
         return 1 + _size(node.expression)
     if isinstance(node, ast.Call):
@@ -555,6 +557,8 @@ class Checker:
         # The function being checked.
         self._function_name = ""
         self._return_type: str | None = None
+        # Whether a `?` can return early here: only the statements of a function body (decision 0028).
+        self._try_allowed = False
         # The refined type whose condition is being checked, if any.
         self._refining: str | None = None
         # The function whose 'example' clause is being checked, if any.
@@ -1544,7 +1548,11 @@ class Checker:
         for example in function.examples:
             self._example(example, function.name)
 
-        returns = self._block(function.body, _Scope(scope))
+        self._try_allowed = True
+        try:
+            returns = self._block(function.body, _Scope(scope))
+        finally:
+            self._try_allowed = False
         if signature.return_type not in (None, VOID) and not returns:
             self._report(
                 "E2014",
@@ -2113,6 +2121,8 @@ class Checker:
             return self._name(node, scope, expected)
         if isinstance(node, ast.Unary):
             return self._unary(node, scope)
+        if isinstance(node, ast.Try):
+            return self._try(node, scope)
         if isinstance(node, ast.Binary):
             if node.operator in EQUALITY and self._is_none_constant(node.right, scope):
                 # `None` is an Option with no value: in a comparison, the other side says
@@ -2513,6 +2523,45 @@ class Checker:
             hint="None is an Option without a value: it needs a type of the form Option[Text].",
         )
         return None
+
+    def _try(self, node: ast.Try, scope: _Scope) -> str | None:
+        """`operand?` (decision 0028): the value of a `Some` or an `Ok`, or an early return of the
+        `None` or the `Err` from the function. The function has to be able to give that variant."""
+        found = self._expression(node.operand, scope)
+        if not self._try_allowed:
+            self._report(
+                "E2036", "'?' can only be used in the statements of a function", node.operator_span,
+                hint="A condition of a clause or of a refined type cannot return early. "
+                     "Read the value with 'match' or 'Option.value_or' there.",
+            )
+            return None
+        if found is None:
+            return None
+        operand = self._current_type_model(self._root(found))
+        is_option = isinstance(operand, type_model.Application)             and operand.constructor.identity == type_model.OPTION.identity
+        is_result = isinstance(operand, type_model.Application)             and operand.constructor.identity == type_model.RESULT.identity
+        if not (is_option or is_result):
+            self._report(
+                "E2036", f"'?' needs an Option or a Result, but this is {found}", node.operator_span,
+                hint="'?' reads the value of a Some or an Ok, and returns the None or the Err. "
+                     "Remove the '?' if the value is not optional.",
+            )
+            return None
+        wanted = "Option[...]" if is_option else "Result[..., " + type_model.display(operand.arguments[1]) + "]"
+        returned = self._current_type_model(self._root(self._return_type)) if self._return_type else None
+        compatible = isinstance(returned, type_model.Application) and (
+            returned.constructor.identity == operand.constructor.identity
+            and (is_option or type_model.equal(returned.arguments[1], operand.arguments[1]))
+        )
+        if not compatible:
+            gives = self._return_type if self._return_type not in (None, VOID) else "nothing"
+            self._report(
+                "E2036", f"'?' can return {'a None' if is_option else 'an Err'} here, but '{self._function_name}' "
+                f"gives {gives}", node.operator_span,
+                hint=f"The function has to give {wanted} for '?' to return early. "
+                     "Handle the other case with 'match' or 'if let' instead.",
+            )
+        return type_model.display(operand.arguments[0])
 
     def _unary(self, node: ast.Unary, scope: _Scope) -> str | None:
         found = self._expression(node.operand, scope)

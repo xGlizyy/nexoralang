@@ -1,0 +1,30 @@
+fn parse(text: Text) gives Result[Int, Text] {
+    if Int.can_parse(text) {
+        return Ok(Int.parse(text))
+    }
+    return Err("not a number")
+}
+
+fn double(text: Text) gives Result[Int, Text] {
+    let n = parse(text)?
+    return Ok(n * 2)
+}
+
+fn first(names: List[Text]) gives Option[Text] {
+    if List.length(names) == 0 {
+        return None
+    }
+    return Some(List.get(names, 0))
+}
+
+fn shout(names: List[Text]) gives Option[Text] {
+    let name = first(names)?
+    return Some(name + "!")
+}
+
+fn main() {
+    print(double("21"))
+    print(double("x"))
+    print(shout(["ada"]))
+    print(shout([]))
+}

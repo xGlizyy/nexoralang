@@ -996,7 +996,17 @@ class Parser:
             operand = self._unary()
             self._nesting -= 1
             return self._built(ast.Unary(operator.span.to(operand.span), operator.lexeme, operand), operand)
-        return self._primary()
+        return self._postfix()
+
+    def _postfix(self) -> ast.Expr:
+        """A primary expression followed by any number of `?` (decision 0028)."""
+        expression = self._primary()
+        while self._check(TokenType.QUESTION):
+            question = self._advance()
+            expression = self._built(
+                ast.Try(expression.span.to(question.span), expression, question.span), expression,
+            )
+        return expression
 
     def _primary(self) -> ast.Expr:
         token = self._peek()

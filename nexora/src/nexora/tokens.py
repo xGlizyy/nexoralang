@@ -58,6 +58,7 @@ class TokenType(Enum):
     COMMA = ","
     COLON = ":"
     DOT = "."
+    QUESTION = "?"
     ARROW = "->"
     FAT_ARROW = "=>"
     EQUAL = "="

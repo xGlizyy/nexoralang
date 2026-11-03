@@ -28,6 +28,7 @@ _SINGLE = {
     # A '.' inside a number ("1.5") is read with the number. Any other '.' is this token, which is
     # only valid in a qualified call such as Text.length(s) (decision 0011, 3.4).
     ".": TokenType.DOT,
+    "?": TokenType.QUESTION,
     "=": TokenType.EQUAL,
     "+": TokenType.PLUS,
     "*": TokenType.STAR,

@@ -169,7 +169,7 @@ def test_eof_position_is_the_end_of_the_text():
     assert (tokens[-1].span.line, tokens[-1].span.column) == (2, 3)
 
 
-@pytest.mark.parametrize("char", ["@", "#", "$", ";", "'", "?", "%", "ñ", "\x00"])
+@pytest.mark.parametrize("char", ["@", "#", "$", ";", "'", "%", "ñ", "\x00"])
 def test_invalid_characters_are_reported_not_skipped(char):
     tokens, errors = lex(f"a {char} b")
     assert codes(errors) == ["E1001"]

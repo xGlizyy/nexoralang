@@ -21,6 +21,10 @@ Each version groups its changes into these sections, when they contain content:
 
 ### Added
 
+- The `?` operator (decision 0028): `expression?` is the value of a `Some` or an `Ok`, and otherwise returns the `None` or the `Err`
+  from the function unchanged. The function has to give a matching `Option[_]` or `Result[_, E]` (same `E`); anything else is the new
+  `E2036`. It is valid only in the statements of a function body. Programs written before it are not affected: `?` was a lexical error.
+
 - The native tools as the default way to use NEXORA (decision 0027): `nex`, `nexora-lsp`, `nex-mcp`, `nexora-format` and `nexora-worker`,
   written in NEXORA and compiled by its own compiler, published as the release `native-v0.15.0` for Linux (x64, arm64), macOS (x64, arm64) and
   Windows (x64). `Net.get` and `Process.run` perform the operation in them, with the limits of decision 0020 and the TLS of the system.
