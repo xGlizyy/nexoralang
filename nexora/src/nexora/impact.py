@@ -43,6 +43,52 @@ def _normalize(expression: ast.Expr, source: Source) -> tuple:
                  for token in tokens if token.type not in (TokenType.NEWLINE, TokenType.EOF))
 
 
+def _loop_requirements(module, module_name: str, function: ast.Function) -> list[Requirement]:
+    result: list[Requirement] = []
+    loop_counts: dict[str, int] = {}
+
+    def visit(block: ast.Block, parent: str = "function") -> None:
+        for statement in block.statements:
+            if isinstance(statement, ast.If):
+                visit(statement.then_block, parent)
+                if isinstance(statement.else_branch, ast.Block):
+                    visit(statement.else_branch, parent)
+                elif isinstance(statement.else_branch, ast.If):
+                    visit(ast.Block(statement.else_branch.span, (statement.else_branch,)), parent)
+                elif isinstance(statement.else_branch, ast.IfLet):
+                    visit(ast.Block(statement.else_branch.span, (statement.else_branch,)), parent)
+            elif isinstance(statement, ast.IfLet):
+                visit(statement.then_block, parent)
+                if isinstance(statement.else_branch, ast.Block):
+                    visit(statement.else_branch, parent)
+                elif isinstance(statement.else_branch, ast.If):
+                    visit(ast.Block(statement.else_branch.span, (statement.else_branch,)), parent)
+                elif isinstance(statement.else_branch, ast.IfLet):
+                    visit(ast.Block(statement.else_branch.span, (statement.else_branch,)), parent)
+            elif isinstance(statement, (ast.While, ast.For)):
+                if isinstance(statement, ast.While):
+                    loop_kind, head = "while", statement.condition
+                else:
+                    loop_kind, head = "for", statement.iterable
+                head_key = repr(_normalize(head, module.source))
+                stem = f"{parent}/{loop_kind}:{head_key}"
+                loop_counts[stem] = loop_counts.get(stem, 0) + 1
+                scope = f"{stem}#{loop_counts[stem]}"
+                for clause in statement.clauses:
+                    result.append(Requirement(
+                        module_name, function.name, scope, clause.clause, clause.name,
+                        module.source.text_of(clause.condition.span),
+                        _normalize(clause.condition, module.source), clause.message,
+                        clause.condition.span, clause.condition,
+                    ))
+                visit(statement.body, scope)
+            elif isinstance(statement, ast.Block):
+                visit(statement, parent)
+
+    visit(function.body)
+    return result
+
+
 def _all_requirements(analysis: Analysis) -> list[Requirement]:
     project = analysis.project
     if project is None:
@@ -61,47 +107,7 @@ def _all_requirements(analysis: Analysis) -> list[Requirement]:
                     contract.condition.span, contract.condition,
                 ))
 
-            loop_counts: dict[str, int] = {}
-
-            def visit(block: ast.Block, parent: str = "function") -> None:
-                for statement in block.statements:
-                    if isinstance(statement, ast.If):
-                        visit(statement.then_block, parent)
-                        if isinstance(statement.else_branch, ast.Block):
-                            visit(statement.else_branch, parent)
-                        elif isinstance(statement.else_branch, ast.If):
-                            visit(ast.Block(statement.else_branch.span, (statement.else_branch,)), parent)
-                        elif isinstance(statement.else_branch, ast.IfLet):
-                            visit(ast.Block(statement.else_branch.span, (statement.else_branch,)), parent)
-                    elif isinstance(statement, ast.IfLet):
-                        visit(statement.then_block, parent)
-                        if isinstance(statement.else_branch, ast.Block):
-                            visit(statement.else_branch, parent)
-                        elif isinstance(statement.else_branch, ast.If):
-                            visit(ast.Block(statement.else_branch.span, (statement.else_branch,)), parent)
-                        elif isinstance(statement.else_branch, ast.IfLet):
-                            visit(ast.Block(statement.else_branch.span, (statement.else_branch,)), parent)
-                    elif isinstance(statement, (ast.While, ast.For)):
-                        if isinstance(statement, ast.While):
-                            loop_kind, head = "while", statement.condition
-                        else:
-                            loop_kind, head = "for", statement.iterable
-                        head_key = repr(_normalize(head, module.source))
-                        stem = f"{parent}/{loop_kind}:{head_key}"
-                        loop_counts[stem] = loop_counts.get(stem, 0) + 1
-                        scope = f"{stem}#{loop_counts[stem]}"
-                        for clause in statement.clauses:
-                            result.append(Requirement(
-                                module_name, function.name, scope, clause.clause, clause.name,
-                                module.source.text_of(clause.condition.span),
-                                _normalize(clause.condition, module.source), clause.message,
-                                clause.condition.span, clause.condition,
-                            ))
-                        visit(statement.body, scope)
-                    elif isinstance(statement, ast.Block):
-                        visit(statement, parent)
-
-            visit(function.body)
+            result.extend(_loop_requirements(module, module_name, function))
     return result
 
 
@@ -270,7 +276,8 @@ def compare(before: Analysis, after: Analysis) -> dict:
 
     for identity in sorted(old_by_id.keys() & new_by_id.keys(), key=repr):
         a, b = old_by_id[identity], new_by_id[identity]
-        matched_old.add(id(a)); matched_new.add(id(b))
+        matched_old.add(id(a))
+        matched_new.add(id(b))
         if a.clause != b.clause:
             add("kind_changed", a, b, "unknown")
         elif a.normalized != b.normalized:
@@ -291,7 +298,8 @@ def compare(before: Analysis, after: Analysis) -> dict:
                  if (item.module, item.function, item.scope, item.clause, item.normalized) == key]
         if len(left) == len(right) == 1:
             a, b = left[0], right[0]
-            matched_old.add(id(a)); matched_new.add(id(b))
+            matched_old.add(id(a))
+            matched_new.add(id(b))
             changes.append({"module": b.module, "function": b.function, "scope": b.scope, "clause": b.clause,
                             "name": b.name, "status": "renamed", "direction": None,
                             "before": a.condition, "after": b.condition,
@@ -303,14 +311,17 @@ def compare(before: Analysis, after: Analysis) -> dict:
     unnamed_new: dict[tuple, list[Requirement]] = {}
     for item in old:
         if item.name is None and id(item) not in matched_old:
-            unnamed_old.setdefault((item.module, item.function, item.scope, item.clause, item.normalized), []).append(item)
+            key = (item.module, item.function, item.scope, item.clause, item.normalized)
+            unnamed_old.setdefault(key, []).append(item)
     for item in new:
         if item.name is None and id(item) not in matched_new:
-            unnamed_new.setdefault((item.module, item.function, item.scope, item.clause, item.normalized), []).append(item)
+            key = (item.module, item.function, item.scope, item.clause, item.normalized)
+            unnamed_new.setdefault(key, []).append(item)
     for key in unnamed_old.keys() | unnamed_new.keys():
         left, right = unnamed_old.get(key, []), unnamed_new.get(key, [])
         for _ in range(min(len(left), len(right))):
-            left.pop(); right.pop()
+            left.pop()
+            right.pop()
         if len(left) == len(right) == 1:
             a, b = left.pop(), right.pop()
             direction = _direction(a.condition_node, b.condition_node)
@@ -321,7 +332,8 @@ def compare(before: Analysis, after: Analysis) -> dict:
                 add("ambiguous", item, None, "unknown")
             for item in right:
                 add("ambiguous", None, item, "unknown")
-            left.clear(); right.clear()
+            left.clear()
+            right.clear()
         for item in left:
             if item.name is None:
                 add("removed", item, None, "weakened" if item.clause in {"needs", "promises"} else "unknown")
