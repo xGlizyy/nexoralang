@@ -30,6 +30,7 @@ these pages is run by the automated tests and compared against the real output o
 | [CLI reference](cli-reference.md) | Commands, options, output formats and exit codes of `nex` |
 | [Diagnostics](diagnostics.md) | How to read an error, categories and every code |
 | [Automated tools and AI](ai-tooling.md) | What NEXORA offers a tool or an agent, the Python API and what does not exist |
+| [AI evaluation protocol](ai-evaluation-protocol.md) | How the pilot that asks whether requirements in the code help an AI agent was run, and its limits |
 | [Structured context](ai-context.md) | `nex context` and `nex symbols`: a summary and the symbols of a program, without running it |
 | [JSON protocol](json-protocol.md) | Every JSON format, its versions, its rules and its JSON Schemas |
 | [Public interfaces and stability](interface-stability.md) | The compatibility promise for the CLI, diagnostics, JSON, LSP, MCP and Python APIs |

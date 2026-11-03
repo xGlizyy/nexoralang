@@ -149,8 +149,8 @@ fn apply_discount(price_cents: Int, percent: Percent) -> Int {
 | Natural-language explanation attached to every condition | Does not exist |
 | Concrete cases in the function (`example`) and a command that runs them | Does not exist; planned |
 | Refined types (`where`) | Does not exist; it needs records or user-defined types first |
-| Warning when an edit removes or weakens a requirement | Does not exist; it is not decided how to detect "weakening" |
-| Evaluation of whether this really helps an AI | **It has not been done** |
+| Warning when an edit removes or weakens a requirement | `nex impact` reports removals and every changed condition; it proves weakening or strengthening for a limited one-variable integer-bound fragment and marks other directions unknown |
+| Evaluation of whether this really helps an AI | The 72-run local one-shot pilot (2026-11-02) found no observed difference; independent, multi-model replication and diagnostic feedback remain open |
 
 > **Update (0.3.0).** [Decision 0007](0007-contratos-estables-y-tipos-refinados.md)
 > implements three pieces of this table: contracts stop being experimental, every condition
@@ -159,7 +159,9 @@ fn apply_discount(price_cents: Int, percent: Percent) -> Int {
 
 ## How we will know whether it works
 
-The feature is a hypothesis until it is measured. The minimal experiment:
+The feature remains a hypothesis. The defined local one-shot experiment is complete and found no
+observed difference; its protocol and results are in the [pilot report](../../experiments/agent-contracts-pilot/results-summary.md).
+The next study needs:
 
 - A set of tasks in which an agent modifies functions that have requirements.
 - Two variants of each task: the requirements **only in the instruction**, or **also in the
@@ -170,8 +172,12 @@ The feature is a hypothesis until it is measured. The minimal experiment:
   - False alarms: requirements reported as broken when they are not.
   - Requirements removed or relaxed by the agent so that the program passes.
 
-The [reference tasks](../ai-tooling.md#reference-tasks) are the starting point. Until
-there are results, no page of the project should claim that NEXORA improves work with AI.
+The [reference tasks](../ai-tooling.md#reference-tasks) check deterministic tools but are not
+agent-edit tasks. The local pilot uses a separate fixed set; its protocol and results are linked
+from the [roadmap](../roadmap.md#under-research). A follow-up attempt with the available local model
+produced no valid responses because its runtime failed on GPU and exceeded practical latency on CPU;
+it is excluded from the results. The pilot is not evidence that NEXORA improves work with AI. No page
+should claim a general advantage without independent replication.
 
 ## What it does not aim to be
 

@@ -74,7 +74,7 @@ that decision or an approved reference application requires them.
 | **Python API** (`nexora.tooling`) | Implemented and tested (`tests/test_tooling.py`) | Declaring it stable. Today it is experimental and may change |
 | **MCP server** (optional) | Seven analysis tools, tested with the client of the official SDK (`tests/test_mcp.py`). Checked by hand once in Claude Code. It does not run code | Testing it in other assistants. Including the specification in the installable package |
 | **Continuous integration** | GitHub Actions runs the Python test suite on Python 3.11, 3.12 and 3.13 on Linux, Windows and macOS | Manual smoke checks on native Linux and macOS machines remain (see platform verification below) |
-| **Optional values and results** | `Option[T]` and `Result[T, E]`, with `Some`, `None`, `Ok` and `Err`, and the functions that recognize the variant and read the value. `match`, `if let` and the `?` operator (decision 0028; `?` is not in the native tools until they are rebuilt) | Nothing planned |
+| **Optional values and results** | `Option[T]` and `Result[T, E]`, with `Some`, `None`, `Ok` and `Err`, and the functions that recognize the variant and read the value. No `match` or `?` | `match`, `if let` and the `?` operator, when there are user enums |
 | **Verification on other platforms** | Checked on Windows 11 with Python 3.12; run on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13 by the continuous integration | Checking it on macOS and on Linux on a real machine, not only on the runners |
 | **Readiness for contributors** | MIT licence, contribution guide, code of conduct, public repository with its issue tracker, and a repository-level security policy with private reporting and response targets | No LTS or security backports; only the latest published release of each component is supported |
 
@@ -90,14 +90,14 @@ solid:
 | 1 | **Stabilizing contracts** (`requires`, `ensures`): fixing their position in the code and the name `result`, and no longer marking them as experimental | **Completed in 0.3.0** ([decision 0007](decisions/0007-contratos-estables-y-tipos-refinados.md)) |
 | 2 | **A natural-language explanation attached to every condition**, which appears in the diagnostic when the condition is broken | **Completed in 0.3.0**, in contracts and in refined types |
 | 3 | **Concrete cases in the function (`example`)** and a command that runs them without writing `main` | **Completed in 0.4.0** ([decision 0008](decisions/0008-ejemplos-y-nex-test.md)) |
-| 4 | **Warning when an edit removes or weakens a requirement** | Under research: it is not decided how to detect that a condition is weaker than another one |
+| 4 | **Warning when an edit removes or weakens a requirement** | Implemented conservatively in `nex impact`: removals and condition changes are reported; a limited integer-bound fragment is classified as weakened or strengthened, and every other changed condition is marked for review |
 | 5 | **Refined types** (`type Percent = Int where ...`) | **Completed in 0.3.0** over the built-in types. Refining records is missing: it is not implemented |
 | 5b | **Loop requirements**: the measure (`decreases`) and the invariants (`invariant`), with their explanation, checked on every iteration | **Completed in 0.5.0** ([decision 0010](decisions/0010-var-y-while.md)) |
-| 6 | **Evaluating whether requirements in the code help an AI agent** not to break them | Planned; see the last row of [Under research](#under-research) |
+| 6 | **Evaluating whether requirements in the code help an AI agent** not to break them | The defined pilot is complete: 72 paired one-shot runs found no observed difference. This does not establish equivalence or a general effect; broader replication remains research ([protocol](ai-evaluation-protocol.md), [results](../experiments/agent-contracts-pilot/results-summary.md)) |
 | 7 | **Promises with an identity, and what backs each one** ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)): the clauses in the header of the function, names, `trust`, and the evidence of every clause | **Phase 1 completed in 0.12.0**: the syntax, `nex migrate` and the enforcement (`nex check --evidence`). Planned: what the examples observe (`nex test --evidence`, 0.13.0), `nex impact` (0.15.0) and deciding a `needs` at the call sites with constants (later) |
 
-Until step 6 gives results, the feature is a hypothesis and is not presented as a
-proven advantage.
+The pilot does not establish an advantage; the feature remains a hypothesis. A diagnostics-feedback
+study and independent replication are still needed before making a general performance claim.
 
 ## Planned
 
@@ -127,11 +127,11 @@ Ideas from the original design whose value or form is not decided:
 | Idea | Open question |
 |------|---------------|
 | Static verification of contracts | Which part can be proven without a full prover, and without giving false guarantees? |
-| Weakened requirements between two versions of a function | How to know, without a prover, that a new condition is weaker than the previous one? Is it enough to warn when a condition disappears or changes? |
+| General logical comparison of requirements | `nex impact` proves implication only for a small integer-bound fragment; which further fragments can be supported without false claims? |
 | Declared effects (`uses`) | Is the burden of annotating them worth it? |
 | Functions resolved by an AI model (`ai fn`, `tool fn`) | Can a deterministic language incorporate an operation that is not, and how is it tested? |
 | Structured edits in diagnostics | Which format would allow applying a fix automatically and safely? |
-| **The central hypothesis of the project** | When an AI modifies a function, are more violations detected if the requirements are written in the code than if they are only in the instruction? **It has not been evaluated.** The experiment is described in [decision 0006](decisions/0006-requisitos-verificables.md#how-we-will-know-whether-it-works); the [reference tasks](ai-tooling.md#reference-tasks) are its starting point |
+| **The central hypothesis of the project** | When an AI modifies a function, are more violations detected if the requirements are written in the code than if they are only in the instruction? A local one-shot pilot found no observed difference: both conditions passed 34/36 runs. This does not settle the hypothesis; see [protocol](ai-evaluation-protocol.md) and [results](../experiments/agent-contracts-pilot/results-summary.md). |
 | Running programs through MCP | With which isolation and under which explicit activation? Today the server only analyzes |
 | Compilation to JavaScript or WebAssembly | The original draft proposed it; today only an interpreter exists, and the playground runs on the server |
 
@@ -143,10 +143,10 @@ Ideas from the original design whose value or form is not decided:
 | 2 | Type system, functions, contracts, JSON outputs | Completed (version 0.2.0); the contract rules became stable in 0.3.0, and their header syntax was revised in 0.12.0 |
 | 3 | Documentation, tests and quality | Implemented; CI runs the Python suite on Python 3.11, 3.12 and 3.13 across Linux, Windows and macOS. Native Linux/macOS smoke checks remain |
 | 4 | Playground: web editor that runs with the real interpreter | Live in production at NEXORA 0.14.1; multi-file projects and statement debugger are available. Docker isolation passed the staging and production release verifier |
-| 5 | Tools for agents: JSON protocol, `nex context`, `nex symbols`, Python API, MCP server | Implemented and tested locally, also the language server of the editor; no AI model has been evaluated |
-| 6 | Verifiable requirements: stable contracts, explanation of the rules and refined types | Completed (version 0.3.0). Examples (step 3) arrived in 0.4.0; steps 4 and 6 of the [main line](#main-line-verifiable-requirements) remain |
+| 5 | Tools for agents: JSON protocol, `nex context`, `nex symbols`, Python API, MCP server | Implemented and tested locally, also the language server of the editor; a small local one-shot model pilot found no observed contract advantage, and broader evaluation remains |
+| 6 | Verifiable requirements: stable contracts, explanation of the rules and refined types | Core completed; examples arrived in 0.4.0, conservative requirement comparison is implemented, and the defined AI pilot is published. General proof of logical implication and independent model replication remain research |
 | 7 | Repetition without recursion: `var` and loops that declare why they end and what they keep true | Completed (version 0.5.0) |
-| 8 | An identity of its own: promises in the header, `trust`, evidence per clause and `nex migrate` ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), phase 1) | Completed (version 0.12.0), with the equivalence tests against the published 0.11.0 green in the continuous integration. Phases 2 to 4 of the decision remain |
+| 8 | An identity of its own: promises in the header, `trust`, evidence per clause and `nex migrate` ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md), phase 1) | Phase 1 completed (0.12.0) with equivalence tests green in CI. `nex impact` has a conservative implementation; observed evidence and static call-site decisions remain |
 
 The website of the project (<https://nexoralang.org>, whose code is in a separate private repository)
 shows a summarized version of this roadmap. This document is the reference.

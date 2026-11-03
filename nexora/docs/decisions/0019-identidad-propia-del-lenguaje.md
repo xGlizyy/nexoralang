@@ -2,7 +2,8 @@
 
 - **Status:** accepted. **Phase 1 is implemented and published in 0.12.0** (2026-10-25): tag
   `v0.12.0`, package `nexora-lang` 0.12.0 on PyPI and npm. The tests of 4.3 and 8.9 were written and
-  pass, also in the continuous integration of `main` before the tag. Phases 2 to 4 have not started. When it was accepted
+  pass, also in the continuous integration of `main` before the tag. Phase 3 has a partial development-line
+  implementation (`nex impact`); phases 2 and 4 have not started. When it was accepted
   (2026-10-24): "The design is accepted; nothing in this document is implemented, and phase 1 needs
   its own explicit authorization (8.11)."
 - **Version:** phase 1 in 0.12.0 (published); the later phases as in 8.11
@@ -122,7 +123,7 @@ reader, person or model, something to learn. Two rules follow:
 | The formatter keeps comments | **[V]** since PR #6 (commit `bdc4ada`, in `main`). It works on the physical lines of the text and keeps comments, blank lines and line endings; its tests check, for every example program, that each line keeps its tokens and its comment. It does not know the 0.12 layout, which is phase 1 work (8.10), and a text with a byte-order mark is still left unformatted, as before | `formatter.py`, `lsp.py`; `tests/test_formatter.py`, `tests/test_lsp.py` |
 | Header clauses, `gives`, `keeps`, `shrinks`, `trust` (syntax, type check, never evaluated, enforcement `trusted`), names of clauses, `nex migrate`, `nex check --evidence` (enforcement only), new format versions | **[P]** | Phase 1 |
 | The observed dimension, `nex test --evidence` | **[P]** | Phase 2 |
-| `nex impact` | **[P]** | Phase 3 |
+| `nex impact` | **Partial implementation** | Phase 3: conservative comparison of function and loop requirements; general identity matching and condition implication remain incomplete |
 | Static decision of `needs` at call sites with constants | **[P]** | Phase 4 |
 | A formatter that keeps comments | **Done** (PR #6, `bdc4ada`). It was a separate, blocking fix; the precondition of phase 1 that depended on it is met (8.11) | 8.10 |
 | The acceptance tests of 4.3 and the equivalence tests of 8.9 | **[P]**. **None exists and none has been run** | Phase 1 (8.11) |
@@ -606,6 +607,14 @@ with `E3002` in `part * 100` before the promise is evaluated; checked for this r
 0.11 interpreter. Integer division of non-negative numbers rounds down: `percentage(1, 3)` is `33`.
 
 ## 7. Identity and `nex impact` **[P]**
+
+**Implementation status (development line):** the Python CLI command `python -m nexora impact`
+compares named and unnamed function contracts and loop clauses, flags removals and changed
+conditions, and proves the direction of implication only for Boolean combinations of integer bounds
+on one variable. It is not implemented in the native `nex` executable. The full matching design
+below remains the target: declared module/function renames, examples, signatures, visibility, and
+general logical implication are not implemented. See the [CLI reference](../cli-reference.md#nex-impact)
+for the supported behavior.
 
 ### 7.1 Identities and normal forms
 

@@ -1,0 +1,280 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexora.invalid/schemas/nexora-impact.schema.json",
+  "title": "nexora.impact/1: the changes of requirements between two versions of a program (nex impact)",
+  "type": "object",
+  "required": [
+    "schema",
+    "nexora_version",
+    "ok",
+    "diagnostics",
+    "changes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "nexora.impact/1"
+    },
+    "nexora_version": {
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "False when one of the two programs could not be analysed."
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/change"
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "changes",
+        "weakened",
+        "removed",
+        "unknown_direction"
+      ],
+      "properties": {
+        "changes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "weakened": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "removed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_direction": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "span": {
+      "description": "A region of the source. Lines and columns start at 1; the end is exclusive. Columns count Unicode code points.",
+      "type": "object",
+      "required": [
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": [
+        "severity",
+        "category",
+        "code",
+        "message",
+        "label",
+        "hint",
+        "notes",
+        "file",
+        "line",
+        "column",
+        "end_line",
+        "end_column"
+      ],
+      "properties": {
+        "severity": {
+          "enum": [
+            "error",
+            "warning"
+          ]
+        },
+        "category": {
+          "enum": [
+            "contract",
+            "file",
+            "lexical",
+            "runtime",
+            "semantic",
+            "syntax",
+            "test",
+            "type"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[EW][0-9]{4}$",
+          "description": "Stable identifier of the problem."
+        },
+        "message": {
+          "type": "string",
+          "description": "Fixed title of the code."
+        },
+        "label": {
+          "type": "string",
+          "description": "What is wrong in this particular case."
+        },
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A suggested fix, only when a rule of the language supports it."
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Related information."
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "end_column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    },
+    "change": {
+      "type": "object",
+      "required": [
+        "module",
+        "function",
+        "scope",
+        "clause",
+        "name",
+        "status",
+        "direction",
+        "before",
+        "after",
+        "before_message",
+        "after_message"
+      ],
+      "properties": {
+        "module": {
+          "type": "string"
+        },
+        "function": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "clause": {
+          "enum": [
+            "needs",
+            "promises",
+            "trust",
+            "keeps",
+            "shrinks"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "enum": [
+            "kind_changed",
+            "condition_changed",
+            "weakened",
+            "explanation_changed",
+            "renamed",
+            "removed",
+            "added",
+            "ambiguous"
+          ]
+        },
+        "direction": {
+          "enum": [
+            "weakened",
+            "strengthened",
+            "equivalent",
+            "incomparable",
+            "unknown",
+            null
+          ]
+        },
+        "before": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "after": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "before_message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "after_message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "previous_name": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

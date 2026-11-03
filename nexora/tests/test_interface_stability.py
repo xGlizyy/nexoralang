@@ -34,7 +34,8 @@ def test_stability_policy_classifies_every_public_interface():
 def test_stable_cli_command_names_remain_available():
     parser = cli._build_parser()
     subparsers = next(action for action in parser._actions if action.dest == "command")
-    assert set(subparsers.choices) == {
+    # `impact` is experimental (docs/interface-stability.md) and is not part of the stable names.
+    assert set(subparsers.choices) - {"impact"} == {
         "run", "debug", "check", "inspect", "context", "symbols", "test", "migrate",
     }
 

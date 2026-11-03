@@ -51,7 +51,7 @@ NEXORA can help with questions 1, 2, 3, 5 and 6 through structured data and dete
 |---|---|---|
 | **Current capability** | Static types `Int`, `Float`, `Bool`, `Text`, `Void`; contracts `requires`/`ensures` checked on execution; refined types over builtins; `example`; `while` with `invariant`/`decreases`; `nex check`, `inspect`, `context`, `symbols`, `test`; JSON; read-only MCP; playground with worker | Implemented and documented **[V]/[D]** |
 | **Proposal in this ADR** | Type algebra; lists; records; enums; `match`; exhaustiveness; `Option`/`Result`; explicit input; modules; evidence and impact of requirements | Design, not implemented **[P]** |
-| **Research hypothesis** | That requirements in code and NEXORA tools cause an AI to detect more violations, weaken fewer requirements and require fewer corrections | **Not measured** **[?]** |
+| **Research hypothesis** | That requirements in code and NEXORA tools cause an AI to detect more violations, weaken fewer requirements and require fewer corrections | A small local one-shot source-contract pilot found no observed difference; independent replication and tool-feedback evaluation remain open **[?]** |
 
 The distinction matters: a proposed capability must not be described as if it already exists; a hypothesis must not be presented as a result.
 
@@ -997,7 +997,7 @@ The playground must remain disabled by default (`PLAYGROUND_ENABLED=false`) and 
 | D18 | Scope of 1.0 | Core + modules + stdlib + tools + security; LSP/REPL optional | Everything; fixed date | Consistency and quality | High | Acceptance criteria | All | Proposal |
 | D19 | Runtime contracts | Maintain 0004/0007: checked on execution, not proved | Formal verification | Already decided | — | — | — | Previously decided |
 | D20 | Interpreter only runs checked programs | Maintain 0002 | Execute without checker | Already decided | — | — | — | Previously decided |
-| D21 | Requirements as differential feature | Maintain 0006; hypothesis still unmeasured | Another feature | Already decided | — | Evaluation H.7 | — | Previously decided direction, hypothesis pending |
+| D21 | Requirements as differential feature | Maintain 0006; local one-shot pilot found no observed difference, broader evidence pending | Another feature | Already decided | — | Evaluation H.7 | — | Previously decided direction, hypothesis pending |
 
 ### J.1. Open questions requiring approval
 

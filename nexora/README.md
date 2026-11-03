@@ -50,9 +50,11 @@ In this version, the question takes the shape of design decisions that can be ch
 - **Tools receive data, not text.** The program and its errors can be obtained as JSON,
   with a versioned schema.
 
-These decisions are a **working hypothesis**. There is no evaluation that shows that
-they make the work of an AI tool easier, and this project does not claim that NEXORA is faster,
-safer, more productive or better than any other language.
+These decisions are a **working hypothesis**. A small local one-shot pilot found no observed
+difference in whether a model preserved requirements with contracts in the source or only in the
+instructions. That does not settle the question; see the [pilot results](experiments/agent-contracts-pilot/results-summary.md).
+This project does not claim that NEXORA is faster, safer, more productive or better than any other
+language.
 
 NEXORA neither includes nor calls any AI model. Its rules are deterministic code that works
 offline. What there is and what there is not, precisely: [Automated tools and AI](docs/ai-tooling.md).
@@ -72,7 +74,7 @@ production-ready.
 | **Experimental** | Python API `nexora.tooling` · optional MCP server (tested with the SDK client and, by hand, in Claude Code; in no other assistant) |
 | **Live in production, still experimental** | The [web Playground](https://nexoralang.org/playground) runs a previous interpreter release. It supports Check, Run, multi-file projects with an entry file, and a statement debugger with breakpoints, Step, Continue and Stop. Public runs use the same interpreter in a Docker worker with network access disabled. |
 | **Planned** (does not exist) | `break` and `continue`, `for` over ranges or `Text`, maps and user generics |
-| **Under research** (does not exist) | Static verification of contracts, AI features inside the language, and the evaluation of the hypothesis of the project |
+| **Under research** | Static verification of contracts and AI features inside the language do not exist. The hypothesis evaluation has an initial local pilot; independent replication remains open |
 
 Interface commitments: [public interfaces and stability](docs/interface-stability.md). The release,
 migration and deprecation rules are in the [compatibility and versioning policy](docs/compatibility.md).
@@ -184,10 +186,11 @@ functions and how to read an error.
 | `nex context file.nex` | Summarizes the program: signatures, contracts, calls, features. **Without running it** |
 | `nex symbols file.nex` | Lists functions, parameters and variables, and where each one is used. **Without running it** |
 | `nex test file.nex` | Evaluates the examples (`example`) of the functions, each one separately. It does not require `main` or run it |
+| `nex impact before.nex after.nex` | Compares declared function and loop requirements between versions, flags removals and condition changes, and identifies provable weakening in a limited integer-condition fragment. **Without running either program** |
 | `nex --version` | Shows the version |
 | `nex --help` | Shows the help |
 
-`nex check`, `nex run`, `nex context`, `nex symbols` and `nex test` accept `--format json` to deliver the
+`nex check`, `nex run`, `nex context`, `nex symbols`, `nex test` and `nex impact` accept `--format json` to deliver the
 result as data.
 
 | Exit code | Meaning |
@@ -213,6 +216,9 @@ start to end and, when there is a well-founded fix, a suggestion.
 
 `nex inspect` also delivers the complete syntax tree, with the type of every expression;
 `nex symbols`, every declared name and its uses; and `nex context`, a short summary of the program.
+The development comparison command `python -m nexora impact before.nex after.nex` reports removed
+or changed requirements and proves weakening only in a limited integer-bound fragment. It is not
+available in the native `nex` executable yet.
 None of these commands runs the program, and no AI model is involved in any of them.
 
 ```bash

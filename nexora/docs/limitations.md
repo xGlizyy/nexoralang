@@ -124,7 +124,9 @@ Stable since 0.3.0. Their limits, in detail, in [contracts](contracts.md#limitat
   limits, in [MCP server](mcp.md#limitations).
 - The specification is only available to the tools (`get_language_spec`) if NEXORA was
   installed from the source code; the *wheel* package does not include the documentation.
-- NEXORA does not call any AI model, and **no model has been evaluated** with these tools.
+- NEXORA does not call any AI model. A local one-shot pilot evaluated source contracts without
+  diagnostic feedback; **no broad or independent evaluation of the tools has been completed**. See
+  the [protocol](ai-evaluation-protocol.md) and [results](../experiments/agent-contracts-pilot/results-summary.md).
   What there is are structured and deterministic data:
   [Automated tools and AI](ai-tooling.md).
 
