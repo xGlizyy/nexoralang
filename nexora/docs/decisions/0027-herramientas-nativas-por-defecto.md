@@ -20,6 +20,7 @@ NEXORA. That work is now complete enough to be used:
 - The compiler compiles itself to a fixed point, and `selfhost/seed/cgen.c` rebuilds it with a C compiler alone.
 - Release `native-v0.15.0` publishes the five programs for Linux (x64 and arm64), macOS (x64 and arm64) and Windows (x64), each with its checksum.
   Every package is built from the seed by the continuous integration and runs a program before it is published.
+  Release `native-v0.15.1` adds the `?` operator (decision 0028) and `nex impact`; the language version they report is still 0.15.0.
 
 ## 2. Decision
 
