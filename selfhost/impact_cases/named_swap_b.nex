@@ -1,0 +1,9 @@
+fn charge(amount: Int) gives Int
+    needs b: amount > 5
+{
+    return amount
+}
+
+fn main() {
+    print(charge(1))
+}

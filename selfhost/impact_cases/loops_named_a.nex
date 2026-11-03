@@ -1,0 +1,14 @@
+fn count(n: Int) gives Int {
+    var i = 0
+    while i < n
+        keeps c: i >= 0, "explained"
+        shrinks n - i
+    {
+        i = i + 1
+    }
+    return i
+}
+
+fn main() {
+    print(count(3))
+}

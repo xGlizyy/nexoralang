@@ -1,0 +1,6 @@
+import "rules.nex"
+import "other.nex"
+
+fn main() {
+    print(rules.positive(1) + other.twice(1))
+}

@@ -206,3 +206,35 @@ def test_text_output_of_invalid_and_missing_files(tmp_path):
     assert invalid.returncode == 1 and "bad.nex" in invalid.stderr
     missing = run_cli("a.nex", "nope.nex", cwd=tmp_path)
     assert missing.returncode == 4
+
+
+MATCH_LOOP = """fn pick(flag: Bool, n: Int) gives Int {{
+    var total = 0
+    match flag {{
+        true => {{
+            var i = 0
+            while i < n
+                keeps {k}
+                shrinks n - i
+            {{
+                i = i + 1
+            }}
+            total = i
+        }}
+        false => {{
+            total = 0
+        }}
+    }}
+    return total
+}}
+
+fn main() {{
+    print(pick(true, 3))
+}}
+"""
+
+
+def test_a_loop_in_an_arm_of_a_match_is_seen():
+    document = compare(MATCH_LOOP.format(k="c: i >= 0"), MATCH_LOOP.format(k="c: i >= -5"))
+    assert [(c["clause"], c["status"]) for c in document["changes"]] == [("keeps", "weakened")]
+    assert document["changes"][0]["scope"].startswith("function/while:")

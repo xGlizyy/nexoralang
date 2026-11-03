@@ -1,0 +1,10 @@
+fn charge(amount: Int) gives Int
+    needs a: amount > 0
+    needs b: amount > 0
+{
+    return amount
+}
+
+fn main() {
+    print(charge(1))
+}

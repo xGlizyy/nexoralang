@@ -6,6 +6,7 @@ Every other condition change is reported as changed with an unknown direction, n
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 
 from . import ast_nodes as ast
@@ -39,44 +40,51 @@ UNIVERSE: Intervals = ((INT_MIN, INT_MAX),)
 def _normalize(expression: ast.Expr, source: Source) -> tuple:
     fragment = Source(source.name, source.text_of(expression.span))
     tokens, _ = tokenize(fragment)
-    return tuple((token.type.value, token.value if token.value is not None else token.lexeme)
+    return tuple((token.type.value, token.lexeme)
                  for token in tokens if token.type not in (TokenType.NEWLINE, TokenType.EOF))
+
+
+def _nodes_in(value: object):
+    if isinstance(value, ast.Node):
+        yield value
+    elif isinstance(value, (tuple, list)):
+        for item in value:
+            yield from _nodes_in(item)
+
+
+def _children(node: ast.Node):
+    """The nodes a node holds directly, in the order of its fields (the order of the source)."""
+    for field in dataclasses.fields(node):
+        yield from _nodes_in(getattr(node, field.name))
 
 
 def _loop_requirements(module, module_name: str, function: ast.Function) -> list[Requirement]:
     result: list[Requirement] = []
     loop_counts: dict[str, int] = {}
 
-    def visit(block: ast.Block, parent: str = "function") -> None:
-        for statement in block.statements:
-            if isinstance(statement, (ast.If, ast.IfLet)):
-                visit(statement.then_block, parent)
-                other = statement.else_branch
-                if isinstance(other, ast.Block):
-                    visit(other, parent)
-                elif other is not None:
-                    visit(ast.Block(other.span, (other,)), parent)
-            elif isinstance(statement, (ast.While, ast.For)):
-                if isinstance(statement, ast.While):
-                    loop_kind, head = "while", statement.condition
+    def visit(node: ast.Node, parent: str) -> None:
+        for child in _children(node):
+            if isinstance(child, (ast.While, ast.For)):
+                if isinstance(child, ast.While):
+                    loop_kind, head = "while", child.condition
                 else:
-                    loop_kind, head = "for", statement.iterable
-                head_key = repr(_normalize(head, module.source))
-                stem = f"{parent}/{loop_kind}:{head_key}"
+                    loop_kind, head = "for", child.iterable
+                head_text = " ".join(lexeme for _, lexeme in _normalize(head, module.source))
+                stem = f"{parent}/{loop_kind}:{head_text}"
                 loop_counts[stem] = loop_counts.get(stem, 0) + 1
                 scope = f"{stem}#{loop_counts[stem]}"
-                for clause in statement.clauses:
+                for clause in child.clauses:
                     result.append(Requirement(
                         module_name, function.name, scope, clause.clause, clause.name,
                         module.source.text_of(clause.condition.span),
                         _normalize(clause.condition, module.source), clause.message,
                         clause.condition.span, clause.condition,
                     ))
-                visit(statement.body, scope)
-            elif isinstance(statement, ast.Block):
-                visit(statement, parent)
+                visit(child.body, scope)
+            else:
+                visit(child, parent)
 
-    visit(function.body)
+    visit(function.body, "function")
     return result
 
 
@@ -326,7 +334,9 @@ def compare(before: Analysis, after: Analysis) -> dict:
             add("added", None, item)
 
     changes.sort(key=lambda item: (item["module"], item["function"], item["scope"], item["name"] or "",
-                                   item["clause"], item["status"], item["before"] or ""))
+                                   item["clause"], item["status"], item["before"] or "", item["after"] or "",
+                                   item["before_message"] or "", item["after_message"] or "",
+                                   item.get("previous_name", "")))
     return {"schema": "nexora.impact/1", "nexora_version": __version__, "ok": True,
             "diagnostics": [], "changes": changes,
             "summary": {"changes": len(changes),

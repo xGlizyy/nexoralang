@@ -1,0 +1,9 @@
+fn charge(amount: Int, other: Int) gives Int
+    needs c: not (amount > 3)
+{
+    return amount
+}
+
+fn main() {
+    print(charge(1, 1))
+}

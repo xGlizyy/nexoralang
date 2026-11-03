@@ -33,6 +33,7 @@ import "json.nex"
 import "legacy.nex"
 import "migrate.nex"
 import "evidence.nex"
+import "impact.nex"
 
 uses read "."
 uses write "."
@@ -636,6 +637,7 @@ fn usage() {
     err("       nex inspect FILE")
     err("       nex context [--format text|json] FILE")
     err("       nex symbols [--format text|json] [--name NAME] [--function NAME] FILE")
+    err("       nex impact [--format text|json] BEFORE AFTER")
     exit_with(2)
 }
 
@@ -898,6 +900,67 @@ fn symbols_command(path: Text, format: Text, name: Text, function: Text) {
     }
     if count_errors(reports) > 0 {
         exit_with(1)
+    }
+}
+
+// `nex impact BEFORE AFTER`: the changes of the requirements between two versions of a program (nexora.impact/1). Each file is read and
+// checked in turn; the first one that cannot be read, or has errors, ends the command.
+type Wanted = { stop: Bool, reqs: List[impact.Req] }
+
+fn impact_requirements(path: Text, format: Text) gives Wanted {
+    let reason = file_problem(path)
+    if reason != "" {
+        let problem = parser.Problem(
+            code: "E0001", label: reason + ": " + path, hint: "", notes: [], line: 0, column: 0, end_line: 0, end_column: 0
+        )
+        if format == "json" {
+            print(impact.failure_document([report.Report(problem: problem, file: path)]))
+        } else {
+            err(render.render(problem, path, []))
+            err("")
+        }
+        exit_with(4)
+        return Wanted(stop: true, reqs: [])
+    }
+    let loaded = load_and_check(path, false, 0, "json")
+    if loaded.stop != "" {
+        if loaded.stop != "limit" {
+            err("error: " + path + ": " + loaded.stop)
+        }
+        exit_with(70)
+        return Wanted(stop: true, reqs: [])
+    }
+    let reports = report.reports_of(loaded.results)
+    if count_errors(reports) > 0 {
+        if format == "json" {
+            print(impact.failure_document(reports))
+        } else {
+            show_reports(reports)
+        }
+        exit_with(1)
+        return Wanted(stop: true, reqs: [])
+    }
+    var texts: List[Text] = []
+    for each in loaded.results {
+        texts = List.append(texts, source_of(each.module.path))
+    }
+    return Wanted(stop: false, reqs: impact.collect(loaded.results, texts))
+}
+
+fn impact_command(before: Text, after: Text, format: Text) {
+    let old = impact_requirements(before, format)
+    if old.stop {
+        return
+    }
+    let new = impact_requirements(after, format)
+    if new.stop {
+        return
+    }
+    let changes = impact.compare(old.reqs, new.reqs)
+    if format == "json" {
+        print(impact.document(before, after, changes))
+    } else {
+        print(impact.render_text(changes))
     }
 }
 
@@ -2094,6 +2157,8 @@ fn main() {
         } else {
             usage()
         }
+    } else if command == "impact" and List.length(words) >= 2 {
+        impact_command(List.get(words, 0), List.get(words, 1), taken.format)
     } else if command == "test" and List.length(words) >= 1 {
         var only = ""
         if List.length(words) >= 3 and List.get(words, 1) == "--function" {

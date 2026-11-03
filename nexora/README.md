@@ -216,9 +216,8 @@ start to end and, when there is a well-founded fix, a suggestion.
 
 `nex inspect` also delivers the complete syntax tree, with the type of every expression;
 `nex symbols`, every declared name and its uses; and `nex context`, a short summary of the program.
-The development comparison command `python -m nexora impact before.nex after.nex` reports removed
-or changed requirements and proves weakening only in a limited integer-bound fragment. It is not
-available in the native `nex` executable yet.
+The experimental command `nex impact before.nex after.nex` reports removed or changed requirements
+and proves weakening only in a limited integer-bound fragment.
 None of these commands runs the program, and no AI model is involved in any of them.
 
 ```bash

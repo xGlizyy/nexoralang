@@ -359,13 +359,14 @@ behaviour not checked by this command*.
 
 ## `nex impact`
 
-This command is **experimental** (see [interface stability](interface-stability.md)) and is currently available in the Python CLI only (`python -m nexora impact`). The native
-`nex` executable does not implement it yet. It compares function and loop requirements in two
-checked versions without running either program:
+This command is **experimental** (see [interface stability](interface-stability.md)). The Python
+CLI (`python -m nexora impact`) and the native `nex` write the same output, which
+`selfhost/compare_impact.py` checks on 90 pairs of programs in both formats. It compares function
+and loop requirements in two checked versions without running either program:
 
 ```bash
-python -m nexora impact before.nex after.nex
-python -m nexora impact before.nex after.nex --format json
+nex impact before.nex after.nex
+nex impact before.nex after.nex --format json
 ```
 
 The direction classifier proves weakening or
@@ -404,7 +405,7 @@ NEXORA 0.15.0
 `nex --help` shows the commands and the exit codes. Every command has its own help:
 `nex run --help`, `nex check --help`, `nex inspect --help`, `nex context --help`,
 `nex symbols --help`.
-`python -m nexora impact --help` (Python CLI only).
+`python -m nexora impact --help` shows the help of this command; the native `nex` shows its usage line.
 
 ## Output formats
 

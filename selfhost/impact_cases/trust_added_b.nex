@@ -1,0 +1,9 @@
+fn charge(amount: Int) gives Int
+    trust t: amount > 0, "checked elsewhere"
+{
+    return amount
+}
+
+fn main() {
+    print(charge(1))
+}

@@ -1,0 +1,9 @@
+fn charge(amount: Int, other: Int) gives Int
+    needs c: amount != 1
+{
+    return amount
+}
+
+fn main() {
+    print(charge(1, 1))
+}
