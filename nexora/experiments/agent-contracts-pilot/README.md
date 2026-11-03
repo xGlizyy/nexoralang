@@ -6,7 +6,9 @@ checks the answer with the reference interpreter and hidden cases.
 
 The fixed 12-task set is in `tasks.py`. `case-rationales.md` documents why each hidden case exists.
 The recorded v2 outputs are in `results.jsonl`; v1 is retained but excluded in
-`results-v1-excluded.jsonl` because its prompt leaked contract syntax.
+`results-v1-excluded.jsonl` because its prompt leaked contract syntax. In that file the temporary
+directory of the machine that ran the pilot, which appeared in the recorded compiler output, is
+written as `<temp>`; nothing else was changed.
 
 To run the full set with a new local Ollama model, start Ollama, make that model available locally,
 then choose a new output file so the recorded results remain unchanged:
