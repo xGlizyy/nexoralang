@@ -1,0 +1,55 @@
+fn run(n: Int, flag: Bool) gives Int
+    needs n >= 0
+{
+    var i = 0
+    while i < n
+        keeps i >= 0, "the count stays"
+        shrinks n - i
+    {
+        if i > 100 {
+            i = i + 1
+        } else if i > 50 {
+            i = i + 1
+        } else {
+            for item in [1, 2]
+                keeps i >= 0
+            {
+                i = i + item
+            }
+        }
+    }
+    match flag {
+        true => {
+            var j = 0
+            while j < n
+                keeps i >= 0
+                shrinks n - j
+            {
+                j = j + 1
+            }
+            i = i + j
+        }
+        false => {
+            for item in [1, 2]
+                keeps i >= 0
+            {
+                i = i + item
+            }
+        }
+    }
+    for item in [1, 2]
+        keeps i >= 0
+    {
+        i = i + item
+    }
+    for item in [1, 2]
+        keeps i >= 0
+    {
+        i = i + item
+    }
+    return i
+}
+
+fn main() {
+    print(run(3, true))
+}

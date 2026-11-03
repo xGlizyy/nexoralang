@@ -21,6 +21,12 @@ Each version groups its changes into these sections, when they contain content:
 
 ### Added
 
+- `nex impact BEFORE AFTER` (experimental): the changes of the declared requirements between two versions of a program, without running
+  either one, as text or as `nexora.impact/1`. Removals and changed conditions are reported; a weakening is proved only for Boolean
+  combinations of integer bounds on one variable. It is in the Python CLI and in the native `nex`, which write the same output
+  (`selfhost/compare_impact.py`). Modules are matched by name, loops are found wherever they are (also in the arms of a `match`),
+  and the order of the changes is total, so the output does not depend on the run.
+
 - The `?` operator (decision 0028): `expression?` is the value of a `Some` or an `Ok`, and otherwise returns the `None` or the `Err`
   from the function unchanged. The function has to give a matching `Option[_]` or `Result[_, E]` (same `E`); anything else is the new
   `E2036`. It is valid only in the statements of a function body. Programs written before it are not affected: `?` was a lexical error.

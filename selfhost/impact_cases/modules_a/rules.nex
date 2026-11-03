@@ -1,0 +1,5 @@
+pub fn positive(n: Int) gives Int
+    needs c: n > 5
+{
+    return n
+}

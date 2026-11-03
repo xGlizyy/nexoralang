@@ -1,0 +1,5 @@
+fn helper(n: Int) gives Int
+    needs c: n >= 0
+{
+    return n
+}

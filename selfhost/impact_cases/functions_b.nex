@@ -1,0 +1,16 @@
+fn zeta(n: Int) gives Int
+    needs positive: n >= 0
+{
+    return n
+}
+
+fn second(n: Int) gives Int
+    needs small: n < 5
+    promises result >= n
+{
+    return n
+}
+
+fn main() {
+    print(zeta(1) + second(1))
+}

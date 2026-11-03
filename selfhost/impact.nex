@@ -1,0 +1,1026 @@
+// `nex impact BEFORE AFTER`: the changes of the requirements between two versions of a program (nexora/src/nexora/impact.py,
+// `nexora.impact/1`). Neither program is run. The direction of a changed condition is proved only for Boolean combinations of
+// integer bounds on one variable; every other change is reported with an unknown direction, never as safe.
+
+import "json.nex"
+import "lexer.nex"
+import "parser.nex"
+import "project.nex"
+import "report.nex"
+import "info.nex"
+import "render.nex"
+import "context.nex"
+
+// One clause of a program: `key` is its condition as a sequence of tokens (kind and lexeme), so that two spellings of the same
+// tokens are the same condition. An empty `name` or `message` is none.
+pub type Req = {
+    module: Text, function: Text, scope: Text, clause: Text, name: Text, condition: Text, key: Text, message: Text,
+    node: parser.Node
+}
+
+// A change. An empty `direction`, `name`, `before`, `after`, `before_message`, `after_message` or `previous` is none (null).
+pub type Change = {
+    module: Text, function: Text, scope: Text, clause: Text, name: Text, status: Text, direction: Text, before: Text, after: Text,
+    before_message: Text, after_message: Text, previous: Text
+}
+
+// The tokens of a condition as written, without the line ends: the kind and the lexeme of each one.
+fn tokens_of(text: Text) gives List[lexer.Token] {
+    var kept: List[lexer.Token] = []
+    let lexed = lexer.tokenize(text)
+    for token in lexed.tokens {
+        if token.kind != "end of line" and token.kind != "end of file" {
+            kept = List.append(kept, token)
+        }
+    }
+    return kept
+}
+
+fn key_of(text: Text) gives Text {
+    var parts: List[Text] = []
+    for token in tokens_of(text) {
+        parts = List.append(parts, token.kind + "|" + token.lexeme)
+    }
+    return parser.join_texts(parts, "\n")
+}
+
+fn head_text(text: Text) gives Text {
+    var parts: List[Text] = []
+    for token in tokens_of(text) {
+        parts = List.append(parts, token.lexeme)
+    }
+    return parser.join_texts(parts, " ")
+}
+
+fn clause_req(module: Text, function: Text, scope: Text, clause: parser.Node, lines: List[Text]) gives Req {
+    let condition = context.field(clause, "condition")
+    let text = context.slice_of(lines, condition)
+    return Req(
+        module: module, function: function, scope: scope, clause: context.text_of(context.field(clause, "clause")),
+        name: context.text_of(context.field(clause, "name")), condition: text, key: key_of(text),
+        message: context.text_of(context.field(clause, "message")), node: condition
+    )
+}
+
+// What walking the body of a function has found: the clauses, and how many loops have the same head in the same scope.
+type State = { found: List[Req], stems: List[Text], counts: List[Int] }
+
+type Where = { module: Text, function: Text, lines: List[Text] }
+
+fn index_in(items: List[Text], wanted: Text) gives Int {
+    var i = 0
+    while i < List.length(items)
+        shrinks List.length(items) - i
+    {
+        if List.get(items, i) == wanted {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn counted(state: State, stem: Text) gives State {
+    let at = index_in(state.stems, stem)
+    if at < 0 {
+        return State(found: state.found, stems: List.append(state.stems, stem), counts: List.append(state.counts, 1))
+    }
+    var counts: List[Int] = []
+    var i = 0
+    while i < List.length(state.counts)
+        shrinks List.length(state.counts) - i
+    {
+        if i == at {
+            counts = List.append(counts, List.get(state.counts, i) + 1)
+        } else {
+            counts = List.append(counts, List.get(state.counts, i))
+        }
+        i = i + 1
+    }
+    return State(found: state.found, stems: state.stems, counts: counts)
+}
+
+fn visit_all(nodes: List[parser.Node], parent: Text, at: Where, state: State) gives State {
+    var now = state
+    for node in nodes {
+        now = visit(node, parent, at, now)
+    }
+    return now
+}
+
+// Every loop under a node, whatever holds it (a block, an `if`, an arm of a `match`), in the order of the source. The clauses of a
+// loop are found in the scope of the loop, and the loops inside its body are found inside that scope.
+fn visit(node: parser.Node, parent: Text, at: Where, state: State) gives State {
+    return match node {
+        parser.Node.Obj(kind, names, values) => visit_object(node, kind, values, parent, at, state)
+        parser.Node.Items(items) => visit_all(items, parent, at, state)
+        _ => state
+    }
+}
+
+fn visit_object(
+    node: parser.Node, kind: Text, values: List[parser.Node], parent: Text, at: Where, state: State
+) gives State {
+    if kind == "While" or kind == "For" {
+        var head = context.field(node, "iterable")
+        var word = "for"
+        if kind == "While" {
+            head = context.field(node, "condition")
+            word = "while"
+        }
+        let stem = parent + "/" + word + ":" + head_text(context.slice_of(at.lines, head))
+        let counted_state = counted(state, stem)
+        let number = List.get(counted_state.counts, index_in(counted_state.stems, stem))
+        let scope = stem + "#" + to_text(number)
+        var found = counted_state.found
+        for clause in context.items_of(context.field(node, "clauses")) {
+            found = List.append(found, clause_req(at.module, at.function, scope, clause, at.lines))
+        }
+        return visit(
+            context.field(node, "body"), scope, at,
+            State(found: found, stems: counted_state.stems, counts: counted_state.counts)
+        )
+    }
+    return visit_all(values, parent, at, state)
+}
+
+// The `needs`, `promises` and `trust` of the header of every function, and the clauses of its loops.
+fn reqs_of(module: Text, program: parser.Node, lines: List[Text]) gives List[Req] {
+    var found: List[Req] = []
+    for function in context.items_of(context.field(program, "functions")) {
+        let name = context.text_of(context.field(function, "name"))
+        for item in context.items_of(context.field(function, "header")) {
+            if context.kind_of(item) == "Contract" {
+                found = List.append(found, clause_req(module, name, "function", item, lines))
+            }
+        }
+        let state = visit(
+            context.field(function, "body"), "function", Where(module: module, function: name, lines: lines),
+            State(found: [], stems: [], counts: [])
+        )
+        found = List.concat(found, state.found)
+    }
+    return found
+}
+
+// Every clause of the program: the entry file has the module name "", the others their name. `texts` are the texts of the
+// modules, in the order of `results`; the entry file is the last.
+pub fn collect(results: List[project.Checked], texts: List[Text]) gives List[Req] {
+    let last_one = List.get(results, List.length(results) - 1)
+    let entry_path = last_one.module.path
+    var all: List[Req] = []
+    var i = 0
+    while i < List.length(results)
+        shrinks List.length(results) - i
+    {
+        let each = List.get(results, i)
+        var name = each.module.name
+        if each.module.path == entry_path {
+            name = ""
+        }
+        all = List.concat(all, reqs_of(name, each.typed, render.lines_of(List.get(texts, i))))
+        i = i + 1
+    }
+    return all
+}
+
+// Sets of integers as a flat list of bounds: low, high, low, high... in increasing order, without touching pairs.
+
+fn int_max() gives Int {
+    return 9223372036854775807
+}
+
+fn int_min() gives Int {
+    return 0 - 9223372036854775807 - 1
+}
+
+fn universe() gives List[Int] {
+    return [int_min(), int_max()]
+}
+
+fn pair_less(a_low: Int, a_high: Int, b_low: Int, b_high: Int) gives Bool {
+    if a_low != b_low {
+        return a_low < b_low
+    }
+    return a_high < b_high
+}
+
+fn sorted_pairs(flat: List[Int]) gives List[Int] {
+    var out: List[Int] = []
+    var i = 0
+    while i < List.length(flat)
+        shrinks List.length(flat) - i
+    {
+        let low = List.get(flat, i)
+        let high = List.get(flat, i + 1)
+        var before: List[Int] = []
+        var after: List[Int] = []
+        var j = 0
+        var placed = false
+        while j < List.length(out)
+            shrinks List.length(out) - j
+        {
+            if not placed and pair_less(low, high, List.get(out, j), List.get(out, j + 1)) {
+                placed = true
+            }
+            if placed {
+                after = List.append(List.append(after, List.get(out, j)), List.get(out, j + 1))
+            } else {
+                before = List.append(List.append(before, List.get(out, j)), List.get(out, j + 1))
+            }
+            j = j + 2
+        }
+        out = List.concat(List.append(List.append(before, low), high), after)
+        i = i + 2
+    }
+    return out
+}
+
+fn bigger(a: Int, b: Int) gives Int {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+fn smaller(a: Int, b: Int) gives Int {
+    if a < b {
+        return a
+    }
+    return b
+}
+
+fn merge(flat: List[Int]) gives List[Int] {
+    if List.length(flat) == 0 {
+        return []
+    }
+    let ordered = sorted_pairs(flat)
+    var merged: List[Int] = []
+    var low = List.get(ordered, 0)
+    var high = List.get(ordered, 1)
+    var i = 2
+    while i < List.length(ordered)
+        shrinks List.length(ordered) - i
+    {
+        let next_low = List.get(ordered, i)
+        let next_high = List.get(ordered, i + 1)
+        if high == int_max() or next_low <= high + 1 {
+            high = bigger(high, next_high)
+        } else {
+            merged = List.append(List.append(merged, low), high)
+            low = next_low
+            high = next_high
+        }
+        i = i + 2
+    }
+    return List.append(List.append(merged, low), high)
+}
+
+fn union(left: List[Int], right: List[Int]) gives List[Int] {
+    return merge(List.concat(left, right))
+}
+
+fn intersect(left: List[Int], right: List[Int]) gives List[Int] {
+    var pieces: List[Int] = []
+    var i = 0
+    while i < List.length(left)
+        shrinks List.length(left) - i
+    {
+        var j = 0
+        while j < List.length(right)
+            shrinks List.length(right) - j
+        {
+            let low = bigger(List.get(left, i), List.get(right, j))
+            let high = smaller(List.get(left, i + 1), List.get(right, j + 1))
+            if low <= high {
+                pieces = List.append(List.append(pieces, low), high)
+            }
+            j = j + 2
+        }
+        i = i + 2
+    }
+    return merge(pieces)
+}
+
+fn complement(value: List[Int]) gives List[Int] {
+    var pieces: List[Int] = []
+    var start = int_min()
+    var open = true
+    var i = 0
+    while i < List.length(value)
+        shrinks List.length(value) - i
+    {
+        let low = List.get(value, i)
+        let high = List.get(value, i + 1)
+        if open and start < low {
+            pieces = List.append(List.append(pieces, start), low - 1)
+        }
+        if high == int_max() {
+            open = false
+        } else if open {
+            start = high + 1
+        }
+        i = i + 2
+    }
+    if open {
+        pieces = List.append(List.append(pieces, start), int_max())
+    }
+    return pieces
+}
+
+fn subset(left: List[Int], right: List[Int]) gives Bool {
+    var i = 0
+    while i < List.length(left)
+        shrinks List.length(left) - i
+    {
+        let item = [List.get(left, i), List.get(left, i + 1)]
+        if intersect(item, right) != item {
+            return false
+        }
+        i = i + 2
+    }
+    return true
+}
+
+// A whole number the expression is made of, if it is made of one.
+type Number = { known: Bool, value: Int }
+
+fn integer(node: parser.Node) gives Number {
+    let kind = context.kind_of(node)
+    if kind == "IntLiteral" {
+        return match context.field(node, "value") {
+            parser.Node.Whole(value) => Number(known: true, value: value)
+            _ => Number(known: false, value: 0)
+        }
+    }
+    if kind == "Group" {
+        return integer(context.field(node, "expression"))
+    }
+    if kind == "Unary" and context.text_of(context.field(node, "operator")) == "-" {
+        let inner = integer(context.field(node, "operand"))
+        if inner.known {
+            return Number(known: true, value: 0 - inner.value)
+        }
+    }
+    return Number(known: false, value: 0)
+}
+
+// A set of integers of one variable (`name` is empty when the expression names none), or nothing when the expression is outside the
+// fragment.
+type Described = { ok: Bool, name: Text, spans: List[Int] }
+
+fn outside() gives Described {
+    return Described(ok: false, name: "", spans: [])
+}
+
+fn flag_of(node: parser.Node) gives Bool {
+    return match node {
+        parser.Node.Flag(value) => value
+        _ => false
+    }
+}
+
+fn name_of(node: parser.Node) gives Text {
+    if context.kind_of(node) == "Name" {
+        return context.text_of(context.field(node, "name"))
+    }
+    return ""
+}
+
+fn describe(node: parser.Node, variable: Text) gives Described {
+    let kind = context.kind_of(node)
+    if kind == "Group" {
+        return describe(context.field(node, "expression"), variable)
+    }
+    if kind == "BoolLiteral" {
+        if flag_of(context.field(node, "value")) {
+            return Described(ok: true, name: variable, spans: universe())
+        }
+        return Described(ok: true, name: variable, spans: [])
+    }
+    let operator = context.text_of(context.field(node, "operator"))
+    if kind == "Unary" and operator == "not" {
+        let inner = describe(context.field(node, "operand"), variable)
+        if not inner.ok {
+            return outside()
+        }
+        return Described(ok: true, name: inner.name, spans: complement(inner.spans))
+    }
+    if kind == "Binary" and (operator == "and" or operator == "or") {
+        let left = describe(context.field(node, "left"), variable)
+        if not left.ok {
+            return outside()
+        }
+        let right = describe(context.field(node, "right"), left.name)
+        if not right.ok {
+            return outside()
+        }
+        if left.name != "" and right.name != "" and left.name != right.name {
+            return outside()
+        }
+        var target = left.name
+        if target == "" {
+            target = right.name
+        }
+        if operator == "and" {
+            return Described(ok: true, name: target, spans: intersect(left.spans, right.spans))
+        }
+        return Described(ok: true, name: target, spans: union(left.spans, right.spans))
+    }
+    let comparisons = ["==", "!=", "<", "<=", ">", ">="]
+    if kind != "Binary" or not List.contains(comparisons, operator) {
+        return outside()
+    }
+    let left_node = context.field(node, "left")
+    let right_node = context.field(node, "right")
+    let left_variable = name_of(left_node)
+    let right_variable = name_of(right_node)
+    let left_number = integer(left_node)
+    let right_number = integer(right_node)
+    var name = ""
+    var value = 0
+    var how = operator
+    if left_variable != "" and right_number.known and right_variable == "" {
+        name = left_variable
+        value = right_number.value
+    } else if right_variable != "" and left_number.known and left_variable == "" {
+        name = right_variable
+        value = left_number.value
+        how = flipped(operator)
+    } else if left_number.known and right_number.known {
+        return Described(ok: true, name: variable, spans: constant(operator, left_number.value, right_number.value))
+    } else if left_variable != "" and right_variable != "" and left_variable == right_variable {
+        var holds = false
+        if operator == "==" or operator == "<=" or operator == ">=" {
+            holds = true
+        }
+        if holds {
+            return Described(ok: true, name: left_variable, spans: universe())
+        }
+        return Described(ok: true, name: left_variable, spans: [])
+    } else {
+        return outside()
+    }
+    if variable != "" and variable != name {
+        return outside()
+    }
+    return Described(ok: true, name: name, spans: bounds(how, value))
+}
+
+fn flipped(operator: Text) gives Text {
+    if operator == "<" {
+        return ">"
+    }
+    if operator == "<=" {
+        return ">="
+    }
+    if operator == ">" {
+        return "<"
+    }
+    if operator == ">=" {
+        return "<="
+    }
+    return operator
+}
+
+fn constant(operator: Text, left: Int, right: Int) gives List[Int] {
+    var holds = false
+    if operator == "==" {
+        holds = left == right
+    } else if operator == "!=" {
+        holds = left != right
+    } else if operator == "<" {
+        holds = left < right
+    } else if operator == "<=" {
+        holds = left <= right
+    } else if operator == ">" {
+        holds = left > right
+    } else {
+        holds = left >= right
+    }
+    if holds {
+        return universe()
+    }
+    return []
+}
+
+// The integers `x` for which `x OPERATOR value` holds. A literal is never outside the range of Int, so every bound exists.
+fn bounds(operator: Text, value: Int) gives List[Int] {
+    if operator == "==" {
+        return [value, value]
+    }
+    if operator == "!=" {
+        return complement([value, value])
+    }
+    if operator == "<" {
+        return [int_min(), value - 1]
+    }
+    if operator == "<=" {
+        return [int_min(), value]
+    }
+    if operator == ">" {
+        if value < int_max() {
+            return [value + 1, int_max()]
+        }
+        return []
+    }
+    return [value, int_max()]
+}
+
+fn direction_of(before: parser.Node, after: parser.Node) gives Text {
+    let old = describe(before, "")
+    let new = describe(after, "")
+    if not old.ok or not new.ok {
+        return "unknown"
+    }
+    if old.name != new.name {
+        return "unknown"
+    }
+    if old.spans == new.spans {
+        return "equivalent"
+    }
+    if subset(old.spans, new.spans) {
+        return "weakened"
+    }
+    if subset(new.spans, old.spans) {
+        return "strengthened"
+    }
+    return "incomparable"
+}
+
+fn change_of(status: Text, old: List[Req], new: List[Req], direction: Text) gives Change {
+    // `old` and `new` have one item, or none; the change is placed where the new one is, if there is a new one.
+    var chosen = old
+    if List.length(new) > 0 {
+        chosen = new
+    }
+    let item = List.get(chosen, 0)
+    var before = ""
+    var before_message = ""
+    if List.length(old) > 0 {
+        let first = List.get(old, 0)
+        before = first.condition
+        before_message = first.message
+    }
+    var after = ""
+    var after_message = ""
+    if List.length(new) > 0 {
+        let first = List.get(new, 0)
+        after = first.condition
+        after_message = first.message
+    }
+    return Change(
+        module: item.module, function: item.function, scope: item.scope, clause: item.clause, name: item.name, status: status,
+        direction: direction, before: before, after: after, before_message: before_message, after_message: after_message,
+        previous: ""
+    )
+}
+
+fn named_index(items: List[Req], wanted: Req) gives Int {
+    // The last clause with the same module, function, scope and name, or -1.
+    var found = 0 - 1
+    var i = 0
+    while i < List.length(items)
+        shrinks List.length(items) - i
+    {
+        let each = List.get(items, i)
+        if each.name != "" and each.module == wanted.module and each.function == wanted.function and each.scope == wanted.scope and each.name == wanted.name {
+            found = i
+        }
+        i = i + 1
+    }
+    return found
+}
+
+fn same_place(a: Req, b: Req) gives Bool {
+    return a.module == b.module and a.function == b.function and a.scope == b.scope and a.clause == b.clause and a.key == b.key
+}
+
+fn lost_direction(item: Req) gives Text {
+    if item.clause == "needs" or item.clause == "promises" {
+        return "weakened"
+    }
+    return "unknown"
+}
+
+fn marked(flags: List[Bool], at: Int) gives List[Bool] {
+    var out: List[Bool] = []
+    var i = 0
+    while i < List.length(flags)
+        shrinks List.length(flags) - i
+    {
+        out = List.append(out, i == at or List.get(flags, i))
+        i = i + 1
+    }
+    return out
+}
+
+fn unmarked(count: Int) gives List[Bool] {
+    var out: List[Bool] = []
+    var i = 0
+    while i < count
+        shrinks count - i
+    {
+        out = List.append(out, false)
+        i = i + 1
+    }
+    return out
+}
+
+fn is_last_named(items: List[Req], at: Int) gives Bool {
+    return named_index(items, List.get(items, at)) == at
+}
+
+// How many of `items` at the positions not yet taken are in the same place as `wanted`, and which is the first.
+fn same_places(items: List[Req], taken: List[Bool], wanted: Req) gives List[Int] {
+    var found: List[Int] = []
+    var i = 0
+    while i < List.length(items)
+        shrinks List.length(items) - i
+    {
+        let each = List.get(items, i)
+        if not List.get(taken, i) and each.name == wanted.name and same_place(each, wanted) {
+            found = List.append(found, i)
+        }
+        i = i + 1
+    }
+    return found
+}
+
+// The changes between the clauses of two versions of a program, sorted.
+pub fn compare(old: List[Req], new: List[Req]) gives List[Change] {
+    var changes: List[Change] = []
+    var done_old = unmarked(List.length(old))
+    var done_new = unmarked(List.length(new))
+
+    // Named clauses are the same clause when module, function, scope and name agree.
+    var i = 0
+    while i < List.length(old)
+        shrinks List.length(old) - i
+    {
+        let a = List.get(old, i)
+        if a.name != "" and is_last_named(old, i) {
+            let j = named_index(new, a)
+            if j >= 0 {
+                let b = List.get(new, j)
+                done_old = marked(done_old, i)
+                done_new = marked(done_new, j)
+                if a.clause != b.clause {
+                    changes = List.append(changes, change_of("kind_changed", [a], [b], "unknown"))
+                } else if a.key != b.key {
+                    let direction = direction_of(a.node, b.node)
+                    var status = "condition_changed"
+                    if direction == "weakened" {
+                        status = "weakened"
+                    }
+                    changes = List.append(changes, change_of(status, [a], [b], direction))
+                } else if a.message != b.message {
+                    changes = List.append(changes, change_of("explanation_changed", [a], [b], ""))
+                }
+            }
+        }
+        i = i + 1
+    }
+
+    // A named clause that only changed its name: the one clause of its kind and condition on each side.
+    let rest_old = done_old
+    let rest_new = done_new
+    i = 0
+    while i < List.length(old)
+        shrinks List.length(old) - i
+    {
+        let a = List.get(old, i)
+        if a.name != "" and not List.get(rest_old, i) {
+            var lefts = 0
+            var k = 0
+            while k < List.length(old)
+                shrinks List.length(old) - k
+            {
+                let other = List.get(old, k)
+                if other.name != "" and not List.get(rest_old, k) and same_place(other, a) {
+                    lefts = lefts + 1
+                }
+                k = k + 1
+            }
+            var rights: List[Int] = []
+            k = 0
+            while k < List.length(new)
+                shrinks List.length(new) - k
+            {
+                let other = List.get(new, k)
+                if other.name != "" and not List.get(rest_new, k) and same_place(other, a) {
+                    rights = List.append(rights, k)
+                }
+                k = k + 1
+            }
+            if lefts == 1 and List.length(rights) == 1 {
+                let b = List.get(new, List.get(rights, 0))
+                done_old = marked(done_old, i)
+                done_new = marked(done_new, List.get(rights, 0))
+                changes = List.append(changes, Change(
+                    module: b.module, function: b.function, scope: b.scope, clause: b.clause, name: b.name, status: "renamed",
+                    direction: "", before: a.condition, after: b.condition, before_message: a.message, after_message: b.message,
+                    previous: a.name
+                ))
+            }
+        }
+        i = i + 1
+    }
+
+    // Unnamed clauses are the same clause when their place, kind and condition agree; equal ones cancel out one to one.
+    var taken_old = done_old
+    var taken_new = done_new
+    i = 0
+    while i < List.length(old)
+        shrinks List.length(old) - i
+    {
+        let a = List.get(old, i)
+        if a.name == "" and not List.get(taken_old, i) {
+            let lefts = same_places(old, taken_old, a)
+            let rights = same_places(new, taken_new, a)
+            // The first of each side are left over; the others are paired, from the end.
+            let pairs = smaller(List.length(lefts), List.length(rights))
+            let left_over = List.length(lefts) - pairs
+            let right_over = List.length(rights) - pairs
+            var n = 0
+            while n < List.length(lefts)
+                shrinks List.length(lefts) - n
+            {
+                let at = List.get(lefts, n)
+                taken_old = marked(taken_old, at)
+                if n < left_over {
+                    changes = List.append(changes, change_of("removed", [List.get(old, at)], [], lost_direction(List.get(old, at))))
+                }
+                n = n + 1
+            }
+            n = 0
+            while n < List.length(rights)
+                shrinks List.length(rights) - n
+            {
+                let at = List.get(rights, n)
+                taken_new = marked(taken_new, at)
+                if n < right_over {
+                    changes = List.append(changes, change_of("added", [], [List.get(new, at)], ""))
+                }
+                n = n + 1
+            }
+        }
+        i = i + 1
+    }
+    // Unnamed clauses that only the new version has.
+    i = 0
+    while i < List.length(new)
+        shrinks List.length(new) - i
+    {
+        let b = List.get(new, i)
+        if b.name == "" and not List.get(taken_new, i) {
+            let rights = same_places(new, taken_new, b)
+            var n = 0
+            while n < List.length(rights)
+                shrinks List.length(rights) - n
+            {
+                taken_new = marked(taken_new, List.get(rights, n))
+                changes = List.append(changes, change_of("added", [], [List.get(new, List.get(rights, n))], ""))
+                n = n + 1
+            }
+        }
+        i = i + 1
+    }
+
+    // Named clauses that are on one side only.
+    i = 0
+    while i < List.length(old)
+        shrinks List.length(old) - i
+    {
+        let a = List.get(old, i)
+        if a.name != "" and not List.get(done_old, i) {
+            changes = List.append(changes, change_of("removed", [a], [], lost_direction(a)))
+        }
+        i = i + 1
+    }
+    i = 0
+    while i < List.length(new)
+        shrinks List.length(new) - i
+    {
+        let b = List.get(new, i)
+        if b.name != "" and not List.get(done_new, i) {
+            changes = List.append(changes, change_of("added", [], [b], ""))
+        }
+        i = i + 1
+    }
+    return sorted_changes(changes)
+}
+
+fn before_in_order(a: Change, b: Change) gives Bool {
+    // True when `b` has to go before `a`: the sort key is module, function, scope, name, clause, status, the old and the new condition, the two explanations and the previous name.
+    if a.module != b.module {
+        return b.module < a.module
+    }
+    if a.function != b.function {
+        return b.function < a.function
+    }
+    if a.scope != b.scope {
+        return b.scope < a.scope
+    }
+    if a.name != b.name {
+        return b.name < a.name
+    }
+    if a.clause != b.clause {
+        return b.clause < a.clause
+    }
+    if a.status != b.status {
+        return b.status < a.status
+    }
+    if a.before != b.before {
+        return b.before < a.before
+    }
+    if a.after != b.after {
+        return b.after < a.after
+    }
+    if a.before_message != b.before_message {
+        return b.before_message < a.before_message
+    }
+    if a.after_message != b.after_message {
+        return b.after_message < a.after_message
+    }
+    return b.previous < a.previous
+}
+
+// A stable insertion sort: a change goes after the ones that are not greater than it.
+fn sorted_changes(changes: List[Change]) gives List[Change] {
+    var out: List[Change] = []
+    for change in changes {
+        var before: List[Change] = []
+        var after: List[Change] = []
+        var placed = false
+        for each in out {
+            if not placed and before_in_order(each, change) {
+                placed = true
+            }
+            if placed {
+                after = List.append(after, each)
+            } else {
+                before = List.append(before, each)
+            }
+        }
+        out = List.concat(List.append(before, change), after)
+    }
+    return out
+}
+
+fn optional(text: Text) gives json.Json {
+    if text == "" {
+        return json.Json.JNull()
+    }
+    return json.Json.JStr(text)
+}
+
+fn change_json(change: Change) gives json.Json {
+    var keys = ([
+        "module", "function", "scope", "clause", "name", "status", "direction", "before", "after", "before_message", "after_message"
+    ])
+    var values = ([
+        json.Json.JStr(change.module), json.Json.JStr(change.function), json.Json.JStr(change.scope), json.Json.JStr(change.clause),
+        optional(change.name), json.Json.JStr(change.status), optional(change.direction), optional(change.before),
+        optional(change.after), optional(change.before_message), optional(change.after_message)
+    ])
+    if change.previous != "" {
+        keys = List.append(keys, "previous_name")
+        values = List.append(values, json.Json.JStr(change.previous))
+    }
+    return json.Json.JObj(keys, values)
+}
+
+fn count_where(changes: List[Change], field: Text, wanted: Text) gives Int {
+    var number = 0
+    for change in changes {
+        var value = change.direction
+        if field == "status" {
+            value = change.status
+        }
+        if value == wanted {
+            number = number + 1
+        }
+    }
+    return number
+}
+
+// The `nexora.impact/1` document of a comparison.
+pub fn document(before: Text, after: Text, changes: List[Change]) gives Text {
+    var items: List[json.Json] = []
+    for change in changes {
+        items = List.append(items, change_json(change))
+    }
+    let summary = json.Json.JObj(
+        ["changes", "weakened", "removed", "unknown_direction"],
+        [
+            json.Json.JInt(List.length(changes)), json.Json.JInt(count_where(changes, "direction", "weakened")),
+            json.Json.JInt(count_where(changes, "status", "removed")), json.Json.JInt(count_where(changes, "direction", "unknown"))
+        ]
+    )
+    return json.dump_indented(json.Json.JObj(
+        ["schema", "nexora_version", "ok", "diagnostics", "changes", "summary", "before", "after"],
+        [
+            json.Json.JStr("nexora.impact/1"), json.Json.JStr(info.version()), json.Json.JBool(true), json.Json.JList([]),
+            json.Json.JList(items), summary, json.Json.JStr(before), json.Json.JStr(after)
+        ]
+    ))
+}
+
+// The document when one of the two programs could not be analysed.
+pub fn failure_document(reports: List[report.Report]) gives Text {
+    return json.dump_indented(json.Json.JObj(
+        ["schema", "nexora_version", "ok", "diagnostics", "changes"],
+        [
+            json.Json.JStr("nexora.impact/1"), json.Json.JStr(info.version()), json.Json.JBool(false), report.diagnostics(reports),
+            json.Json.JList([])
+        ]
+    ))
+}
+
+fn upper(word: Text) gives Text {
+    if word == "kind_changed" {
+        return "KIND_CHANGED"
+    }
+    if word == "explanation_changed" {
+        return "EXPLANATION_CHANGED"
+    }
+    if word == "renamed" {
+        return "RENAMED"
+    }
+    if word == "ambiguous" {
+        return "AMBIGUOUS"
+    }
+    if word == "strengthened" {
+        return "STRENGTHENED"
+    }
+    if word == "equivalent" {
+        return "EQUIVALENT"
+    }
+    if word == "incomparable" {
+        return "INCOMPARABLE"
+    }
+    if word == "weakened" {
+        return "WEAKENED"
+    }
+    return "UNKNOWN"
+}
+
+fn location_of(change: Change) gives Text {
+    var place = change.function
+    if change.module != "" {
+        place = change.module + ":" + change.function
+    }
+    if change.scope != "function" {
+        place = place + " [" + change.scope + "]"
+    }
+    if change.name != "" {
+        place = place + "." + change.name
+    }
+    return place
+}
+
+// What `nex impact` prints.
+pub fn render_text(changes: List[Change]) gives Text {
+    if List.length(changes) == 0 {
+        return "No requirement changes."
+    }
+    var lines: List[Text] = []
+    for change in changes {
+        let place = location_of(change) + " (" + change.clause + ")"
+        if change.status == "removed" {
+            var label = "REMOVED"
+            if change.direction == "weakened" {
+                label = "POTENTIAL WEAKENING"
+            }
+            lines = List.append(lines, label + ": " + place)
+            lines = List.append(lines, "  before: " + change.before)
+        } else if change.status == "weakened" {
+            lines = List.append(lines, "WEAKENED: " + place)
+            lines = List.append(lines, "  before: " + change.before)
+            lines = List.append(lines, "  after:  " + change.after)
+        } else if change.status == "added" {
+            lines = List.append(lines, "ADDED: " + place)
+            lines = List.append(lines, "  after: " + change.after)
+        } else if change.status == "condition_changed" {
+            lines = List.append(lines, "CHANGED, DIRECTION " + upper(change.direction) + ": " + place)
+            lines = List.append(lines, "  before: " + change.before)
+            lines = List.append(lines, "  after:  " + change.after)
+        } else {
+            lines = List.append(lines, upper(change.status) + ": " + place)
+            if change.before != "" {
+                lines = List.append(lines, "  before: " + change.before)
+            }
+            if change.after != "" {
+                lines = List.append(lines, "  after:  " + change.after)
+            }
+        }
+    }
+    lines = List.append(
+        lines,
+        to_text(List.length(changes)) + " change(s); " + to_text(count_where(changes, "direction", "weakened")) + " proven weakening(s); "
+            + to_text(count_where(changes, "direction", "unknown")) + " change(s) with unknown direction."
+    )
+    lines = List.append(lines, "Only simple one-variable integer conditions are classified; unknown means review manually.")
+    return parser.join_texts(lines, "\n")
+}

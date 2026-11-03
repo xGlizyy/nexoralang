@@ -1,0 +1,9 @@
+fn charge(amount: Int, other: Int) gives Int
+    needs c: amount >= 10 and amount <= 50
+{
+    return amount
+}
+
+fn main() {
+    print(charge(1, 1))
+}

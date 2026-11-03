@@ -1,0 +1,5 @@
+import "rules.nex"
+
+fn main() {
+    print(rules.positive(1))
+}

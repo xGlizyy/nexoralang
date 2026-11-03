@@ -608,10 +608,12 @@ with `E3002` in `part * 100` before the promise is evaluated; checked for this r
 
 ## 7. Identity and `nex impact` **[P]**
 
-**Implementation status (development line):** the Python CLI command `python -m nexora impact`
+**Implementation status (development line):** the command `nex impact` (in the Python CLI and in
+the native `nex`, which write the same output)
 compares named and unnamed function contracts and loop clauses, flags removals and changed
 conditions, and proves the direction of implication only for Boolean combinations of integer bounds
-on one variable. It is not implemented in the native `nex` executable. The full matching design
+on one variable. Modules are identified by their name (the file name without extension, which no
+two modules of a program share), not by a path. The full matching design
 below remains the target: declared module/function renames, examples, signatures, visibility, and
 general logical implication are not implemented. See the [CLI reference](../cli-reference.md#nex-impact)
 for the supported behavior.

@@ -139,6 +139,7 @@ jobs:
           echo "== context"; python selfhost/compare_context.py $files
           echo "== symbols"; python selfhost/compare_symbols.py $files
           echo "== check --evidence"; python selfhost/compare_evidence.py $files
+          echo "== impact"; python selfhost/compare_impact.py
           echo "== format (the files of the repository; the collector runs very often on the first ones)"
           files=$(git ls-files 'selfhost/*.nex' 'nexora/examples/*.nex' 'selfhost/*_cases/*.nex' 'selfhost/*_cases/*/*.nex')
           NEXORA_FORMATTER="$PWD/out/formatter" python selfhost/compare_format.py $files
