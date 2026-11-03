@@ -32,7 +32,7 @@ Each version groups its changes into these sections, when they contain content:
   `E2036`. It is valid only in the statements of a function body. Programs written before it are not affected: `?` was a lexical error.
 
 - The native tools as the default way to use NEXORA (decision 0027): `nex`, `nexora-lsp`, `nex-mcp`, `nexora-format` and `nexora-worker`,
-  written in NEXORA and compiled by its own compiler, published as the release `native-v0.15.0` for Linux (x64, arm64), macOS (x64, arm64) and
+  written in NEXORA and compiled by its own compiler, published as the release `native-v0.15.0` (and `native-v0.15.1`, which adds the `?` operator and `nex impact`) for Linux (x64, arm64), macOS (x64, arm64) and
   Windows (x64). `Net.get` and `Process.run` perform the operation in them, with the limits of decision 0020 and the TLS of the system.
   The Python implementation stays as the reference and as the `pip` and `npm` installation.
 
