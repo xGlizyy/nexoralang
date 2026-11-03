@@ -2538,8 +2538,9 @@ class Checker:
         if found is None:
             return None
         operand = self._current_type_model(self._root(found))
-        is_option = isinstance(operand, type_model.Application)             and operand.constructor.identity == type_model.OPTION.identity
-        is_result = isinstance(operand, type_model.Application)             and operand.constructor.identity == type_model.RESULT.identity
+        applied = isinstance(operand, type_model.Application)
+        is_option = applied and operand.constructor.identity == type_model.OPTION.identity
+        is_result = applied and operand.constructor.identity == type_model.RESULT.identity
         if not (is_option or is_result):
             self._report(
                 "E2036", f"'?' needs an Option or a Result, but this is {found}", node.operator_span,
