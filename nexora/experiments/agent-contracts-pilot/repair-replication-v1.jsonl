@@ -1,0 +1,1 @@
+{"protocol_version": 3, "task_id": "checkout-discount", "seed": 17, "condition": "prompt_only", "model": "gemma4:26b", "ollama_version": "0.40.13", "nexora_version": "NEXORA 0.15.0", "task_set_sha256": "5c3fd9958a83095702f31ec53d615b7f8544738195b49b05e45e514f2afbf3fe", "error": "HTTPError: HTTP Error 500: Internal Server Error"}

@@ -545,8 +545,10 @@ distinguishes NEXORA ([decision 0006](decisions/0006-requisitos-verificables.md)
 is only in an instruction in natural language is checked by nobody and gets lost in the next
 edit; written as a contract, it is checked on every call and says who broke it.
 
-Whether that really helps people and AI tools, and how much, **has not been measured**:
-it is a working hypothesis, not a result.
+Whether that really helps people and AI tools, and how much, remains a working hypothesis. A small
+local one-shot pilot found no observed difference in requirement-preserving edits; its limits and
+results are in the [pilot report](../experiments/agent-contracts-pilot/results-summary.md). It is not
+evidence of a general effect.
 
 The design decisions and their alternatives are in
 [`decisions/0004`](decisions/0004-contratos-en-ejecucion.md),

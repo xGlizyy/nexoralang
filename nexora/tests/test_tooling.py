@@ -530,7 +530,8 @@ def test_capabilities_come_from_the_implementation():
     assert document["analysis_executes_code"] is False
     # The formats of analysis. nexora.result/1 and nexora.test/1 come from running code (nexora.api), and
     # nexora.tooling never runs anything (decision 0008, section 7).
-    execution = ("nexora-result.schema.json", "nexora-test.schema.json")
+    # nexora.impact/1 is written by the experimental `nex impact` command, not by nexora.tooling.
+    execution = ("nexora-result.schema.json", "nexora-test.schema.json", "nexora-impact.schema.json")
     assert set(document["schemas"]) == {s["properties"]["schema"]["const"] for n, s in SCHEMAS.items() if n not in execution}
 
 

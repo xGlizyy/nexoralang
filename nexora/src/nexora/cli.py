@@ -13,7 +13,7 @@ import sys
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from . import api, migrate, migrate_files, tooling
+from . import api, impact, migrate, migrate_files, tooling
 from .capabilities import Capabilities, Grants, TextLimitExceeded
 from .debugging import DebugEvent, format_debug_value
 from .diagnostics import CONTRACT, ERROR, MAX_DIAGNOSTICS, Diagnostic, NexoraRuntimeError, Source, render
@@ -252,6 +252,20 @@ def _build_parser() -> argparse.ArgumentParser:
     migrate_parser.add_argument("--write", action="store_true",
                                 help="replace the files of the program with their migrated text")
 
+    impact_parser = commands.add_parser(
+        "impact",
+        help="compare requirements between two checked program versions",
+        description=(
+            "Compare function contracts in two NEXORA programs. It flags removed contracts and "
+            "classifies simple one-variable integer conditions; other changes are reported with "
+            "an unknown direction. It never runs either program."
+        ),
+    )
+    impact_parser.add_argument("before", help="older .nex program")
+    impact_parser.add_argument("after", help="newer .nex program")
+    impact_parser.add_argument("--format", choices=("text", "json"), default="text",
+                               help="how to write the comparison (default: text)")
+
     test_parser.add_argument("--function", help="only the examples declared in this function")
     test_parser.add_argument(
         "--allow-read", action="append", default=[], metavar="RUTA",
@@ -466,6 +480,40 @@ def _analysis_command(path: str, output_format: str, build, render_text=None) ->
     else:
         print(render_text(document))
     return EXIT_OK if analysis.ok else EXIT_INVALID_PROGRAM
+
+
+def _impact(before_path: str, after_path: str, output_format: str) -> int:
+    analyses = []
+    for path in (before_path, after_path):
+        source, failure = _load(path)
+        if source is None:
+            if output_format == "json":
+                _print_json({"schema": "nexora.impact/1", "nexora_version": __version__, "ok": False,
+                             "diagnostics": [failure.to_dict(path)], "changes": []}, sys.stdout)
+            else:
+                _report((failure,), Source(path, ""))
+            return EXIT_UNREADABLE_FILE
+        analysis = analyze(source, require_main=False, read=_module_reader(source))
+        if not analysis.ok:
+            reports = _reports(analysis)
+            if output_format == "json":
+                diagnostics = [diagnostic.to_dict(report_source.name)
+                               for diagnostic, report_source in reports]
+                _print_json({"schema": "nexora.impact/1", "nexora_version": __version__, "ok": False,
+                             "diagnostics": diagnostics, "changes": []}, sys.stdout)
+            else:
+                _write_reports(reports)
+            return EXIT_INVALID_PROGRAM
+        analyses.append(analysis)
+    document = impact.compare(analyses[0], analyses[1])
+    document["before"] = before_path
+    document["after"] = after_path
+    document["diagnostics"] = []
+    if output_format == "json":
+        _print_json(document, sys.stdout)
+    else:
+        print(impact.render(document))
+    return EXIT_OK
 
 
 def _run(path: str, output_format: str, arguments: tuple[str, ...] = (),
@@ -1439,6 +1487,8 @@ def main(argv: list[str] | None = None) -> int:
                          tuple(arguments.allow_network), tuple(arguments.allow_process))
         if arguments.command == "migrate":
             return _migrate(arguments.file, arguments.write)
+        if arguments.command == "impact":
+            return _impact(arguments.before, arguments.after, arguments.format)
         if arguments.command == "symbols":
             return _analysis_command(
                 arguments.file, arguments.format,

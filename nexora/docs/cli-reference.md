@@ -19,6 +19,7 @@ nex context <file> [--format text|json]
 nex symbols <file> [--format text|json] [--name NAME] [--function FUNCTION]
 nex test <file> [--format text|json] [--function FUNCTION] [--allow-read PATH] [--allow-write PATH] [--allow-network ORIGIN] [--allow-process COMMAND]
 nex migrate <file> [--write]
+nex impact <before> <after> [--format text|json]
 nex --version
 nex --help
 ```
@@ -33,6 +34,7 @@ nex --help
 | `nex symbols` | Yes | **No** | The declared names and where they are used |
 | `nex test` | Yes | Its examples, not `main` | The result of each example |
 | `nex migrate` | Yes, with the front ends of 0.11 and of 0.12 | **No** | The migrated text; with `--write`, the files of the program |
+| `nex impact` | Yes, both complete projects | **No** | Requirement changes between the two versions |
 
 All the commands use the same lexer, the same parser and the same static
 checker. What `nex check` accepts is exactly what `nex run` and `nex debug` run.
@@ -355,6 +357,38 @@ replaced stay replaced. A crash or a power cut is not handled: a temporary file 
 The command says only what it checked: *structure verified; text outside the edits verified;
 behaviour not checked by this command*.
 
+## `nex impact`
+
+This command is **experimental** (see [interface stability](interface-stability.md)) and is currently available in the Python CLI only (`python -m nexora impact`). The native
+`nex` executable does not implement it yet. It compares function and loop requirements in two
+checked versions without running either program:
+
+```bash
+python -m nexora impact before.nex after.nex
+python -m nexora impact before.nex after.nex --format json
+```
+
+The direction classifier proves weakening or
+strengthening only for a limited set of Boolean combinations of integer comparisons on one variable.
+Other changed conditions are reported for review. This command does not implement the full matching
+design in [decision 0019](decisions/0019-identidad-propia-del-lenguaje.md#72-matching-algorithm).
+
+Both entry files and their imported modules must pass static analysis. Modules are matched by their
+name (the file name without its extension, which no two modules of a program share), functions by name, and named contracts by name. Unnamed
+contracts are matched by kind and token-normalized condition. A unique named contract rename with an
+unchanged kind and condition is recognized. A removed `needs`, `promises`, or `keeps` clause is
+reported as a potential weakening; removing a `shrinks` measure is flagged as a changed termination
+requirement. Changed conditions are classified only when they are Boolean combinations of
+integer bounds on one variable (for example, `amount >= 0 and amount <= 100`). In that fragment,
+`WEAKENED` means the old condition implies the new one; `STRENGTHENED` means the reverse. For other
+expressions the direction is `unknown`, so they require review. NEXORA does not claim a logical
+comparison it cannot establish.
+
+The JSON output is `nexora.impact/1` ([schema](schemas/nexora-impact.schema.json)). A successful
+comparison exits `0`, even when it reports changes; invalid source exits `1`, and unreadable source
+exits `4`. This first version compares function and loop requirements; examples, signatures, function
+or module renames, and general logical equivalence are not inferred.
+
 ## `nex --version`
 
 ```bash
@@ -370,6 +404,7 @@ NEXORA 0.15.0
 `nex --help` shows the commands and the exit codes. Every command has its own help:
 `nex run --help`, `nex check --help`, `nex inspect --help`, `nex context --help`,
 `nex symbols --help`.
+`python -m nexora impact --help` (Python CLI only).
 
 ## Output formats
 
@@ -380,6 +415,7 @@ NEXORA 0.15.0
 | `json` (inspection) | Programs. Schema `nexora.inspect/3` | [`inspect-schema.md`](inspect-schema.md) |
 | `json` (context and symbols) | Programs. Schemas `nexora.context/2` and `nexora.symbols/2` | [Structured context](ai-context.md) |
 | `json` (tests) | Programs. Schema `nexora.test/1` | [Decision 0008](decisions/0008-ejemplos-y-nex-test.md), section 6 |
+| `json` (impact) | Programs. Schema `nexora.impact/1` | [JSON protocol](json-protocol.md) |
 
 The rules common to all JSON documents and their JSON Schemas are in
 [JSON protocol](json-protocol.md).
@@ -402,10 +438,10 @@ Where each thing appears:
 | Code | Meaning | Commands |
 |------|---------|----------|
 | `0` | Success | All |
-| `1` | The program has lexical, syntax, semantic or type errors; `nex migrate`: refused, nothing written | `run`, `check`, `inspect`, `context`, `symbols`, `test`, `migrate` |
+| `1` | The program has lexical, syntax, semantic or type errors; `nex migrate`: refused, nothing written | `run`, `check`, `inspect`, `context`, `symbols`, `test`, `migrate`, `impact` |
 | `2` | Wrong use of the command line | All |
 | `3` | The program failed while running (category `runtime`) | `run` |
-| `4` | The file does not exist, cannot be read or is not UTF-8; for `nex migrate`, also a file of the program that could not be written | `run`, `check`, `inspect`, `context`, `symbols`, `test`, `migrate` |
+| `4` | The file does not exist, cannot be read or is not UTF-8; for `nex migrate`, also a file of the program that could not be written | `run`, `check`, `inspect`, `context`, `symbols`, `test`, `migrate`, `impact` |
 | `5` | While running, the program broke a rule that it declares: a contract, a refined type, an invariant or the measure of a loop (category `contract`) | `run` |
 | `6` | Some example did not pass (`failed` or `error`), or there was no example to evaluate | `test` |
 | `70` | Internal error of NEXORA: a failure of the tool, not of the program. A program that runs out of memory while running gives `3` in `run` and `6` in `test`, with the diagnostic `E3007` | All |

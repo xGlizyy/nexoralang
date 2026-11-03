@@ -14,7 +14,7 @@ that **today**, precisely, and what is still an intention.
 | **Python API** | The `nexora.tooling` module: the same outputs, without going through the command line | Implemented and tested. **Experimental**: it may change before 1.0 |
 | **MCP server** | An optional server that offers the analysis as tools to a compatible assistant ([MCP](mcp.md)) | **Experimental**; tested with the client of the official SDK. Checked by hand in a Claude Code session; **in no other assistant** |
 | **Language server (LSP)** | Integration with editors ([LSP](lsp.md)): diagnostics, completion, hover, navigation, rename and formatting | **Experimental**; implemented and tested (`nexora-lsp`), including relative imports and negotiated position encodings |
-| **Research goal** | Finding out whether these decisions make it easier for an automated tool to understand, generate or fix code | **Not evaluated** |
+| **Research goal** | Finding out whether source contracts help agents preserve requirements while editing code | A small local, one-shot pilot is complete; independent replication and a diagnostics-feedback study remain ([protocol](ai-evaluation-protocol.md), [results](../experiments/agent-contracts-pilot/results-summary.md)) |
 | **Integrations with AI models** | Calls to models, code generation, an assistant of its own | **They do not exist** |
 
 What NEXORA does **not** do:
@@ -28,7 +28,7 @@ And what **cannot be claimed**:
 
 - There is no evaluation that shows that an AI tool gets better results with
   NEXORA than with another language. That experiment has not been done.
-- The design decisions described here are reasoned hypotheses, not measured results.
+- The design decisions described here are reasoned hypotheses. The one pilot measured only one model, 12 small arithmetic tasks and one-shot edits; it found no observed difference and does not establish a general effect.
 
 ## What the language offers a tool
 
@@ -328,15 +328,16 @@ contract. The static analysis answers `ok: true` and warns in a note that the co
 proven; finding the violation requires running the program, which the analysis tools
 (and the MCP server) do not do.
 
-**What it measures and what it does not.** It measures that the deterministic tools answer those
-questions correctly. **It measures no AI model.** Whether an agent writes better NEXORA with these tools
-than without them has not been evaluated, and it is not claimed.
+**What it measures.** These reference tasks check that deterministic tools answer nine questions
+correctly; they do not involve an AI model. A separate local pilot tested whether source contracts
+help a model preserve requirements during edits. It found no observed difference in a small
+one-shot study; see the [protocol](ai-evaluation-protocol.md) and
+[results](../experiments/agent-contracts-pilot/results-summary.md). The language runtime and
+analysis tools still call no model, and the pilot is not evidence of a general advantage.
 
-An evaluation like that would have to be done outside this repository (which calls no model), and
-to be honest it would need: a set of tasks fixed in advance, the same tasks with and without
-tools, several attempts per task, an automatic success criterion (the program passes
-`nex check` and produces the expected output with `nex run`) and the publication of all the results,
-the bad ones too.
+The runtime remains independent of models. The optional pilot runner in
+`experiments/agent-contracts-pilot/` uses an explicitly configured local Ollama model and is separate
+from the installed language tools.
 
 ## Guarantees of these outputs
 
@@ -383,7 +384,7 @@ The complete rules, the history and the JSON Schema files are in
 - **The Python API is experimental**, and the other modules are internal and may change without notice.
 - **The MCP server has only been tested in one assistant** (Claude Code, a manual session), besides
   the automated tests with the SDK client.
-- **No AI model has been evaluated** with these tools.
+- **No broad or independent AI evaluation has been completed.** The local pilot evaluated source contracts in one-shot edits, without tool feedback; its scope and results are documented above.
 - The `TypeDecl` node is stable since `nexora.inspect/2`. `Contract` changed in `nexora.inspect/3`: it is an item of `Function.header`, with the clause words of 0.12 and a `name` ([decision 0019](decisions/0019-identidad-propia-del-lenguaje.md)).
 
 ## Use cases this allows

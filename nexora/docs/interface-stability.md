@@ -44,6 +44,9 @@ The currently supported identifiers are `nexora.diagnostics/1`, `nexora.inspect/
 contract. A consumer should select behavior by the `schema` field, and a producer must introduce a
 new schema version when changing an existing field's meaning or removing/renaming a field.
 
+`nexora.impact/1`, written by the experimental `nex impact` command, is **not** part of that promise:
+the command and its document may change in any release until they are declared stable.
+
 ## Compatibility checks
 
 `tests/test_interface_stability.py` pins the stable CLI command names, exit codes, and schema

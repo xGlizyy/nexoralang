@@ -854,7 +854,8 @@ The `README` shows no status badge.
 - **The MCP server inside a real assistant.** The automated tests use the SDK client.
   There is a single manual check with Claude Code, described in
   [MCP server](mcp.md#check-in-claude-code).
-- **No AI model.** The reference tasks measure the deterministic tools.
+- **No model in the language test suite.** The reference tasks measure deterministic tools. A separate
+  local one-shot source-contract pilot is documented in the [evaluation report](../experiments/agent-contracts-pilot/results-summary.md); it is not part of CI.
 - **The isolation of the playground with containers** has not been run. The POSIX limits of the worker,
   launched as a process without a container, have, on Linux.
 - **The server against real services**: MySQL (sessions, accounts and OAuth are tested with

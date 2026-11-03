@@ -552,6 +552,34 @@ def all_schemas() -> dict[str, dict]:
          "message": _NULLABLE_STRING},
         ["schema", "action", "status", "output", "diagnostics", "message"], base,
     )
+    impact = _document(
+        "nexora-impact", "nexora.impact/1: the changes of requirements between two versions of a program (nex impact)",
+        {"schema": {"const": "nexora.impact/1"},
+         "nexora_version": {"type": "string"},
+         "ok": {"type": "boolean", "description": "False when one of the two programs could not be analysed."},
+         "diagnostics": {"type": "array", "items": {"$ref": "#/$defs/diagnostic"}},
+         "changes": {"type": "array", "items": {"$ref": "#/$defs/change"}},
+         "summary": {"type": "object", "required": ["changes", "weakened", "removed", "unknown_direction"],
+                     "properties": {name: {"type": "integer", "minimum": 0}
+                                    for name in ("changes", "weakened", "removed", "unknown_direction")}}},
+        ["schema", "nexora_version", "ok", "diagnostics", "changes"],
+        {**base, "change": {
+            "type": "object",
+            "required": ["module", "function", "scope", "clause", "name", "status", "direction",
+                         "before", "after", "before_message", "after_message"],
+            "properties": {
+                "module": {"type": "string"}, "function": {"type": "string"}, "scope": {"type": "string"},
+                "clause": {"enum": ["needs", "promises", "trust", "keeps", "shrinks"]},
+                "name": _NULLABLE_STRING,
+                "status": {"enum": ["kind_changed", "condition_changed", "weakened", "explanation_changed",
+                                    "renamed", "removed", "added", "ambiguous"]},
+                "direction": {"enum": ["weakened", "strengthened", "equivalent", "incomparable", "unknown", None]},
+                "before": _NULLABLE_STRING, "after": _NULLABLE_STRING,
+                "before_message": _NULLABLE_STRING, "after_message": _NULLABLE_STRING,
+                "previous_name": {"type": "string"},
+            },
+        }},
+    )
     return {
         "nexora-diagnostics.schema.json": diagnostics,
         "nexora-inspect.schema.json": inspect,
@@ -562,4 +590,5 @@ def all_schemas() -> dict[str, dict]:
         "nexora-result.schema.json": result,
         "nexora-test.schema.json": test,
         "nexora-evidence.schema.json": evidence,
+        "nexora-impact.schema.json": impact,
     }

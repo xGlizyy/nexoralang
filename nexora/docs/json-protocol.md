@@ -19,14 +19,17 @@ breaking changes require a new version ([stability policy](interface-stability.m
 | `nexora.spec/2` | The specification of the language, or a section | `tooling.get_language_spec` | [`nexora-spec.schema.json`](schemas/nexora-spec.schema.json) |
 | `nexora.capabilities/1` | What this version of NEXORA is | `tooling.get_capabilities` | [`nexora-capabilities.schema.json`](schemas/nexora-capabilities.schema.json) |
 | `nexora.evidence/1` | What backs every clause of the program | `nex check --evidence --format json`, `tooling.get_evidence` | [`nexora-evidence.schema.json`](schemas/nexora-evidence.schema.json) |
+| `nexora.impact/1` | Requirement changes between two checked versions | `nex impact --format json` | [`nexora-impact.schema.json`](schemas/nexora-impact.schema.json) |
 | `nexora.result/1` | The result of checking or **running** a program | `nexora.api`, the [playground](playground.md) | [`nexora-result.schema.json`](schemas/nexora-result.schema.json) |
 | `nexora.test/1` | The result of **evaluating** the examples of a program | `nex test --format json`, `nexora.api.test_source` | [`nexora-test.schema.json`](schemas/nexora-test.schema.json) |
 
-The first seven are **analysis** formats: producing them never runs the program. The last two are
-the only ones that can come from a run, and no analysis tool uses them.
+The analysis formats are produced without running the program. `nexora.result/1` and
+`nexora.test/1` can come from a run; `nexora.impact/1` compares two analyses and never executes
+either program. Only the runtime formats can come from program execution.
 `nexora.test/1` is defined in [decision 0008](decisions/0008-ejemplos-y-nex-test.md), section 6.
 
-All the tools of the [MCP](mcp.md) server return these same documents.
+The [MCP](mcp.md) server returns the analysis documents produced by its tools; `nexora.impact/1`
+is currently a CLI-only format.
 
 ## Common rules
 
