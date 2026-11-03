@@ -486,7 +486,30 @@ fn parse_unary(p: Parser) gives Step {
         )
         return built(node, leave(operand.parser), operand.depth, span, "")
     }
-    return parse_primary(p)
+    return parse_postfix(p)
+}
+
+// A primary expression followed by any number of `?` (decision 0028).
+fn parse_postfix(p: Parser) gives Step {
+    var current = parse_primary(p)
+    if not current.ok {
+        return current
+    }
+    while check(current.parser, "?")
+        shrinks List.length(current.parser.tokens) - current.parser.pos
+    {
+        let question = peek_at(current.parser, 0)
+        let span = join_spans(current.span, token_span(question))
+        let node = obj(
+            "Try", ["span", "operand", "operator_span"],
+            [place(span), current.node, place(token_span(question))]
+        )
+        current = built(node, advance(current.parser), current.depth, span, "")
+        if not current.ok {
+            return current
+        }
+    }
+    return current
 }
 
 // Whether the current name is followed by one or more dotted names and a call. The parser is

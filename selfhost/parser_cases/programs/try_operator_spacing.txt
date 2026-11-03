@@ -1,0 +1,5 @@
+fn f(t: Text) gives Result[Int, Text] {
+    let n = parse( t ) ?
+    let m = -g(n)?  +  1
+    return Ok(m)
+}

@@ -37,6 +37,7 @@ whose rules it replaces say so at the top.
 | [0025](0025-interprete-autoalojado.md) | A self-hosted interpreter written in NEXORA, in stages; leaving Python is a later decision | Accepted; stage 4 closed by 0026 and 0027 | No |
 | [0026](0026-generador-a-c.md) | A code generator to C written in NEXORA, so a program runs without Python; the compiler compiles itself | Accepted; implemented and released as `native-v0.15.0` | No |
 | [0027](0027-herramientas-nativas-por-defecto.md) | The native tools are the default way to use NEXORA; the Python implementation stays as the reference and the `pip`/`npm` install | Accepted | No |
+| [0028](0028-operador-de-propagacion.md) | The postfix `?` operator that returns the `None` or the `Err` early | Accepted; implemented in the development line | No |
 
 ## Possible incompatible changes in the future
 

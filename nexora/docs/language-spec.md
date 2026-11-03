@@ -762,7 +762,47 @@ are `false`.
 **How they are printed.** `Some(1)`, `None`, `Ok(1)` and `Err(boom)`, with the text unquoted, like the
 fields of a record. In diagnostics the text is quoted: `Err("boom")`.
 
-There is no `?`. The type of a `None` or of an empty list that is an **argument** of a function with
+**The `?` operator.** `expression?` reads the value of a `Some` or an `Ok`, and otherwise ends the function
+that contains it, giving back the `None` or the `Err` unchanged (decision 0028). Its type is the type of the
+value: `Option[T]?` is `T`, and `Result[T, E]?` is `T`.
+
+- It is postfix, binds tighter than any prefix or binary operator (`-f()?` is `-(f()?)`) and can be repeated
+  (`f()??` for an `Option[Option[T]]`).
+- With an `Option`, the function has to give an `Option[U]` for any `U`. With a `Result[T, E]`, the function has to
+  give a `Result[U, E]` with **the same** `E`: the error is not converted. Otherwise it is `E2036`.
+- It is valid only in the statements of a function body. In a `needs`, `promises`, `keeps` or `shrinks`
+  condition, in an `example` or in the condition of a refined type it is `E2036`, because those conditions
+  do not return.
+- When it returns early, the `promises` of the function are checked against the value it gives back, as with
+  any `return`.
+
+<!-- nex:run -->
+```nex
+fn half(n: Int) gives Result[Int, Text] {
+    if n < 2 {
+        return Err("too small")
+    }
+    return Ok(n / 2)
+}
+
+fn quarter(n: Int) gives Result[Int, Text] {
+    let h = half(n)?
+    let q = half(h)?
+    return Ok(q)
+}
+
+fn main() {
+    print(quarter(12))
+    print(quarter(3))
+}
+```
+
+```text
+Ok(3)
+Err(too small)
+```
+
+The type of a `None` or of an empty list that is an **argument** of a function with
 type variables is not deduced from the other arguments: the language does not infer a type through
 the arguments of a call. Give the type in a variable first.
 
@@ -2065,6 +2105,7 @@ do.
 | `E2033` | Invalid enum pattern | `type` | A pattern names no variant of the matched enum, `Option` or `Result`, or has the wrong payload arity |
 | `E2034` | Unreachable match arm | `type` | A previous arm already covers every value this pattern could match |
 | `E2035` | Invalid enum construction | `type` | A value is constructed with an unknown enum variant or wrong number of payload values |
+| `E2036` | Invalid use of '?' | `type` | `?` is applied to something that is not an `Option` or a `Result`, is used outside the statements of a function, or the function cannot give the `None` or the `Err` it would return (section 4.7) |
 | `W2001` | Unused variable | `semantic` | A variable, parameter or iterator is declared and its value is never read. A name that only receives assignments is unused too |
 | `W2002` | Variable never reassigned | `semantic` | A variable is declared with `var` and never receives a new value: `let` says what the program means |
 | `W2003` | Name is not snake_case | `semantic` | A variable, parameter, iterator or private function is not written in `snake_case`. Type names keep PascalCase, and public functions and their parameters keep the spelling of their interface |

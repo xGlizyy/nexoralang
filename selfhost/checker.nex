@@ -31,7 +31,9 @@ pub type Sig = {
 
 type State = {
     problems: List[parser.Problem], user: List[Sig], function: Text, return_type: Text,
-    in_example: Text, unsupported: Text, tables: Tables, usage: Usage
+    in_example: Text, unsupported: Text, tables: Tables, usage: Usage,
+    // Whether a `?` can return early here: only the statements of a function body (decision 0028).
+    try_ok: Bool
 }
 
 type Checked = { node: parser.Node, ty: Text, state: State }
@@ -154,7 +156,7 @@ fn with_problems(state: State, problems: List[parser.Problem]) gives State {
     return State(
         problems: problems, user: state.user, function: state.function, return_type: state.return_type,
         in_example: state.in_example, unsupported: state.unsupported,
-        tables: state.tables, usage: state.usage
+        tables: state.tables, usage: state.usage, try_ok: state.try_ok
     )
 }
 
@@ -162,7 +164,7 @@ fn with_user(state: State, user: List[Sig]) gives State {
     return State(
         problems: state.problems, user: user, function: state.function, return_type: state.return_type,
         in_example: state.in_example, unsupported: state.unsupported,
-        tables: state.tables, usage: state.usage
+        tables: state.tables, usage: state.usage, try_ok: state.try_ok
     )
 }
 
@@ -170,7 +172,7 @@ fn with_function(state: State, function: Text, return_type: Text) gives State {
     return State(
         problems: state.problems, user: state.user, function: function, return_type: return_type,
         in_example: state.in_example, unsupported: state.unsupported,
-        tables: state.tables, usage: state.usage
+        tables: state.tables, usage: state.usage, try_ok: state.try_ok
     )
 }
 
@@ -178,7 +180,15 @@ fn with_example(state: State, in_example: Text) gives State {
     return State(
         problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
         in_example: in_example, unsupported: state.unsupported,
-        tables: state.tables, usage: state.usage
+        tables: state.tables, usage: state.usage, try_ok: state.try_ok
+    )
+}
+
+fn with_try_ok(state: State, try_ok: Bool) gives State {
+    return State(
+        problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
+        in_example: state.in_example, unsupported: state.unsupported,
+        tables: state.tables, usage: state.usage, try_ok: try_ok
     )
 }
 
@@ -189,7 +199,8 @@ fn unsupported(state: State, reason: Text) gives State {
     }
     return State(
         problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
-        in_example: state.in_example, unsupported: reason, tables: state.tables, usage: state.usage
+        in_example: state.in_example, unsupported: reason, tables: state.tables, usage: state.usage,
+        try_ok: state.try_ok
     )
 }
 
@@ -611,6 +622,9 @@ fn check_expression(state: State, env: List[Binding], node: parser.Node, expecte
     if kind == "Unary" {
         return check_unary(state, env, node)
     }
+    if kind == "Try" {
+        return check_try(state, env, node)
+    }
     if kind == "Binary" {
         return check_binary(state, env, node)
     }
@@ -697,6 +711,73 @@ fn check_unknown_variable(state: State, env: List[Binding], name: Text, span: pa
         hint = "Did you mean '" + close + "'?"
     }
     return report(state, "E2005", "There is no variable named '" + name + "' here", hint, [], span)
+}
+
+// `operand?` (decision 0028): the value of a `Some` or an `Ok`, or an early return of the `None` or the `Err`
+// from the function. The function has to be able to give that variant.
+fn check_try(state: State, env: List[Binding], node: parser.Node) gives Checked {
+    let operand = check_expression(state, env, field(node, "operand"), "")
+    let rebuilt = with_field(node, "operand", operand.node)
+    let mark = place_span(field(node, "operator_span"))
+    if not operand.state.try_ok {
+        return checked(
+            rebuilt, "",
+            report(
+                operand.state, "E2036", "'?' can only be used in the statements of a function",
+                "A condition of a clause or of a refined type cannot return early. "
+                + "Read the value with 'match' or 'Option.value_or' there.",
+                [], mark
+            )
+        )
+    }
+    if operand.ty == "" {
+        return checked(rebuilt, "", operand.state)
+    }
+    let root = root_of(operand.state, operand.ty)
+    let is_option = is_option_type(root)
+    if not is_option and not is_result_type(root) {
+        return checked(
+            rebuilt, "",
+            report(
+                operand.state, "E2036", "'?' needs an Option or a Result, but this is " + operand.ty,
+                "'?' reads the value of a Some or an Ok, and returns the None or the Err. "
+                + "Remove the '?' if the value is not optional.",
+                [], mark
+            )
+        )
+    }
+    var item = ""
+    var wanted = "Option[...]"
+    var failure = "a None"
+    var compatible = false
+    let returned = root_of(operand.state, operand.state.return_type)
+    if is_option {
+        item = option_item(root)
+        compatible = operand.state.return_type != "" and is_option_type(returned)
+    } else {
+        let parts = result_parts(root)
+        item = List.get(parts, 0)
+        wanted = "Result[..., " + List.get(parts, 1) + "]"
+        failure = "an Err"
+        compatible = (
+            operand.state.return_type != "" and is_result_type(returned)
+            and List.get(result_parts(returned), 1) == List.get(parts, 1)
+        )
+    }
+    var current = operand.state
+    if not compatible {
+        var result_text = "nothing"
+        if operand.state.return_type != "" and operand.state.return_type != "Void" {
+            result_text = operand.state.return_type
+        }
+        current = report(
+            current, "E2036", "'?' can return " + failure + " here, but '" + current.function + "' gives " + result_text,
+            "The function has to give " + wanted + " for '?' to return early. "
+            + "Handle the other case with 'match' or 'if let' instead.",
+            [], mark
+        )
+    }
+    return checked(rebuilt, item, current)
 }
 
 fn check_unary(state: State, env: List[Binding], node: parser.Node) gives Checked {
@@ -1905,8 +1986,8 @@ fn check_function(state: State, node: parser.Node, sig: Sig) gives Typed {
             example_index = example_index + 1
         }
     }
-    let body = check_block(current, env, field(node, "body"))
-    current = body.state
+    let body = check_block(with_try_ok(current, true), env, field(node, "body"))
+    current = with_try_ok(body.state, false)
     if has_value and not body.returns {
         current = report(
             current, "E2014",
@@ -1955,7 +2036,7 @@ fn is_expression_kind(kind: Text) gives Bool {
     return List.contains(
         [
             "IntLiteral", "FloatLiteral", "TextLiteral", "BoolLiteral", "ListLiteral", "Name", "Unary", "Binary",
-            "Group", "Call", "RecordConstruction", "FieldAccess", "MatchExpr"
+            "Group", "Call", "RecordConstruction", "FieldAccess", "MatchExpr", "Try"
         ],
         kind
     )
@@ -1991,7 +2072,7 @@ fn fill_object(kind: Text, names: List[Text], values: List[parser.Node]) gives p
 fn initial_state() gives State {
     return State(
         problems: [], user: [], function: "", return_type: "", in_example: "", unsupported: "",
-        tables: empty_tables(), usage: empty_usage()
+        tables: empty_tables(), usage: empty_usage(), try_ok: false
     )
 }
 
@@ -3207,7 +3288,7 @@ fn with_tables(state: State, tables: Tables) gives State {
     return State(
         problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
         in_example: state.in_example, unsupported: state.unsupported, tables: tables,
-        usage: state.usage
+        usage: state.usage, try_ok: state.try_ok
     )
 }
 
@@ -3852,6 +3933,9 @@ pub fn unparse(node: parser.Node) gives Text {
     if kind == "Group" {
         return "(" + unparse(field(node, "expression")) + ")"
     }
+    if kind == "Try" {
+        return unparse(field(node, "operand")) + "?"
+    }
     if kind == "Unary" {
         var separator = ""
         if text_of(field(node, "operator")) == "not" {
@@ -3899,7 +3983,7 @@ fn size_of(node: parser.Node) gives Int {
     if kind == "Binary" {
         return 1 + size_of(field(node, "left")) + size_of(field(node, "right"))
     }
-    if kind == "Unary" {
+    if kind == "Unary" or kind == "Try" {
         return 1 + size_of(field(node, "operand"))
     }
     if kind == "Group" {
@@ -5657,7 +5741,8 @@ fn empty_usage() gives Usage {
 fn with_usage(state: State, usage: Usage) gives State {
     return State(
         problems: state.problems, user: state.user, function: state.function, return_type: state.return_type,
-        in_example: state.in_example, unsupported: state.unsupported, tables: state.tables, usage: usage
+        in_example: state.in_example, unsupported: state.unsupported, tables: state.tables, usage: usage,
+        try_ok: state.try_ok
     )
 }
 

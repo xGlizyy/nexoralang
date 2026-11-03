@@ -96,3 +96,12 @@ Option.value(x)
 Result.value_or(r, 0)
 List.append(xs, 1)
 Text.contains(a, "x") and not Text.contains(b, "y")
+f(x)?
+f(x)??
+-g(a)? + 1
+a? == b?
+items.first?
+(f(x))?
+f(x)? and ok
+?
+f(x) ?

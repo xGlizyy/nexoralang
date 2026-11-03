@@ -47,6 +47,7 @@ type Control = enum {
 // What is left to do when a value arrives.
 type Kont = enum {
     KUnary(node: parser.Node),
+    KTry,
     KBinLeft(node: parser.Node),
     KBinRight(node: parser.Node, left: Val),
     KArgs(node: parser.Node, done: List[Val]),
@@ -1713,6 +1714,9 @@ fn step_eval(prog: Prog, m: Machine, node: parser.Node) gives Machine {
     if kind == "Unary" {
         return mk(m, Control.CEval(field(node, "operand")), m.env, push(Kont.KUnary(node), m.stack))
     }
+    if kind == "Try" {
+        return mk(m, Control.CEval(field(node, "operand")), m.env, push(Kont.KTry(), m.stack))
+    }
     if kind == "Binary" {
         return mk(m, Control.CEval(field(node, "left")), m.env, push(Kont.KBinLeft(node), m.stack))
     }
@@ -2149,6 +2153,7 @@ fn step_value(prog: Prog, m: Machine, v: Val) gives Machine {
 fn handle_value(prog: Prog, m: Machine, top: Kont, rest: Stk, v: Val) gives Machine {
     return match top {
         Kont.KUnary(node) => unary_value(m, node, rest, v)
+        Kont.KTry => try_value(m, rest, v)
         Kont.KBinLeft(node) => binary_left(m, node, rest, v)
         Kont.KBinRight(node, left) => binary_right(prog, m, node, rest, left, v)
         Kont.KArgs(node, done) => next_part(prog, m, node, rest, done, v)
@@ -2179,6 +2184,21 @@ fn handle_value(prog: Prog, m: Machine, top: Kont, rest: Stk, v: Val) gives Mach
         Kont.KRet(saved, name, site) => mk_depth(with_returned(m, site, v), Control.CValue(v), saved, rest, m.depth - 1)
         Kont.KHalt => mk(m, Control.CDone(v), m.env, rest)
     }
+}
+
+// `operand?` (decision 0028): the value of a `Some` or an `Ok`; any other variant ends the function, which gives it back.
+fn try_value(m: Machine, rest: Stk, v: Val) gives Machine {
+    return match v {
+        Val.VVariant(owner, kind, items) => try_variant(m, rest, v, kind, items)
+        _ => mk(m, Control.CValue(v), m.env, rest)
+    }
+}
+
+fn try_variant(m: Machine, rest: Stk, v: Val, kind: Text, items: List[Val]) gives Machine {
+    if kind == "Some" or kind == "Ok" {
+        return mk(m, Control.CValue(List.get(items, 0)), m.env, rest)
+    }
+    return mk(m, Control.CReturn(v), m.env, rest)
 }
 
 fn unary_value(m: Machine, node: parser.Node, rest: Stk, v: Val) gives Machine {
@@ -2614,7 +2634,7 @@ fn skipped_calls(node: parser.Node, watch: List[Text]) gives List[Text] {
         }
     } else if kind == "Binary" {
         found = List.concat(skipped_calls(field(node, "left"), watch), skipped_calls(field(node, "right"), watch))
-    } else if kind == "Unary" {
+    } else if kind == "Unary" or kind == "Try" {
         found = skipped_calls(field(node, "operand"), watch)
     } else if kind == "Group" {
         found = skipped_calls(field(node, "expression"), watch)

@@ -594,10 +594,30 @@ stops with `E3012` or `E3013`.
 An `Option` does not carry the reason for the absence; a `Result` does. If the caller needs to know why
 something is missing, it is a `Result`.
 
-### What there is not
+### Passing a failure upwards with `?`
 
-There is no `match`, no `if let`, no `?` operator and no user enums: the variants are recognized
-with the functions above and the value is read with `unwrap_or` when it is known which one it is.
+Most of the time a function that calls another one that can fail only wants to say "if that failed, I fail
+the same way". `expression?` does exactly that: on a `Some` or an `Ok` it is the value inside, and on a `None`
+or an `Err` it ends the function, which gives that `None` or `Err` back unchanged.
+
+```nex
+fn parse(text: Text) gives Result[Int, Text] {
+    if Int.can_parse(text) {
+        return Ok(Int.parse(text))
+    }
+    return Err("not a whole number")
+}
+
+fn double(text: Text) gives Result[Int, Text] {
+    let n = parse(text)?
+    return Ok(n * 2)
+}
+```
+
+The checker makes sure the early return is possible: an `Option` needs a function that gives an `Option[...]`,
+and a `Result[T, E]` needs one that gives a `Result[..., E]` with the same `E`; otherwise it is `E2036`. The error
+is never converted. When the two cases deserve different work, use `match` or `if let`
+([specification, section 4.8](language-spec.md)).
 
 ## Records
 

@@ -137,6 +137,7 @@ A code never changes its meaning. If it stops being used it is retired, not reus
 | `E2033` | Invalid enum pattern | The pattern names an unknown variant or uses the wrong payload arity | Match a declared variant with the listed fields |
 | `E2034` | Unreachable match arm | An earlier pattern already covers this arm | Remove the arm or place a more specific arm first |
 | `E2035` | Invalid enum construction | A value is constructed with an unknown variant or wrong payload arity | Use a declared variant with its required number of payload values |
+| `E2036` | Invalid use of '?' | `?` is applied to a value that is not an `Option` or a `Result`, is used in a clause, an example or a refined type, or the function does not give the `None` or the `Err` it would return | Give the function the matching `Option[...]` or `Result[..., E]`, or handle the other case with `match` or `if let` |
 
 ### Type
 

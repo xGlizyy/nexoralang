@@ -172,7 +172,7 @@ fn word_kind(word: Text) gives Text {
 }
 
 fn is_single(c: Text) gives Bool {
-    return c != "" and Text.contains("()[]\{},:.=+*<>", c)
+    return c != "" and Text.contains("()[]\{},:.?=+*<>", c)
 }
 
 fn is_double(pair: Text) gives Bool {

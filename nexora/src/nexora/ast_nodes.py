@@ -62,6 +62,14 @@ class Unary(Node):
 
 
 @dataclass(frozen=True)
+class Try(Node):
+    """`operand?`: the value of an `Option` or `Result`, or an early return of its `None` or `Err`
+    from the enclosing function (decision 0028)."""
+    operand: Expr
+    operator_span: Span
+
+
+@dataclass(frozen=True)
 class Binary(Node):
     """Arithmetic (`+ - * /`), comparison (`== != < <= > >=`) or logic (`and`, `or`)."""
     operator: str
@@ -378,8 +386,8 @@ class MatchExpr(Node):
     arms: tuple[MatchArm, ...]
 
 
-Expr = Expr | MatchExpr
-EXPRESSION_NODES = (*EXPRESSION_NODES, MatchExpr)
+Expr = Expr | MatchExpr | Try
+EXPRESSION_NODES = (*EXPRESSION_NODES, MatchExpr, Try)
 
 
 # Declarations

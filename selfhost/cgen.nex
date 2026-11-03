@@ -153,7 +153,8 @@ type Info = {
 }
 
 // What the generator keeps while it writes: the number of the next temporary, and the first thing it cannot do yet.
-type St = { next: Int, bad: Text, info: Info }
+// `scope` is the function being written: a `?` returns from it, through its `promises` (decision 0028).
+type St = { next: Int, bad: Text, info: Info, scope: Fn }
 
 // A piece of C: the statements that compute something, and the name or literal that holds it.
 type Part = { code: Text, value: Text, st: St }
@@ -162,7 +163,7 @@ fn refuse(st: St, reason: Text) gives St {
     if st.bad != "" {
         return st
     }
-    return St(next: st.next, bad: reason, info: st.info)
+    return St(next: st.next, bad: reason, info: st.info, scope: st.scope)
 }
 
 fn part(code: Text, value: Text, st: St) gives Part {
@@ -172,11 +173,11 @@ fn part(code: Text, value: Text, st: St) gives Part {
 // A new temporary holding `expression`.
 fn temporary(st: St, expression: Text) gives Part {
     let name = "t" + to_text(st.next)
-    return part("rv " + name + " = " + expression + ";\n", name, St(next: st.next + 1, bad: st.bad, info: st.info))
+    return part("rv " + name + " = " + expression + ";\n", name, St(next: st.next + 1, bad: st.bad, info: st.info, scope: st.scope))
 }
 
 fn fresh(st: St) gives St {
-    return St(next: st.next + 1, bad: st.bad, info: st.info)
+    return St(next: st.next + 1, bad: st.bad, info: st.info, scope: st.scope)
 }
 
 // The variables in scope, in the order they were declared: an error lists their values.
@@ -252,7 +253,24 @@ fn gen_expr(st: St, node: parser.Node) gives Part {
     if kind == "MatchExpr" {
         return gen_match(st, node)
     }
+    if kind == "Try" {
+        return gen_try(st, node)
+    }
     return part("", "rt_unit()", refuse(st, "the expression " + kind))
+}
+
+// `operand?` (decision 0028): the payload of a `Some` or an `Ok`; any other variant is what the function returns, after
+// its `promises` are checked, as a `return` of it would.
+fn gen_try(st: St, node: parser.Node) gives Part {
+    let operand = gen_expr(st, field(node, "operand"))
+    let held = temporary(operand.st, operand.value)
+    let promised = promise_code(fresh(held.st), held.st.scope, held.value, true)
+    let leave = "rt_top = rt_saved + 1;\n" + promised.code + "rt_leave(rt_saved);\nreturn " + held.value + ";\n"
+    let guard = (
+        "if (!(rt_is_kind(" + held.value + ", \"Some\") || rt_is_kind(" + held.value + ", \"Ok\"))) \{\n" + leave + "}\n"
+    )
+    let payload = temporary(promised.st, "rt_arg(" + held.value + ", 0)")
+    return part(operand.code + held.code + guard + payload.code, payload.value, payload.st)
 }
 
 // `(rv[]){a, b}, 2`: the items of a list or the arguments of a constructor, and how many there are.
@@ -1218,7 +1236,7 @@ fn gen_function(st: St, function: parser.Node) gives Part {
     }
     let name = text_of(field(function, "name"))
     let scope = Fn(name: name, params: param_vars(function), afters: clauses_of(function, "promises"))
-    let entry = needs_code(st, function, scope)
+    let entry = needs_code(St(next: st.next, bad: st.bad, info: st.info, scope: scope), function, scope)
     let body = gen_block(entry.st, scope, scope.params, field(function, "body"))
     let file = index_of(st.info.files, text_of(field(function, "file")))
     var file_index = 0
@@ -1358,7 +1376,7 @@ fn generate(program: parser.Node, path: Text, paths: List[Text], trusted: Bool, 
         refined = List.append(refined, declared_name(declaration))
     }
     var st = St(
-        next: 0, bad: "",
+        next: 0, bad: "", scope: Fn(name: "", params: [], afters: []),
         info: Info(
             fns: fns, records: record_names, record_fields: record_fields, enums: enums, refined: refined, files: paths
         )

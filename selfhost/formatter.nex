@@ -41,7 +41,7 @@ fn no_space_after() gives List[Text] {
 }
 
 fn no_space_before() gives List[Text] {
-    return [")", "]", ",", ".", ":", "("]
+    return [")", "]", ",", ".", ":", "(", "?"]
 }
 
 fn binary() gives List[Text] {
@@ -142,7 +142,7 @@ fn is_unary(tokens: List[lexer.Token], index: Int) gives Bool {
     if previous == "true" or previous == "false" {
         return false
     }
-    if previous == ")" or previous == "]" or previous == "}" {
+    if previous == ")" or previous == "]" or previous == "}" or previous == "?" {
         return false
     }
     return true
