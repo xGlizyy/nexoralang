@@ -49,22 +49,13 @@ def _loop_requirements(module, module_name: str, function: ast.Function) -> list
 
     def visit(block: ast.Block, parent: str = "function") -> None:
         for statement in block.statements:
-            if isinstance(statement, ast.If):
+            if isinstance(statement, (ast.If, ast.IfLet)):
                 visit(statement.then_block, parent)
-                if isinstance(statement.else_branch, ast.Block):
-                    visit(statement.else_branch, parent)
-                elif isinstance(statement.else_branch, ast.If):
-                    visit(ast.Block(statement.else_branch.span, (statement.else_branch,)), parent)
-                elif isinstance(statement.else_branch, ast.IfLet):
-                    visit(ast.Block(statement.else_branch.span, (statement.else_branch,)), parent)
-            elif isinstance(statement, ast.IfLet):
-                visit(statement.then_block, parent)
-                if isinstance(statement.else_branch, ast.Block):
-                    visit(statement.else_branch, parent)
-                elif isinstance(statement.else_branch, ast.If):
-                    visit(ast.Block(statement.else_branch.span, (statement.else_branch,)), parent)
-                elif isinstance(statement.else_branch, ast.IfLet):
-                    visit(ast.Block(statement.else_branch.span, (statement.else_branch,)), parent)
+                other = statement.else_branch
+                if isinstance(other, ast.Block):
+                    visit(other, parent)
+                elif other is not None:
+                    visit(ast.Block(other.span, (other,)), parent)
             elif isinstance(statement, (ast.While, ast.For)):
                 if isinstance(statement, ast.While):
                     loop_kind, head = "while", statement.condition
@@ -97,7 +88,7 @@ def _all_requirements(analysis: Analysis) -> list[Requirement]:
     for module in project.modules:
         if module.program is None:
             continue
-        module_name = "" if module is project.entry else module.path.replace("\\", "/")
+        module_name = "" if module.path == project.entry.path else module.name
         for function in module.program.functions:
             for contract in function.contracts:
                 result.append(Requirement(
@@ -322,24 +313,10 @@ def compare(before: Analysis, after: Analysis) -> dict:
         for _ in range(min(len(left), len(right))):
             left.pop()
             right.pop()
-        if len(left) == len(right) == 1:
-            a, b = left.pop(), right.pop()
-            direction = _direction(a.condition_node, b.condition_node)
-            status = "weakened" if direction == "weakened" else "condition_changed"
-            add(status, a, b, direction)
-        elif left and right:
-            for item in left:
-                add("ambiguous", item, None, "unknown")
-            for item in right:
-                add("ambiguous", None, item, "unknown")
-            left.clear()
-            right.clear()
         for item in left:
-            if item.name is None:
-                add("removed", item, None, "weakened" if item.clause in {"needs", "promises"} else "unknown")
+            add("removed", item, None, "weakened" if item.clause in {"needs", "promises"} else "unknown")
         for item in right:
-            if item.name is None:
-                add("added", None, item)
+            add("added", None, item)
 
     for item in remaining_named_old:
         if id(item) not in matched_old:

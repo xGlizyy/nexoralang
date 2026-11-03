@@ -374,7 +374,7 @@ Other changed conditions are reported for review. This command does not implemen
 design in [decision 0019](decisions/0019-identidad-propia-del-lenguaje.md#72-matching-algorithm).
 
 Both entry files and their imported modules must pass static analysis. Modules are matched by their
-import path relative to each entry file, functions by name, and named contracts by name. Unnamed
+name (the file name without its extension, which no two modules of a program share), functions by name, and named contracts by name. Unnamed
 contracts are matched by kind and token-normalized condition. A unique named contract rename with an
 unchanged kind and condition is recognized. A removed `needs`, `promises`, or `keeps` clause is
 reported as a potential weakening; removing a `shrinks` measure is flagged as a changed termination
