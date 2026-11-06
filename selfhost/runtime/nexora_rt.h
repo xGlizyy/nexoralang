@@ -1849,6 +1849,53 @@ static rv rt_intr_read_stdin_line(void) {
     return rt_list_from(&item, 1);
 }
 
+/* One line of the standard input under --max-input (selfhost/interpreter.nex, `read_stdin_limited`), as cli.py reads it: no more bytes than are
+ * left of the limit plus one, and no more than a Text of --max-text can need; the bytes of every line, its break included, are counted here.
+ * An empty list at the end of the input, ["limit"] when the line does not fit in what is left, ["line", TEXT] otherwise. */
+static int64_t rt_stdin_counted = 0;
+static rv rt_intr_read_stdin_limited(rv max_input, rv max_text) {
+    fflush(stdout);
+    int64_t left = max_input.u.i - rt_stdin_counted;
+    int64_t size = left + 1;
+    if (max_text.u.i > 0) {
+        int64_t by_text = 4 * (max_text.u.i + 1) + 1;
+        if (by_text < size) size = by_text;
+    }
+    size_t cap = 128, n = 0;
+    char *line = (char *)rt_alloc_raw(cap);
+    int ch;
+    int64_t bytes = 0;
+    while (bytes < size && (ch = getc(stdin)) != EOF) {
+        bytes++;
+        if (n + 2 > cap) {
+            char *bigger = (char *)rt_alloc_raw(cap * 2);
+            memcpy(bigger, line, n);
+            line = bigger;
+            cap *= 2;
+        }
+        line[n++] = (char)ch;
+        if (ch == '\n') break;
+    }
+    if (bytes == 0) return rt_list_from(0, 0);
+    if (bytes > left) {
+        rt_text word = {(char *)"limit", 5, 5};
+        rv tag = rt_txt(word);
+        return rt_list_from(&tag, 1);
+    }
+    rt_stdin_counted += bytes;
+    if (n > 0 && line[n - 1] == '\n') n--;
+    if (n > 0 && line[n - 1] == '\r') n--;
+    line[n] = 0;
+    int64_t points = 0;
+    for (size_t i = 0; i < n; i++) if (((unsigned char)line[i] & 0xC0) != 0x80) points++;
+    rt_text t = {line, (int64_t)n, points};
+    rt_text word = {(char *)"line", 4, 4};
+    rv items[2];
+    items[0] = rt_txt(word);
+    items[1] = rt_txt(t);
+    return rt_list_from(items, 2);
+}
+
 /* `nex run --timeout` and `--max-memory` (selfhost/nex.nex). The time limit is a timer that stops the process with the message of
  * the diagnostic and status 3; it counts from `start_timeout`, as Python's counts from the run. Both answer whether the system can do it
  * (the timer needs POSIX, the address-space limit needs Linux), which is what Python's usage errors say. */

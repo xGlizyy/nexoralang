@@ -3131,13 +3131,36 @@ fn read_stdin_line() gives List[Text] {
     return []
 }
 
+// One line of the standard input under --max-input, as `nex run` reads it (cli.py, `read_input`): it reads at most the bytes that are
+// left of the limit plus one, and no more than a Text of --max-text could need, and counts the bytes of every line it reads, the
+// line break included. It answers an empty list at the end of the input, `["limit"]` when the line does not fit in what is left, and
+// `["line", TEXT]` otherwise. The count of bytes is kept by the program that runs this one, so this definition, which is what Python
+// runs and has no input, reads nothing; the executables that cgen.nex makes replace it with a C one.
+fn read_stdin_limited(max_input: Int, max_text: Int) gives List[Text] {
+    return []
+}
+
 // `input()` of a program that is run with no --stdin file: the standard input, as `nex run` reads it.
 fn read_live_line(host: HostCfg, m: Machine, node: parser.Node) gives Machine {
     if host.max_input > 0 {
-        return stop_with(
-            m, m.stack, 0, "E0000", "--max-input cannot be applied to the standard input by this interpreter yet", "", [],
-            place_of(node)
-        )
+        let limited = read_stdin_limited(host.max_input, host.max_text)
+        if List.length(limited) == 0 {
+            return stop_with(
+                m, m.stack, 0, "E3009", "There is no more input to read",
+                "The standard input ended. Check it before reading again.", [], place_of(node)
+            )
+        }
+        if List.get(limited, 0) == "limit" {
+            let problem = problem_at(
+                "E3015", "input limit exceeded (" + to_text(host.max_input) + ")", "", [], parser.no_span()
+            )
+            return mk(m, Control.CFail(problem), m.env, m.stack)
+        }
+        let text = List.get(limited, 1)
+        if text_too_long(host.max_text, text) {
+            return failed(m, text_limit_res(host.max_text, "node"), node)
+        }
+        return mk(m, Control.CValue(Val.VText(text)), m.env, m.stack)
     }
     let got = read_stdin_line()
     if List.length(got) == 0 {

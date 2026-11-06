@@ -44,6 +44,27 @@ def run(command: list[str], data: bytes) -> tuple[str, str, int]:
             done.stderr.decode("utf-8", "replace").replace("\r\n", "\n"), done.returncode)
 
 
+# The limits of the standard input: `--max-input` counts the bytes of every line read, its line break included, and `--max-text`
+# bounds the Text that `input()` gives. The values sit on both sides of the sizes of the inputs above, so that the limit is
+# reached before, exactly at and after the end of a line.
+LIMITS = [
+    [],
+    ["--max-input", "1"],
+    ["--max-input", "5"],
+    ["--max-input", "6"],
+    ["--max-input", "7"],
+    ["--max-input", "11"],
+    ["--max-input", "12"],
+    ["--max-input", "13"],
+    ["--max-input", "100"],
+    ["--max-text", "3"],
+    ["--max-text", "5"],
+    ["--max-text", "100"],
+    ["--max-input", "12", "--max-text", "5"],
+    ["--max-input", "100", "--max-text", "4"],
+]
+
+
 def main() -> int:
     native = os.environ["NEXORA_NEX"]
     different = total = 0
@@ -52,12 +73,14 @@ def main() -> int:
             path = Path(folder) / (name.replace(" ", "_") + ".nex")
             path.write_text(text, encoding="utf-8", newline="\n")
             for label, data in INPUTS.items():
-                total += 1
-                want = run([sys.executable, "-m", "nexora", "run", str(path)], data)
-                got = run([native, "run", str(path)], data)
-                if want != got:
-                    different += 1
-                    print(f"DIFF  {name} / {label}\n  nex:     {ascii(want)}\n  nex.nex: {ascii(got)}")
+                for flags in LIMITS:
+                    total += 1
+                    want = run([sys.executable, "-m", "nexora", "run", *flags, str(path)], data)
+                    got = run([native, "run", *flags, str(path)], data)
+                    if want != got:
+                        different += 1
+                        shown = " ".join(flags) or "no limits"
+                        print(f"DIFF  {name} / {label} / {shown}\n  nex:     {ascii(want)}\n  nex.nex: {ascii(got)}")
     print(f"{total - different} equal, {different} different")
     return 1 if different else 0
 

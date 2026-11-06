@@ -1183,6 +1183,9 @@ fn intrinsic_of(function: parser.Node) gives Text {
     if count == 0 and name == "read_stdin_line" and file == "selfhost/interpreter.nex" {
         return "rt_intr_read_stdin_line"
     }
+    if count == 2 and name == "read_stdin_limited" and file == "selfhost/interpreter.nex" {
+        return "rt_intr_read_stdin_limited"
+    }
     if count == 1 and name == "host_get" and file == "selfhost/interpreter.nex" {
         return "rt_intr_host_get"
     }
