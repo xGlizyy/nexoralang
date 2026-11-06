@@ -1,0 +1,99 @@
+// envreport: a tool that asks another program for information and reports on it. It runs `python --version`, reads the
+// version and says whether it is one that NEXORA supports (CPython 3.11 or newer).
+//
+//   nex run envreport.nex --allow-process python
+//   nex test envreport.nex
+//
+// It declares the one capability it needs: it runs the executable `python`, and nothing else. Whoever runs it has to grant
+// that executable with --allow-process; without the grant it stops with E3008, and without the declaration it would not
+// pass `nex check` (E2026).
+//
+// The output is the same on every machine that has a supported Python: it does not print the minor version.
+
+uses process "python"
+
+type Version = { major: Int, minor: Int }
+
+// The version written by `python --version`, such as "Python 3.12.1" with a line break at the end.
+fn parse_version(text: Text) gives Result[Version, Text]
+    example Result.value(parse_version("Python 3.12.1\n")) == Version(major: 3, minor: 12)
+    example Result.value(parse_version("Python 3.13.0rc1")) == Version(major: 3, minor: 13)
+    example Result.error(parse_version("not python")) == "unexpected text: not python"
+    example Result.error(parse_version("Python x.y")) == "no version number in: Python x.y"
+{
+    let prefix = "Python "
+    if Text.starts_with(text, prefix) == false {
+        return Err("unexpected text: " + text)
+    }
+    let major = number_at(text, Text.length(prefix))
+    if Option.is_none(major) {
+        return Err("no version number in: " + text)
+    }
+    let dot = Text.length(prefix) + digits_at(text, Text.length(prefix))
+    if Text.slice(text, dot, dot + 1) != "." {
+        return Err("no version number in: " + text)
+    }
+    let minor = number_at(text, dot + 1)
+    if Option.is_none(minor) {
+        return Err("no version number in: " + text)
+    }
+    return Ok(Version(major: Option.value(major), minor: Option.value(minor)))
+}
+
+fn is_digit(character: Text) gives Bool
+    example is_digit("7")
+    example is_digit("x") == false
+{
+    return Text.length(character) == 1 and Text.contains("0123456789", character)
+}
+
+// How many digits start at `at`.
+fn digits_at(text: Text, at: Int) gives Int
+    needs at >= 0, "A position is not negative"
+    example digits_at("ab123c", 2) == 3
+    example digits_at("ab", 0) == 0
+{
+    var count = 0
+    while at + count < Text.length(text) and is_digit(Text.slice(text, at + count, at + count + 1))
+        keeps count >= 0
+        shrinks Text.length(text) - at - count, "Each turn reads one more character"
+    {
+        count = count + 1
+    }
+    return count
+}
+
+// The whole number that starts at `at`, if there is one.
+fn number_at(text: Text, at: Int) gives Option[Int]
+    needs at >= 0, "A position is not negative"
+    example number_at("v42.", 1) == Some(42)
+    example number_at("v.", 1) == None
+{
+    let count = digits_at(text, at)
+    if count == 0 {
+        return None
+    }
+    return Some(Int.parse(Text.slice(text, at, at + count)))
+}
+
+// CPython 3.11 or newer, the support target of decision 0021.
+fn supported(version: Version) gives Bool
+    example supported(Version(major: 3, minor: 11))
+    example supported(Version(major: 3, minor: 10)) == false
+    example supported(Version(major: 4, minor: 0))
+{
+    return version.major > 3 or (version.major == 3 and version.minor >= 11)
+}
+
+fn main() {
+    let parsed = parse_version(Process.run("python", ["--version"]))
+    if Result.is_err(parsed) {
+        print("error: " + Result.error(parsed))
+        return
+    }
+    let version = Result.value(parsed)
+    print("interpreter: python")
+    print("major: " + to_text(version.major))
+    print("supported: " + to_text(supported(version)))
+    print("check: " + Text.slice(Process.run("python", ["-c", "print(6 * 7)"]), 0, 2))
+}

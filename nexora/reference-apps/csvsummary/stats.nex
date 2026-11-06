@@ -1,0 +1,44 @@
+// stats: the figures of one column of a table. A module that uses the `csv` module.
+
+import "csv.nex"
+
+pub type Column = { name: Text, count: Int, sum: Int, low: Int, high: Int }
+
+// The count, sum, lowest and highest value of the column at `index`, whose cells must be whole numbers.
+pub fn summarize(table: csv.Table, index: Int) gives Result[Column, Text]
+    needs index >= 0 and index < List.length(table.header), "The column exists"
+    example Result.value(summarize(csv.Table(header: ["n"], rows: [["3"], ["-1"], ["8"]]), 0)) == Column(name: "n", count: 3, sum: 10, low: -1, high: 8)
+    example Result.error(summarize(csv.Table(header: ["n"], rows: [["3"], ["x"]]), 0)) == "row 2 of column n is not a whole number: x"
+    example Result.error(summarize(csv.Table(header: ["n"], rows: []), 0)) == "column n has no rows"
+{
+    var count = 0
+    var sum = 0
+    var low = 0
+    var high = 0
+    for row in table.rows
+        keeps count >= 0
+    {
+        let cell = List.get(row, index)
+        if Int.can_parse(cell) == false {
+            return Err("row " + to_text(count + 1) + " of column " + List.get(table.header, index) + " is not a whole number: " + cell)
+        }
+        let value = Int.parse(cell)
+        if count == 0 or value < low {
+            low = value
+        }
+        if count == 0 or value > high {
+            high = value
+        }
+        count = count + 1
+        sum = sum + value
+    }
+    if count == 0 {
+        return Err("column " + List.get(table.header, index) + " has no rows")
+    }
+    return Ok(Column(name: List.get(table.header, index), count: count, sum: sum, low: low, high: high))
+}
+
+pub fn describe(column: Column) gives Text {
+    let figures = "count " + to_text(column.count) + ", sum " + to_text(column.sum)
+    return column.name + ": " + figures + ", low " + to_text(column.low) + ", high " + to_text(column.high)
+}
