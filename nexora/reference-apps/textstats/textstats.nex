@@ -1,0 +1,180 @@
+// textstats: a pure command-line tool. It reads a text (the arguments, or one line of the standard input when
+// there are none) and reports its size, its words and the word that repeats the most.
+//
+//   nex run textstats.nex -- the quick brown fox jumps over the lazy dog
+//   echo "to be or not to be" | nex run textstats.nex
+//   nex test textstats.nex
+//
+// It declares no capability: it needs no file, no network and no process.
+//
+// Words are the runs of characters between spaces. Case matters ("The" and "the" are two words).
+
+type Count = { word: Text, times: Int }
+
+type Vowels = Int where value >= 0, "A count of vowels cannot be negative"
+
+fn is_space(character: Text) gives Bool
+    needs Text.length(character) == 1, "One character at a time"
+    example is_space(" ")
+    example is_space("a") == false
+{
+    return character == " "
+}
+
+// The words of a text, in the order in which they appear.
+fn words(text: Text) gives List[Text]
+    example words("a b") == ["a", "b"]
+    example words("  many   spaces ") == ["many", "spaces"]
+    example words("") == []
+{
+    var found: List[Text] = []
+    var start = 0
+    var i = 0
+    // `start` is where the current word begins, or the position after the last space seen.
+    while i < Text.length(text)
+        keeps start <= i
+        shrinks Text.length(text) - i, "Each turn reads one more character"
+    {
+        if is_space(Text.slice(text, i, i + 1)) {
+            if i > start {
+                found = List.append(found, Text.slice(text, start, i))
+            }
+            start = i + 1
+        }
+        i = i + 1
+    }
+    if Text.length(text) > start {
+        found = List.append(found, Text.slice(text, start, Text.length(text)))
+    }
+    return found
+}
+
+fn vowels(text: Text) gives Vowels
+    example vowels("education") == 5
+    example vowels("rhythm") == 0
+{
+    var count = 0
+    var i = 0
+    while i < Text.length(text)
+        keeps count >= 0 and count <= i
+        shrinks Text.length(text) - i, "Each turn reads one more character"
+    {
+        if Text.contains("aeiouAEIOU", Text.slice(text, i, i + 1)) {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    return Vowels(count)
+}
+
+// How many times `word` appears in the list.
+fn times_in(all: List[Text], word: Text) gives Int
+    promises result >= 0, "A count is never negative"
+    example times_in(["a", "b", "a"], "a") == 2
+    example times_in([], "a") == 0
+{
+    var times = 0
+    for each in all
+        keeps times >= 0, "A count never goes down"
+    {
+        if each == word {
+            times = times + 1
+        }
+    }
+    return times
+}
+
+// The longest word, the first one when several have the same length.
+fn longest(all: List[Text]) gives Option[Text]
+    example longest(["a", "abc", "ab"]) == Some("abc")
+    example longest(["ab", "cd"]) == Some("ab")
+    example longest([]) == None
+{
+    var best: Option[Text] = None
+    for each in all
+        keeps true
+    {
+        let better = match best {
+            None => true
+            Some(current) => Text.length(each) > Text.length(current)
+        }
+        if better {
+            best = Some(each)
+        }
+    }
+    return best
+}
+
+// The word that appears the most, the first one to appear when several tie.
+fn most_frequent(all: List[Text]) gives Option[Count]
+    example most_frequent(["a", "b", "b"]) == Some(Count(word: "b", times: 2))
+    example most_frequent(["x", "y"]) == Some(Count(word: "x", times: 1))
+    example most_frequent([]) == None
+{
+    var best: Option[Count] = None
+    for each in all
+        keeps true
+    {
+        let times = times_in(all, each)
+        let better = match best {
+            None => true
+            Some(current) => times > current.times
+        }
+        if better {
+            best = Some(Count(word: each, times: times))
+        }
+    }
+    return best
+}
+
+fn describe_longest(all: List[Text]) gives Text {
+    return match longest(all) {
+        None => "-"
+        Some(word) => word
+    }
+}
+
+fn describe_frequent(all: List[Text]) gives Text {
+    return match most_frequent(all) {
+        None => "-"
+        Some(count) => count.word + " (" + to_text(count.times) + ")"
+    }
+}
+
+// The text to analyse: the arguments joined with a space, or one line of the standard input.
+fn source_text(arguments: List[Text]) gives Text {
+    if List.length(arguments) == 0 {
+        return input()
+    }
+    var joined = ""
+    var first = true
+    for argument in arguments
+        keeps true
+    {
+        if first {
+            joined = argument
+            first = false
+        } else {
+            joined = joined + " " + argument
+        }
+    }
+    return joined
+}
+
+fn report(text: Text) gives List[Text] {
+    let all = words(text)
+    var lines: List[Text] = ["characters: " + to_text(Text.length(text))]
+    lines = List.append(lines, "words: " + to_text(List.length(all)))
+    lines = List.append(lines, "vowels: " + to_text(vowels(text)))
+    lines = List.append(lines, "longest: " + describe_longest(all))
+    lines = List.append(lines, "most frequent: " + describe_frequent(all))
+    return lines
+}
+
+fn main() {
+    for line in report(source_text(args()))
+        keeps true
+    {
+        print(line)
+    }
+}
