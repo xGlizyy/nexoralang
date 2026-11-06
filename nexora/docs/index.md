@@ -48,6 +48,7 @@ these pages is run by the automated tests and compared against the real output o
 | [Testing](testing.md) | What is tested, how to run it and coverage |
 | [Technical decisions](decisions/README.md) | Why the language is the way it is, and the incompatible changes |
 | [Roadmap](roadmap.md) | What is done and verified, and what is pending |
+| [1.0 readiness](1-0-readiness.md) | Status of each gate of the 1.0 release criteria and the work that is left |
 | [Limitations](limitations.md) | What does not exist and the known risks |
 | [Changelog](../CHANGELOG.md) | What changed in each version |
 | [Contributing](../CONTRIBUTING.md) | Development environment and checks before proposing a change |
