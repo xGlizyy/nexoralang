@@ -279,3 +279,22 @@ The roadmap is subordinate to this boundary: a planned feature is not automatica
 unless this decision or an approved reference application requires it. If the project later chooses
 web services as a target, it must record a superseding decision covering the runtime, concurrency,
 standard library, deployment and security model before expanding the 1.0 scope.
+
+## Amendments
+
+Statements of this decision that stopped being true after it was accepted. They correct facts; the scope, the
+criteria and the gates above are unchanged. The status of every gate is in [1.0 readiness](../1-0-readiness.md).
+
+- **2026-11-06, baseline (section 2).** The baseline is no longer 0.13.0: the reference implementation is 0.15.0
+  and the specification is 0.14. The language server resolves relative imports across the open project and
+  negotiates UTF-8, UTF-16 and UTF-32 positions (0.14.0), so those two limitations are closed. The local CLI has
+  configurable limits for time, memory, source, input, output and text (0.14.1).
+- **2026-11-06, deferred features (section 10).** Enums and exhaustive `match` are implemented
+  ([decision 0024](0024-enumeraciones-y-match-exhaustivo.md)), and so is the `?` operator
+  ([decision 0028](0028-operador-de-propagacion.md)). They are in the specification and so they belong to the
+  1.0 subset. Native tools exist and are the default of the tools
+  ([decisions 0025 to 0027](0027-herramientas-nativas-por-defecto.md)); the product promise has not yet been
+  amended to say which implementation it covers (see the readiness page).
+- **2026-11-06, support target (section 6).** The target lists CPython 3.11 to 3.14; `pyproject.toml` and the CI
+  matrix cover 3.11 to 3.13. The gate on platform support is not met for 3.14 until the CI matrix includes it or
+  this decision is amended.

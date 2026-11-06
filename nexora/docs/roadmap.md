@@ -21,7 +21,8 @@ NEXORA 1.0 targets small, single-process CLI tools and local automation written 
 operators. Web servers and multi-user services are out of scope. The accepted [product scope and
 release criteria](decisions/0021-alcance-nexora-1-0.md) define the platform target, stable interfaces
 and evidence required for a 1.0 release. Roadmap items are not automatically 1.0 blockers unless
-that decision or an approved reference application requires them.
+that decision or an approved reference application requires them. The status of each 1.0 gate is in
+[1.0 readiness](1-0-readiness.md).
 
 ## Completed and verified
 
