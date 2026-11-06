@@ -1,0 +1,60 @@
+// csv: reads the text of a comma-separated file into a table. A module: it has no `main`, it is imported by main.nex.
+
+pub type Table = { header: List[Text], rows: List[List[Text]] }
+
+// The pieces of `text` between the single-character `separator`, empty pieces included.
+pub fn split(text: Text, separator: Text) gives List[Text]
+    needs Text.length(separator) == 1, "The separator is one character"
+    example split("a,b,,c", ",") == ["a", "b", "", "c"]
+    example split("", ",") == [""]
+    example split("abc", ",") == ["abc"]
+{
+    var pieces: List[Text] = []
+    var start = 0
+    var i = 0
+    while i < Text.length(text)
+        keeps start <= i
+        shrinks Text.length(text) - i, "Each turn reads one more character"
+    {
+        if Text.slice(text, i, i + 1) == separator {
+            pieces = List.append(pieces, Text.slice(text, start, i))
+            start = i + 1
+        }
+        i = i + 1
+    }
+    return List.append(pieces, Text.slice(text, start, Text.length(text)))
+}
+
+// The table in `content`: the first line is the header, and every other non-empty line is a row with as many
+// fields as the header has. The error says which line is wrong. (`read_file` already turns CRLF into LF.)
+pub fn parse(content: Text) gives Result[Table, Text]
+    example Result.value(parse("a,b\n1,2\n")) == Table(header: ["a", "b"], rows: [["1", "2"]])
+    example Result.value(parse("a,b\n1,2\n3,4")) == Table(header: ["a", "b"], rows: [["1", "2"], ["3", "4"]])
+    example Result.error(parse("a,b\n1\n")) == "line 2 has 1 fields, the header has 2"
+    example Result.error(parse("")) == "the file is empty"
+{
+    let lines = split(content, "\n")
+    let header_line = List.get(lines, 0)
+    if Text.length(header_line) == 0 {
+        return Err("the file is empty")
+    }
+    let header = split(header_line, ",")
+    var rows: List[List[Text]] = []
+    var number = 1
+    while number < List.length(lines)
+        keeps number >= 1
+        shrinks List.length(lines) - number, "Each turn reads one more line"
+    {
+        let line = List.get(lines, number)
+        if Text.length(line) > 0 {
+            let fields = split(line, ",")
+            if List.length(fields) != List.length(header) {
+                let found = to_text(List.length(fields))
+                return Err("line " + to_text(number + 1) + " has " + found + " fields, the header has " + to_text(List.length(header)))
+            }
+            rows = List.append(rows, fields)
+        }
+        number = number + 1
+    }
+    return Ok(Table(header: header, rows: rows))
+}

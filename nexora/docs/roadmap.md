@@ -60,6 +60,7 @@ that decision or an approved reference application requires them. The status of 
 | Partial tree, symbols and summary when the program has syntax errors | `tests/test_tooling.py`, including the program cut at every character |
 | Reference tasks for the analysis tools | `tests/test_tooling_tasks.py` |
 | Runnable examples with recorded output | `tests/test_examples.py` |
+| Three **reference applications** (a pure CLI, files and modules, a granted process) and what writing them found ([1.0 readiness](1-0-readiness.md)) | `tests/test_reference_apps.py`, and the CI job `reference-apps`, which runs them with the built wheel in a clean environment |
 | **Normative language specification, version 0.13**: syntax, semantics and conformance scope; executable examples cover every normative section; the initial design document is labelled and treated as a draft | `tests/test_docs.py` |
 | **Public web Playground (NEXORA 0.14.1)** | Live at [nexoralang.org/playground](https://nexoralang.org/playground); supports Check, Run, multi-file projects, entry-file selection and statement debugging with breakpoints. Staging and production passed the release verifier; interpreter debugger coverage is in `tests/test_worker.py` |
 | Documentation in sync with the implementation | `tests/test_docs.py` |

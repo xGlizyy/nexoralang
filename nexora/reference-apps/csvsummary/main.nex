@@ -1,0 +1,69 @@
+// csvsummary: reads a CSV file, summarizes every column after the first (the label) and writes the summary to a file.
+// A program of three files: this one, csv.nex and stats.nex.
+//
+//   nex run main.nex --allow-read data --allow-write out -- data/sales.csv out/summary.txt
+//   nex test main.nex
+//
+// It declares the two capabilities it needs, and whoever runs it has to grant them: it can read inside `data`
+// and write inside `out`, and nothing else.
+
+import "csv.nex"
+import "stats.nex"
+
+uses read "data"
+uses write "out"
+
+// The lines of the summary, or the reason why the file cannot be summarized.
+fn summarize_all(table: csv.Table) gives Result[List[Text], Text]
+    example Result.value(summarize_all(csv.Table(header: ["who", "n"], rows: [["a", "1"], ["b", "5"]]))) == ["n: count 2, sum 6, low 1, high 5"]
+    example Result.error(summarize_all(csv.Table(header: ["who", "n"], rows: [["a", "x"]]))) == "row 1 of column n is not a whole number: x"
+{
+    var lines: List[Text] = []
+    var index = 1
+    while index < List.length(table.header)
+        keeps index >= 1
+        shrinks List.length(table.header) - index, "Each turn summarizes one more column"
+    {
+        let column = stats.summarize(table, index)
+        if Result.is_err(column) {
+            return Err(Result.error(column))
+        }
+        lines = List.append(lines, stats.describe(Result.value(column)))
+        index = index + 1
+    }
+    return Ok(lines)
+}
+
+fn join(lines: List[Text]) gives Text
+    example join(["a", "b"]) == "a\nb\n"
+    example join([]) == ""
+{
+    var text = ""
+    for line in lines
+        keeps true
+    {
+        text = text + line + "\n"
+    }
+    return text
+}
+
+fn main() {
+    let arguments = args()
+    if List.length(arguments) != 2 {
+        print("usage: nex run main.nex --allow-read data --allow-write out -- INPUT.csv OUTPUT.txt")
+        return
+    }
+    let parsed = csv.parse(read_file(List.get(arguments, 0)))
+    if Result.is_err(parsed) {
+        print("error: " + Result.error(parsed))
+        return
+    }
+    let summary = summarize_all(Result.value(parsed))
+    if Result.is_err(summary) {
+        print("error: " + Result.error(summary))
+        return
+    }
+    let text = join(Result.value(summary))
+    write_file(List.get(arguments, 1), text)
+    print(text)
+}

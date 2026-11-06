@@ -16,7 +16,7 @@ lowers a criterion.
 | Gate | Status | What there is | What is missing |
 |------|--------|---------------|-----------------|
 | Normative specification | **Met** | [Specification 0.14](language-spec.md) covers enums, exhaustive `match` and the `?` operator, and every normative section has executable examples (`tests/test_docs.py`) | Declaring the 1.0 specification: a freeze of the syntax, with the version number it will carry |
-| Reference applications | **Open** | Feature examples in `examples/` and one deployment example (`docs/examples/deployment/app.nex`) | Three reviewed applications: a pure CLI, one that uses local files and modules, and one that uses an explicitly granted capability (HTTPS or a process). Each must install, check, test and run from a clean environment on the supported systems |
+| Reference applications | **Partial** | Three applications in [`reference-apps/`](../reference-apps/README.md): `textstats` (a pure CLI), `csvsummary` (files and three modules) and `envreport` (a granted process). `tests/test_reference_apps.py` checks, tests and runs them, failures included, and the CI job `reference-apps` does it with the built wheel in a clean environment on Linux, Windows and macOS with Python 3.11 to 3.13 | The maintainer's review of the three applications, and the decisions on what they found (below). The gate asks for HTTPS or a process as the granted capability: `envreport` covers the process, none covers HTTPS |
 | Stable CLI | **Partial** | [Interface stability policy](interface-stability.md); versioned JSON with schemas generated from the code and checked against real output (`tests/test_tooling.py`); CLI tests (`tests/test_cli.py`) on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13 | A single compatibility suite that pins the exit codes, options and diagnostic codes of `check`, `run` and `test`, so that a change to any of them fails a test by name |
 | Module behavior | **Met** | Resolution, visibility and cycles are specified and tested (`tests/test_modules.py`, including the cycle cases); the language server resolves relative imports across the open project (`tests/test_lsp.py`) | Nothing planned. The reference applications will exercise it again |
 | Runtime control | **Met** | `--timeout`, `--max-output`, `--max-input`, `--max-text`, `--max-source` and `--max-memory`; a loop that never ends stops with `E4006`; POSIX timeouts clean up the child process group (`tests/test_cli.py`, `tests/test_loops.py`, `tests/test_out_of_memory.py`) | Nothing planned |
@@ -28,15 +28,31 @@ lowers a criterion.
 | Support process | **Met** | Public security policy, with response targets and the list of supported releases | Keeping the table of supported releases current |
 | Release blockers | **Open** | None recorded | A release issue list reviewed with no open P0 or P1 |
 
-Four of the twelve gates are met. The work that is left is concentrated in the reference applications, the
-platform evidence and the release process; the language itself is not what is holding 1.0 back.
+Four of the twelve gates are met, six are partial and two are open. The work that is left is concentrated in the
+review of the reference applications, the platform evidence and the release process; the language itself is not
+what is holding 1.0 back, apart from the findings below.
+
+## What the reference applications found
+
+Writing the three applications is what the gate is for: they show what a real tool needs and the language does not
+give it. Each of these has to be settled before the 1.0 subset is frozen, either by adding it or by saying in the
+specification that it is out of 1.0 (the list is also in the [applications' README](../reference-apps/README.md)):
+
+1. **A program cannot choose its exit status.** `csvsummary` reports a bad file with `error: ...` and ends with
+   status 0. For tools that are used in scripts this is the most important of the findings.
+2. **`input()` cannot tell the end of the input**: reading with nothing left stops the program with `E3009`.
+3. **`write_file` does not create folders.**
+4. **`Ok(...)` and `Err(...)` cannot be written in an `example`**, only read with `Result.value` and `Result.error`.
+5. **List literals and expressions have to fit on one line**, and there is no `\r` escape in a text.
+
+None of them blocks writing the applications, and the first one is the only one that I would call a gap in the
+promise; the rest are limits to document.
 
 ## What is left, in order
 
-1. **Three reference applications** (the biggest gap). They are the evidence for the stable subset: whatever
-   they need and the language lacks is resolved before the freeze, and whatever they do not need stays out of
-   1.0. Proposed: a text-statistics CLI (pure), a file transformer over several modules (files and modules), and
-   a small checker of URLs or a wrapper around a process (one capability).
+1. **Review the three reference applications** (`reference-apps/`), decide the findings above, and add an application
+   whose capability is HTTPS if the maintainer wants both capabilities covered. Whatever the applications need and the
+   language lacks is resolved before the freeze; whatever they do not need stays out of 1.0.
 2. **Platform evidence.** Decide Python 3.14 (below), pin the runner versions the decision names, and record a
    native smoke test on Windows 11, Ubuntu 24.04 and macOS 14 or newer with its date.
 3. **The threat model of the local CLI**, as a document under `docs/`, reviewed against `tests/test_security.py`.
