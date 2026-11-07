@@ -3865,6 +3865,20 @@ static rt_host_result rt_run_process(const char *command, const char *const *arg
             killpg(pid, SIGKILL);
         }
     }
+    if (!exited && !too_large && !timed_out) {
+        /* Both pipes ended before the command was reaped: it is ending (a command that prints nothing closes them as it exits), or it
+         * closed its output and keeps running. Give it the time that is left; killing it now would turn a clean exit into status -9. */
+        while (!exited) {
+            if (waitpid(pid, &status, WNOHANG) == pid) {
+                exited = true;
+            } else if (RT_HOST_SECONDS * 1000 - (rt_host_now() - started) <= 0) {
+                timed_out = true;
+            } else {
+                poll(0, 0, 2);
+            }
+            if (timed_out) break;
+        }
+    }
     if (too_large || timed_out) killpg(pid, SIGKILL);
     if (!exited) {
         killpg(pid, SIGKILL);

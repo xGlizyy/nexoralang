@@ -1,0 +1,5 @@
+// Prints the arguments of the program, as a list. nexora-selfhost.yml runs it with `nex run FILE -- ARGUMENTS` in Python and in the
+// native nex: the first `--` only separates the arguments from the options of nex, and both have to print the same.
+fn main() {
+    print(args())
+}

@@ -238,6 +238,17 @@ def test_t5_there_is_no_shell(data, nex):
     assert "injected" not in out
 
 
+@pytest.mark.skipif(os.name != "posix", reason="needs mkdir and true as programs")
+@pytest.mark.parametrize("command", ["mkdir", "true"])
+def test_t5_a_process_that_prints_nothing_succeeds_every_time(command, data, nex):
+    # A command that writes nothing closes both of its pipes as it exits: the host must wait for it, not kill it (it was status -9).
+    arguments = '["-p", "made/by/the/process"]' if command == "mkdir" else "[]"
+    program = f'uses process "{command}"' + chr(10)*2 + 'fn main() {' + chr(10) + f'    print("[" + Process.run("{command}", {arguments}) + "]")' + chr(10) + '}' + chr(10)
+    put(data, "p.nex", program)
+    for _ in range(25):
+        assert nex("run", "--allow-process", command, "p.nex")[:2] == (0, "[]" + chr(10))
+
+
 def test_t6_the_output_of_a_process_is_bounded(data, nex):
     put(data, "p.nex", process(COMMAND, '["-c", "print(\'x\' * 2000000)"]'))
     status, out, err = nex("run", "--allow-process", COMMAND, "p.nex")

@@ -3385,13 +3385,19 @@ pub fn parse_options(words: List[Text]) gives RunOptions {
     var max_source = 0
     var stdin_text = ""
     var live = true
+    var separated = false
     var i = 0
     while i < List.length(words)
         shrinks List.length(words) - i
     {
         let word = List.get(words, i)
         if path != "" {
-            arguments = List.append(arguments, word)
+            // The first `--` after the file only separates the arguments of the program from the options of `nex`, as in Python.
+            if word == "--" and separated == false and List.length(arguments) == 0 {
+                separated = true
+            } else {
+                arguments = List.append(arguments, word)
+            }
             i = i + 1
         } else if word == "--allow-read" or word == "--allow-write" or word == "--allow-network" or word == "--allow-process" {
             kinds = List.append(kinds, Text.slice(word, 8, Text.length(word)))

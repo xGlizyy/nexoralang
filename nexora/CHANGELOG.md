@@ -55,6 +55,12 @@ Each version groups its changes into these sections, when they contain content:
   before comparing it with the declared and the granted folders; a loop of links is denied. The releases `native-v0.15.0` and
   `native-v0.15.1` have the defect: update to `native-v0.15.2`, or do not use their `nex run` with `--allow-read` or `--allow-write`
   on programs that you do not trust, or on folders where others can create links. The Python package was never affected.
+- Native `nex` on Linux and macOS: `Process.run` of a command that prints nothing (`mkdir`, `true`) could fail with
+  `process '...' exited with status -9`. When both pipes ended before the command was reaped, the host killed the group of a command
+  that was already exiting; it now waits for it until the five seconds are up, as the Python implementation does.
+- Native `nex run FILE -- ARGUMENTS` gave the program a first argument `--` that Python does not give: the first `--` after the file
+  only separates the arguments from the options of `nex`, in both implementations now (`selfhost/args_cases/args.nex`, checked by
+  the CI of the native tools). Fixed in `native-v0.15.3`.
 - The `.sha256` file of each native release listed itself too (the hash of an empty file) next to the archive. It now holds one line,
   the hash of the archive.
 

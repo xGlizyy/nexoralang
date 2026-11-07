@@ -130,6 +130,13 @@ jobs:
           python selfhost/compare_stdin.py
           echo "== limits (time and memory exist on Linux)"
           python selfhost/compare_limits.py
+          echo "== the arguments after --, the same in Python and in the native nex"
+          for words in "-- x y" "-- -- x" "-- x -- y" ""; do
+            python_says=$(python -m nexora run selfhost/args_cases/args.nex $words)
+            native_says=$(./out/nex run selfhost/args_cases/args.nex $words)
+            echo "[$words] python: $python_says, native: $native_says"
+            test "$python_says" = "$native_says"
+          done
           echo "== the rows of the threat model (docs/threat-model.md), Python and native, symbolic links included"
           python -m pip install pytest
           NEXORA_NEX="$PWD/out/nex" python -m pytest -q nexora/tests/test_threat_model_rows.py
