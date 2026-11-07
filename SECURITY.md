@@ -75,6 +75,9 @@ Also of interest, although less serious, is any input that causes an internal er
 
 ## What the design protects
 
+The full reasoning, threat by threat and with the test of each one, is in the
+[threat model of the local CLI](nexora/docs/threat-model.md).
+
 These properties follow from how the language is built and **are checked by automated tests**
 (`nexora/tests/test_security.py`, `nexora/tests/test_robustness.py`):
 
