@@ -1,0 +1,125 @@
+# Evidence for the support target of decision 0021 (section 6): a dated smoke test of the programs that people download, on the exact
+# systems that the decision names.
+#
+#   - The native tools of the latest `native-v*` release are downloaded, their SHA-256 is checked against the .sha256 of the release,
+#     and they are used: `nex` checks, tests and runs programs, and the worker of the playground answers.
+#   - The reference interpreter is installed from the wheel of this commit on every Python of the target, and runs a program.
+#
+# The summary of each job (system, version, what ran, the date) is the record that docs/platform-support.md links to. Run by hand, on a
+# schedule, for a tag, and for a change to this file. It uses no secrets and no paid services.
+
+name: nexora-platform
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: [".github/workflows/nexora-platform.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Native tools · ${{ matrix.system }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { system: linux-x64, runner: ubuntu-24.04, archive: tar.gz, exe: "" }
+          - { system: windows-x64, runner: windows-2025, archive: zip, exe: ".exe" }
+          - { system: macos-arm64, runner: macos-14, archive: tar.gz, exe: "" }
+          - { system: macos-x64, runner: macos-15-intel, archive: tar.gz, exe: "" }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The system
+        run: |
+          {
+            echo "### Native tools on ${{ matrix.system }} (${{ matrix.runner }})"
+            echo
+            echo "- date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            case "$RUNNER_OS" in
+              Linux) echo "- system: $(. /etc/os-release && echo "$PRETTY_NAME"), $(uname -sr), $(uname -m)";;
+              macOS) echo "- system: macOS $(sw_vers -productVersion), $(uname -m)";;
+              Windows) echo "- system: $(cmd //c ver | tr -d '\r' | grep -v '^$'), $(uname -m)";;
+            esac
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Download the latest native release and check its hash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release list --limit 30 --json tagName -q '[.[] | select(.tagName | startswith("native-v"))][0].tagName')
+          echo "release $tag"
+          name="nexora-native-${{ matrix.system }}"
+          mkdir -p native && cd native
+          gh release download "$tag" --pattern "$name.*"
+          archive="$name.${{ matrix.archive }}"
+          line=$(grep -E " \*?$archive\$" "$name.sha256")
+          expected=${line%% *}
+          if command -v sha256sum > /dev/null; then actual=$(sha256sum "$archive" | cut -d' ' -f1); else actual=$(shasum -a 256 "$archive" | cut -d' ' -f1); fi
+          echo "expected $expected"
+          echo "actual   $actual"
+          test "$expected" = "$actual"
+          if [ "${{ matrix.archive }}" = zip ]; then 7z x -y "$archive" > /dev/null; else tar -xzf "$archive"; fi
+          ls "$name"
+          echo "- release: \`$tag\`, SHA-256 of \`$archive\` verified: \`$actual\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Use the tools
+        run: |
+          bin="$PWD/native/nexora-native-${{ matrix.system }}"
+          nex="$bin/nex${{ matrix.exe }}"
+          printf 'fn main() {\n    print("hello")\n}\n' > hello.nex
+          test "$("$nex" run hello.nex | tr -d '\r')" = "hello"
+          "$nex" check hello.nex
+          "$nex" test nexora/reference-apps/textstats/textstats.nex
+          "$nex" check nexora/examples/checked_examples.nex
+          "$nex" test nexora/examples/checked_examples.nex
+          "$nex" run nexora/reference-apps/textstats/textstats.nex -- hello native world
+          printf '{"action": "info"}\n' | "$bin/nexora-worker${{ matrix.exe }}" | grep -qF '"status": "success"'
+          echo "- ran: \`nex run\`, \`nex check\`, \`nex test\` (hello, the reference application textstats, checked_examples) and the worker" >> "$GITHUB_STEP_SUMMARY"
+
+  python:
+    name: Reference interpreter · Python ${{ matrix.python }} · ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, windows-2025, macos-14]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Build the wheel, install it in a clean environment, run a program
+        run: |
+          python -m pip install build
+          python -m build --wheel --outdir "$RUNNER_TEMP/dist" nexora
+          python -m venv "$RUNNER_TEMP/clean"
+          if [ -x "$RUNNER_TEMP/clean/bin/python" ]; then py="$RUNNER_TEMP/clean/bin/python"; else py="$RUNNER_TEMP/clean/Scripts/python.exe"; fi
+          "$py" -m pip install "$RUNNER_TEMP"/dist/*.whl
+          "$py" -m nexora --version
+          test "$("$py" -m nexora run nexora/examples/hello.nex | tr -d '\r')" = "Hello from NEXORA"
+          {
+            echo "### Reference interpreter on Python ${{ matrix.python }}, ${{ matrix.runner }}"
+            echo
+            echo "- date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "- python: $("$py" --version), $("$py" -c 'import platform; print(platform.platform())')"
+            echo "- installed from the wheel of $GITHUB_SHA: $("$py" -m nexora --version)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"

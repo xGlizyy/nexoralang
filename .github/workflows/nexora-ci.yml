@@ -28,8 +28,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python: ["3.11", "3.12", "3.13"]
+        os: [ubuntu-24.04, windows-2025, macos-14]
+        python: ["3.11", "3.12", "3.13", "3.14"]
     defaults:
       run:
         working-directory: nexora
@@ -55,7 +55,7 @@ jobs:
         run: python -m pytest -v --cov -m "not equivalence" -k "not test_run_timeout_stops_execution_with_a_clear_diagnostic and not test_run_timeout_cleans_up_an_active_process" -o faulthandler_timeout=120
 
       - name: POSIX timeout tests without coverage
-        if: matrix.os != 'windows-latest'
+        if: matrix.os != 'windows-2025'
         run: python -m pytest -v tests/test_cli.py::test_run_timeout_stops_execution_with_a_clear_diagnostic tests/test_cli.py::test_run_timeout_cleans_up_an_active_process -o faulthandler_timeout=120
 
       - name: The installed command works
@@ -69,7 +69,7 @@ jobs:
     # the wheel is downloaded and its SHA-256 checked on every run. NEXORA_SKIP_EQUIVALENCE is never
     # set here; with CI set, the tests fail instead of skipping if it is.
     name: Equivalence with 0.11.0 (T1-T4)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: nexora
@@ -104,7 +104,7 @@ jobs:
 
   package:
     name: Installable package
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: nexora
@@ -127,6 +127,13 @@ jobs:
           /tmp/clean/bin/nex --version
           /tmp/clean/bin/nex run examples/hello.nex
 
+      - name: Install the source distribution in a clean environment and use it
+        run: |
+          python -m venv /tmp/clean-sdist
+          /tmp/clean-sdist/bin/python -m pip install dist/*.tar.gz
+          /tmp/clean-sdist/bin/nex --version
+          /tmp/clean-sdist/bin/nex run examples/hello.nex
+
   # The three reference applications of decision 0021 (nexora/reference-apps/), run with the package a user installs: the
   # wheel is built and installed in a new virtual environment, and the tests start `nex` from that environment, not from the
   # source tree. Every Python/OS pair that the project claims to support.
@@ -137,8 +144,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python: ["3.11", "3.12", "3.13"]
+        os: [ubuntu-24.04, windows-2025, macos-14]
+        python: ["3.11", "3.12", "3.13", "3.14"]
     defaults:
       run:
         working-directory: nexora
@@ -171,7 +178,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-2025, macos-14]
         # 18: the minimum declared by npm/package.json (engines ">=18"). It no longer has official
         # support (since 2025-04-30), but it is tested while the package declares it; it is also earlier than
         # the `node --test` patterns (Node 21). 22 and 24: the supported LTS lines. Node 20 was removed as
@@ -179,7 +186,7 @@ jobs:
         node: ["18", "22", "24"]
         include:
           # Node 26, still untested: only on Linux and non-blocking.
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             node: "26"
             experimental: true
     defaults:
