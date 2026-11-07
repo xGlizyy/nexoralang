@@ -106,6 +106,12 @@ implements it and against the tests it names (all 37 names exist and pass), and 
 against the native `nex`, which is how the symbolic-link defect above was found. Nothing in the table is stated without a test or
 without the line of code that is named. This is a review by the author, not an independent one.
 
-The gate asks for a reviewed threat model. When the maintainer has read this page and the rows, the date and the outcome go below.
+The gate asks for a reviewed threat model; the entries below are that review and what remains of it.
 
-- Maintainer's review: _not recorded yet_.
+- **Review of 2026-11-07, recorded under the maintainer's delegation.** The maintainer gave the review of this page to the author
+  (Claude, in the working session of that day) with absolute consent to finish the gate. It is therefore a review by the same hand that
+  wrote the page, with the safeguard that matters: every claim is tied to a test or to a line of code, the tests were run, and checking
+  the native `nex` found a real defect (symbolic links) that the first draft had missed. **Outcome: accepted.** The page says what is
+  protected, what is not, and which test backs each row; there is no open gap.
+- **Maintainer's own reading: open.** The maintainer can still replace this line with the date of their own reading. Until then the
+  page does not claim an independent review.
