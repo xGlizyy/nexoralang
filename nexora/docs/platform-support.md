@@ -12,7 +12,7 @@ whole test suite passes in continuous integration on it, and that the programs p
 | Python (the reference implementation) | CPython 3.11, 3.12, 3.13 and 3.14 | `nexora-ci.yml`: the whole suite, the reference applications and a clean install of the wheel, on every Python and every system below |
 | Linux | Ubuntu 24.04 LTS, x86-64 | The runner `ubuntu-24.04`; the native `linux-x64` package; Ubuntu 24.04 on WSL 2, by hand |
 | Windows | Windows 11, x86-64 | The runner `windows-2025` (Windows Server 2025: the same kernel and API as Windows 11, and GitHub has no x86-64 Windows 11 image); the native `windows-x64` package on a real Windows 11, by hand |
-| macOS | macOS 14 or newer, Apple Silicon | The runner `macos-14`; the native `macos-arm64` package |
+| macOS | macOS 14 or newer, Apple Silicon | The runner `macos-15`; the native `macos-arm64` package |
 | Native tools (`nex`, `nexora-lsp`, `nex-mcp`, the formatter, the worker) | Linux x86-64 and arm64, macOS Apple Silicon and Intel, Windows x86-64 | `nexora-native-release.yml` builds and runs the five packages of each `native-v*` release; `nexora-platform.yml` downloads them, verifies their SHA-256 and uses them |
 
 **Not in the target:** macOS on Intel for the Python implementation (the native package for it is built, smoke-tested and
@@ -21,7 +21,7 @@ for the Python tests. They may work; nothing here promises it.
 
 ## How it is checked
 
-- **Every change** runs the suite of `nexora-ci.yml` on `ubuntu-24.04`, `windows-2025` and `macos-14` with each of the four Pythons,
+- **Every change** runs the suite of `nexora-ci.yml` on `ubuntu-24.04`, `windows-2025` and `macos-15` with each of the four Pythons,
   and the job `reference-apps` runs the three [reference applications](../reference-apps/README.md) from a wheel installed in a clean
   environment on the same twelve combinations.
 - **Every change to the native tools** runs `nexora-selfhost.yml`: the seed is the fixed point of the sources and the native tools give
