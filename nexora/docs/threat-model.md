@@ -39,7 +39,7 @@ only the user can give.
 | T1 | A program reads or writes a file without permission | Declaration, grant and host are all required; reading does not give writing | `tests/test_permissions_files.py`: `test_declaring_is_not_granting`, `test_granting_is_not_declaring`, `test_reading_is_not_writing`, `test_writing_is_not_reading`, `test_without_a_host_no_file_is_ever_read` |
 | T2 | A program leaves the granted folder with `..`, an absolute path, a similar prefix, a symbolic link or a junction | The path is resolved with `realpath` and compared with the declared and the granted scope, both | `test_a_dot_dot_that_leaves_the_scope_is_denied`, `test_a_path_that_starts_the_same_is_not_inside`, `test_an_absolute_path_outside_the_scope_is_denied`, `test_a_symbolic_link_that_leaves_the_scope_is_denied`, `test_a_directory_junction_that_leaves_the_scope_is_denied` |
 | T3 | A program reaches a network origin it did not declare, or plain HTTP | Only HTTPS to an origin that is declared and granted; the URL is checked before a client is built | `tests/test_network_process.py`: `test_https_requires_both_a_matching_grant_and_an_allowed_environment`, `test_network_capability_only_allows_the_declared_origin`, `test_https_rejects_non_https_urls_before_opening_a_connection` |
-| T4 | An allowed origin sends the program somewhere else, a proxy variable of the environment does, or a huge answer exhausts memory | Redirects are refused, proxies are ignored, the answer is limited to 1 MiB and 5 seconds | Implemented in `host.py` (`NoRedirect`, `ProxyHandler({})`, `_NETWORK_MAX_BYTES`). **No test pins it today: see the gaps** |
+| T4 | An allowed origin sends the program somewhere else, a proxy variable of the environment does, or a huge answer exhausts memory | Redirects are refused, proxies are ignored, the answer is limited to 1 MiB and 5 seconds | `tests/test_threat_model.py`: `test_the_network_client_ignores_the_proxy_variables_of_the_environment`, `test_the_network_client_refuses_to_follow_a_redirect`, `test_a_network_answer_over_one_mebibyte_is_an_error` |
 | T5 | A program starts an executable it did not declare, or a shell | The command is declared and granted exactly, and started without a shell and without standard input | `test_process_requires_a_static_declaration`, `test_process_runs_only_when_declared_granted_and_allowed`, `test_process_fails_without_grant_or_environment_permission` |
 | T6 | A process runs forever, fills memory, or leaves descendants behind | Five seconds, 1 MiB for each output stream; on POSIX the process group is cleaned up | `test_process_timeout_is_bounded`, `test_process_output_is_bounded`; `tests/test_cli.py`: `test_process_run_cleans_up_descendants_after_command_returns` |
 | T7 | Text of the program is interpreted as code (Python, shell) | The interpreter walks its own syntax tree; no module calls `eval`, `exec` or `compile` | `tests/test_security.py`: `test_no_module_evaluates_python_code_or_opens_files_by_itself`, `test_text_is_data_and_is_never_interpreted`, `test_python_and_shell_constructs_are_rejected_before_anything_runs` |
@@ -72,13 +72,11 @@ that enforces the deadline, the memory, the processes, the file system and the n
 
 ## Gaps found while writing this page
 
-- **T4 has no test.** The refusal of redirects, ignoring the proxy variables and the size limit of the network
-  answer are implemented and untested. A test that replaces the opener would pin them.
-- **Capabilities are not inherited by modules** (language specification, section 7.6), and no test names the
-  threat: a module that reads a file without declaring it itself must fail even when the program that imports it
-  declares and is granted the same file.
-- **The environment of the child process** is described in decision 0020 (only `PATH` and what Windows needs to
-  start programs); no test reads the environment that the child receives.
+Three gaps found while writing it were closed with `tests/test_threat_model.py`: the network answer (T4), the rule that
+modules do not inherit capabilities (`test_a_module_that_reads_a_file_must_declare_it_even_if_the_program_does`) and
+the environment of a child process (`test_a_child_process_does_not_receive_the_environment_of_the_user`). What is left:
+
+
 - **The native `nex`** (decision 0027) is the default of the tools. This page rests on the tests of the Python
   reference implementation; whether the same rows hold for the native one, and which tests show it, has not been
   checked here.
