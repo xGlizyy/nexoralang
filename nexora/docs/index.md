@@ -36,6 +36,10 @@ these pages is run by the automated tests and compared against the real output o
 | [Public interfaces and stability](interface-stability.md) | The compatibility promise for the CLI, diagnostics, JSON, LSP, MCP and Python APIs |
 | [Threat model of the local CLI](threat-model.md) | What the local CLI withstands, what it does not, and the test behind each claim |
 | [Compatibility and versioning](compatibility.md) | What may change before 1.0, the 1.x version rules, deprecation, migration and support periods |
+| [Migrating from 0.x to 1.0](migration-guide.md) | What to do, by starting version, to be on 1.0; every incompatible change that was made |
+| [Release process](release-process.md) | How a release is made, how its three artifacts are checked and hashed, and how to check what you installed |
+| [Yank policy](yanking.md) | When a release is withdrawn, what is done and how fast, and what a user does |
+| [Platform support](platform-support.md) | The systems and Python versions of the support target and the dated evidence for each |
 | [MCP server](mcp.md) | Optional server for compatible AI assistants: installation, tools and security |
 | [LSP](lsp.md) | VS Code, Neovim, Helix and Emacs integration through `nexora-lsp` |
 | [`nex inspect` schema](inspect-schema.md) | Every node and field of the syntax tree in JSON |

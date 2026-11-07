@@ -38,6 +38,7 @@ whose rules it replaces say so at the top.
 | [0026](0026-generador-a-c.md) | A code generator to C written in NEXORA, so a program runs without Python; the compiler compiles itself | Accepted; implemented and released as `native-v0.15.0` | No |
 | [0027](0027-herramientas-nativas-por-defecto.md) | The native tools are the default way to use NEXORA; the Python implementation stays as the reference and the `pip`/`npm` install | Accepted | No |
 | [0028](0028-operador-de-propagacion.md) | The postfix `?` operator that returns the `None` or the `Err` early | Accepted; implemented in the development line | No |
+| [0029](0029-congelacion-de-la-especificacion-1-0.md) | The 1.0 specification is frozen; the findings of the reference applications, the implementations the promise covers, the support period and the platforms | Accepted | No |
 
 ## Possible incompatible changes in the future
 

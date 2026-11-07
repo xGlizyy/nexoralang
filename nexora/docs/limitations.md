@@ -48,6 +48,22 @@ NEXORA is an early-stage project (before version 1.0):
 With these limitations NEXORA is useful for small tools and for studying the language itself. It is
 not yet a general-purpose replacement for established languages.
 
+## What 1.0 does not include
+
+[Decision 0029](decisions/0029-congelacion-de-la-especificacion-1-0.md) freezes the specification of 1.0 as it is. Everything in
+the table above is outside it, and so are the five things that the three
+[reference applications](../reference-apps/README.md) showed a real tool needs. None of them blocks a tool, each has a way
+round, and each can be added in a later 1.x release without breaking a program that works on 1.0, because each one only turns
+something that is an error today into something that works, or adds a function:
+
+| Missing in 1.0 | What to do instead | How it can arrive |
+|----------------|--------------------|-------------------|
+| **A program cannot choose its exit status** (the most important of the five: a tool used in a script needs to fail) | Print the error and end normally (status 0), or end with a contract that the program breaks on purpose: that is status 5, and its message is the contract's. `release/check_artifacts.nex` does the second | An `exit(code)` function, the first addition planned after 1.0 |
+| **`input()` cannot tell the end of the input**: reading when there is nothing left stops the program with `E3009` | Take the input from a file (`read_file`) or from the arguments (`args()`), or read exactly as many lines as the caller promises | A function that tests whether there is a line left |
+| **`write_file` does not create folders** | The folder has to exist: make it before, or ask whoever runs the program to | An opt-in way to create them. `write_file` itself keeps failing with `E3010` |
+| **`Ok(...)` and `Err(...)` cannot be written in an `example`**, only read with `Result.value` and `Result.error` | Compare `Result.value(f(x))` and `Result.error(f(x))`, as the reference applications do | Typing them in an `example` |
+| **A list literal and an expression have to fit on one line**, and a text has no `` escape | Build the list with `List.append`; split an expression with a helper function | Line breaks inside brackets and a `` escape |
+
 ## Limits of the implementation
 
 | Limit | Value | What happens when it is exceeded |

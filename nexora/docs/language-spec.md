@@ -1,14 +1,16 @@
 # NEXORA language specification
 
-- **Specification version:** 0.14
-- **Reference implementation:** `nexora` 0.15.0 (this repository, directory `nexora/`)
-- **Status:** normative for the NEXORA 0.14 language. The reference implementation release 0.16.0 adds
-  enumerations and exhaustive pattern matching. Earlier releases do not change the 0.13 grammar. Version 0.14.1 adds
-  opt-in local CLI resource limits, and 0.15.0 adds the local CLI debugger; both are specified in
-  the [CLI reference](cli-reference.md).
-  The syntax of 0.12 comes from
+- **Specification version:** 1.0
+- **Reference implementation:** `nexora` 0.15.0 conforms to it (this repository, directory `nexora/`); 1.0.0 is the first release
+  that carries the number of the specification. The native tools conform as well
+  ([decision 0027](decisions/0027-herramientas-nativas-por-defecto.md)).
+- **Status:** normative for the NEXORA 1.0 language, and **frozen** ([decision 0029](decisions/0029-congelacion-de-la-especificacion-1-0.md)).
+  It is the grammar and the semantics that the specification 0.14 described, with enumerations, exhaustive `match` and the `?`
+  operator: giving it the number 1.0 changed no rule. The local CLI limits of 0.14.1 and the debugger of 0.15.0 are
+  specified in the [CLI reference](cli-reference.md). The syntax of 0.12 comes from
   [decision 0019](decisions/0019-identidad-propia-del-lenguaje.md); a program written for 0.11 is
-  rewritten with `nex migrate` ([CLI reference](cli-reference.md#nex-migrate)).
+  rewritten with `nex migrate` ([CLI reference](cli-reference.md#nex-migrate)), and the
+  [migration guide](migration-guide.md) says what to do from every earlier version.
 
 This document is the normative reference for the language version it names. If the reference
 interpreter and this document disagree, that is a defect in the implementation or in this document;
@@ -18,11 +20,23 @@ here.
 ## Status and conformance
 
 The specification version identifies language rules, not the version number of the Python or npm
-package. A package release can add tools or CLI options without changing the language version. A
-change to syntax or core semantics requires a new specification version and an update to the rules
-and executable examples affected by it. The project is still before 1.0, so a later specification
-version may make incompatible changes; this version remains the reference for programs that target
-0.14.
+package. A package release can add tools or CLI options without changing the language version.
+
+**The specification is frozen from 1.0.** What is frozen is the grammar (section 3), the keywords and reserved words (2.4), the
+built-in functions (section 8), the diagnostic codes with their titles and categories (11.3) and the exit codes (11.5), and so is
+the meaning that this document gives to each of them. `release/check_freeze.nex`, a program written in NEXORA, compares them with
+the frozen files in `release/frozen/` and runs in continuous integration. After 1.0:
+
+- A change that makes a program that is valid in 1.0 invalid, or gives it another meaning, is an incompatible change and needs a new
+  major version of the specification (2.0), after a deprecation as described in the
+  [compatibility policy](compatibility.md).
+- A backward-compatible addition (a built-in function, a diagnostic code, a production that no valid 1.0 program can match) is a
+  minor version of the specification (1.1, 1.2…), with its decision, its rules and its executable examples, and the frozen
+  files are updated in the same change. A new keyword or reserved word is not an addition: it can make a valid program invalid.
+- A correction to behavior that contradicted this document is a bug fix, called out in the release notes.
+
+What 1.0 does not include is in section 13 and in [the limitations](limitations.md#what-10-does-not-include). Section 14
+lists planned features; planned work is not part of this version.
 
 The words **must**, **must not** and **may** state requirements, prohibitions and permitted choices
 for a conforming implementation. An unmarked rule in sections 2–12 describes guaranteed language
@@ -2369,6 +2383,11 @@ These are real limitations of this version, not bugs:
   error. A `var` that is never reassigned gives `W2002`, and a name outside `snake_case` gives
   `W2003`. These are the only warnings: no other quality problem is reported.
 - `print` receives a single argument and always adds a line break.
+- A program cannot choose the exit status of `nex run`: it is 0 when `main` ends, 3 when the program fails, 5 when it breaks a
+  contract (section 11.5). A tool that has to fail in a script ends with a contract that it breaks on purpose.
+- `write_file` does not create folders: the folder of the path has to exist (`E3010`).
+- `Ok(...)` and `Err(...)` cannot be written in an `example`, only read with `Result.value` and `Result.error`; a list literal
+  and an expression fit on one line, and a text has no `\r` escape.
 - Input and files are those of section 8.3. It is not possible to read "until the end" of the
   standard input without stopping (`input()` fails with `E3009`), there are no directories or files that are not
   text, no direct environment-variable access and no HTTP methods other than GET.
