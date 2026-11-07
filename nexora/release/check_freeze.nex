@@ -1,0 +1,320 @@
+// check_freeze: checks that the specification still says what it said when it was frozen (decision 0029), and writes the frozen files.
+// It is written in NEXORA and run with `nex`.
+//
+//   nex run check_freeze.nex --allow-read . -- check docs/language-spec.md release/frozen
+//   nex run check_freeze.nex --allow-read . --allow-write release/frozen -- freeze docs/language-spec.md release/frozen
+//   nex test check_freeze.nex
+//
+// What is frozen is read from the specification and compared with the files of `release/frozen/`:
+//   grammar.txt       the code blocks of section 3 (the EBNF)                      the same, line by line
+//   keywords.txt      the code blocks of section 2.4 (keywords and reserved words)  the same, line by line
+//   builtins.txt      the first column of the tables of section 8 (the signatures)  every frozen line is still there
+//   diagnostics.txt   code, title and category of the table of section 11.3         every frozen line is still there
+//   exit-codes.txt    the codes of the table of section 11.5                        every frozen line is still there
+// A frozen line that disappears or changes is a breaking change and fails the check. A line that is new is an addition, allowed in a
+// minor release by the compatibility policy: it is reported, and `freeze` writes it into the frozen file so that it is pinned from
+// then on. The grammar and the keywords have to be the same: a new production or a new keyword is a deliberate act with its decision.
+//
+// Success ends the program normally; any problem ends it through a contract, which is status 5 (NEXORA cannot choose an exit status yet).
+
+import "texts.nex"
+
+uses read "."
+uses write "release/frozen"
+
+// The lines of `lines` after the first one that starts with `from` and before the next one that starts with `until`.
+fn between(lines: List[Text], from: Text, until: Text) gives List[Text]
+    example between(["a", "## 1", "b", "c", "## 2", "d"], "## 1", "## 2") == ["b", "c"]
+    example between(["a", "## 1", "b"], "## 1", "## 2") == ["b"]
+    example between(["a"], "## 1", "## 2") == []
+{
+    var found: List[Text] = []
+    var inside = false
+    for line in lines
+        keeps true
+    {
+        if inside and Text.starts_with(line, until) {
+            return found
+        }
+        if inside {
+            found = List.append(found, line)
+        }
+        if inside == false and Text.starts_with(line, from) {
+            inside = true
+        }
+    }
+    return found
+}
+
+// The lines inside code fences, without the fences and without empty lines.
+fn fenced(lines: List[Text]) gives List[Text]
+    example fenced(["x", "```ebnf", "a = b ;", "", "c", "```", "y", "```", "d", "```"]) == ["a = b ;", "c", "d"]
+    example fenced(["x"]) == []
+{
+    var found: List[Text] = []
+    var inside = false
+    for line in lines
+        keeps true
+    {
+        if Text.starts_with(line, "```") {
+            inside = inside == false
+        } else if inside and Text.length(line) > 0 {
+            found = List.append(found, line)
+        }
+    }
+    return found
+}
+
+// The cells of a row of a table, without the spaces around them.
+fn cells(row: Text) gives List[Text]
+    example cells("| `A` | b c | d |") == ["`A`", "b c", "d"]
+    example cells("|---|---|") == ["---", "---"]
+{
+    var found: List[Text] = []
+    let pieces = texts.split(row, "|")
+    var i = 1
+    while i < List.length(pieces) - 1
+        keeps i >= 1
+        shrinks List.length(pieces) - i, "Each turn reads one more cell"
+    {
+        found = List.append(found, texts.strip(List.get(pieces, i)))
+        i = i + 1
+    }
+    return found
+}
+
+fn join(items: List[Text], separator: Text) gives Text
+    example join(["a", "b", "c"], "|") == "a|b|c"
+    example join([], "|") == ""
+    example join(["a"], "|") == "a"
+{
+    var text = ""
+    var first = true
+    for item in items
+        keeps true
+    {
+        if first {
+            text = item
+            first = false
+        } else {
+            text = text + separator + item
+        }
+    }
+    return text
+}
+
+// The first `count` cells of every row that starts a cell with a code span (a table of code, function or exit-code rows), joined by `|`.
+fn table_rows(lines: List[Text], count: Int) gives List[Text]
+    needs count >= 1, "At least one cell is taken"
+    example table_rows(["| Code | Title |", "|---|---|", "| `E1` | Bad | x |", "text", "| `E2` | Worse | y |"], 2) == ["`E1`|Bad", "`E2`|Worse"]
+    example table_rows(["| `f(a)` | what |"], 1) == ["`f(a)`"]
+{
+    var found: List[Text] = []
+    for line in lines
+        keeps true
+    {
+        if Text.starts_with(line, "| `") {
+            let row = cells(line)
+            var taken: List[Text] = []
+            var i = 0
+            while i < count and i < List.length(row)
+                keeps i >= 0
+                shrinks count - i, "Each turn takes one more cell"
+            {
+                taken = List.append(taken, List.get(row, i))
+                i = i + 1
+            }
+            found = List.append(found, join(taken, "|"))
+        }
+    }
+    return found
+}
+
+// What the specification freezes, in the order of the frozen files.
+type Frozen = { grammar: List[Text], keywords: List[Text], builtins: List[Text], diagnostics: List[Text], exit_codes: List[Text] }
+
+fn read_frozen(spec: Text) gives Frozen
+    example read_frozen("### 2.4 Keywords\n```\nfn let\n```\n### 2.5 L\n## 3. Grammar\n```ebnf\na = b ;\n```\n## 4. D\n## 8. Built-in functions\n| `f()` | does |\n## 9. C\n### 11.3 X\n| `E1` | T | `c` | w |\n### 11.4 J\n### 11.5 Y\n| `0` | ok |\n## 12. Z\n") == Frozen(grammar: ["a = b ;"], keywords: ["fn let"], builtins: ["`f()`"], diagnostics: ["`E1`|T|`c`"], exit_codes: ["`0`"])
+{
+    let lines = texts.split(spec, "\n")
+    let grammar = fenced(between(lines, "## 3. Grammar", "## 4."))
+    let keywords = fenced(between(lines, "### 2.4 Keywords", "### 2.5"))
+    let builtins = table_rows(between(lines, "## 8. Built-in functions", "## 9."), 1)
+    let diagnostics = table_rows(between(lines, "### 11.3", "### 11.4"), 3)
+    let exit_codes = table_rows(between(lines, "### 11.5", "## 12."), 1)
+    return Frozen(grammar: grammar, keywords: keywords, builtins: builtins, diagnostics: diagnostics, exit_codes: exit_codes)
+}
+
+fn lines_text(items: List[Text]) gives Text
+    example lines_text(["a", "b"]) == "a\nb\n"
+    example lines_text([]) == ""
+{
+    if List.length(items) == 0 {
+        return ""
+    }
+    return join(items, "\n") + "\n"
+}
+
+// The frozen lines that are not among `current`: they were removed or changed.
+fn missing(frozen: List[Text], current: List[Text]) gives List[Text]
+    example missing(["a", "b"], ["b", "c"]) == ["a"]
+    example missing([], ["x"]) == []
+{
+    var found: List[Text] = []
+    for line in frozen
+        keeps true
+    {
+        if List.contains(current, line) == false {
+            found = List.append(found, line)
+        }
+    }
+    return found
+}
+
+// The first line where two lists differ, as a text for a message.
+fn first_difference(frozen: List[Text], current: List[Text]) gives Text
+    example first_difference(["a", "b"], ["a", "c"]) == "line 2: frozen `b`, now `c`"
+    example first_difference(["a", "b"], ["a"]) == "line 2: frozen `b`, now nothing"
+    example first_difference(["a"], ["a", "x"]) == "line 2: frozen nothing, now `x`"
+{
+    var i = 0
+    while i < List.length(frozen) or i < List.length(current)
+        keeps i >= 0
+        shrinks List.length(frozen) + List.length(current) - i, "Each turn compares one more line"
+    {
+        var was = "nothing"
+        var now = "nothing"
+        if i < List.length(frozen) {
+            was = "`" + List.get(frozen, i) + "`"
+        }
+        if i < List.length(current) {
+            now = "`" + List.get(current, i) + "`"
+        }
+        if was != now {
+            return "line " + to_text(i + 1) + ": frozen " + was + ", now " + now
+        }
+        i = i + 1
+    }
+    return "no difference"
+}
+
+// Problems of a frozen part that has to stay the same.
+fn exact_problems(label: Text, frozen: List[Text], current: List[Text]) gives List[Text]
+    example exact_problems("grammar", ["a"], ["a"]) == []
+    example exact_problems("grammar", ["a"], ["b"]) == ["grammar changed since the freeze, line 1: frozen `a`, now `b`"]
+{
+    if frozen == current {
+        return []
+    }
+    return [label + " changed since the freeze, " + first_difference(frozen, current)]
+}
+
+// Problems of a frozen part that may only grow: a frozen line that is gone or changed.
+fn removed_problems(label: Text, frozen: List[Text], current: List[Text]) gives List[Text]
+    example removed_problems("builtins", ["a", "b"], ["a", "b", "c"]) == []
+    example removed_problems("builtins", ["a", "b"], ["a"]) == ["builtins: a frozen line is gone or changed: b"]
+{
+    var found: List[Text] = []
+    for line in missing(frozen, current)
+        keeps true
+    {
+        found = List.append(found, label + ": a frozen line is gone or changed: " + line)
+    }
+    return found
+}
+
+// The lines that were added since the freeze.
+fn additions(label: Text, frozen: List[Text], current: List[Text]) gives List[Text]
+    example additions("builtins", ["a"], ["a", "b"]) == ["builtins: new since the freeze: b"]
+    example additions("builtins", ["a"], ["a"]) == []
+{
+    var found: List[Text] = []
+    for line in missing(current, frozen)
+        keeps true
+    {
+        found = List.append(found, label + ": new since the freeze: " + line)
+    }
+    return found
+}
+
+fn problems(frozen: Frozen, current: Frozen) gives List[Text]
+    example problems(Frozen(grammar: ["a"], keywords: ["k"], builtins: ["f"], diagnostics: ["d"], exit_codes: ["0"]), Frozen(grammar: ["a"], keywords: ["k"], builtins: ["f", "g"], diagnostics: ["d"], exit_codes: ["0"])) == []
+    example problems(Frozen(grammar: ["a"], keywords: ["k"], builtins: ["f"], diagnostics: ["d"], exit_codes: ["0"]), Frozen(grammar: ["a"], keywords: ["k", "new"], builtins: [], diagnostics: ["d"], exit_codes: [])) == ["keywords changed since the freeze, line 2: frozen nothing, now `new`", "builtins: a frozen line is gone or changed: f", "exit codes: a frozen line is gone or changed: 0"]
+{
+    var found: List[Text] = []
+    found = List.concat(found, exact_problems("grammar", frozen.grammar, current.grammar))
+    found = List.concat(found, exact_problems("keywords", frozen.keywords, current.keywords))
+    found = List.concat(found, removed_problems("builtins", frozen.builtins, current.builtins))
+    found = List.concat(found, removed_problems("diagnostics", frozen.diagnostics, current.diagnostics))
+    found = List.concat(found, removed_problems("exit codes", frozen.exit_codes, current.exit_codes))
+    return found
+}
+
+fn all_additions(frozen: Frozen, current: Frozen) gives List[Text] {
+    var found: List[Text] = []
+    found = List.concat(found, additions("builtins", frozen.builtins, current.builtins))
+    found = List.concat(found, additions("diagnostics", frozen.diagnostics, current.diagnostics))
+    found = List.concat(found, additions("exit codes", frozen.exit_codes, current.exit_codes))
+    return found
+}
+
+fn load_frozen(folder: Text) gives Frozen {
+    let grammar = texts.lines_of(read_file(folder + "/grammar.txt"))
+    let keywords = texts.lines_of(read_file(folder + "/keywords.txt"))
+    let builtins = texts.lines_of(read_file(folder + "/builtins.txt"))
+    let diagnostics = texts.lines_of(read_file(folder + "/diagnostics.txt"))
+    let exit_codes = texts.lines_of(read_file(folder + "/exit-codes.txt"))
+    return Frozen(grammar: grammar, keywords: keywords, builtins: builtins, diagnostics: diagnostics, exit_codes: exit_codes)
+}
+
+fn store_frozen(folder: Text, current: Frozen) {
+    write_file(folder + "/grammar.txt", lines_text(current.grammar))
+    write_file(folder + "/keywords.txt", lines_text(current.keywords))
+    write_file(folder + "/builtins.txt", lines_text(current.builtins))
+    write_file(folder + "/diagnostics.txt", lines_text(current.diagnostics))
+    write_file(folder + "/exit-codes.txt", lines_text(current.exit_codes))
+}
+
+fn finish(found: List[Text])
+    needs List.length(found) == 0, "the specification is not what was frozen"
+{
+    print("the specification is what was frozen")
+}
+
+fn report(prefix: Text, found: List[Text]) {
+    for line in found
+        keeps true
+    {
+        print(prefix + line)
+    }
+}
+
+fn describe(current: Frozen) gives Text {
+    return to_text(List.length(current.grammar)) + " lines of grammar, " + to_text(List.length(current.keywords)) + " of keywords, " + to_text(List.length(current.builtins)) + " built-in functions, " + to_text(List.length(current.diagnostics)) + " diagnostic codes and " + to_text(List.length(current.exit_codes)) + " exit codes"
+}
+
+fn main() {
+    let arguments = args()
+    if List.length(arguments) != 3 {
+        report("error: ", ["usage: -- check|freeze SPEC FOLDER (see the head of check_freeze.nex)"])
+        finish(["wrong arguments"])
+        return
+    }
+    let mode = List.get(arguments, 0)
+    let current = read_frozen(read_file(List.get(arguments, 1)))
+    let folder = List.get(arguments, 2)
+    if mode == "freeze" {
+        store_frozen(folder, current)
+        print("froze " + describe(current) + " in " + folder)
+    } else if mode == "check" {
+        let frozen = load_frozen(folder)
+        report("note: ", all_additions(frozen, current))
+        let found = problems(frozen, current)
+        report("error: ", found)
+        finish(found)
+        print("checked " + describe(current))
+    } else {
+        report("error: ", ["the mode is check or freeze, not " + mode])
+        finish(["wrong mode"])
+    }
+}

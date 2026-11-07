@@ -1,0 +1,657 @@
+// check_artifacts: checks that the three artifacts of a release say the same thing, and writes or verifies their hashes.
+// It is written in NEXORA and run with the native `nex`: no Python is needed to check a release.
+//
+//   nex run check_artifacts.nex --allow-read . --allow-write . --allow-process ls --allow-process mkdir --allow-process tar \
+//       --allow-process unzip --allow-process sha256sum -- check DIST WORK TAG EXPECTED
+//   nex run check_artifacts.nex ... -- sums DIST WORK TAG EXPECTED     (the same, then writes DIST/SHA256SUMS)
+//   nex run check_artifacts.nex ... -- verify DIST                      (the three files against DIST/SHA256SUMS)
+//   nex test check_artifacts.nex
+//
+// DIST holds one wheel (nexora_lang-*.whl), one source distribution (nexora_lang-*.tar.gz) and one npm package
+// (nexora-lang-*.tgz). WORK is an empty folder where they are unpacked. TAG is the release tag (v plus the version) and
+// EXPECTED the version of src/nexora/version.py; "-" for either one means that it is not checked. DIST and WORK are paths
+// below the folder where the command runs.
+//
+// The check fails, naming every difference, unless:
+//   - the three have the name nexora-lang and the same version, and the version that nexora/version.py ships is that one;
+//   - the version is EXPECTED and the TAG is v plus the version;
+//   - the wheel and the source distribution have the same licence and the same requires-python, and the npm package the
+//     same licence;
+//   - every Python module of the interpreter has the same SHA-256 in the wheel, in the source distribution (src/nexora)
+//     and in the npm package (python/nexora);
+//   - each one carries the licence file, the source distribution has a pyproject.toml, the wheel declares the `nex`
+//     command and the launcher that the npm package names is one of its files.
+//
+// It needs `ls`, `mkdir`, `tar`, `unzip` and `sha256sum` (Linux, macOS, or Git Bash on Windows). A failure ends the program
+// through a contract, which is status 5: NEXORA has no way yet to choose an exit status (docs/1-0-readiness.md).
+
+import "texts.nex"
+
+uses read "."
+uses write "."
+uses process "ls"
+uses process "mkdir"
+uses process "tar"
+uses process "unzip"
+uses process "sha256sum"
+
+type Meta = { name: Text, version: Text, license: Text, requires_python: Text }
+type Module = { name: Text, hash: Text }
+type Item = { label: Text, meta: Meta, shipped: Text, modules: List[Module], notes: List[Text] }
+
+// ---- Texts ----
+
+fn is_hex(character: Text) gives Bool
+    example is_hex("a")
+    example is_hex("F")
+    example is_hex("7")
+    example is_hex("g") == false
+{
+    return Text.length(character) == 1 and Text.contains("0123456789abcdefABCDEF", character)
+}
+
+fn is_sha256(text: Text) gives Bool
+    example is_sha256("00d7af75915443363795b4cdac188d9f766e4e19733ab82430c4beb91222eba2")
+    example is_sha256("00d7af") == false
+    example is_sha256("zzd7af75915443363795b4cdac188d9f766e4e19733ab82430c4beb91222eba2") == false
+{
+    if Text.length(text) != 64 {
+        return false
+    }
+    var i = 0
+    while i < 64
+        keeps i >= 0
+        shrinks 64 - i, "Each turn checks one more character"
+    {
+        if is_hex(Text.slice(text, i, i + 1)) == false {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// ---- The metadata files ----
+
+// The value of the header `key` among `lines` ("Name: nexora-lang"), or the empty text.
+fn header(lines: List[Text], key: Text) gives Text
+    example header(["Name: nexora-lang", "Version: 1.0.0"], "Version") == "1.0.0"
+    example header(["Name: nexora-lang"], "Version") == ""
+{
+    let start = key + ": "
+    for line in lines
+        keeps true
+    {
+        if Text.starts_with(line, start) {
+            return Text.slice(line, Text.length(start), Text.length(line))
+        }
+    }
+    return ""
+}
+
+// The lines of a core metadata file (METADATA, PKG-INFO) that come before the first empty line: the headers.
+fn header_lines(text: Text) gives List[Text]
+    example header_lines("Name: a\nVersion: 1\n\nthe description") == ["Name: a", "Version: 1"]
+{
+    var found: List[Text] = []
+    for line in texts.split(text, "\n")
+        keeps true
+    {
+        if Text.length(line) == 0 {
+            return found
+        }
+        found = List.append(found, line)
+    }
+    return found
+}
+
+fn core_metadata(text: Text) gives Meta
+    example core_metadata("Name: nexora-lang\nVersion: 1.0.0\nLicense-Expression: MIT\nRequires-Python: >=3.11\n\nName: not a header") == Meta(name: "nexora-lang", version: "1.0.0", license: "MIT", requires_python: ">=3.11")
+    example core_metadata("Name: x\nVersion: 2\nLicense: BSD") == Meta(name: "x", version: "2", license: "BSD", requires_python: "")
+{
+    let lines = header_lines(text)
+    var license = header(lines, "License-Expression")
+    if license == "" {
+        license = header(lines, "License")
+    }
+    return Meta(name: header(lines, "Name"), version: header(lines, "Version"), license: license, requires_python: header(lines, "Requires-Python"))
+}
+
+// The first string of the JSON text `text` that is the value of `key`, or the empty text.
+fn json_string(text: Text, key: Text) gives Text
+    example json_string("\{\n  \"name\": \"nexora-lang\",\n  \"version\": \"1.0.0\"\n}", "version") == "1.0.0"
+    example json_string("\{\"bin\": \{\"nex\": \"bin/nex.js\"}}", "nex") == "bin/nex.js"
+    example json_string("\{\"a\": 1}", "b") == ""
+{
+    let at = texts.index_of(text, "\"" + key + "\"", 0)
+    if at < 0 {
+        return ""
+    }
+    let colon = texts.index_of(text, ":", at)
+    if colon < 0 {
+        return ""
+    }
+    let open = texts.index_of(text, "\"", colon)
+    if open < 0 {
+        return ""
+    }
+    let close = texts.index_of(text, "\"", open + 1)
+    if close < 0 {
+        return ""
+    }
+    return Text.slice(text, open + 1, close)
+}
+
+// The version that a version.py writes: __version__ = "1.0.0".
+fn shipped_version(text: Text) gives Text
+    example shipped_version("\"\"\"doc\"\"\"\n\n__version__ = \"0.15.0\"\n") == "0.15.0"
+    example shipped_version("x = 1") == ""
+{
+    for line in texts.lines_of(text)
+        keeps true
+    {
+        if Text.starts_with(line, "__version__ = \"") {
+            let first = Text.length("__version__ = \"")
+            let close = texts.index_of(line, "\"", first)
+            if close >= 0 {
+                return Text.slice(line, first, close)
+            }
+        }
+    }
+    return ""
+}
+
+// ---- Hashes ----
+
+// The entries of the output of `sha256sum` (also the format of SHA256SUMS): a hash, a space, a space or an asterisk, a name.
+fn parse_sums(text: Text) gives Result[List[Module], Text]
+    example Result.value(parse_sums("00d7af75915443363795b4cdac188d9f766e4e19733ab82430c4beb91222eba2  a.whl\n")) == [Module(name: "a.whl", hash: "00d7af75915443363795b4cdac188d9f766e4e19733ab82430c4beb91222eba2")]
+    example Result.value(parse_sums("00d7af75915443363795b4cdac188d9f766e4e19733ab82430c4beb91222eba2 *b.tgz")) == [Module(name: "b.tgz", hash: "00d7af75915443363795b4cdac188d9f766e4e19733ab82430c4beb91222eba2")]
+    example Result.value(parse_sums("")) == []
+    example Result.error(parse_sums("not a hash\n")) == "not a line of sha256sum: not a hash"
+{
+    var found: List[Module] = []
+    for line in texts.lines_of(text)
+        keeps true
+    {
+        if Text.length(line) < 67 {
+            return Err("not a line of sha256sum: " + line)
+        }
+        let separator = Text.slice(line, 64, 66)
+        if is_sha256(Text.slice(line, 0, 64)) == false or (separator != "  " and separator != " *") {
+            return Err("not a line of sha256sum: " + line)
+        }
+        found = List.append(found, Module(name: Text.slice(line, 66, Text.length(line)), hash: Text.slice(line, 0, 64)))
+    }
+    return Ok(found)
+}
+
+// The text of SHA256SUMS for `entries`, in the order given.
+fn sums_text(entries: List[Module]) gives Text
+    example sums_text([Module(name: "a", hash: "h1"), Module(name: "b", hash: "h2")]) == "h1  a\nh2  b\n"
+    example sums_text([]) == ""
+{
+    var text = ""
+    for entry in entries
+        keeps true
+    {
+        text = text + entry.hash + "  " + entry.name + "\n"
+    }
+    return text
+}
+
+// The entries with `prefix` taken off the start of each name.
+fn without_prefix(entries: List[Module], prefix: Text) gives List[Module]
+    example without_prefix([Module(name: "w/x/a.py", hash: "h")], "w/x/") == [Module(name: "a.py", hash: "h")]
+    example without_prefix([Module(name: "other", hash: "h")], "w/") == [Module(name: "other", hash: "h")]
+{
+    var found: List[Module] = []
+    for entry in entries
+        keeps true
+    {
+        if Text.starts_with(entry.name, prefix) {
+            found = List.append(found, Module(name: Text.slice(entry.name, Text.length(prefix), Text.length(entry.name)), hash: entry.hash))
+        } else {
+            found = List.append(found, entry)
+        }
+    }
+    return found
+}
+
+fn hash_of(entries: List[Module], name: Text) gives Text
+    example hash_of([Module(name: "a", hash: "h1")], "a") == "h1"
+    example hash_of([Module(name: "a", hash: "h1")], "b") == ""
+{
+    for entry in entries
+        keeps true
+    {
+        if entry.name == name {
+            return entry.hash
+        }
+    }
+    return ""
+}
+
+// ---- The comparison ----
+
+// What differs between the modules of `base` (the wheel) and those of `other`, naming `label`.
+fn module_problems(label: Text, base: List[Module], other: List[Module]) gives List[Text]
+    example module_problems("npm", [Module(name: "a.py", hash: "1")], [Module(name: "a.py", hash: "1")]) == []
+    example module_problems("npm", [Module(name: "a.py", hash: "1")], [Module(name: "a.py", hash: "2")]) == ["npm: a.py is not the same bytes as in the wheel"]
+    example module_problems("npm", [Module(name: "a.py", hash: "1")], []) == ["npm: a.py is in the wheel and not here"]
+    example module_problems("npm", [], [Module(name: "b.py", hash: "1")]) == ["npm: b.py is here and not in the wheel"]
+{
+    var found: List[Text] = []
+    for entry in base
+        keeps true
+    {
+        let theirs = hash_of(other, entry.name)
+        if theirs == "" {
+            found = List.append(found, label + ": " + entry.name + " is in the wheel and not here")
+        } else if theirs != entry.hash {
+            found = List.append(found, label + ": " + entry.name + " is not the same bytes as in the wheel")
+        }
+    }
+    for entry in other
+        keeps true
+    {
+        if hash_of(base, entry.name) == "" {
+            found = List.append(found, label + ": " + entry.name + " is here and not in the wheel")
+        }
+    }
+    return found
+}
+
+fn item_problems(item: Item) gives List[Text]
+    example item_problems(Item(label: "wheel", meta: Meta(name: "nexora-lang", version: "1.0.0", license: "MIT", requires_python: ">=3.11"), shipped: "1.0.0", modules: [], notes: [])) == []
+    example item_problems(Item(label: "wheel", meta: Meta(name: "other", version: "1.0.0", license: "MIT", requires_python: ""), shipped: "1.0.0", modules: [], notes: [])) == ["wheel: the name is other, expected nexora-lang"]
+    example item_problems(Item(label: "npm", meta: Meta(name: "nexora-lang", version: "1.0.0", license: "MIT", requires_python: ""), shipped: "0.9.0", modules: [], notes: [])) == ["npm: nexora/version.py says 0.9.0, the metadata says 1.0.0"]
+    example item_problems(Item(label: "sdist", meta: Meta(name: "nexora-lang", version: "1.0.0", license: "MIT", requires_python: ""), shipped: "", modules: [], notes: ["no LICENSE file"])) == ["sdist: nexora/version.py is missing or has no __version__", "sdist: no LICENSE file"]
+{
+    var found: List[Text] = []
+    if item.meta.name != "nexora-lang" {
+        found = List.append(found, item.label + ": the name is " + item.meta.name + ", expected nexora-lang")
+    }
+    if item.shipped == "" {
+        found = List.append(found, item.label + ": nexora/version.py is missing or has no __version__")
+    } else if item.shipped != item.meta.version {
+        found = List.append(found, item.label + ": nexora/version.py says " + item.shipped + ", the metadata says " + item.meta.version)
+    }
+    for note in item.notes
+        keeps true
+    {
+        found = List.append(found, item.label + ": " + note)
+    }
+    return found
+}
+
+// Every difference between the three artifacts. `tag` and `expected` are "-" when they are not checked.
+fn problems(wheel: Item, sdist: Item, npm: Item, tag: Text, expected: Text) gives List[Text]
+    example problems(good("wheel"), good("sdist"), good("npm"), "v1.0.0", "1.0.0") == []
+    example problems(good("wheel"), good("sdist"), good("npm"), "-", "-") == []
+    example problems(good("wheel"), good("sdist"), good("npm"), "v1.0.1", "1.0.0") == ["the tag is v1.0.1, the version of the artifacts is 1.0.0 (expected tag v1.0.0)"]
+    example problems(good("wheel"), good("sdist"), good("npm"), "-", "1.0.1") == ["the version of the artifacts is 1.0.0, src/nexora/version.py says 1.0.1"]
+    example problems(good("wheel"), with_version(good("sdist"), "1.0.1"), good("npm"), "-", "-") == ["sdist: nexora/version.py says 1.0.0, the metadata says 1.0.1", "the versions disagree: wheel 1.0.0, source distribution 1.0.1, npm package 1.0.0"]
+    example problems(good("wheel"), good("sdist"), with_license(good("npm"), "ISC"), "-", "-") == ["license: the npm package says ISC, the wheel MIT"]
+    example problems(with_license(good("wheel"), ""), with_license(good("sdist"), ""), with_license(good("npm"), ""), "-", "-") == ["the wheel declares no licence"]
+    example problems(good("wheel"), with_python(good("sdist"), ">=3.10"), good("npm"), "-", "-") == ["requires-python: the wheel says >=3.11, the source distribution >=3.10"]
+    example problems(good("wheel"), good("sdist"), with_modules(good("npm"), [Module(name: "x.py", hash: "1")]), "-", "-") == ["npm package: nexora/a.py is in the wheel and not here", "npm package: x.py is here and not in the wheel"]
+{
+    var found: List[Text] = []
+    found = List.concat(found, item_problems(wheel))
+    found = List.concat(found, item_problems(sdist))
+    found = List.concat(found, item_problems(npm))
+    if wheel.meta.version != sdist.meta.version or wheel.meta.version != npm.meta.version {
+        found = List.append(found, "the versions disagree: wheel " + wheel.meta.version + ", source distribution " + sdist.meta.version + ", npm package " + npm.meta.version)
+    }
+    if expected != "-" and wheel.meta.version != expected {
+        found = List.append(found, "the version of the artifacts is " + wheel.meta.version + ", src/nexora/version.py says " + expected)
+    }
+    if tag != "-" and tag != "v" + wheel.meta.version {
+        found = List.append(found, "the tag is " + tag + ", the version of the artifacts is " + wheel.meta.version + " (expected tag v" + wheel.meta.version + ")")
+    }
+    if wheel.meta.license != sdist.meta.license {
+        found = List.append(found, "license: the wheel says " + wheel.meta.license + ", the source distribution " + sdist.meta.license)
+    }
+    if wheel.meta.license == "" {
+        found = List.append(found, "the wheel declares no licence")
+    }
+    if npm.meta.license != wheel.meta.license and wheel.meta.license != "" {
+        found = List.append(found, "license: the npm package says " + npm.meta.license + ", the wheel " + wheel.meta.license)
+    }
+    if wheel.meta.requires_python != sdist.meta.requires_python {
+        found = List.append(found, "requires-python: the wheel says " + wheel.meta.requires_python + ", the source distribution " + sdist.meta.requires_python)
+    }
+    if List.length(wheel.modules) == 0 {
+        found = List.append(found, "the wheel holds no interpreter module")
+    }
+    found = List.concat(found, module_problems("source distribution", wheel.modules, sdist.modules))
+    found = List.concat(found, module_problems("npm package", wheel.modules, npm.modules))
+    return found
+}
+
+// ---- Items for the examples ----
+
+fn good(label: Text) gives Item {
+
+    return Item(label: label, meta: Meta(name: "nexora-lang", version: "1.0.0", license: "MIT", requires_python: ">=3.11"), shipped: "1.0.0", modules: [Module(name: "nexora/a.py", hash: "1")], notes: [])
+}
+
+fn with_version(item: Item, version: Text) gives Item {
+
+    return Item(label: item.label, meta: Meta(name: item.meta.name, version: version, license: item.meta.license, requires_python: item.meta.requires_python), shipped: item.shipped, modules: item.modules, notes: item.notes)
+}
+
+fn with_license(item: Item, license: Text) gives Item {
+
+    return Item(label: item.label, meta: Meta(name: item.meta.name, version: item.meta.version, license: license, requires_python: item.meta.requires_python), shipped: item.shipped, modules: item.modules, notes: item.notes)
+}
+
+fn with_python(item: Item, python: Text) gives Item {
+
+    return Item(label: item.label, meta: Meta(name: item.meta.name, version: item.meta.version, license: item.meta.license, requires_python: python), shipped: item.shipped, modules: item.modules, notes: item.notes)
+}
+
+fn with_modules(item: Item, modules: List[Module]) gives Item {
+
+    return Item(label: item.label, meta: item.meta, shipped: item.shipped, modules: modules, notes: item.notes)
+}
+
+// ---- The files of the release ----
+
+fn run_lines(command: Text, arguments: List[Text]) gives List[Text] {
+    return texts.lines_of(Process.run(command, arguments))
+}
+
+// The names in `files` that start with `prefix` and end with `suffix`.
+fn matching(files: List[Text], prefix: Text, suffix: Text) gives List[Text]
+    example matching(["a-1.whl", "a-1.tar.gz", "b-1.whl"], "a-", ".whl") == ["a-1.whl"]
+    example matching(["x"], "a-", ".whl") == []
+{
+    var found: List[Text] = []
+    for file in files
+        keeps true
+    {
+        if Text.starts_with(file, prefix) and Text.ends_with(file, suffix) {
+            found = List.append(found, file)
+        }
+    }
+    return found
+}
+
+// The members of `names` that start with `prefix` and end with `.py`.
+fn python_members(names: List[Text], prefix: Text) gives List[Text]
+    example python_members(["p/src/nexora/a.py", "p/src/nexora/", "p/src/other/b.py", "p/src/nexora/c.txt"], "p/src/nexora/") == ["p/src/nexora/a.py"]
+{
+    return matching(names, prefix, ".py")
+}
+
+fn first_ending(names: List[Text], suffix: Text) gives Text
+    example first_ending(["a/METADATA", "a/RECORD"], "/RECORD") == "a/RECORD"
+    example first_ending(["a"], "/RECORD") == ""
+{
+    for name in names
+        keeps true
+    {
+        if Text.ends_with(name, suffix) {
+            return name
+        }
+    }
+    return ""
+}
+
+// The modules among `members`, unpacked under `folder`, with their hash. Their names are the member names with `drop` taken off
+// the start and `add` put in front, so that the same module has the same name in the three artifacts.
+fn module_hashes(members: List[Text], folder: Text, drop: Text, add: Text) gives List[Module]
+    needs Text.length(folder) > 0, "There is a folder"
+{
+    if List.length(members) == 0 {
+        return []
+    }
+    var paths: List[Text] = []
+    for member in members
+        keeps true
+    {
+        paths = List.append(paths, folder + "/" + member)
+    }
+    let parsed = parse_sums(Process.run("sha256sum", paths))
+    var entries: List[Module] = []
+    if Result.is_ok(parsed) {
+        entries = without_prefix(Result.value(parsed), folder + "/" + drop)
+    }
+    var named: List[Module] = []
+    for entry in entries
+        keeps true
+    {
+        named = List.append(named, Module(name: add + entry.name, hash: entry.hash))
+    }
+    return named
+}
+
+fn shipped_in(names: List[Text], member: Text, folder: Text) gives Text {
+    if List.contains(names, member) {
+        return shipped_version(read_file(folder + "/" + member))
+    }
+    return ""
+}
+
+// Unpacking is silent: what `unzip -q`, `tar` and `mkdir` print, if anything, is reported.
+fn unpack_notes(printed: Text) gives List[Text]
+    example unpack_notes("") == []
+    example unpack_notes("oops") == ["unpacking printed: oops"]
+{
+    if printed == "" {
+        return []
+    }
+    return ["unpacking printed: " + printed]
+}
+
+fn inspect_wheel(path: Text, work: Text) gives Item {
+    let names = run_lines("unzip", ["-Z1", path])
+    let folder = work + "/wheel"
+    let made = Process.run("mkdir", ["-p", folder])
+    let unpacked = Process.run("unzip", ["-q", "-o", path, "-d", folder])
+    let metadata = first_ending(names, ".dist-info/METADATA")
+    let entry_points = first_ending(names, ".dist-info/entry_points.txt")
+    var notes: List[Text] = unpack_notes(made + unpacked)
+    var meta = Meta(name: "", version: "", license: "", requires_python: "")
+    if metadata == "" {
+        notes = List.append(notes, "no METADATA file")
+    } else {
+        meta = core_metadata(read_file(folder + "/" + metadata))
+    }
+    if entry_points == "" or Text.contains(read_file(folder + "/" + entry_points), "nex = nexora.cli:main") == false {
+        notes = List.append(notes, "it does not declare the `nex` command")
+    }
+    if first_ending(names, "/licenses/LICENSE") == "" {
+        notes = List.append(notes, "no LICENSE file")
+    }
+    let members = python_members(names, "nexora/")
+    return Item(label: "wheel", meta: meta, shipped: shipped_in(names, "nexora/version.py", folder), modules: module_hashes(members, folder, "", ""), notes: notes)
+}
+
+fn inspect_sdist(path: Text, work: Text) gives Item {
+    let names = run_lines("tar", ["-tzf", path])
+    let folder = work + "/sdist"
+    let made = Process.run("mkdir", ["-p", folder])
+    let unpacked = Process.run("tar", ["-xzf", path, "-C", folder])
+    var root = ""
+    if List.length(names) > 0 {
+        let first = List.get(names, 0)
+        let slash = texts.index_of(first, "/", 0)
+        if slash > 0 {
+            root = Text.slice(first, 0, slash)
+        }
+    }
+    var notes: List[Text] = unpack_notes(made + unpacked)
+    var meta = Meta(name: "", version: "", license: "", requires_python: "")
+    if List.contains(names, root + "/PKG-INFO") {
+        meta = core_metadata(read_file(folder + "/" + root + "/PKG-INFO"))
+    } else {
+        notes = List.append(notes, "no PKG-INFO file")
+    }
+    if List.contains(names, root + "/LICENSE") == false {
+        notes = List.append(notes, "no LICENSE file")
+    }
+    if List.contains(names, root + "/pyproject.toml") == false {
+        notes = List.append(notes, "no pyproject.toml")
+    }
+    let members = python_members(names, root + "/src/nexora/")
+    let shipped = shipped_in(names, root + "/src/nexora/version.py", folder)
+    return Item(label: "sdist", meta: meta, shipped: shipped, modules: module_hashes(members, folder, root + "/src/", ""), notes: notes)
+}
+
+fn inspect_npm(path: Text, work: Text) gives Item {
+    let names = run_lines("tar", ["-tzf", path])
+    let folder = work + "/npm"
+    let made = Process.run("mkdir", ["-p", folder])
+    let unpacked = Process.run("tar", ["-xzf", path, "-C", folder])
+    var notes: List[Text] = unpack_notes(made + unpacked)
+    var meta = Meta(name: "", version: "", license: "", requires_python: "")
+    if List.contains(names, "package/package.json") {
+        let text = read_file(folder + "/package/package.json")
+        meta = Meta(name: json_string(text, "name"), version: json_string(text, "version"), license: json_string(text, "license"), requires_python: "")
+        let launcher = json_string(text, "nex")
+        if launcher == "" or List.contains(names, "package/" + launcher) == false {
+            notes = List.append(notes, "bin.nex (" + launcher + ") is not a file of the package")
+        }
+    } else {
+        notes = List.append(notes, "no package.json file")
+    }
+    if List.contains(names, "package/LICENSE") == false {
+        notes = List.append(notes, "no LICENSE file")
+    }
+    let members = python_members(names, "package/python/nexora/")
+    let shipped = shipped_in(names, "package/python/nexora/version.py", folder)
+    return Item(label: "npm", meta: meta, shipped: shipped, modules: module_hashes(members, folder, "package/python/", ""), notes: notes)
+}
+
+// The one file of `dist` that matches, or the reason why there is not exactly one.
+fn the_file(files: List[Text], prefix: Text, suffix: Text, label: Text) gives Result[Text, Text] {
+    let found = matching(files, prefix, suffix)
+    if List.length(found) != 1 {
+        return Err(label + ": expected exactly one file named " + prefix + "*" + suffix + ", found " + to_text(List.length(found)))
+    }
+    return Ok(List.get(found, 0))
+}
+
+// The three files of the release, in the order of SHA256SUMS (the wheel, the source distribution, the npm package).
+fn release_files(dist: Text) gives Result[List[Text], List[Text]] {
+    let files = run_lines("ls", [dist])
+    let wheel = the_file(files, "nexora_lang-", ".whl", "wheel")
+    let sdist = the_file(files, "nexora_lang-", ".tar.gz", "source distribution")
+    let npm = the_file(files, "nexora-lang-", ".tgz", "npm package")
+    var missing: List[Text] = []
+    for each in [wheel, sdist, npm]
+        keeps true
+    {
+        if Result.is_err(each) {
+            missing = List.append(missing, Result.error(each))
+        }
+    }
+    if List.length(missing) > 0 {
+        return Err(missing)
+    }
+    return Ok([Result.value(wheel), Result.value(sdist), Result.value(npm)])
+}
+
+fn hashes_of_files(dist: Text, names: List[Text]) gives List[Module] {
+    var paths: List[Text] = []
+    for name in names
+        keeps true
+    {
+        paths = List.append(paths, dist + "/" + name)
+    }
+    let parsed = parse_sums(Process.run("sha256sum", paths))
+    if Result.is_err(parsed) {
+        return []
+    }
+    return without_prefix(Result.value(parsed), dist + "/")
+}
+
+// ---- Commands ----
+
+fn check(dist: Text, work: Text, tag: Text, expected: Text) gives List[Text] {
+    let files = release_files(dist)
+    if Result.is_err(files) {
+        return Result.error(files)
+    }
+    let names = Result.value(files)
+    let wheel = inspect_wheel(dist + "/" + List.get(names, 0), work)
+    let sdist = inspect_sdist(dist + "/" + List.get(names, 1), work)
+    let npm = inspect_npm(dist + "/" + List.get(names, 2), work)
+    return problems(wheel, sdist, npm, tag, expected)
+}
+
+fn verify(dist: Text) gives List[Text] {
+    let files = release_files(dist)
+    if Result.is_err(files) {
+        return Result.error(files)
+    }
+    let names = Result.value(files)
+    let listed = parse_sums(read_file(dist + "/SHA256SUMS"))
+    if Result.is_err(listed) {
+        return ["SHA256SUMS: " + Result.error(listed)]
+    }
+    let actual = hashes_of_files(dist, names)
+    var found: List[Text] = []
+    for entry in actual
+        keeps true
+    {
+        let theirs = hash_of(Result.value(listed), entry.name)
+        if theirs == "" {
+            found = List.append(found, "SHA256SUMS does not list " + entry.name)
+        } else if theirs != entry.hash {
+            found = List.append(found, entry.name + ": the hash is not the one of SHA256SUMS")
+        }
+    }
+    for entry in Result.value(listed)
+        keeps true
+    {
+        if List.contains(names, entry.name) == false {
+            found = List.append(found, "SHA256SUMS lists " + entry.name + ", which is not in the folder")
+        }
+    }
+    return found
+}
+
+// Ends the program with status 5 (a contract) when there is any problem; the problems are printed before.
+fn finish(found: List[Text])
+    needs List.length(found) == 0, "the release artifacts do not pass the check"
+{
+    print("the release artifacts pass the check")
+}
+
+fn report(found: List[Text]) {
+    for problem in found
+        keeps true
+    {
+        print("error: " + problem)
+    }
+}
+
+fn main() {
+    let arguments = args()
+    var mode = ""
+    if List.length(arguments) > 0 {
+        mode = List.get(arguments, 0)
+    }
+    if (mode == "check" or mode == "sums") and List.length(arguments) == 5 {
+        let dist = List.get(arguments, 1)
+        let found = check(dist, List.get(arguments, 2), List.get(arguments, 3), List.get(arguments, 4))
+        report(found)
+        if List.length(found) == 0 and mode == "sums" {
+            let names = Result.value(release_files(dist))
+            write_file(dist + "/SHA256SUMS", sums_text(hashes_of_files(dist, names)))
+            print("wrote " + dist + "/SHA256SUMS")
+        }
+        finish(found)
+    } else if mode == "verify" and List.length(arguments) == 2 {
+        let found = verify(List.get(arguments, 1))
+        report(found)
+        finish(found)
+    } else {
+        report(["usage: -- check|sums DIST WORK TAG EXPECTED, or -- verify DIST (see the head of check_artifacts.nex)"])
+        finish(["wrong arguments"])
+    }
+}

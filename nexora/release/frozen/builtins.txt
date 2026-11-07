@@ -1,0 +1,42 @@
+`print`
+`to_text`
+`to_float`
+`to_int`
+`Text`
+`Int`
+`Bool`
+`Float`
+`List[T]`
+`Text.length(text: Text) gives Int`
+`Text.slice(text: Text, start: Int, end: Int) gives Text`
+`Text.contains(text: Text, part: Text) gives Bool`
+`Text.starts_with(text: Text, part: Text) gives Bool`
+`Text.ends_with(text: Text, part: Text) gives Bool`
+`Int.can_parse(text: Text) gives Bool`
+`Int.parse(text: Text) gives Int`
+`Float.can_parse(text: Text) gives Bool`
+`Float.parse(text: Text) gives Float`
+`List.length`
+`List.get`
+`List.append`
+`List.concat`
+`List.contains`
+`args`
+`input`
+`read_file`
+`write_file`
+`Net.get`
+`Process.run`
+`Some`
+`None`
+`Ok`
+`Err`
+`Option.is_some`
+`Option.is_none`
+`Option.value_or`
+`Option.value`
+`Result.is_ok`
+`Result.is_err`
+`Result.value_or`
+`Result.value`
+`Result.error`
