@@ -137,6 +137,7 @@ def test_a_child_process_does_not_receive_the_environment_of_the_user(tmp_path, 
         grants=Grants(process=(command,)), declarations=Capabilities(process=(command,)), processes_allowed=True
     )
     names = set(run_with_host(program, host).strip().split(","))
-    allowed = {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "LC_CTYPE"}
+    # LC_CTYPE is added by Python on Linux (PEP 538) and __CF_USER_TEXT_ENCODING by macOS to every process that it starts.
+    allowed = {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "LC_CTYPE", "__CF_USER_TEXT_ENCODING"}
     assert "NEXORA_THREAT_MODEL_SECRET" not in names
     assert names <= allowed, sorted(names - allowed)
