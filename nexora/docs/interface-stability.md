@@ -50,7 +50,9 @@ the command and its document may change in any release until they are declared s
 ## Compatibility checks
 
 `tests/test_interface_stability.py` pins the stable CLI command names, exit codes, and schema
-identifiers. The CLI, diagnostics, and JSON suites exercise those contracts in real invocations;
+identifiers. `tests/test_cli_compatibility.py` pins, against `tests/golden/cli_contract.json`, the options of
+`check`, `run` and `test`, every diagnostic code with its category, and the exit status of the real command for
+each outcome; removing or changing any of them fails a test by name, and adding one needs the golden file updated. The CLI, diagnostics, and JSON suites exercise those contracts in real invocations;
 the JSON tests also validate produced documents against the checked-in JSON Schemas. LSP and MCP
 have protocol tests, but remain experimental until their external compatibility expectations are
 defined and tested.

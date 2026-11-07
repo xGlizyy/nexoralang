@@ -17,7 +17,7 @@ lowers a criterion.
 |------|--------|---------------|-----------------|
 | Normative specification | **Met** | [Specification 0.14](language-spec.md) covers enums, exhaustive `match` and the `?` operator, and every normative section has executable examples (`tests/test_docs.py`) | Declaring the 1.0 specification: a freeze of the syntax, with the version number it will carry |
 | Reference applications | **Partial** | Three applications in [`reference-apps/`](../reference-apps/README.md): `textstats` (a pure CLI), `csvsummary` (files and three modules) and `envreport` (a granted process). `tests/test_reference_apps.py` checks, tests and runs them, failures included, and the CI job `reference-apps` does it with the built wheel in a clean environment on Linux, Windows and macOS with Python 3.11 to 3.13 | The maintainer's review of the three applications, and the decisions on what they found (below). The gate asks for HTTPS or a process as the granted capability: `envreport` covers the process, none covers HTTPS |
-| Stable CLI | **Partial** | [Interface stability policy](interface-stability.md); versioned JSON with schemas generated from the code and checked against real output (`tests/test_tooling.py`); CLI tests (`tests/test_cli.py`) on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13 | A single compatibility suite that pins the exit codes, options and diagnostic codes of `check`, `run` and `test`, so that a change to any of them fails a test by name |
+| Stable CLI | **Met** | [Interface stability policy](interface-stability.md); versioned JSON with schemas generated from the code and checked against real output (`tests/test_tooling.py`); CLI tests (`tests/test_cli.py`) on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13; `tests/test_cli_compatibility.py` pins the options, exit status and diagnostic codes of `check`, `run` and `test` by name | Nothing planned |
 | Module behavior | **Met** | Resolution, visibility and cycles are specified and tested (`tests/test_modules.py`, including the cycle cases); the language server resolves relative imports across the open project (`tests/test_lsp.py`) | Nothing planned. The reference applications will exercise it again |
 | Runtime control | **Met** | `--timeout`, `--max-output`, `--max-input`, `--max-text`, `--max-source` and `--max-memory`; a loop that never ends stops with `E4006`; POSIX timeouts clean up the child process group (`tests/test_cli.py`, `tests/test_loops.py`, `tests/test_out_of_memory.py`) | Nothing planned |
 | Capability security | **Partial** | File, network and process access need a declaration and a grant (`tests/test_security.py`); [SECURITY.md](../../SECURITY.md) says plainly that the local runtime is not a sandbox | The reviewed threat model of the local CLI that the gate names. Today the threat model is only mentioned, not written |
@@ -28,7 +28,7 @@ lowers a criterion.
 | Support process | **Met** | Public security policy, with response targets and the list of supported releases | Keeping the table of supported releases current |
 | Release blockers | **Open** | None recorded | A release issue list reviewed with no open P0 or P1 |
 
-Four of the twelve gates are met, six are partial and two are open. The work that is left is concentrated in the
+Five of the twelve gates are met, five are partial and two are open. The work that is left is concentrated in the
 review of the reference applications, the platform evidence and the release process; the language itself is not
 what is holding 1.0 back, apart from the findings below.
 
@@ -59,7 +59,7 @@ promise; the rest are limits to document.
 4. **Package evidence**: install the source distribution too, check that the three artifacts agree on version and
    metadata, and publish their hashes with each tag.
 5. **Release process**: migration guide, yank policy and release checklist.
-6. **CLI compatibility suite** that pins exit codes, options and diagnostic codes.
+6. ~~CLI compatibility suite~~ Done: `tests/test_cli_compatibility.py`.
 7. **Freeze**: declare the 1.0 specification once 1 to 6 are done, and review the open issues for P0 and P1.
 
 ## Decisions that are the maintainer's
