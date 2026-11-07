@@ -1,14 +1,16 @@
 # Limitations
 
-What NEXORA does **not** do in the 0.16.0 development line, and the risks worth knowing before using it.
+What NEXORA does **not** do in the 1.0 specification and in the reference implementation 0.15.x, and the risks worth knowing before using it.
 Nothing that appears here as "does not exist" works today, even if it is mentioned in the design
 draft, in the roadmap or in a decision that is accepted and pending implementation.
 
 ## General status
 
-NEXORA is an early-stage project (before version 1.0):
+NEXORA is an early-stage project. Its specification is frozen as 1.0 ([decision 0029](decisions/0029-congelacion-de-la-especificacion-1-0.md)):
+the language changes from now on only by the rules of the [compatibility policy](compatibility.md). The release 1.0.0 of the
+implementation is the maintainer's to publish, and until then the implementation is 0.15.x:
 
-- The language may change incompatibly between versions.
+- The implementation may still change incompatibly before 1.0.0, outside what the specification freezes.
 - **It is not suitable for production use.**
 - This describes programs built with NEXORA. The public Playground is a production-hosted service for
   experimentation, with a restricted worker; its availability does not make the language production-ready.
@@ -171,8 +173,8 @@ resources is a problem. The exact scope is in the repository's [`SECURITY.md`](.
 ## Platforms
 
 Checked on Windows 11 with Python 3.12, and on Linux (Ubuntu 24.04 on WSL 2) with Python 3.11,
-3.12 and 3.13; also run on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13 by the
-[continuous integration](testing.md#continuous-integration). Other distributions and Linux without WSL have not
+3.12 and 3.13; also run on Linux, Windows and macOS with Python 3.11 to 3.14 by the
+[continuous integration](testing.md#continuous-integration) ([platform support](platform-support.md)). Other distributions and Linux without WSL have not
 been tested; see [Installation](installation.md#what-has-been-checked).
 
 ## Project

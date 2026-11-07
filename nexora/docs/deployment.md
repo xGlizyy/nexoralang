@@ -21,7 +21,7 @@ CPython distributions and the Python version is recorded in `.python-version`. I
 its [official installation instructions](https://docs.astral.sh/uv/getting-started/installation/).
 uv supplies managed CPython builds, so it can provide the pinned patch even when an OS vendor has
 not packaged it yet. For a new deployment, select a security-patched Python patch in the
-supported 3.11–3.13 range, pin it in `.python-version`, and update the pin promptly when Python
+supported 3.11–3.14 range, pin it in `.python-version`, and update the pin promptly when Python
 publishes a security release. Keep NEXORA pinned to the release the application was verified
 against; upgrade it deliberately and rerun the application's checks before deployment.
 
@@ -106,5 +106,5 @@ packaging differences; they are not a complete security boundary.
   [CLI reference](cli-reference.md#nex-run).
 
 The reference template is a reproducible install-and-run path, not a claim that every Python patch
-or processor architecture has been manually exercised. CI covers Python 3.11, 3.12 and 3.13 on
+or processor architecture has been manually exercised. CI covers Python 3.11, 3.12, 3.13 and 3.14 on
 Windows, macOS and Linux; see [installation support evidence](installation.md#what-has-been-checked).
