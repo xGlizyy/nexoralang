@@ -3866,6 +3866,20 @@ static rt_host_result rt_run_process(const char *command, const char *const *arg
             killpg(pid, SIGKILL);
         }
     }
+    if (!exited && !too_large && !timed_out) {
+        /* Both pipes ended before the command was reaped: it is ending (a command that prints nothing closes them as it exits), or it
+         * closed its output and keeps running. Give it the time that is left; killing it now would turn a clean exit into status -9. */
+        while (!exited) {
+            if (waitpid(pid, &status, WNOHANG) == pid) {
+                exited = true;
+            } else if (RT_HOST_SECONDS * 1000 - (rt_host_now() - started) <= 0) {
+                timed_out = true;
+            } else {
+                poll(0, 0, 2);
+            }
+            if (timed_out) break;
+        }
+    }
     if (too_large || timed_out) killpg(pid, SIGKILL);
     if (!exited) {
         killpg(pid, SIGKILL);
@@ -20162,6 +20176,20 @@ static const char *const nx_lines9[] = {
 "    lines = List.append(lines, \"            killpg(pid, SIGKILL);\")",
 "    lines = List.append(lines, \"        }\")",
 "    lines = List.append(lines, \"    }\")",
+"    lines = List.append(lines, \"    if (!exited && !too_large && !timed_out) \\{\")",
+"    lines = List.append(lines, \"        /* Both pipes ended before the command was reaped: it is ending (a command that prints nothing closes them as it exits), or it\")",
+"    lines = List.append(lines, \"         * closed its output and keeps running. Give it the time that is left; killing it now would turn a clean exit into status -9. */\")",
+"    lines = List.append(lines, \"        while (!exited) \\{\")",
+"    lines = List.append(lines, \"            if (waitpid(pid, &status, WNOHANG) == pid) \\{\")",
+"    lines = List.append(lines, \"                exited = true;\")",
+"    lines = List.append(lines, \"            } else if (RT_HOST_SECONDS * 1000 - (rt_host_now() - started) <= 0) \\{\")",
+"    lines = List.append(lines, \"                timed_out = true;\")",
+"    lines = List.append(lines, \"            } else \\{\")",
+"    lines = List.append(lines, \"                poll(0, 0, 2);\")",
+"    lines = List.append(lines, \"            }\")",
+"    lines = List.append(lines, \"            if (timed_out) break;\")",
+"    lines = List.append(lines, \"        }\")",
+"    lines = List.append(lines, \"    }\")",
 "    lines = List.append(lines, \"    if (too_large || timed_out) killpg(pid, SIGKILL);\")",
 "    lines = List.append(lines, \"    if (!exited) \\{\")",
 "    lines = List.append(lines, \"        killpg(pid, SIGKILL);\")",
@@ -21833,7 +21861,7 @@ static const char *const nx_lines10[] = {
 0};
 static const char *const nx_paths[] = {"selfhost/unicode_tables.nex", "selfhost/lexer.nex", "selfhost/parser.nex", "selfhost/json.nex", "selfhost/legacy.nex", "selfhost/checker.nex", "selfhost/project.nex", "selfhost/titles.nex", "selfhost/render.nex", "selfhost/runtime_text.nex", "selfhost/cgen.nex"};
 static const char *const *const nx_files[] = {nx_lines0, nx_lines1, nx_lines2, nx_lines3, nx_lines4, nx_lines5, nx_lines6, nx_lines7, nx_lines8, nx_lines9, nx_lines10};
-static const int nx_counts[] = {292, 508, 2875, 622, 375, 6155, 821, 449, 118, 4062, 1476};
+static const int nx_counts[] = {292, 508, 2875, 622, 375, 6155, 821, 449, 118, 4076, 1476};
 
 static const char *const rec_lexer__Token[] = {"kind", "lexeme", "value", "line", "column", "end_line", "end_column"};
 static const char *const rec_lexer__Diagnostic[] = {"code", "label", "hint", "line", "column", "end_line", "end_column"};
@@ -66044,384 +66072,412 @@ rv t17491 = rt_list_append(v_lines, rt_str_at("        }", 3871, 32, 3871, 43));
 v_lines = t17491;
 rv t17492 = rt_list_append(v_lines, rt_str_at("    }", 3872, 32, 3872, 39));
 v_lines = t17492;
-rv t17493 = rt_list_append(v_lines, rt_str_at("    if (too_large || timed_out) killpg(pid, SIGKILL);", 3873, 32, 3873, 87));
+rv t17493 = rt_list_append(v_lines, rt_str_at("    if (!exited && !too_large && !timed_out) {", 3873, 32, 3873, 81));
 v_lines = t17493;
-rv t17494 = rt_list_append(v_lines, rt_str_at("    if (!exited) {", 3874, 32, 3874, 53));
+rv t17494 = rt_list_append(v_lines, rt_str_at("        /* Both pipes ended before the command was reaped: it is ending (a command that prints nothing closes them as it exits), or it", 3874, 32, 3874, 168));
 v_lines = t17494;
-rv t17495 = rt_list_append(v_lines, rt_str_at("        killpg(pid, SIGKILL);", 3875, 32, 3875, 63));
+rv t17495 = rt_list_append(v_lines, rt_str_at("         * closed its output and keeps running. Give it the time that is left; killing it now would turn a clean exit into status -9. */", 3875, 32, 3875, 170));
 v_lines = t17495;
-rv t17496 = rt_list_append(v_lines, rt_str_at("        waitpid(pid, &status, 0);", 3876, 32, 3876, 67));
+rv t17496 = rt_list_append(v_lines, rt_str_at("        while (!exited) {", 3876, 32, 3876, 60));
 v_lines = t17496;
-rv t17497 = rt_list_append(v_lines, rt_str_at("    }", 3877, 32, 3877, 39));
+rv t17497 = rt_list_append(v_lines, rt_str_at("            if (waitpid(pid, &status, WNOHANG) == pid) {", 3877, 32, 3877, 91));
 v_lines = t17497;
-rv t17498 = rt_list_append(v_lines, rt_str_at("    killpg(pid, SIGKILL);", 3878, 32, 3878, 59));
+rv t17498 = rt_list_append(v_lines, rt_str_at("                exited = true;", 3878, 32, 3878, 64));
 v_lines = t17498;
-rv t17499 = rt_list_append(v_lines, rt_str_at("    close(out_pipe[0]);", 3879, 32, 3879, 57));
+rv t17499 = rt_list_append(v_lines, rt_str_at("            } else if (RT_HOST_SECONDS * 1000 - (rt_host_now() - started) <= 0) {", 3879, 32, 3879, 116));
 v_lines = t17499;
-rv t17500 = rt_list_append(v_lines, rt_str_at("    close(err_pipe[0]);", 3880, 32, 3880, 57));
+rv t17500 = rt_list_append(v_lines, rt_str_at("                timed_out = true;", 3880, 32, 3880, 67));
 v_lines = t17500;
-rv t17501 = rt_list_append(v_lines, rt_str_at("    if (timed_out) return rt_host_fail(rt_format(\"process '%s' exceeded %d seconds\", command, RT_HOST_SECONDS));", 3881, 32, 3881, 148));
+rv t17501 = rt_list_append(v_lines, rt_str_at("            } else {", 3881, 32, 3881, 55));
 v_lines = t17501;
-rv t17502 = rt_list_append(v_lines, rt_str_at("    if (too_large) return rt_host_fail(rt_format(\"process output exceeds %d bytes\", RT_HOST_MAX_BYTES));", 3882, 32, 3882, 140));
+rv t17502 = rt_list_append(v_lines, rt_str_at("                poll(0, 0, 2);", 3882, 32, 3882, 64));
 v_lines = t17502;
-rv t17503 = rt_list_append(v_lines, rt_str_at("    int code = WIFEXITED(status) \? WEXITSTATUS(status) : (WIFSIGNALED(status) \? -WTERMSIG(status) : status);", 3883, 32, 3883, 142));
+rv t17503 = rt_list_append(v_lines, rt_str_at("            }", 3883, 32, 3883, 47));
 v_lines = t17503;
-rv t17504 = rt_list_append(v_lines, rt_str_at("    if (code != 0) {", 3884, 32, 3884, 55));
+rv t17504 = rt_list_append(v_lines, rt_str_at("            if (timed_out) break;", 3884, 32, 3884, 67));
 v_lines = t17504;
-rv t17505 = rt_list_append(v_lines, rt_str_at("        const char *text = err.p \? err.p : \"\";", 3885, 32, 3885, 82));
+rv t17505 = rt_list_append(v_lines, rt_str_at("        }", 3885, 32, 3885, 43));
 v_lines = t17505;
-rv t17506 = rt_list_append(v_lines, rt_str_at("        size_t length = err.n;", 3886, 32, 3886, 64));
+rv t17506 = rt_list_append(v_lines, rt_str_at("    }", 3886, 32, 3886, 39));
 v_lines = t17506;
-rv t17507 = rt_list_append(v_lines, rt_str_at("        while (length > 0 && (text[length - 1] == ' ' || text[length - 1] == '\\n' || text[length - 1] == '\\r' || text[length - 1] == '\\t')) length--;", 3887, 32, 3887, 186));
+rv t17507 = rt_list_append(v_lines, rt_str_at("    if (too_large || timed_out) killpg(pid, SIGKILL);", 3887, 32, 3887, 87));
 v_lines = t17507;
-rv t17508 = rt_list_append(v_lines, rt_str_at("        while (length > 0 && (*text == ' ' || *text == '\\n' || *text == '\\r' || *text == '\\t')) { text++; length--; }", 3888, 32, 3888, 155));
+rv t17508 = rt_list_append(v_lines, rt_str_at("    if (!exited) {", 3888, 32, 3888, 53));
 v_lines = t17508;
-rv t17509 = rt_list_append(v_lines, rt_str_at("        if (length > 0) return rt_host_fail(rt_format(\"process '%s' exited with status %d: %.*s\", command, code, (int)length, text));", 3889, 32, 3889, 169));
+rv t17509 = rt_list_append(v_lines, rt_str_at("        killpg(pid, SIGKILL);", 3889, 32, 3889, 63));
 v_lines = t17509;
-rv t17510 = rt_list_append(v_lines, rt_str_at("        return rt_host_fail(rt_format(\"process '%s' exited with status %d\", command, code));", 3890, 32, 3890, 128));
+rv t17510 = rt_list_append(v_lines, rt_str_at("        waitpid(pid, &status, 0);", 3890, 32, 3890, 67));
 v_lines = t17510;
 rv t17511 = rt_list_append(v_lines, rt_str_at("    }", 3891, 32, 3891, 39));
 v_lines = t17511;
-rv t17512 = rt_list_append(v_lines, rt_str_at("    if (!rt_valid_utf8((const unsigned char *)(out.p \? out.p : \"\"), out.n)) {", 3892, 32, 3892, 114));
+rv t17512 = rt_list_append(v_lines, rt_str_at("    killpg(pid, SIGKILL);", 3892, 32, 3892, 59));
 v_lines = t17512;
-rv t17513 = rt_list_append(v_lines, rt_str_at("        return rt_host_fail(rt_format(\"process '%s' wrote output that is not UTF-8\", command));", 3893, 32, 3893, 131));
+rv t17513 = rt_list_append(v_lines, rt_str_at("    close(out_pipe[0]);", 3893, 32, 3893, 57));
 v_lines = t17513;
-rv t17514 = rt_list_append(v_lines, rt_str_at("    }", 3894, 32, 3894, 39));
+rv t17514 = rt_list_append(v_lines, rt_str_at("    close(err_pipe[0]);", 3894, 32, 3894, 57));
 v_lines = t17514;
-rv t17515 = rt_list_append(v_lines, rt_str_at("    return rt_host_done(out);", 3895, 32, 3895, 63));
+rv t17515 = rt_list_append(v_lines, rt_str_at("    if (timed_out) return rt_host_fail(rt_format(\"process '%s' exceeded %d seconds\", command, RT_HOST_SECONDS));", 3895, 32, 3895, 148));
 v_lines = t17515;
-rv t17516 = rt_list_append(v_lines, rt_str_at("}", 3896, 32, 3896, 35));
+rv t17516 = rt_list_append(v_lines, rt_str_at("    if (too_large) return rt_host_fail(rt_format(\"process output exceeds %d bytes\", RT_HOST_MAX_BYTES));", 3896, 32, 3896, 140));
 v_lines = t17516;
-rv t17517 = rt_list_append(v_lines, rt_str_at("#endif", 3897, 32, 3897, 40));
+rv t17517 = rt_list_append(v_lines, rt_str_at("    int code = WIFEXITED(status) \? WEXITSTATUS(status) : (WIFSIGNALED(status) \? -WTERMSIG(status) : status);", 3897, 32, 3897, 142));
 v_lines = t17517;
-rv t17518 = rt_list_append(v_lines, rt_str_at("", 3898, 32, 3898, 34));
+rv t17518 = rt_list_append(v_lines, rt_str_at("    if (code != 0) {", 3898, 32, 3898, 55));
 v_lines = t17518;
-rv t17519 = rt_list_append(v_lines, rt_str_at("/* The text of a result: what the operation read, as a Text. */", 3899, 32, 3899, 97));
+rv t17519 = rt_list_append(v_lines, rt_str_at("        const char *text = err.p \? err.p : \"\";", 3899, 32, 3899, 82));
 v_lines = t17519;
-rv t17520 = rt_list_append(v_lines, rt_str_at("static rv rt_host_text(rt_host_result r) {", 3900, 32, 3900, 77));
+rv t17520 = rt_list_append(v_lines, rt_str_at("        size_t length = err.n;", 3900, 32, 3900, 64));
 v_lines = t17520;
-rv t17521 = rt_list_append(v_lines, rt_str_at("    char *copy = (char *)rt_alloc_raw(r.data.n + 1);", 3901, 32, 3901, 86));
+rv t17521 = rt_list_append(v_lines, rt_str_at("        while (length > 0 && (text[length - 1] == ' ' || text[length - 1] == '\\n' || text[length - 1] == '\\r' || text[length - 1] == '\\t')) length--;", 3901, 32, 3901, 186));
 v_lines = t17521;
-rv t17522 = rt_list_append(v_lines, rt_str_at("    if (r.data.n) memcpy(copy, r.data.p, r.data.n);", 3902, 32, 3902, 85));
+rv t17522 = rt_list_append(v_lines, rt_str_at("        while (length > 0 && (*text == ' ' || *text == '\\n' || *text == '\\r' || *text == '\\t')) { text++; length--; }", 3902, 32, 3902, 155));
 v_lines = t17522;
-rv t17523 = rt_list_append(v_lines, rt_str_at("    copy[r.data.n] = 0;", 3903, 32, 3903, 57));
+rv t17523 = rt_list_append(v_lines, rt_str_at("        if (length > 0) return rt_host_fail(rt_format(\"process '%s' exited with status %d: %.*s\", command, code, (int)length, text));", 3903, 32, 3903, 169));
 v_lines = t17523;
-rv t17524 = rt_list_append(v_lines, rt_str_at("    int64_t points = 0;", 3904, 32, 3904, 57));
+rv t17524 = rt_list_append(v_lines, rt_str_at("        return rt_host_fail(rt_format(\"process '%s' exited with status %d\", command, code));", 3904, 32, 3904, 128));
 v_lines = t17524;
-rv t17525 = rt_list_append(v_lines, rt_str_at("    for (size_t i = 0; i < r.data.n; i++) if (((unsigned char)copy[i] & 0xC0) != 0x80) points++;", 3905, 32, 3905, 130));
+rv t17525 = rt_list_append(v_lines, rt_str_at("    }", 3905, 32, 3905, 39));
 v_lines = t17525;
-rv t17526 = rt_list_append(v_lines, rt_str_at("    rt_text t = {copy, (int64_t)r.data.n, points};", 3906, 32, 3906, 85));
+rv t17526 = rt_list_append(v_lines, rt_str_at("    if (!rt_valid_utf8((const unsigned char *)(out.p \? out.p : \"\"), out.n)) {", 3906, 32, 3906, 114));
 v_lines = t17526;
-rv t17527 = rt_list_append(v_lines, rt_str_at("    return rt_txt(t);", 3907, 32, 3907, 55));
+rv t17527 = rt_list_append(v_lines, rt_str_at("        return rt_host_fail(rt_format(\"process '%s' wrote output that is not UTF-8\", command));", 3907, 32, 3907, 131));
 v_lines = t17527;
-rv t17528 = rt_list_append(v_lines, rt_str_at("}", 3908, 32, 3908, 35));
+rv t17528 = rt_list_append(v_lines, rt_str_at("    }", 3908, 32, 3908, 39));
 v_lines = t17528;
-rv t17529 = rt_list_append(v_lines, rt_str_at("", 3909, 32, 3909, 34));
+rv t17529 = rt_list_append(v_lines, rt_str_at("    return rt_host_done(out);", 3909, 32, 3909, 63));
 v_lines = t17529;
-rv t17530 = rt_list_append(v_lines, rt_str_at("/* The arguments of a command, as C strings. */", 3910, 32, 3910, 81));
+rv t17530 = rt_list_append(v_lines, rt_str_at("}", 3910, 32, 3910, 35));
 v_lines = t17530;
-rv t17531 = rt_list_append(v_lines, rt_str_at("static const char *const *rt_host_arguments(rv list, int *count) {", 3911, 32, 3911, 101));
+rv t17531 = rt_list_append(v_lines, rt_str_at("#endif", 3911, 32, 3911, 40));
 v_lines = t17531;
-rv t17532 = rt_list_append(v_lines, rt_str_at("    rt_list *items = rt_as_list(list);", 3912, 32, 3912, 72));
+rv t17532 = rt_list_append(v_lines, rt_str_at("", 3912, 32, 3912, 34));
 v_lines = t17532;
-rv t17533 = rt_list_append(v_lines, rt_str_at("    *count = (int)items->n;", 3913, 32, 3913, 61));
+rv t17533 = rt_list_append(v_lines, rt_str_at("/* The text of a result: what the operation read, as a Text. */", 3913, 32, 3913, 97));
 v_lines = t17533;
-rv t17534 = rt_list_append(v_lines, rt_str_at("    const char **out = (const char **)rt_alloc_raw(sizeof(char *) * (size_t)(items->n + 1));", 3914, 32, 3914, 126));
+rv t17534 = rt_list_append(v_lines, rt_str_at("static rv rt_host_text(rt_host_result r) {", 3914, 32, 3914, 77));
 v_lines = t17534;
-rv t17535 = rt_list_append(v_lines, rt_str_at("    for (int64_t i = 0; i < items->n; i++) out[i] = items->items[i].u.t.p;", 3915, 32, 3915, 108));
+rv t17535 = rt_list_append(v_lines, rt_str_at("    char *copy = (char *)rt_alloc_raw(r.data.n + 1);", 3915, 32, 3915, 86));
 v_lines = t17535;
-rv t17536 = rt_list_append(v_lines, rt_str_at("    out[items->n] = 0;", 3916, 32, 3916, 56));
+rv t17536 = rt_list_append(v_lines, rt_str_at("    if (r.data.n) memcpy(copy, r.data.p, r.data.n);", 3916, 32, 3916, 85));
 v_lines = t17536;
-rv t17537 = rt_list_append(v_lines, rt_str_at("    return out;", 3917, 32, 3917, 49));
+rv t17537 = rt_list_append(v_lines, rt_str_at("    copy[r.data.n] = 0;", 3917, 32, 3917, 57));
 v_lines = t17537;
-rv t17538 = rt_list_append(v_lines, rt_str_at("}", 3918, 32, 3918, 35));
+rv t17538 = rt_list_append(v_lines, rt_str_at("    int64_t points = 0;", 3918, 32, 3918, 57));
 v_lines = t17538;
-rv t17539 = rt_list_append(v_lines, rt_str_at("", 3919, 32, 3919, 34));
+rv t17539 = rt_list_append(v_lines, rt_str_at("    for (size_t i = 0; i < r.data.n; i++) if (((unsigned char)copy[i] & 0xC0) != 0x80) points++;", 3919, 32, 3919, 130));
 v_lines = t17539;
-rv t17540 = rt_list_append(v_lines, rt_str_at("/* For the interpreter of the tools (selfhost/interpreter.nex): the operation done by the host. The answer is a list of two texts, \"ok\"", 3920, 32, 3920, 171));
+rv t17540 = rt_list_append(v_lines, rt_str_at("    rt_text t = {copy, (int64_t)r.data.n, points};", 3920, 32, 3920, 85));
 v_lines = t17540;
-rv t17541 = rt_list_append(v_lines, rt_str_at(" * and what was read, or \"error\" and the reason. */", 3921, 32, 3921, 87));
+rv t17541 = rt_list_append(v_lines, rt_str_at("    return rt_txt(t);", 3921, 32, 3921, 55));
 v_lines = t17541;
-rv t17542 = rt_list_append(v_lines, rt_str_at("static rv rt_host_answer(rt_host_result r) {", 3922, 32, 3922, 79));
+rv t17542 = rt_list_append(v_lines, rt_str_at("}", 3922, 32, 3922, 35));
 v_lines = t17542;
-rv t17543 = rt_list_append(v_lines, rt_str_at("    rv items[2];", 3923, 32, 3923, 50));
+rv t17543 = rt_list_append(v_lines, rt_str_at("", 3923, 32, 3923, 34));
 v_lines = t17543;
-rv t17544 = rt_list_append(v_lines, rt_str_at("    items[0] = rt_str(r.ok \? \"ok\" : \"error\");", 3924, 32, 3924, 83));
+rv t17544 = rt_list_append(v_lines, rt_str_at("/* The arguments of a command, as C strings. */", 3924, 32, 3924, 81));
 v_lines = t17544;
-rv t17545 = rt_list_append(v_lines, rt_str_at("    items[1] = r.ok \? rt_host_text(r) : rt_str(r.error \? r.error : \"failed\");", 3925, 32, 3925, 113));
+rv t17545 = rt_list_append(v_lines, rt_str_at("static const char *const *rt_host_arguments(rv list, int *count) {", 3925, 32, 3925, 101));
 v_lines = t17545;
-rv t17546 = rt_list_append(v_lines, rt_str_at("    return rt_list_from(items, 2);", 3926, 32, 3926, 68));
+rv t17546 = rt_list_append(v_lines, rt_str_at("    rt_list *items = rt_as_list(list);", 3926, 32, 3926, 72));
 v_lines = t17546;
-rv t17547 = rt_list_append(v_lines, rt_str_at("}", 3927, 32, 3927, 35));
+rv t17547 = rt_list_append(v_lines, rt_str_at("    *count = (int)items->n;", 3927, 32, 3927, 61));
 v_lines = t17547;
-rv t17548 = rt_list_append(v_lines, rt_str_at("", 3928, 32, 3928, 34));
+rv t17548 = rt_list_append(v_lines, rt_str_at("    const char **out = (const char **)rt_alloc_raw(sizeof(char *) * (size_t)(items->n + 1));", 3928, 32, 3928, 126));
 v_lines = t17548;
-rv t17549 = rt_list_append(v_lines, rt_str_at("static rv rt_intr_host_get(rv url) { return rt_host_answer(rt_https_get(url.u.t.p)); }", 3929, 32, 3929, 121));
+rv t17549 = rt_list_append(v_lines, rt_str_at("    for (int64_t i = 0; i < items->n; i++) out[i] = items->items[i].u.t.p;", 3929, 32, 3929, 108));
 v_lines = t17549;
-rv t17550 = rt_list_append(v_lines, rt_str_at("", 3930, 32, 3930, 34));
+rv t17550 = rt_list_append(v_lines, rt_str_at("    out[items->n] = 0;", 3930, 32, 3930, 56));
 v_lines = t17550;
-rv t17551 = rt_list_append(v_lines, rt_str_at("/* Where a path really leads, for the interpreter written in NEXORA: the empty text when that cannot be decided. */", 3931, 32, 3931, 149));
+rv t17551 = rt_list_append(v_lines, rt_str_at("    return out;", 3931, 32, 3931, 49));
 v_lines = t17551;
-rv t17552 = rt_list_append(v_lines, rt_str_at("static rv rt_intr_host_real(rv path) {", 3932, 32, 3932, 73));
+rv t17552 = rt_list_append(v_lines, rt_str_at("}", 3932, 32, 3932, 35));
 v_lines = t17552;
-rv t17553 = rt_list_append(v_lines, rt_str_at("    const char *real = rt_resolve(path.u.t.p);", 3933, 32, 3933, 80));
+rv t17553 = rt_list_append(v_lines, rt_str_at("", 3933, 32, 3933, 34));
 v_lines = t17553;
-rv t17554 = rt_list_append(v_lines, rt_str_at("    return real \? rt_from_cstr(real) : rt_str(\"\");", 3934, 32, 3934, 86));
+rv t17554 = rt_list_append(v_lines, rt_str_at("/* For the interpreter of the tools (selfhost/interpreter.nex): the operation done by the host. The answer is a list of two texts, \"ok\"", 3934, 32, 3934, 171));
 v_lines = t17554;
-rv t17555 = rt_list_append(v_lines, rt_str_at("}", 3935, 32, 3935, 35));
+rv t17555 = rt_list_append(v_lines, rt_str_at(" * and what was read, or \"error\" and the reason. */", 3935, 32, 3935, 87));
 v_lines = t17555;
-rv t17556 = rt_list_append(v_lines, rt_str_at("", 3936, 32, 3936, 34));
+rv t17556 = rt_list_append(v_lines, rt_str_at("static rv rt_host_answer(rt_host_result r) {", 3936, 32, 3936, 79));
 v_lines = t17556;
-rv t17557 = rt_list_append(v_lines, rt_str_at("static rv rt_intr_host_run(rv command, rv arguments) {", 3937, 32, 3937, 89));
+rv t17557 = rt_list_append(v_lines, rt_str_at("    rv items[2];", 3937, 32, 3937, 50));
 v_lines = t17557;
-rv t17558 = rt_list_append(v_lines, rt_str_at("    int count;", 3938, 32, 3938, 48));
+rv t17558 = rt_list_append(v_lines, rt_str_at("    items[0] = rt_str(r.ok \? \"ok\" : \"error\");", 3938, 32, 3938, 83));
 v_lines = t17558;
-rv t17559 = rt_list_append(v_lines, rt_str_at("    const char *const *list = rt_host_arguments(arguments, &count);", 3939, 32, 3939, 101));
+rv t17559 = rt_list_append(v_lines, rt_str_at("    items[1] = r.ok \? rt_host_text(r) : rt_str(r.error \? r.error : \"failed\");", 3939, 32, 3939, 113));
 v_lines = t17559;
-rv t17560 = rt_list_append(v_lines, rt_str_at("    return rt_host_answer(rt_run_process(command.u.t.p, list, count));", 3940, 32, 3940, 104));
+rv t17560 = rt_list_append(v_lines, rt_str_at("    return rt_list_from(items, 2);", 3940, 32, 3940, 68));
 v_lines = t17560;
 rv t17561 = rt_list_append(v_lines, rt_str_at("}", 3941, 32, 3941, 35));
 v_lines = t17561;
 rv t17562 = rt_list_append(v_lines, rt_str_at("", 3942, 32, 3942, 34));
 v_lines = t17562;
-rv t17563 = rt_list_append(v_lines, rt_str_at("static bool rt_scope_allows_origin(const char *scope, const char *origin) {", 3943, 32, 3943, 110));
+rv t17563 = rt_list_append(v_lines, rt_str_at("static rv rt_intr_host_get(rv url) { return rt_host_answer(rt_https_get(url.u.t.p)); }", 3943, 32, 3943, 121));
 v_lines = t17563;
-rv t17564 = rt_list_append(v_lines, rt_str_at("    int a, b;", 3944, 32, 3944, 47));
+rv t17564 = rt_list_append(v_lines, rt_str_at("", 3944, 32, 3944, 34));
 v_lines = t17564;
-rv t17565 = rt_list_append(v_lines, rt_str_at("    const char *declared = rt_origin(scope, &a);", 3945, 32, 3945, 82));
+rv t17565 = rt_list_append(v_lines, rt_str_at("/* Where a path really leads, for the interpreter written in NEXORA: the empty text when that cannot be decided. */", 3945, 32, 3945, 149));
 v_lines = t17565;
-rv t17566 = rt_list_append(v_lines, rt_str_at("    const char *wanted = rt_origin(origin, &b);", 3946, 32, 3946, 81));
+rv t17566 = rt_list_append(v_lines, rt_str_at("static rv rt_intr_host_real(rv path) {", 3946, 32, 3946, 73));
 v_lines = t17566;
-rv t17567 = rt_list_append(v_lines, rt_str_at("    return declared && wanted && strcmp(declared, wanted) == 0;", 3947, 32, 3947, 97));
+rv t17567 = rt_list_append(v_lines, rt_str_at("    const char *real = rt_resolve(path.u.t.p);", 3947, 32, 3947, 80));
 v_lines = t17567;
-rv t17568 = rt_list_append(v_lines, rt_str_at("}", 3948, 32, 3948, 35));
+rv t17568 = rt_list_append(v_lines, rt_str_at("    return real \? rt_from_cstr(real) : rt_str(\"\");", 3948, 32, 3948, 86));
 v_lines = t17568;
-rv t17569 = rt_list_append(v_lines, rt_str_at("", 3949, 32, 3949, 34));
+rv t17569 = rt_list_append(v_lines, rt_str_at("}", 3949, 32, 3949, 35));
 v_lines = t17569;
-rv t17570 = rt_list_append(v_lines, rt_str_at("static bool rt_has_scope(const char *const *kinds, const char *const *paths, int count, const char *kind, const char *origin) {", 3950, 32, 3950, 162));
+rv t17570 = rt_list_append(v_lines, rt_str_at("", 3950, 32, 3950, 34));
 v_lines = t17570;
-rv t17571 = rt_list_append(v_lines, rt_str_at("    for (int i = 0; i < count; i++) {", 3951, 32, 3951, 72));
+rv t17571 = rt_list_append(v_lines, rt_str_at("static rv rt_intr_host_run(rv command, rv arguments) {", 3951, 32, 3951, 89));
 v_lines = t17571;
-rv t17572 = rt_list_append(v_lines, rt_str_at("        if (strcmp(kinds[i], kind) == 0 && rt_scope_allows_origin(paths[i], origin)) return true;", 3952, 32, 3952, 131));
+rv t17572 = rt_list_append(v_lines, rt_str_at("    int count;", 3952, 32, 3952, 48));
 v_lines = t17572;
-rv t17573 = rt_list_append(v_lines, rt_str_at("    }", 3953, 32, 3953, 39));
+rv t17573 = rt_list_append(v_lines, rt_str_at("    const char *const *list = rt_host_arguments(arguments, &count);", 3953, 32, 3953, 101));
 v_lines = t17573;
-rv t17574 = rt_list_append(v_lines, rt_str_at("    return false;", 3954, 32, 3954, 51));
+rv t17574 = rt_list_append(v_lines, rt_str_at("    return rt_host_answer(rt_run_process(command.u.t.p, list, count));", 3954, 32, 3954, 104));
 v_lines = t17574;
 rv t17575 = rt_list_append(v_lines, rt_str_at("}", 3955, 32, 3955, 35));
 v_lines = t17575;
 rv t17576 = rt_list_append(v_lines, rt_str_at("", 3956, 32, 3956, 34));
 v_lines = t17576;
-rv t17577 = rt_list_append(v_lines, rt_str_at("static rv rt_net_get(rv url, RT_SPAN) {", 3957, 32, 3957, 74));
+rv t17577 = rt_list_append(v_lines, rt_str_at("static bool rt_scope_allows_origin(const char *scope, const char *origin) {", 3957, 32, 3957, 110));
 v_lines = t17577;
-rv t17578 = rt_list_append(v_lines, rt_str_at("    int port;", 3958, 32, 3958, 47));
+rv t17578 = rt_list_append(v_lines, rt_str_at("    int a, b;", 3958, 32, 3958, 47));
 v_lines = t17578;
-rv t17579 = rt_list_append(v_lines, rt_str_at("    const char *origin = rt_origin(url.u.t.p, &port);", 3959, 32, 3959, 87));
+rv t17579 = rt_list_append(v_lines, rt_str_at("    const char *declared = rt_origin(scope, &a);", 3959, 32, 3959, 82));
 v_lines = t17579;
-rv t17580 = rt_list_append(v_lines, rt_str_at("    static const char *hint = \"A program needs 'uses network' and the matching --allow-network origin; the environment may still deny network access.\";", 3960, 32, 3960, 187));
+rv t17580 = rt_list_append(v_lines, rt_str_at("    const char *wanted = rt_origin(origin, &b);", 3960, 32, 3960, 81));
 v_lines = t17580;
-rv t17581 = rt_list_append(v_lines, rt_str_at("    if (!origin) {", 3961, 32, 3961, 53));
+rv t17581 = rt_list_append(v_lines, rt_str_at("    return declared && wanted && strcmp(declared, wanted) == 0;", 3961, 32, 3961, 97));
 v_lines = t17581;
-rv t17582 = rt_list_append(v_lines, rt_str_at("        rt_runtime(\"E3014\", \"External operation failed\", \"only HTTPS URLs without credentials and on port 443 are allowed\", \"\", l, c, el, ec);", 3962, 32, 3962, 184));
+rv t17582 = rt_list_append(v_lines, rt_str_at("}", 3962, 32, 3962, 35));
 v_lines = t17582;
-rv t17583 = rt_list_append(v_lines, rt_str_at("    }", 3963, 32, 3963, 39));
+rv t17583 = rt_list_append(v_lines, rt_str_at("", 3963, 32, 3963, 34));
 v_lines = t17583;
-rv t17584 = rt_list_append(v_lines, rt_str_at("    if (!rt_has_scope(rt_declared_kind, rt_declared_path, rt_declared, \"network\", origin)) {", 3964, 32, 3964, 129));
+rv t17584 = rt_list_append(v_lines, rt_str_at("static bool rt_has_scope(const char *const *kinds, const char *const *paths, int count, const char *kind, const char *origin) {", 3964, 32, 3964, 162));
 v_lines = t17584;
-rv t17585 = rt_list_append(v_lines, rt_str_at("        rt_runtime(\"E3008\", \"Permission denied\", rt_format(\"this program does not declare network access to '%s'\", origin), hint, l, c, el, ec);", 3965, 32, 3965, 184));
+rv t17585 = rt_list_append(v_lines, rt_str_at("    for (int i = 0; i < count; i++) {", 3965, 32, 3965, 72));
 v_lines = t17585;
-rv t17586 = rt_list_append(v_lines, rt_str_at("    }", 3966, 32, 3966, 39));
+rv t17586 = rt_list_append(v_lines, rt_str_at("        if (strcmp(kinds[i], kind) == 0 && rt_scope_allows_origin(paths[i], origin)) return true;", 3966, 32, 3966, 131));
 v_lines = t17586;
-rv t17587 = rt_list_append(v_lines, rt_str_at("    if (!rt_has_scope(rt_granted_kind, rt_granted_path, rt_granted, \"network\", origin)) {", 3967, 32, 3967, 126));
+rv t17587 = rt_list_append(v_lines, rt_str_at("    }", 3967, 32, 3967, 39));
 v_lines = t17587;
-rv t17588 = rt_list_append(v_lines, rt_str_at("        rt_runtime(\"E3008\", \"Permission denied\", rt_format(\"'%s' is not among the network origins the user allowed\", origin), hint, l, c, el, ec);", 3968, 32, 3968, 186));
+rv t17588 = rt_list_append(v_lines, rt_str_at("    return false;", 3968, 32, 3968, 51));
 v_lines = t17588;
-rv t17589 = rt_list_append(v_lines, rt_str_at("    }", 3969, 32, 3969, 39));
+rv t17589 = rt_list_append(v_lines, rt_str_at("}", 3969, 32, 3969, 35));
 v_lines = t17589;
-rv t17590 = rt_list_append(v_lines, rt_str_at("    rt_host_result done = rt_https_get(url.u.t.p);", 3970, 32, 3970, 84));
+rv t17590 = rt_list_append(v_lines, rt_str_at("", 3970, 32, 3970, 34));
 v_lines = t17590;
-rv t17591 = rt_list_append(v_lines, rt_str_at("    if (!done.ok) rt_runtime(\"E3014\", \"External operation failed\", done.error, \"\", l, c, el, ec);", 3971, 32, 3971, 137));
+rv t17591 = rt_list_append(v_lines, rt_str_at("static rv rt_net_get(rv url, RT_SPAN) {", 3971, 32, 3971, 74));
 v_lines = t17591;
-rv t17592 = rt_list_append(v_lines, rt_str_at("    return rt_check_text(rt_host_text(done), l, c, el, ec);", 3972, 32, 3972, 93));
+rv t17592 = rt_list_append(v_lines, rt_str_at("    int port;", 3972, 32, 3972, 47));
 v_lines = t17592;
-rv t17593 = rt_list_append(v_lines, rt_str_at("}", 3973, 32, 3973, 35));
+rv t17593 = rt_list_append(v_lines, rt_str_at("    const char *origin = rt_origin(url.u.t.p, &port);", 3973, 32, 3973, 87));
 v_lines = t17593;
-rv t17594 = rt_list_append(v_lines, rt_str_at("", 3974, 32, 3974, 34));
+rv t17594 = rt_list_append(v_lines, rt_str_at("    static const char *hint = \"A program needs 'uses network' and the matching --allow-network origin; the environment may still deny network access.\";", 3974, 32, 3974, 187));
 v_lines = t17594;
-rv t17595 = rt_list_append(v_lines, rt_str_at("static bool rt_has_command(const char *const *kinds, const char *const *paths, int count, const char *command) {", 3975, 32, 3975, 147));
+rv t17595 = rt_list_append(v_lines, rt_str_at("    if (!origin) {", 3975, 32, 3975, 53));
 v_lines = t17595;
-rv t17596 = rt_list_append(v_lines, rt_str_at("    for (int i = 0; i < count; i++) {", 3976, 32, 3976, 72));
+rv t17596 = rt_list_append(v_lines, rt_str_at("        rt_runtime(\"E3014\", \"External operation failed\", \"only HTTPS URLs without credentials and on port 443 are allowed\", \"\", l, c, el, ec);", 3976, 32, 3976, 184));
 v_lines = t17596;
-rv t17597 = rt_list_append(v_lines, rt_str_at("        if (strcmp(kinds[i], \"process\") == 0 && strcmp(paths[i], command) == 0) return true;", 3977, 32, 3977, 128));
+rv t17597 = rt_list_append(v_lines, rt_str_at("    }", 3977, 32, 3977, 39));
 v_lines = t17597;
-rv t17598 = rt_list_append(v_lines, rt_str_at("    }", 3978, 32, 3978, 39));
+rv t17598 = rt_list_append(v_lines, rt_str_at("    if (!rt_has_scope(rt_declared_kind, rt_declared_path, rt_declared, \"network\", origin)) {", 3978, 32, 3978, 129));
 v_lines = t17598;
-rv t17599 = rt_list_append(v_lines, rt_str_at("    return false;", 3979, 32, 3979, 51));
+rv t17599 = rt_list_append(v_lines, rt_str_at("        rt_runtime(\"E3008\", \"Permission denied\", rt_format(\"this program does not declare network access to '%s'\", origin), hint, l, c, el, ec);", 3979, 32, 3979, 184));
 v_lines = t17599;
-rv t17600 = rt_list_append(v_lines, rt_str_at("}", 3980, 32, 3980, 35));
+rv t17600 = rt_list_append(v_lines, rt_str_at("    }", 3980, 32, 3980, 39));
 v_lines = t17600;
-rv t17601 = rt_list_append(v_lines, rt_str_at("", 3981, 32, 3981, 34));
+rv t17601 = rt_list_append(v_lines, rt_str_at("    if (!rt_has_scope(rt_granted_kind, rt_granted_path, rt_granted, \"network\", origin)) {", 3981, 32, 3981, 126));
 v_lines = t17601;
-rv t17602 = rt_list_append(v_lines, rt_str_at("static rv rt_process_run(rv command, rv arguments, RT_SPAN) {", 3982, 32, 3982, 96));
+rv t17602 = rt_list_append(v_lines, rt_str_at("        rt_runtime(\"E3008\", \"Permission denied\", rt_format(\"'%s' is not among the network origins the user allowed\", origin), hint, l, c, el, ec);", 3982, 32, 3982, 186));
 v_lines = t17602;
-rv t17603 = rt_list_append(v_lines, rt_str_at("    const char *name = command.u.t.p;", 3983, 32, 3983, 71));
+rv t17603 = rt_list_append(v_lines, rt_str_at("    }", 3983, 32, 3983, 39));
 v_lines = t17603;
-rv t17604 = rt_list_append(v_lines, rt_str_at("    static const char *hint = \"A program needs 'uses process' and the matching --allow-process command; the environment may still deny external processes.\";", 3984, 32, 3984, 192));
+rv t17604 = rt_list_append(v_lines, rt_str_at("    rt_host_result done = rt_https_get(url.u.t.p);", 3984, 32, 3984, 84));
 v_lines = t17604;
-rv t17605 = rt_list_append(v_lines, rt_str_at("    if (!rt_has_command(rt_declared_kind, rt_declared_path, rt_declared, name)) {", 3985, 32, 3985, 116));
+rv t17605 = rt_list_append(v_lines, rt_str_at("    if (!done.ok) rt_runtime(\"E3014\", \"External operation failed\", done.error, \"\", l, c, el, ec);", 3985, 32, 3985, 137));
 v_lines = t17605;
-rv t17606 = rt_list_append(v_lines, rt_str_at("        rt_runtime(\"E3008\", \"Permission denied\", rt_format(\"this program does not declare permission to run '%s'\", name), hint, l, c, el, ec);", 3986, 32, 3986, 182));
+rv t17606 = rt_list_append(v_lines, rt_str_at("    return rt_check_text(rt_host_text(done), l, c, el, ec);", 3986, 32, 3986, 93));
 v_lines = t17606;
-rv t17607 = rt_list_append(v_lines, rt_str_at("    }", 3987, 32, 3987, 39));
+rv t17607 = rt_list_append(v_lines, rt_str_at("}", 3987, 32, 3987, 35));
 v_lines = t17607;
-rv t17608 = rt_list_append(v_lines, rt_str_at("    if (!rt_has_command(rt_granted_kind, rt_granted_path, rt_granted, name)) {", 3988, 32, 3988, 113));
+rv t17608 = rt_list_append(v_lines, rt_str_at("", 3988, 32, 3988, 34));
 v_lines = t17608;
-rv t17609 = rt_list_append(v_lines, rt_str_at("        rt_runtime(\"E3008\", \"Permission denied\", rt_format(\"'%s' is not among the commands the user allowed\", name), hint, l, c, el, ec);", 3989, 32, 3989, 177));
+rv t17609 = rt_list_append(v_lines, rt_str_at("static bool rt_has_command(const char *const *kinds, const char *const *paths, int count, const char *command) {", 3989, 32, 3989, 147));
 v_lines = t17609;
-rv t17610 = rt_list_append(v_lines, rt_str_at("    }", 3990, 32, 3990, 39));
+rv t17610 = rt_list_append(v_lines, rt_str_at("    for (int i = 0; i < count; i++) {", 3990, 32, 3990, 72));
 v_lines = t17610;
-rv t17611 = rt_list_append(v_lines, rt_str_at("    int count;", 3991, 32, 3991, 48));
+rv t17611 = rt_list_append(v_lines, rt_str_at("        if (strcmp(kinds[i], \"process\") == 0 && strcmp(paths[i], command) == 0) return true;", 3991, 32, 3991, 128));
 v_lines = t17611;
-rv t17612 = rt_list_append(v_lines, rt_str_at("    const char *const *list = rt_host_arguments(arguments, &count);", 3992, 32, 3992, 101));
+rv t17612 = rt_list_append(v_lines, rt_str_at("    }", 3992, 32, 3992, 39));
 v_lines = t17612;
-rv t17613 = rt_list_append(v_lines, rt_str_at("    rt_host_result done = rt_run_process(name, list, count);", 3993, 32, 3993, 94));
+rv t17613 = rt_list_append(v_lines, rt_str_at("    return false;", 3993, 32, 3993, 51));
 v_lines = t17613;
-rv t17614 = rt_list_append(v_lines, rt_str_at("    if (!done.ok) rt_runtime(\"E3014\", \"External operation failed\", done.error, \"\", l, c, el, ec);", 3994, 32, 3994, 137));
+rv t17614 = rt_list_append(v_lines, rt_str_at("}", 3994, 32, 3994, 35));
 v_lines = t17614;
-rv t17615 = rt_list_append(v_lines, rt_str_at("    return rt_check_text(rt_host_text(done), l, c, el, ec);", 3995, 32, 3995, 93));
+rv t17615 = rt_list_append(v_lines, rt_str_at("", 3995, 32, 3995, 34));
 v_lines = t17615;
-rv t17616 = rt_list_append(v_lines, rt_str_at("}", 3996, 32, 3996, 35));
+rv t17616 = rt_list_append(v_lines, rt_str_at("static rv rt_process_run(rv command, rv arguments, RT_SPAN) {", 3996, 32, 3996, 96));
 v_lines = t17616;
-rv t17617 = rt_list_append(v_lines, rt_str_at("", 3997, 32, 3997, 34));
+rv t17617 = rt_list_append(v_lines, rt_str_at("    const char *name = command.u.t.p;", 3997, 32, 3997, 71));
 v_lines = t17617;
-rv t17618 = rt_list_append(v_lines, rt_str_at("static rv rt_args(RT_SPAN) {", 3998, 32, 3998, 63));
+rv t17618 = rt_list_append(v_lines, rt_str_at("    static const char *hint = \"A program needs 'uses process' and the matching --allow-process command; the environment may still deny external processes.\";", 3998, 32, 3998, 192));
 v_lines = t17618;
-rv t17619 = rt_list_append(v_lines, rt_str_at("    rv *items = (rv *)rt_alloc((size_t)(rt_args_count > 0 \? rt_args_count : 1) * sizeof(rv));", 3999, 32, 3999, 127));
+rv t17619 = rt_list_append(v_lines, rt_str_at("    if (!rt_has_command(rt_declared_kind, rt_declared_path, rt_declared, name)) {", 3999, 32, 3999, 116));
 v_lines = t17619;
-rv t17620 = rt_list_append(v_lines, rt_str_at("    for (int i = 0; i < rt_args_count; i++) items[i] = rt_check_text(rt_str(rt_args_list[i]), l, c, el, ec);", 4000, 32, 4000, 142));
+rv t17620 = rt_list_append(v_lines, rt_str_at("        rt_runtime(\"E3008\", \"Permission denied\", rt_format(\"this program does not declare permission to run '%s'\", name), hint, l, c, el, ec);", 4000, 32, 4000, 182));
 v_lines = t17620;
-rv t17621 = rt_list_append(v_lines, rt_str_at("    return rt_list_from(items, rt_args_count);", 4001, 32, 4001, 80));
+rv t17621 = rt_list_append(v_lines, rt_str_at("    }", 4001, 32, 4001, 39));
 v_lines = t17621;
-rv t17622 = rt_list_append(v_lines, rt_str_at("}", 4002, 32, 4002, 35));
+rv t17622 = rt_list_append(v_lines, rt_str_at("    if (!rt_has_command(rt_granted_kind, rt_granted_path, rt_granted, name)) {", 4002, 32, 4002, 113));
 v_lines = t17622;
-rv t17623 = rt_list_append(v_lines, rt_str_at("", 4003, 32, 4003, 34));
+rv t17623 = rt_list_append(v_lines, rt_str_at("        rt_runtime(\"E3008\", \"Permission denied\", rt_format(\"'%s' is not among the commands the user allowed\", name), hint, l, c, el, ec);", 4003, 32, 4003, 177));
 v_lines = t17623;
-rv t17624 = rt_list_append(v_lines, rt_str_at("/* The command line of an executable is the one of `nex run`: the options of the user, then `--`, then the arguments of the", 4004, 32, 4004, 157));
+rv t17624 = rt_list_append(v_lines, rt_str_at("    }", 4004, 32, 4004, 39));
 v_lines = t17624;
-rv t17625 = rt_list_append(v_lines, rt_str_at(" * program. */", 4005, 32, 4005, 48));
+rv t17625 = rt_list_append(v_lines, rt_str_at("    int count;", 4005, 32, 4005, 48));
 v_lines = t17625;
-rv t17626 = rt_list_append(v_lines, rt_str_at("static void rt_options(int argc, char **argv) {", 4006, 32, 4006, 82));
+rv t17626 = rt_list_append(v_lines, rt_str_at("    const char *const *list = rt_host_arguments(arguments, &count);", 4006, 32, 4006, 101));
 v_lines = t17626;
-rv t17627 = rt_list_append(v_lines, rt_str_at("#ifdef RT_CLI", 4007, 32, 4007, 47));
+rv t17627 = rt_list_append(v_lines, rt_str_at("    rt_host_result done = rt_run_process(name, list, count);", 4007, 32, 4007, 94));
 v_lines = t17627;
-rv t17628 = rt_list_append(v_lines, rt_str_at("    /* Every argument belongs to the tool: `nex run --max-output 5 file` is not an option of the runtime. */", 4008, 32, 4008, 142));
+rv t17628 = rt_list_append(v_lines, rt_str_at("    if (!done.ok) rt_runtime(\"E3014\", \"External operation failed\", done.error, \"\", l, c, el, ec);", 4008, 32, 4008, 137));
 v_lines = t17628;
-rv t17629 = rt_list_append(v_lines, rt_str_at("    rt_args_list = (const char *const *)(argv + 1);", 4009, 32, 4009, 85));
+rv t17629 = rt_list_append(v_lines, rt_str_at("    return rt_check_text(rt_host_text(done), l, c, el, ec);", 4009, 32, 4009, 93));
 v_lines = t17629;
-rv t17630 = rt_list_append(v_lines, rt_str_at("    rt_args_count = argc - 1;", 4010, 32, 4010, 63));
+rv t17630 = rt_list_append(v_lines, rt_str_at("}", 4010, 32, 4010, 35));
 v_lines = t17630;
-rv t17631 = rt_list_append(v_lines, rt_str_at("    return;", 4011, 32, 4011, 45));
+rv t17631 = rt_list_append(v_lines, rt_str_at("", 4011, 32, 4011, 34));
 v_lines = t17631;
-rv t17632 = rt_list_append(v_lines, rt_str_at("#endif", 4012, 32, 4012, 40));
+rv t17632 = rt_list_append(v_lines, rt_str_at("static rv rt_args(RT_SPAN) {", 4012, 32, 4012, 63));
 v_lines = t17632;
-rv t17633 = rt_list_append(v_lines, rt_str_at("    int i = 1;", 4013, 32, 4013, 48));
+rv t17633 = rt_list_append(v_lines, rt_str_at("    rv *items = (rv *)rt_alloc((size_t)(rt_args_count > 0 \? rt_args_count : 1) * sizeof(rv));", 4013, 32, 4013, 127));
 v_lines = t17633;
-rv t17634 = rt_list_append(v_lines, rt_str_at("    for (; i < argc; i++) {", 4014, 32, 4014, 62));
+rv t17634 = rt_list_append(v_lines, rt_str_at("    for (int i = 0; i < rt_args_count; i++) items[i] = rt_check_text(rt_str(rt_args_list[i]), l, c, el, ec);", 4014, 32, 4014, 142));
 v_lines = t17634;
-rv t17635 = rt_list_append(v_lines, rt_str_at("        const char *a = argv[i];", 4015, 32, 4015, 66));
+rv t17635 = rt_list_append(v_lines, rt_str_at("    return rt_list_from(items, rt_args_count);", 4015, 32, 4015, 80));
 v_lines = t17635;
-rv t17636 = rt_list_append(v_lines, rt_str_at("        if (strcmp(a, \"--\") == 0) { i++; break; }", 4016, 32, 4016, 86));
+rv t17636 = rt_list_append(v_lines, rt_str_at("}", 4016, 32, 4016, 35));
 v_lines = t17636;
-rv t17637 = rt_list_append(v_lines, rt_str_at("        if ((strcmp(a, \"--max-text\") == 0 || strcmp(a, \"--max-output\") == 0 || strcmp(a, \"--max-input\") == 0) && i + 1 < argc) {", 4017, 32, 4017, 169));
+rv t17637 = rt_list_append(v_lines, rt_str_at("", 4017, 32, 4017, 34));
 v_lines = t17637;
-rv t17638 = rt_list_append(v_lines, rt_str_at("            int64_t value = (int64_t)atoll(argv[i + 1]);", 4018, 32, 4018, 90));
+rv t17638 = rt_list_append(v_lines, rt_str_at("/* The command line of an executable is the one of `nex run`: the options of the user, then `--`, then the arguments of the", 4018, 32, 4018, 157));
 v_lines = t17638;
-rv t17639 = rt_list_append(v_lines, rt_str_at("            if (value <= 0) {", 4019, 32, 4019, 64));
+rv t17639 = rt_list_append(v_lines, rt_str_at(" * program. */", 4019, 32, 4019, 48));
 v_lines = t17639;
-rv t17640 = rt_list_append(v_lines, rt_str_at("                fprintf(stderr, \"error: %s must be greater than zero\\n\", a);", 4020, 32, 4020, 113));
+rv t17640 = rt_list_append(v_lines, rt_str_at("static void rt_options(int argc, char **argv) {", 4020, 32, 4020, 82));
 v_lines = t17640;
-rv t17641 = rt_list_append(v_lines, rt_str_at("                exit(2);", 4021, 32, 4021, 58));
+rv t17641 = rt_list_append(v_lines, rt_str_at("#ifdef RT_CLI", 4021, 32, 4021, 47));
 v_lines = t17641;
-rv t17642 = rt_list_append(v_lines, rt_str_at("            }", 4022, 32, 4022, 47));
+rv t17642 = rt_list_append(v_lines, rt_str_at("    /* Every argument belongs to the tool: `nex run --max-output 5 file` is not an option of the runtime. */", 4022, 32, 4022, 142));
 v_lines = t17642;
-rv t17643 = rt_list_append(v_lines, rt_str_at("            if (strcmp(a, \"--max-text\") == 0) rt_max_text = value;", 4023, 32, 4023, 102));
+rv t17643 = rt_list_append(v_lines, rt_str_at("    rt_args_list = (const char *const *)(argv + 1);", 4023, 32, 4023, 85));
 v_lines = t17643;
-rv t17644 = rt_list_append(v_lines, rt_str_at("            else if (strcmp(a, \"--max-output\") == 0) rt_max_output = value;", 4024, 32, 4024, 111));
+rv t17644 = rt_list_append(v_lines, rt_str_at("    rt_args_count = argc - 1;", 4024, 32, 4024, 63));
 v_lines = t17644;
-rv t17645 = rt_list_append(v_lines, rt_str_at("            else rt_max_input = value;", 4025, 32, 4025, 72));
+rv t17645 = rt_list_append(v_lines, rt_str_at("    return;", 4025, 32, 4025, 45));
 v_lines = t17645;
-rv t17646 = rt_list_append(v_lines, rt_str_at("            i++;", 4026, 32, 4026, 50));
+rv t17646 = rt_list_append(v_lines, rt_str_at("#endif", 4026, 32, 4026, 40));
 v_lines = t17646;
-rv t17647 = rt_list_append(v_lines, rt_str_at("            continue;", 4027, 32, 4027, 55));
+rv t17647 = rt_list_append(v_lines, rt_str_at("    int i = 1;", 4027, 32, 4027, 48));
 v_lines = t17647;
-rv t17648 = rt_list_append(v_lines, rt_str_at("        }", 4028, 32, 4028, 43));
+rv t17648 = rt_list_append(v_lines, rt_str_at("    for (; i < argc; i++) {", 4028, 32, 4028, 62));
 v_lines = t17648;
-rv t17649 = rt_list_append(v_lines, rt_str_at("        const char *kind = strcmp(a, \"--allow-read\") == 0 \? \"read\" : strcmp(a, \"--allow-write\") == 0 \? \"write\"", 4029, 32, 4029, 152));
+rv t17649 = rt_list_append(v_lines, rt_str_at("        const char *a = argv[i];", 4029, 32, 4029, 66));
 v_lines = t17649;
-rv t17650 = rt_list_append(v_lines, rt_str_at("                         : strcmp(a, \"--allow-network\") == 0 \? \"network\" : strcmp(a, \"--allow-process\") == 0 \? \"process\" : 0;", 4030, 32, 4030, 167));
+rv t17650 = rt_list_append(v_lines, rt_str_at("        if (strcmp(a, \"--\") == 0) { i++; break; }", 4030, 32, 4030, 86));
 v_lines = t17650;
-rv t17651 = rt_list_append(v_lines, rt_str_at("        if (kind && i + 1 < argc) {", 4031, 32, 4031, 70));
+rv t17651 = rt_list_append(v_lines, rt_str_at("        if ((strcmp(a, \"--max-text\") == 0 || strcmp(a, \"--max-output\") == 0 || strcmp(a, \"--max-input\") == 0) && i + 1 < argc) {", 4031, 32, 4031, 169));
 v_lines = t17651;
-rv t17652 = rt_list_append(v_lines, rt_str_at("            if (rt_granted < RT_MAX_SCOPES) {", 4032, 32, 4032, 80));
+rv t17652 = rt_list_append(v_lines, rt_str_at("            int64_t value = (int64_t)atoll(argv[i + 1]);", 4032, 32, 4032, 90));
 v_lines = t17652;
-rv t17653 = rt_list_append(v_lines, rt_str_at("                rt_granted_kind[rt_granted] = kind;", 4033, 32, 4033, 85));
+rv t17653 = rt_list_append(v_lines, rt_str_at("            if (value <= 0) {", 4033, 32, 4033, 64));
 v_lines = t17653;
-rv t17654 = rt_list_append(v_lines, rt_str_at("                rt_granted_path[rt_granted] = argv[i + 1];", 4034, 32, 4034, 92));
+rv t17654 = rt_list_append(v_lines, rt_str_at("                fprintf(stderr, \"error: %s must be greater than zero\\n\", a);", 4034, 32, 4034, 113));
 v_lines = t17654;
-rv t17655 = rt_list_append(v_lines, rt_str_at("                rt_granted++;", 4035, 32, 4035, 63));
+rv t17655 = rt_list_append(v_lines, rt_str_at("                exit(2);", 4035, 32, 4035, 58));
 v_lines = t17655;
 rv t17656 = rt_list_append(v_lines, rt_str_at("            }", 4036, 32, 4036, 47));
 v_lines = t17656;
-rv t17657 = rt_list_append(v_lines, rt_str_at("            i++;", 4037, 32, 4037, 50));
+rv t17657 = rt_list_append(v_lines, rt_str_at("            if (strcmp(a, \"--max-text\") == 0) rt_max_text = value;", 4037, 32, 4037, 102));
 v_lines = t17657;
-rv t17658 = rt_list_append(v_lines, rt_str_at("        } else {", 4038, 32, 4038, 51));
+rv t17658 = rt_list_append(v_lines, rt_str_at("            else if (strcmp(a, \"--max-output\") == 0) rt_max_output = value;", 4038, 32, 4038, 111));
 v_lines = t17658;
-rv t17659 = rt_list_append(v_lines, rt_str_at("            break;", 4039, 32, 4039, 52));
+rv t17659 = rt_list_append(v_lines, rt_str_at("            else rt_max_input = value;", 4039, 32, 4039, 72));
 v_lines = t17659;
-rv t17660 = rt_list_append(v_lines, rt_str_at("        }", 4040, 32, 4040, 43));
+rv t17660 = rt_list_append(v_lines, rt_str_at("            i++;", 4040, 32, 4040, 50));
 v_lines = t17660;
-rv t17661 = rt_list_append(v_lines, rt_str_at("    }", 4041, 32, 4041, 39));
+rv t17661 = rt_list_append(v_lines, rt_str_at("            continue;", 4041, 32, 4041, 55));
 v_lines = t17661;
-rv t17662 = rt_list_append(v_lines, rt_str_at("    rt_args_list = (const char *const *)(argv + i);", 4042, 32, 4042, 85));
+rv t17662 = rt_list_append(v_lines, rt_str_at("        }", 4042, 32, 4042, 43));
 v_lines = t17662;
-rv t17663 = rt_list_append(v_lines, rt_str_at("    rt_args_count = argc - i;", 4043, 32, 4043, 63));
+rv t17663 = rt_list_append(v_lines, rt_str_at("        const char *kind = strcmp(a, \"--allow-read\") == 0 \? \"read\" : strcmp(a, \"--allow-write\") == 0 \? \"write\"", 4043, 32, 4043, 152));
 v_lines = t17663;
-rv t17664 = rt_list_append(v_lines, rt_str_at("}", 4044, 32, 4044, 35));
+rv t17664 = rt_list_append(v_lines, rt_str_at("                         : strcmp(a, \"--allow-network\") == 0 \? \"network\" : strcmp(a, \"--allow-process\") == 0 \? \"process\" : 0;", 4044, 32, 4044, 167));
 v_lines = t17664;
-rv t17665 = rt_list_append(v_lines, rt_str_at("", 4045, 32, 4045, 34));
+rv t17665 = rt_list_append(v_lines, rt_str_at("        if (kind && i + 1 < argc) {", 4045, 32, 4045, 70));
 v_lines = t17665;
-rv t17666 = rt_list_append(v_lines, rt_str_at("/* The program: the path it was given and the files it is made of, for the lines a diagnostic quotes. */", 4046, 32, 4046, 138));
+rv t17666 = rt_list_append(v_lines, rt_str_at("            if (rt_granted < RT_MAX_SCOPES) {", 4046, 32, 4046, 80));
 v_lines = t17666;
-rv t17667 = rt_list_append(v_lines, rt_str_at("static void rt_setup(const char *entry, int count, const char *const *paths, const char *const *const *lines, const int *counts) {", 4047, 32, 4047, 165));
+rv t17667 = rt_list_append(v_lines, rt_str_at("                rt_granted_kind[rt_granted] = kind;", 4047, 32, 4047, 85));
 v_lines = t17667;
-rv t17668 = rt_list_append(v_lines, rt_str_at("    rt_entry = entry;", 4048, 32, 4048, 55));
+rv t17668 = rt_list_append(v_lines, rt_str_at("                rt_granted_path[rt_granted] = argv[i + 1];", 4048, 32, 4048, 92));
 v_lines = t17668;
-rv t17669 = rt_list_append(v_lines, rt_str_at("    rt_nfiles = count;", 4049, 32, 4049, 56));
+rv t17669 = rt_list_append(v_lines, rt_str_at("                rt_granted++;", 4049, 32, 4049, 63));
 v_lines = t17669;
-rv t17670 = rt_list_append(v_lines, rt_str_at("    rt_file_path = paths;", 4050, 32, 4050, 59));
+rv t17670 = rt_list_append(v_lines, rt_str_at("            }", 4050, 32, 4050, 47));
 v_lines = t17670;
-rv t17671 = rt_list_append(v_lines, rt_str_at("    rt_file_lines = lines;", 4051, 32, 4051, 60));
+rv t17671 = rt_list_append(v_lines, rt_str_at("            i++;", 4051, 32, 4051, 50));
 v_lines = t17671;
-rv t17672 = rt_list_append(v_lines, rt_str_at("    rt_file_count = counts;", 4052, 32, 4052, 61));
+rv t17672 = rt_list_append(v_lines, rt_str_at("        } else {", 4052, 32, 4052, 51));
 v_lines = t17672;
-rv t17673 = rt_list_append(v_lines, rt_str_at("    if (count > 0) {", 4053, 32, 4053, 55));
+rv t17673 = rt_list_append(v_lines, rt_str_at("            break;", 4053, 32, 4053, 52));
 v_lines = t17673;
-rv t17674 = rt_list_append(v_lines, rt_str_at("        rt_path = paths[0];", 4054, 32, 4054, 61));
+rv t17674 = rt_list_append(v_lines, rt_str_at("        }", 4054, 32, 4054, 43));
 v_lines = t17674;
-rv t17675 = rt_list_append(v_lines, rt_str_at("        rt_src = lines[0];", 4055, 32, 4055, 60));
+rv t17675 = rt_list_append(v_lines, rt_str_at("    }", 4055, 32, 4055, 39));
 v_lines = t17675;
-rv t17676 = rt_list_append(v_lines, rt_str_at("        rt_src_lines = counts[0];", 4056, 32, 4056, 67));
+rv t17676 = rt_list_append(v_lines, rt_str_at("    rt_args_list = (const char *const *)(argv + i);", 4056, 32, 4056, 85));
 v_lines = t17676;
-rv t17677 = rt_list_append(v_lines, rt_str_at("    }", 4057, 32, 4057, 39));
+rv t17677 = rt_list_append(v_lines, rt_str_at("    rt_args_count = argc - i;", 4057, 32, 4057, 63));
 v_lines = t17677;
 rv t17678 = rt_list_append(v_lines, rt_str_at("}", 4058, 32, 4058, 35));
 v_lines = t17678;
 rv t17679 = rt_list_append(v_lines, rt_str_at("", 4059, 32, 4059, 34));
 v_lines = t17679;
-rv r17680 = v_lines;
+rv t17680 = rt_list_append(v_lines, rt_str_at("/* The program: the path it was given and the files it is made of, for the lines a diagnostic quotes. */", 4060, 32, 4060, 138));
+v_lines = t17680;
+rv t17681 = rt_list_append(v_lines, rt_str_at("static void rt_setup(const char *entry, int count, const char *const *paths, const char *const *const *lines, const int *counts) {", 4061, 32, 4061, 165));
+v_lines = t17681;
+rv t17682 = rt_list_append(v_lines, rt_str_at("    rt_entry = entry;", 4062, 32, 4062, 55));
+v_lines = t17682;
+rv t17683 = rt_list_append(v_lines, rt_str_at("    rt_nfiles = count;", 4063, 32, 4063, 56));
+v_lines = t17683;
+rv t17684 = rt_list_append(v_lines, rt_str_at("    rt_file_path = paths;", 4064, 32, 4064, 59));
+v_lines = t17684;
+rv t17685 = rt_list_append(v_lines, rt_str_at("    rt_file_lines = lines;", 4065, 32, 4065, 60));
+v_lines = t17685;
+rv t17686 = rt_list_append(v_lines, rt_str_at("    rt_file_count = counts;", 4066, 32, 4066, 61));
+v_lines = t17686;
+rv t17687 = rt_list_append(v_lines, rt_str_at("    if (count > 0) {", 4067, 32, 4067, 55));
+v_lines = t17687;
+rv t17688 = rt_list_append(v_lines, rt_str_at("        rt_path = paths[0];", 4068, 32, 4068, 61));
+v_lines = t17688;
+rv t17689 = rt_list_append(v_lines, rt_str_at("        rt_src = lines[0];", 4069, 32, 4069, 60));
+v_lines = t17689;
+rv t17690 = rt_list_append(v_lines, rt_str_at("        rt_src_lines = counts[0];", 4070, 32, 4070, 67));
+v_lines = t17690;
+rv t17691 = rt_list_append(v_lines, rt_str_at("    }", 4071, 32, 4071, 39));
+v_lines = t17691;
+rv t17692 = rt_list_append(v_lines, rt_str_at("}", 4072, 32, 4072, 35));
+v_lines = t17692;
+rv t17693 = rt_list_append(v_lines, rt_str_at("", 4073, 32, 4073, 34));
+v_lines = t17693;
+rv r17694 = v_lines;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17680;
+return r17694;
 }
 
 static rv nx_kind_of(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_node) {
@@ -66454,49 +66510,49 @@ return rt_intr_is_null(v_node);
 
 static rv nx_place_of(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_node) {
 int rt_saved = rt_enter("place_of", 10, s_l, s_c, s_el, s_ec);
-rv t17681 = nx_field(86, 18, 86, 37, v_node, rt_str_at("span", 86, 30, 86, 36));
-rv t17682 = t17681;
-rv t17683 = rt_unit();
+rv t17695 = nx_field(86, 18, 86, 37, v_node, rt_str_at("span", 86, 30, 86, 36));
+rv t17696 = t17695;
+rv t17697 = rt_unit();
 {
-bool done17684 = false;
-if (!done17684) {
+bool done17698 = false;
+if (!done17698) {
 rv v_line = rt_unit();
 rv v_column = rt_unit();
 rv v_end_line = rt_unit();
 rv v_end_column = rt_unit();
-bool ok17685 = true;
-if (ok17685) ok17685 = rt_is_kind(t17682, "Place");
-rv t17686 = rt_unit();
-if (ok17685) t17686 = rt_arg(t17682, 0);
-if (ok17685) v_line = t17686;
-rv t17687 = rt_unit();
-if (ok17685) t17687 = rt_arg(t17682, 1);
-if (ok17685) v_column = t17687;
-rv t17688 = rt_unit();
-if (ok17685) t17688 = rt_arg(t17682, 2);
-if (ok17685) v_end_line = t17688;
-rv t17689 = rt_unit();
-if (ok17685) t17689 = rt_arg(t17682, 3);
-if (ok17685) v_end_column = t17689;
-if (ok17685) {
-done17684 = true;
-rv t17690 = rt_record_new("parser.Span", rec_parser__Span, 4, (rv[]){v_line, v_column, v_end_line, v_end_column});
-t17683 = t17690;
+bool ok17699 = true;
+if (ok17699) ok17699 = rt_is_kind(t17696, "Place");
+rv t17700 = rt_unit();
+if (ok17699) t17700 = rt_arg(t17696, 0);
+if (ok17699) v_line = t17700;
+rv t17701 = rt_unit();
+if (ok17699) t17701 = rt_arg(t17696, 1);
+if (ok17699) v_column = t17701;
+rv t17702 = rt_unit();
+if (ok17699) t17702 = rt_arg(t17696, 2);
+if (ok17699) v_end_line = t17702;
+rv t17703 = rt_unit();
+if (ok17699) t17703 = rt_arg(t17696, 3);
+if (ok17699) v_end_column = t17703;
+if (ok17699) {
+done17698 = true;
+rv t17704 = rt_record_new("parser.Span", rec_parser__Span, 4, (rv[]){v_line, v_column, v_end_line, v_end_column});
+t17697 = t17704;
 }
 }
-if (!done17684) {
-bool ok17691 = true;
-if (ok17691) {
-done17684 = true;
-rv t17692 = nx_parser__no_span(90, 14, 90, 30);
-t17683 = t17692;
+if (!done17698) {
+bool ok17705 = true;
+if (ok17705) {
+done17698 = true;
+rv t17706 = nx_parser__no_span(90, 14, 90, 30);
+t17697 = t17706;
 }
 }
 }
-rv r17693 = t17683;
+rv r17707 = t17697;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17693;
+return r17707;
 }
 
 static rv nx_c_string(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_text) {
@@ -66509,16 +66565,16 @@ bool turn_has_before = false;
 int64_t before = 0;
 for (;;) {
 rt_push_loop(RT_COND, 101, turn);
-rv t17696 = rt_int(v_text.u.t.len);
-rv t17697 = rt_bool(rt_less(v_i, t17696));
-bool go = rt_truth(t17697);
+rv t17710 = rt_int(v_text.u.t.len);
+rv t17711 = rt_bool(rt_less(v_i, t17710));
+bool go = rt_truth(t17711);
 rt_pop();
 if (!go) break;
 turn++;
 rt_push_loop(RT_MEASURE, 101, turn);
-rv t17694 = rt_int(v_text.u.t.len);
-rv t17695 = rt_sub(t17694, v_i, 102, 17, 102, 38);
-int64_t m = t17695.u.i;
+rv t17708 = rt_int(v_text.u.t.len);
+rv t17709 = rt_sub(t17708, v_i, 102, 17, 102, 38);
+int64_t m = t17709.u.i;
 rt_pop();
 if ((turn_has_before && m >= before) || m < 0) {
 rt_notes own = {{0}, 0};
@@ -66537,83 +66593,83 @@ rt_fail("contract", "E4006", "Loop measure did not decrease", label, "", &own, 0
 turn_has_before = true;
 before = m;
 rt_push_loop(RT_BODY, 101, turn);
-rv t17698 = rt_add(v_i, rt_int(INT64_C(1)), 104, 37, 104, 42);
-rv t17699 = rt_text_slice(v_text, v_i, t17698, 104, 17, 104, 43);
-rv v_c = t17699;
-rv t17700 = rt_bool(rt_eq(v_c, rt_str_at("\\", 105, 17, 105, 21)));
-if (rt_truth(t17700)) {
-rv t17701 = rt_add(v_out, rt_str_at("\\\\", 106, 25, 106, 31), 106, 19, 106, 31);
-v_out = t17701;
+rv t17712 = rt_add(v_i, rt_int(INT64_C(1)), 104, 37, 104, 42);
+rv t17713 = rt_text_slice(v_text, v_i, t17712, 104, 17, 104, 43);
+rv v_c = t17713;
+rv t17714 = rt_bool(rt_eq(v_c, rt_str_at("\\", 105, 17, 105, 21)));
+if (rt_truth(t17714)) {
+rv t17715 = rt_add(v_out, rt_str_at("\\\\", 106, 25, 106, 31), 106, 19, 106, 31);
+v_out = t17715;
 } else {
-rv t17702 = rt_bool(rt_eq(v_c, rt_str_at("\"", 107, 24, 107, 28)));
-if (rt_truth(t17702)) {
-rv t17703 = rt_add(v_out, rt_str_at("\\\"", 108, 25, 108, 31), 108, 19, 108, 31);
-v_out = t17703;
+rv t17716 = rt_bool(rt_eq(v_c, rt_str_at("\"", 107, 24, 107, 28)));
+if (rt_truth(t17716)) {
+rv t17717 = rt_add(v_out, rt_str_at("\\\"", 108, 25, 108, 31), 108, 19, 108, 31);
+v_out = t17717;
 } else {
-rv t17704 = rt_bool(rt_eq(v_c, rt_str_at("\n", 109, 24, 109, 28)));
-if (rt_truth(t17704)) {
-rv t17705 = rt_add(v_out, rt_str_at("\\n", 110, 25, 110, 30), 110, 19, 110, 30);
-v_out = t17705;
+rv t17718 = rt_bool(rt_eq(v_c, rt_str_at("\n", 109, 24, 109, 28)));
+if (rt_truth(t17718)) {
+rv t17719 = rt_add(v_out, rt_str_at("\\n", 110, 25, 110, 30), 110, 19, 110, 30);
+v_out = t17719;
 } else {
-rv t17706 = rt_bool(rt_eq(v_c, rt_str_at("\t", 111, 24, 111, 28)));
-if (rt_truth(t17706)) {
-rv t17707 = rt_add(v_out, rt_str_at("\\t", 112, 25, 112, 30), 112, 19, 112, 30);
-v_out = t17707;
+rv t17720 = rt_bool(rt_eq(v_c, rt_str_at("\t", 111, 24, 111, 28)));
+if (rt_truth(t17720)) {
+rv t17721 = rt_add(v_out, rt_str_at("\\t", 112, 25, 112, 30), 112, 19, 112, 30);
+v_out = t17721;
 } else {
-rv t17708 = rt_bool(rt_eq(v_c, rt_str_at("\?", 113, 24, 113, 27)));
-if (rt_truth(t17708)) {
-rv t17709 = rt_add(v_out, rt_str_at("\\\?", 114, 25, 114, 30), 114, 19, 114, 30);
-v_out = t17709;
+rv t17722 = rt_bool(rt_eq(v_c, rt_str_at("\?", 113, 24, 113, 27)));
+if (rt_truth(t17722)) {
+rv t17723 = rt_add(v_out, rt_str_at("\\\?", 114, 25, 114, 30), 114, 19, 114, 30);
+v_out = t17723;
 } else {
-rv t17710 = rt_add(v_out, v_c, 116, 19, 116, 26);
-v_out = t17710;
+rv t17724 = rt_add(v_out, v_c, 116, 19, 116, 26);
+v_out = t17724;
 }
 }
 }
 }
 }
-rv t17711 = rt_add(v_i, rt_int(INT64_C(1)), 118, 13, 118, 18);
-v_i = t17711;
+rv t17725 = rt_add(v_i, rt_int(INT64_C(1)), 118, 13, 118, 18);
+v_i = t17725;
 rt_pop();
 }
 }
-rv t17712 = rt_add(v_out, rt_str_at("\"", 120, 18, 120, 22), 120, 12, 120, 22);
-rv r17713 = t17712;
+rv t17726 = rt_add(v_out, rt_str_at("\"", 120, 18, 120, 22), 120, 12, 120, 22);
+rv r17727 = t17726;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17713;
+return r17727;
 }
 
 static rv nx_span4(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_span) {
 int rt_saved = rt_enter("span4", 10, s_l, s_c, s_el, s_ec);
-rv t17714 = rt_field(v_span, "line");
-rv t17715 = rt_to_text(t17714, 124, 12, 124, 30);
-rv t17716 = rt_add(t17715, rt_str_at(", ", 124, 33, 124, 37), 124, 12, 124, 37);
-rv t17717 = rt_field(v_span, "column");
-rv t17718 = rt_to_text(t17717, 124, 40, 124, 60);
-rv t17719 = rt_add(t17716, t17718, 124, 12, 124, 60);
-rv t17720 = rt_add(t17719, rt_str_at(", ", 124, 63, 124, 67), 124, 12, 124, 67);
-rv t17721 = rt_field(v_span, "end_line");
-rv t17722 = rt_to_text(t17721, 124, 70, 124, 92);
-rv t17723 = rt_add(t17720, t17722, 124, 12, 124, 92);
-rv t17724 = rt_add(t17723, rt_str_at(", ", 124, 95, 124, 99), 124, 12, 124, 99);
-rv t17725 = rt_field(v_span, "end_column");
-rv t17726 = rt_to_text(t17725, 124, 102, 124, 126);
-rv t17727 = rt_add(t17724, t17726, 124, 12, 124, 126);
-rv r17728 = t17727;
+rv t17728 = rt_field(v_span, "line");
+rv t17729 = rt_to_text(t17728, 124, 12, 124, 30);
+rv t17730 = rt_add(t17729, rt_str_at(", ", 124, 33, 124, 37), 124, 12, 124, 37);
+rv t17731 = rt_field(v_span, "column");
+rv t17732 = rt_to_text(t17731, 124, 40, 124, 60);
+rv t17733 = rt_add(t17730, t17732, 124, 12, 124, 60);
+rv t17734 = rt_add(t17733, rt_str_at(", ", 124, 63, 124, 67), 124, 12, 124, 67);
+rv t17735 = rt_field(v_span, "end_line");
+rv t17736 = rt_to_text(t17735, 124, 70, 124, 92);
+rv t17737 = rt_add(t17734, t17736, 124, 12, 124, 92);
+rv t17738 = rt_add(t17737, rt_str_at(", ", 124, 95, 124, 99), 124, 12, 124, 99);
+rv t17739 = rt_field(v_span, "end_column");
+rv t17740 = rt_to_text(t17739, 124, 102, 124, 126);
+rv t17741 = rt_add(t17738, t17740, 124, 12, 124, 126);
+rv r17742 = t17741;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17728;
+return r17742;
 }
 
 static rv nx_node_span(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_node) {
 int rt_saved = rt_enter("node_span", 10, s_l, s_c, s_el, s_ec);
-rv t17729 = nx_place_of(128, 18, 128, 32, v_node);
-rv t17730 = nx_span4(128, 12, 128, 33, t17729);
-rv r17731 = t17730;
+rv t17743 = nx_place_of(128, 18, 128, 32, v_node);
+rv t17744 = nx_span4(128, 12, 128, 33, t17743);
+rv r17745 = t17744;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17731;
+return r17745;
 }
 
 static rv nx_c_name(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_name) {
@@ -66626,16 +66682,16 @@ bool turn_has_before = false;
 int64_t before = 0;
 for (;;) {
 rt_push_loop(RT_COND, 135, turn);
-rv t17734 = rt_int(v_name.u.t.len);
-rv t17735 = rt_bool(rt_less(v_i, t17734));
-bool go = rt_truth(t17735);
+rv t17748 = rt_int(v_name.u.t.len);
+rv t17749 = rt_bool(rt_less(v_i, t17748));
+bool go = rt_truth(t17749);
 rt_pop();
 if (!go) break;
 turn++;
 rt_push_loop(RT_MEASURE, 135, turn);
-rv t17732 = rt_int(v_name.u.t.len);
-rv t17733 = rt_sub(t17732, v_i, 136, 17, 136, 38);
-int64_t m = t17733.u.i;
+rv t17746 = rt_int(v_name.u.t.len);
+rv t17747 = rt_sub(t17746, v_i, 136, 17, 136, 38);
+int64_t m = t17747.u.i;
 rt_pop();
 if ((turn_has_before && m >= before) || m < 0) {
 rt_notes own = {{0}, 0};
@@ -66654,673 +66710,673 @@ rt_fail("contract", "E4006", "Loop measure did not decrease", label, "", &own, 0
 turn_has_before = true;
 before = m;
 rt_push_loop(RT_BODY, 135, turn);
-rv t17736 = rt_add(v_i, rt_int(INT64_C(1)), 138, 37, 138, 42);
-rv t17737 = rt_text_slice(v_name, v_i, t17736, 138, 17, 138, 43);
-rv v_c = t17737;
-rv t17738 = rt_bool(rt_eq(v_c, rt_str_at(".", 139, 17, 139, 20)));
-if (rt_truth(t17738)) {
-rv t17739 = rt_add(v_out, rt_str_at("__", 140, 25, 140, 29), 140, 19, 140, 29);
-v_out = t17739;
+rv t17750 = rt_add(v_i, rt_int(INT64_C(1)), 138, 37, 138, 42);
+rv t17751 = rt_text_slice(v_name, v_i, t17750, 138, 17, 138, 43);
+rv v_c = t17751;
+rv t17752 = rt_bool(rt_eq(v_c, rt_str_at(".", 139, 17, 139, 20)));
+if (rt_truth(t17752)) {
+rv t17753 = rt_add(v_out, rt_str_at("__", 140, 25, 140, 29), 140, 19, 140, 29);
+v_out = t17753;
 } else {
-rv t17740 = rt_add(v_out, v_c, 142, 19, 142, 26);
-v_out = t17740;
+rv t17754 = rt_add(v_out, v_c, 142, 19, 142, 26);
+v_out = t17754;
 }
-rv t17741 = rt_add(v_i, rt_int(INT64_C(1)), 144, 13, 144, 18);
-v_i = t17741;
+rv t17755 = rt_add(v_i, rt_int(INT64_C(1)), 144, 13, 144, 18);
+v_i = t17755;
 rt_pop();
 }
 }
-rv r17742 = v_out;
+rv r17756 = v_out;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17742;
+return r17756;
 }
 
 static rv nx_refuse(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_reason) {
 int rt_saved = rt_enter("refuse", 10, s_l, s_c, s_el, s_ec);
-rv t17743 = rt_field(v_st, "bad");
-rv t17744 = rt_bool(!rt_eq(t17743, rt_str_at("", 163, 18, 163, 20)));
-if (rt_truth(t17744)) {
-rv r17745 = v_st;
+rv t17757 = rt_field(v_st, "bad");
+rv t17758 = rt_bool(!rt_eq(t17757, rt_str_at("", 163, 18, 163, 20)));
+if (rt_truth(t17758)) {
+rv r17759 = v_st;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17745;
+return r17759;
 }
-rv t17746 = rt_field(v_st, "next");
-rv t17747 = rt_field(v_st, "info");
-rv t17748 = rt_field(v_st, "scope");
-rv t17749 = rt_record_new("St", rec_St, 4, (rv[]){t17746, v_reason, t17747, t17748});
-rv r17750 = t17749;
+rv t17760 = rt_field(v_st, "next");
+rv t17761 = rt_field(v_st, "info");
+rv t17762 = rt_field(v_st, "scope");
+rv t17763 = rt_record_new("St", rec_St, 4, (rv[]){t17760, v_reason, t17761, t17762});
+rv r17764 = t17763;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17750;
+return r17764;
 }
 
 static rv nx_part(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_code, rv v_value, rv v_st) {
 int rt_saved = rt_enter("part", 10, s_l, s_c, s_el, s_ec);
-rv t17751 = rt_record_new("Part", rec_Part, 3, (rv[]){v_code, v_value, v_st});
-rv r17752 = t17751;
+rv t17765 = rt_record_new("Part", rec_Part, 3, (rv[]){v_code, v_value, v_st});
+rv r17766 = t17765;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17752;
+return r17766;
 }
 
 static rv nx_temporary(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_expression) {
 int rt_saved = rt_enter("temporary", 10, s_l, s_c, s_el, s_ec);
-rv t17753 = rt_field(v_st, "next");
-rv t17754 = rt_to_text(t17753, 175, 22, 175, 38);
-rv t17755 = rt_add(rt_str_at("t", 175, 16, 175, 19), t17754, 175, 16, 175, 38);
-rv v_name = t17755;
-rv t17756 = rt_add(rt_str_at("rv ", 176, 17, 176, 22), v_name, 176, 17, 176, 29);
-rv t17757 = rt_add(t17756, rt_str_at(" = ", 176, 32, 176, 37), 176, 17, 176, 37);
-rv t17758 = rt_add(t17757, v_expression, 176, 17, 176, 50);
-rv t17759 = rt_add(t17758, rt_str_at(";\n", 176, 53, 176, 58), 176, 17, 176, 58);
-rv t17760 = rt_field(v_st, "next");
-rv t17761 = rt_add(t17760, rt_int(INT64_C(1)), 176, 75, 176, 86);
-rv t17762 = rt_field(v_st, "bad");
-rv t17763 = rt_field(v_st, "info");
-rv t17764 = rt_field(v_st, "scope");
-rv t17765 = rt_record_new("St", rec_St, 4, (rv[]){t17761, t17762, t17763, t17764});
-rv t17766 = nx_part(176, 12, 176, 133, t17759, v_name, t17765);
-rv r17767 = t17766;
+rv t17767 = rt_field(v_st, "next");
+rv t17768 = rt_to_text(t17767, 175, 22, 175, 38);
+rv t17769 = rt_add(rt_str_at("t", 175, 16, 175, 19), t17768, 175, 16, 175, 38);
+rv v_name = t17769;
+rv t17770 = rt_add(rt_str_at("rv ", 176, 17, 176, 22), v_name, 176, 17, 176, 29);
+rv t17771 = rt_add(t17770, rt_str_at(" = ", 176, 32, 176, 37), 176, 17, 176, 37);
+rv t17772 = rt_add(t17771, v_expression, 176, 17, 176, 50);
+rv t17773 = rt_add(t17772, rt_str_at(";\n", 176, 53, 176, 58), 176, 17, 176, 58);
+rv t17774 = rt_field(v_st, "next");
+rv t17775 = rt_add(t17774, rt_int(INT64_C(1)), 176, 75, 176, 86);
+rv t17776 = rt_field(v_st, "bad");
+rv t17777 = rt_field(v_st, "info");
+rv t17778 = rt_field(v_st, "scope");
+rv t17779 = rt_record_new("St", rec_St, 4, (rv[]){t17775, t17776, t17777, t17778});
+rv t17780 = nx_part(176, 12, 176, 133, t17773, v_name, t17779);
+rv r17781 = t17780;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17767;
+return r17781;
 }
 
 static rv nx_fresh(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st) {
 int rt_saved = rt_enter("fresh", 10, s_l, s_c, s_el, s_ec);
-rv t17768 = rt_field(v_st, "next");
-rv t17769 = rt_add(t17768, rt_int(INT64_C(1)), 180, 21, 180, 32);
-rv t17770 = rt_field(v_st, "bad");
-rv t17771 = rt_field(v_st, "info");
-rv t17772 = rt_field(v_st, "scope");
-rv t17773 = rt_record_new("St", rec_St, 4, (rv[]){t17769, t17770, t17771, t17772});
-rv r17774 = t17773;
+rv t17782 = rt_field(v_st, "next");
+rv t17783 = rt_add(t17782, rt_int(INT64_C(1)), 180, 21, 180, 32);
+rv t17784 = rt_field(v_st, "bad");
+rv t17785 = rt_field(v_st, "info");
+rv t17786 = rt_field(v_st, "scope");
+rv t17787 = rt_record_new("St", rec_St, 4, (rv[]){t17783, t17784, t17785, t17786});
+rv r17788 = t17787;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17774;
+return r17788;
 }
 
 static rv nx_values_code(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_vars) {
 int rt_saved = rt_enter("values_code", 10, s_l, s_c, s_el, s_ec);
 rv v_out = rt_str_at("", 187, 15, 187, 17);
 {
-rv it17775 = v_vars;
-int64_t n17775 = rt_list_len(it17775);
+rv it17789 = v_vars;
+int64_t n17789 = rt_list_len(it17789);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 188, turn);
 rt_pop();
-if (turn >= n17775) break;
-rv v_variable = rt_list_at(it17775, turn);
+if (turn >= n17789) break;
+rv v_variable = rt_list_at(it17789, turn);
 rt_push_loop(RT_BODY, 188, turn + 1);
-rv t17776 = rt_add(v_out, rt_str_at("rt_buf_val(&b, ", 189, 21, 189, 38), 189, 15, 189, 38);
-rv t17777 = rt_field(v_variable, "name");
-rv t17778 = nx_c_string(189, 41, 189, 64, t17777);
-rv t17779 = rt_add(t17776, t17778, 189, 15, 189, 64);
-rv t17780 = rt_add(t17779, rt_str_at(", v_", 189, 67, 189, 73), 189, 15, 189, 73);
-rv t17781 = rt_field(v_variable, "name");
-rv t17782 = rt_add(t17780, t17781, 189, 15, 189, 89);
-rv t17783 = rt_add(t17782, rt_str_at(");\n", 189, 92, 189, 98), 189, 15, 189, 98);
-v_out = t17783;
+rv t17790 = rt_add(v_out, rt_str_at("rt_buf_val(&b, ", 189, 21, 189, 38), 189, 15, 189, 38);
+rv t17791 = rt_field(v_variable, "name");
+rv t17792 = nx_c_string(189, 41, 189, 64, t17791);
+rv t17793 = rt_add(t17790, t17792, 189, 15, 189, 64);
+rv t17794 = rt_add(t17793, rt_str_at(", v_", 189, 67, 189, 73), 189, 15, 189, 73);
+rv t17795 = rt_field(v_variable, "name");
+rv t17796 = rt_add(t17794, t17795, 189, 15, 189, 89);
+rv t17797 = rt_add(t17796, rt_str_at(");\n", 189, 92, 189, 98), 189, 15, 189, 98);
+v_out = t17797;
 rt_pop();
 turn++;
 }
 }
-rv r17784 = v_out;
+rv r17798 = v_out;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17784;
+return r17798;
 }
 
 static rv nx_literal_value(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_node) {
 int rt_saved = rt_enter("literal_value", 10, s_l, s_c, s_el, s_ec);
-rv t17785 = v_node;
-rv t17786 = rt_unit();
+rv t17799 = v_node;
+rv t17800 = rt_unit();
 {
-bool done17787 = false;
-if (!done17787) {
-rv v_value = rt_unit();
-bool ok17788 = true;
-if (ok17788) ok17788 = rt_is_kind(t17785, "Whole");
-rv t17789 = rt_unit();
-if (ok17788) t17789 = rt_arg(t17785, 0);
-if (ok17788) v_value = t17789;
-if (ok17788) {
-done17787 = true;
-rv t17790 = rt_to_text(v_value, 198, 57, 198, 71);
-rv t17791 = rt_add(rt_str_at("rt_int(INT64_C(", 198, 37, 198, 54), t17790, 198, 37, 198, 71);
-rv t17792 = rt_add(t17791, rt_str_at("))", 198, 74, 198, 78), 198, 37, 198, 78);
-t17786 = t17792;
-}
-}
-if (!done17787) {
-rv v_text = rt_unit();
-bool ok17793 = true;
-if (ok17793) ok17793 = rt_is_kind(t17785, "Real");
-rv t17794 = rt_unit();
-if (ok17793) t17794 = rt_arg(t17785, 0);
-if (ok17793) v_text = t17794;
-if (ok17793) {
-done17787 = true;
-rv t17795 = rt_add(rt_str_at("rt_float(", 199, 35, 199, 46), v_text, 199, 35, 199, 53);
-rv t17796 = rt_add(t17795, rt_str_at(")", 199, 56, 199, 59), 199, 35, 199, 59);
-t17786 = t17796;
-}
-}
-if (!done17787) {
-rv v_value = rt_unit();
-bool ok17797 = true;
-if (ok17797) ok17797 = rt_is_kind(t17785, "Str");
-rv t17798 = rt_unit();
-if (ok17797) t17798 = rt_arg(t17785, 0);
-if (ok17797) v_value = t17798;
-if (ok17797) {
-done17787 = true;
-rv t17799 = nx_c_string(200, 47, 200, 62, v_value);
-rv t17800 = rt_add(rt_str_at("rt_str(", 200, 35, 200, 44), t17799, 200, 35, 200, 62);
-rv t17801 = rt_add(t17800, rt_str_at(")", 200, 65, 200, 68), 200, 35, 200, 68);
-t17786 = t17801;
-}
-}
-if (!done17787) {
+bool done17801 = false;
+if (!done17801) {
 rv v_value = rt_unit();
 bool ok17802 = true;
-if (ok17802) ok17802 = rt_is_kind(t17785, "Flag");
+if (ok17802) ok17802 = rt_is_kind(t17799, "Whole");
 rv t17803 = rt_unit();
-if (ok17802) t17803 = rt_arg(t17785, 0);
+if (ok17802) t17803 = rt_arg(t17799, 0);
 if (ok17802) v_value = t17803;
 if (ok17802) {
-done17787 = true;
-rv t17804 = nx_bool_value(201, 36, 201, 53, v_value);
-t17786 = t17804;
+done17801 = true;
+rv t17804 = rt_to_text(v_value, 198, 57, 198, 71);
+rv t17805 = rt_add(rt_str_at("rt_int(INT64_C(", 198, 37, 198, 54), t17804, 198, 37, 198, 71);
+rv t17806 = rt_add(t17805, rt_str_at("))", 198, 74, 198, 78), 198, 37, 198, 78);
+t17800 = t17806;
 }
 }
-if (!done17787) {
-bool ok17805 = true;
-if (ok17805) {
-done17787 = true;
-t17786 = rt_str_at("rt_unit()", 202, 14, 202, 25);
+if (!done17801) {
+rv v_text = rt_unit();
+bool ok17807 = true;
+if (ok17807) ok17807 = rt_is_kind(t17799, "Real");
+rv t17808 = rt_unit();
+if (ok17807) t17808 = rt_arg(t17799, 0);
+if (ok17807) v_text = t17808;
+if (ok17807) {
+done17801 = true;
+rv t17809 = rt_add(rt_str_at("rt_float(", 199, 35, 199, 46), v_text, 199, 35, 199, 53);
+rv t17810 = rt_add(t17809, rt_str_at(")", 199, 56, 199, 59), 199, 35, 199, 59);
+t17800 = t17810;
+}
+}
+if (!done17801) {
+rv v_value = rt_unit();
+bool ok17811 = true;
+if (ok17811) ok17811 = rt_is_kind(t17799, "Str");
+rv t17812 = rt_unit();
+if (ok17811) t17812 = rt_arg(t17799, 0);
+if (ok17811) v_value = t17812;
+if (ok17811) {
+done17801 = true;
+rv t17813 = nx_c_string(200, 47, 200, 62, v_value);
+rv t17814 = rt_add(rt_str_at("rt_str(", 200, 35, 200, 44), t17813, 200, 35, 200, 62);
+rv t17815 = rt_add(t17814, rt_str_at(")", 200, 65, 200, 68), 200, 35, 200, 68);
+t17800 = t17815;
+}
+}
+if (!done17801) {
+rv v_value = rt_unit();
+bool ok17816 = true;
+if (ok17816) ok17816 = rt_is_kind(t17799, "Flag");
+rv t17817 = rt_unit();
+if (ok17816) t17817 = rt_arg(t17799, 0);
+if (ok17816) v_value = t17817;
+if (ok17816) {
+done17801 = true;
+rv t17818 = nx_bool_value(201, 36, 201, 53, v_value);
+t17800 = t17818;
+}
+}
+if (!done17801) {
+bool ok17819 = true;
+if (ok17819) {
+done17801 = true;
+t17800 = rt_str_at("rt_unit()", 202, 14, 202, 25);
 }
 }
 }
-rv r17806 = t17786;
+rv r17820 = t17800;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17806;
+return r17820;
 }
 
 static rv nx_bool_value(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_value) {
 int rt_saved = rt_enter("bool_value", 10, s_l, s_c, s_el, s_ec);
 if (rt_truth(v_value)) {
-rv r17807 = rt_str_at("rt_bool(true)", 208, 16, 208, 31);
+rv r17821 = rt_str_at("rt_bool(true)", 208, 16, 208, 31);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17807;
+return r17821;
 }
-rv r17808 = rt_str_at("rt_bool(false)", 210, 12, 210, 28);
+rv r17822 = rt_str_at("rt_bool(false)", 210, 12, 210, 28);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17808;
+return r17822;
 }
 
 static rv nx_gen_expr(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_node) {
 int rt_saved = rt_enter("gen_expr", 10, s_l, s_c, s_el, s_ec);
-rv t17809 = nx_kind_of(214, 16, 214, 29, v_node);
-rv v_kind = t17809;
-rv t17810 = rt_bool(rt_eq(v_kind, rt_str_at("TextLiteral", 215, 16, 215, 29)));
-if (rt_truth(t17810)) {
-rv t17811 = nx_field(216, 57, 216, 77, v_node, rt_str_at("value", 216, 69, 216, 76));
-rv t17812 = nx_text_of(216, 49, 216, 78, t17811);
-rv t17813 = nx_c_string(216, 40, 216, 79, t17812);
-rv t17814 = rt_add(rt_str_at("rt_str_at(", 216, 25, 216, 37), t17813, 216, 25, 216, 79);
-rv t17815 = rt_add(t17814, rt_str_at(", ", 216, 82, 216, 86), 216, 25, 216, 86);
-rv t17816 = nx_node_span(216, 89, 216, 104, v_node);
-rv t17817 = rt_add(t17815, t17816, 216, 25, 216, 104);
-rv t17818 = rt_add(t17817, rt_str_at(")", 216, 107, 216, 110), 216, 25, 216, 110);
-rv t17819 = nx_part(216, 16, 216, 115, rt_str_at("", 216, 21, 216, 23), t17818, v_st);
-rv r17820 = t17819;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r17820;
-}
-rv t17821 = rt_bool(rt_eq(v_kind, rt_str_at("IntLiteral", 218, 16, 218, 28)));
-rv t17822 = t17821;
-if (!rt_truth(t17822)) {
-rv t17823 = rt_bool(rt_eq(v_kind, rt_str_at("BoolLiteral", 218, 40, 218, 53)));
-t17822 = t17823;
-}
-rv t17824 = t17822;
-if (!rt_truth(t17824)) {
-rv t17825 = rt_bool(rt_eq(v_kind, rt_str_at("FloatLiteral", 218, 65, 218, 79)));
-t17824 = t17825;
-}
+rv t17823 = nx_kind_of(214, 16, 214, 29, v_node);
+rv v_kind = t17823;
+rv t17824 = rt_bool(rt_eq(v_kind, rt_str_at("TextLiteral", 215, 16, 215, 29)));
 if (rt_truth(t17824)) {
-rv t17826 = nx_field(219, 39, 219, 59, v_node, rt_str_at("value", 219, 51, 219, 58));
-rv t17827 = nx_literal_value(219, 25, 219, 60, t17826);
-rv t17828 = nx_part(219, 16, 219, 65, rt_str_at("", 219, 21, 219, 23), t17827, v_st);
-rv r17829 = t17828;
+rv t17825 = nx_field(216, 57, 216, 77, v_node, rt_str_at("value", 216, 69, 216, 76));
+rv t17826 = nx_text_of(216, 49, 216, 78, t17825);
+rv t17827 = nx_c_string(216, 40, 216, 79, t17826);
+rv t17828 = rt_add(rt_str_at("rt_str_at(", 216, 25, 216, 37), t17827, 216, 25, 216, 79);
+rv t17829 = rt_add(t17828, rt_str_at(", ", 216, 82, 216, 86), 216, 25, 216, 86);
+rv t17830 = nx_node_span(216, 89, 216, 104, v_node);
+rv t17831 = rt_add(t17829, t17830, 216, 25, 216, 104);
+rv t17832 = rt_add(t17831, rt_str_at(")", 216, 107, 216, 110), 216, 25, 216, 110);
+rv t17833 = nx_part(216, 16, 216, 115, rt_str_at("", 216, 21, 216, 23), t17832, v_st);
+rv r17834 = t17833;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17829;
+return r17834;
 }
-rv t17830 = rt_bool(rt_eq(v_kind, rt_str_at("Name", 221, 16, 221, 22)));
-if (rt_truth(t17830)) {
-rv t17831 = nx_field(222, 28, 222, 47, v_node, rt_str_at("name", 222, 40, 222, 46));
-rv t17832 = nx_text_of(222, 20, 222, 48, t17831);
-rv v_name = t17832;
-rv t17833 = rt_bool(rt_eq(v_name, rt_str_at("None", 223, 20, 223, 26)));
-if (rt_truth(t17833)) {
-rv t17834 = nx_part(224, 20, 224, 45, rt_str_at("", 224, 25, 224, 27), rt_str_at("rt_none()", 224, 29, 224, 40), v_st);
-rv r17835 = t17834;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r17835;
+rv t17835 = rt_bool(rt_eq(v_kind, rt_str_at("IntLiteral", 218, 16, 218, 28)));
+rv t17836 = t17835;
+if (!rt_truth(t17836)) {
+rv t17837 = rt_bool(rt_eq(v_kind, rt_str_at("BoolLiteral", 218, 40, 218, 53)));
+t17836 = t17837;
 }
-rv t17836 = rt_add(rt_str_at("v_", 226, 25, 226, 29), v_name, 226, 25, 226, 36);
-rv t17837 = nx_part(226, 16, 226, 41, rt_str_at("", 226, 21, 226, 23), t17836, v_st);
-rv r17838 = t17837;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r17838;
+rv t17838 = t17836;
+if (!rt_truth(t17838)) {
+rv t17839 = rt_bool(rt_eq(v_kind, rt_str_at("FloatLiteral", 218, 65, 218, 79)));
+t17838 = t17839;
 }
-rv t17839 = rt_bool(rt_eq(v_kind, rt_str_at("Group", 228, 16, 228, 23)));
-if (rt_truth(t17839)) {
-rv t17840 = nx_field(229, 29, 229, 54, v_node, rt_str_at("expression", 229, 41, 229, 53));
-rv t17841 = nx_gen_expr(229, 16, 229, 55, v_st, t17840);
-rv r17842 = t17841;
+if (rt_truth(t17838)) {
+rv t17840 = nx_field(219, 39, 219, 59, v_node, rt_str_at("value", 219, 51, 219, 58));
+rv t17841 = nx_literal_value(219, 25, 219, 60, t17840);
+rv t17842 = nx_part(219, 16, 219, 65, rt_str_at("", 219, 21, 219, 23), t17841, v_st);
+rv r17843 = t17842;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17842;
+return r17843;
 }
-rv t17843 = rt_bool(rt_eq(v_kind, rt_str_at("Unary", 231, 16, 231, 23)));
-if (rt_truth(t17843)) {
-rv t17844 = nx_gen_unary(232, 16, 232, 35, v_st, v_node);
-rv r17845 = t17844;
+rv t17844 = rt_bool(rt_eq(v_kind, rt_str_at("Name", 221, 16, 221, 22)));
+if (rt_truth(t17844)) {
+rv t17845 = nx_field(222, 28, 222, 47, v_node, rt_str_at("name", 222, 40, 222, 46));
+rv t17846 = nx_text_of(222, 20, 222, 48, t17845);
+rv v_name = t17846;
+rv t17847 = rt_bool(rt_eq(v_name, rt_str_at("None", 223, 20, 223, 26)));
+if (rt_truth(t17847)) {
+rv t17848 = nx_part(224, 20, 224, 45, rt_str_at("", 224, 25, 224, 27), rt_str_at("rt_none()", 224, 29, 224, 40), v_st);
+rv r17849 = t17848;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17845;
+return r17849;
 }
-rv t17846 = rt_bool(rt_eq(v_kind, rt_str_at("Binary", 234, 16, 234, 24)));
-if (rt_truth(t17846)) {
-rv t17847 = nx_gen_binary(235, 16, 235, 36, v_st, v_node);
-rv r17848 = t17847;
+rv t17850 = rt_add(rt_str_at("v_", 226, 25, 226, 29), v_name, 226, 25, 226, 36);
+rv t17851 = nx_part(226, 16, 226, 41, rt_str_at("", 226, 21, 226, 23), t17850, v_st);
+rv r17852 = t17851;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17848;
+return r17852;
 }
-rv t17849 = rt_bool(rt_eq(v_kind, rt_str_at("Call", 237, 16, 237, 22)));
-if (rt_truth(t17849)) {
-rv t17850 = nx_gen_call(238, 16, 238, 34, v_st, v_node);
-rv r17851 = t17850;
+rv t17853 = rt_bool(rt_eq(v_kind, rt_str_at("Group", 228, 16, 228, 23)));
+if (rt_truth(t17853)) {
+rv t17854 = nx_field(229, 29, 229, 54, v_node, rt_str_at("expression", 229, 41, 229, 53));
+rv t17855 = nx_gen_expr(229, 16, 229, 55, v_st, t17854);
+rv r17856 = t17855;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17851;
+return r17856;
 }
-rv t17852 = rt_bool(rt_eq(v_kind, rt_str_at("ListLiteral", 240, 16, 240, 29)));
-if (rt_truth(t17852)) {
-rv t17853 = nx_field(241, 46, 241, 69, v_node, rt_str_at("elements", 241, 58, 241, 68));
-rv t17854 = nx_items_of(241, 37, 241, 70, t17853);
-rv t17855 = nx_gen_args(241, 24, 241, 71, v_st, t17854);
-rv v_elements = t17855;
-rv t17856 = rt_field(v_elements, "st");
-rv t17857 = rt_field(v_elements, "values");
-rv t17858 = nx_array_of(242, 61, 242, 86, t17857);
-rv t17859 = rt_add(rt_str_at("rt_list_from(", 242, 43, 242, 58), t17858, 242, 43, 242, 86);
-rv t17860 = rt_add(t17859, rt_str_at(")", 242, 89, 242, 92), 242, 43, 242, 92);
-rv t17861 = nx_temporary(242, 20, 242, 93, t17856, t17860);
-rv v_made = t17861;
-rv t17862 = rt_field(v_elements, "code");
-rv t17863 = rt_field(v_made, "code");
-rv t17864 = rt_add(t17862, t17863, 243, 21, 243, 46);
-rv t17865 = rt_field(v_made, "value");
-rv t17866 = rt_field(v_made, "st");
-rv t17867 = nx_part(243, 16, 243, 68, t17864, t17865, t17866);
-rv r17868 = t17867;
+rv t17857 = rt_bool(rt_eq(v_kind, rt_str_at("Unary", 231, 16, 231, 23)));
+if (rt_truth(t17857)) {
+rv t17858 = nx_gen_unary(232, 16, 232, 35, v_st, v_node);
+rv r17859 = t17858;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17868;
+return r17859;
 }
-rv t17869 = rt_bool(rt_eq(v_kind, rt_str_at("RecordConstruction", 245, 16, 245, 36)));
-if (rt_truth(t17869)) {
-rv t17870 = nx_gen_record(246, 16, 246, 36, v_st, v_node);
-rv r17871 = t17870;
+rv t17860 = rt_bool(rt_eq(v_kind, rt_str_at("Binary", 234, 16, 234, 24)));
+if (rt_truth(t17860)) {
+rv t17861 = nx_gen_binary(235, 16, 235, 36, v_st, v_node);
+rv r17862 = t17861;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17871;
+return r17862;
 }
-rv t17872 = rt_bool(rt_eq(v_kind, rt_str_at("FieldAccess", 248, 16, 248, 29)));
-if (rt_truth(t17872)) {
-rv t17873 = nx_field(249, 35, 249, 56, v_node, rt_str_at("target", 249, 47, 249, 55));
-rv t17874 = nx_gen_expr(249, 22, 249, 57, v_st, t17873);
-rv v_target = t17874;
-rv t17875 = rt_field(v_target, "st");
-rv t17876 = rt_field(v_target, "value");
-rv t17877 = rt_add(rt_str_at("rt_field(", 250, 41, 250, 52), t17876, 250, 41, 250, 67);
-rv t17878 = rt_add(t17877, rt_str_at(", ", 250, 70, 250, 74), 250, 41, 250, 74);
-rv t17879 = nx_field(250, 94, 250, 113, v_node, rt_str_at("name", 250, 106, 250, 112));
-rv t17880 = nx_text_of(250, 86, 250, 114, t17879);
-rv t17881 = nx_c_string(250, 77, 250, 115, t17880);
-rv t17882 = rt_add(t17878, t17881, 250, 41, 250, 115);
-rv t17883 = rt_add(t17882, rt_str_at(")", 250, 118, 250, 121), 250, 41, 250, 121);
-rv t17884 = nx_temporary(250, 20, 250, 122, t17875, t17883);
-rv v_made = t17884;
-rv t17885 = rt_field(v_target, "code");
-rv t17886 = rt_field(v_made, "code");
-rv t17887 = rt_add(t17885, t17886, 251, 21, 251, 44);
-rv t17888 = rt_field(v_made, "value");
-rv t17889 = rt_field(v_made, "st");
-rv t17890 = nx_part(251, 16, 251, 66, t17887, t17888, t17889);
-rv r17891 = t17890;
+rv t17863 = rt_bool(rt_eq(v_kind, rt_str_at("Call", 237, 16, 237, 22)));
+if (rt_truth(t17863)) {
+rv t17864 = nx_gen_call(238, 16, 238, 34, v_st, v_node);
+rv r17865 = t17864;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17891;
+return r17865;
 }
-rv t17892 = rt_bool(rt_eq(v_kind, rt_str_at("MatchExpr", 253, 16, 253, 27)));
-if (rt_truth(t17892)) {
-rv t17893 = nx_gen_match(254, 16, 254, 35, v_st, v_node);
-rv r17894 = t17893;
+rv t17866 = rt_bool(rt_eq(v_kind, rt_str_at("ListLiteral", 240, 16, 240, 29)));
+if (rt_truth(t17866)) {
+rv t17867 = nx_field(241, 46, 241, 69, v_node, rt_str_at("elements", 241, 58, 241, 68));
+rv t17868 = nx_items_of(241, 37, 241, 70, t17867);
+rv t17869 = nx_gen_args(241, 24, 241, 71, v_st, t17868);
+rv v_elements = t17869;
+rv t17870 = rt_field(v_elements, "st");
+rv t17871 = rt_field(v_elements, "values");
+rv t17872 = nx_array_of(242, 61, 242, 86, t17871);
+rv t17873 = rt_add(rt_str_at("rt_list_from(", 242, 43, 242, 58), t17872, 242, 43, 242, 86);
+rv t17874 = rt_add(t17873, rt_str_at(")", 242, 89, 242, 92), 242, 43, 242, 92);
+rv t17875 = nx_temporary(242, 20, 242, 93, t17870, t17874);
+rv v_made = t17875;
+rv t17876 = rt_field(v_elements, "code");
+rv t17877 = rt_field(v_made, "code");
+rv t17878 = rt_add(t17876, t17877, 243, 21, 243, 46);
+rv t17879 = rt_field(v_made, "value");
+rv t17880 = rt_field(v_made, "st");
+rv t17881 = nx_part(243, 16, 243, 68, t17878, t17879, t17880);
+rv r17882 = t17881;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17894;
+return r17882;
 }
-rv t17895 = rt_bool(rt_eq(v_kind, rt_str_at("Try", 256, 16, 256, 21)));
-if (rt_truth(t17895)) {
-rv t17896 = nx_gen_try(257, 16, 257, 33, v_st, v_node);
-rv r17897 = t17896;
+rv t17883 = rt_bool(rt_eq(v_kind, rt_str_at("RecordConstruction", 245, 16, 245, 36)));
+if (rt_truth(t17883)) {
+rv t17884 = nx_gen_record(246, 16, 246, 36, v_st, v_node);
+rv r17885 = t17884;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17897;
+return r17885;
 }
-rv t17898 = rt_add(rt_str_at("the expression ", 259, 45, 259, 62), v_kind, 259, 45, 259, 69);
-rv t17899 = nx_refuse(259, 34, 259, 70, v_st, t17898);
-rv t17900 = nx_part(259, 12, 259, 71, rt_str_at("", 259, 17, 259, 19), rt_str_at("rt_unit()", 259, 21, 259, 32), t17899);
-rv r17901 = t17900;
+rv t17886 = rt_bool(rt_eq(v_kind, rt_str_at("FieldAccess", 248, 16, 248, 29)));
+if (rt_truth(t17886)) {
+rv t17887 = nx_field(249, 35, 249, 56, v_node, rt_str_at("target", 249, 47, 249, 55));
+rv t17888 = nx_gen_expr(249, 22, 249, 57, v_st, t17887);
+rv v_target = t17888;
+rv t17889 = rt_field(v_target, "st");
+rv t17890 = rt_field(v_target, "value");
+rv t17891 = rt_add(rt_str_at("rt_field(", 250, 41, 250, 52), t17890, 250, 41, 250, 67);
+rv t17892 = rt_add(t17891, rt_str_at(", ", 250, 70, 250, 74), 250, 41, 250, 74);
+rv t17893 = nx_field(250, 94, 250, 113, v_node, rt_str_at("name", 250, 106, 250, 112));
+rv t17894 = nx_text_of(250, 86, 250, 114, t17893);
+rv t17895 = nx_c_string(250, 77, 250, 115, t17894);
+rv t17896 = rt_add(t17892, t17895, 250, 41, 250, 115);
+rv t17897 = rt_add(t17896, rt_str_at(")", 250, 118, 250, 121), 250, 41, 250, 121);
+rv t17898 = nx_temporary(250, 20, 250, 122, t17889, t17897);
+rv v_made = t17898;
+rv t17899 = rt_field(v_target, "code");
+rv t17900 = rt_field(v_made, "code");
+rv t17901 = rt_add(t17899, t17900, 251, 21, 251, 44);
+rv t17902 = rt_field(v_made, "value");
+rv t17903 = rt_field(v_made, "st");
+rv t17904 = nx_part(251, 16, 251, 66, t17901, t17902, t17903);
+rv r17905 = t17904;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17901;
+return r17905;
+}
+rv t17906 = rt_bool(rt_eq(v_kind, rt_str_at("MatchExpr", 253, 16, 253, 27)));
+if (rt_truth(t17906)) {
+rv t17907 = nx_gen_match(254, 16, 254, 35, v_st, v_node);
+rv r17908 = t17907;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r17908;
+}
+rv t17909 = rt_bool(rt_eq(v_kind, rt_str_at("Try", 256, 16, 256, 21)));
+if (rt_truth(t17909)) {
+rv t17910 = nx_gen_try(257, 16, 257, 33, v_st, v_node);
+rv r17911 = t17910;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r17911;
+}
+rv t17912 = rt_add(rt_str_at("the expression ", 259, 45, 259, 62), v_kind, 259, 45, 259, 69);
+rv t17913 = nx_refuse(259, 34, 259, 70, v_st, t17912);
+rv t17914 = nx_part(259, 12, 259, 71, rt_str_at("", 259, 17, 259, 19), rt_str_at("rt_unit()", 259, 21, 259, 32), t17913);
+rv r17915 = t17914;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r17915;
 }
 
 static rv nx_gen_try(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_node) {
 int rt_saved = rt_enter("gen_try", 10, s_l, s_c, s_el, s_ec);
-rv t17902 = nx_field(265, 32, 265, 54, v_node, rt_str_at("operand", 265, 44, 265, 53));
-rv t17903 = nx_gen_expr(265, 19, 265, 55, v_st, t17902);
-rv v_operand = t17903;
-rv t17904 = rt_field(v_operand, "st");
-rv t17905 = rt_field(v_operand, "value");
-rv t17906 = nx_temporary(266, 16, 266, 52, t17904, t17905);
-rv v_held = t17906;
-rv t17907 = rt_field(v_held, "st");
-rv t17908 = nx_fresh(267, 33, 267, 47, t17907);
-rv t17909 = rt_field(v_held, "st");
-rv t17910 = rt_field(t17909, "scope");
-rv t17911 = rt_field(v_held, "value");
-rv t17912 = nx_promise_code(267, 20, 267, 81, t17908, t17910, t17911, rt_bool(true));
-rv v_promised = t17912;
-rv t17913 = rt_field(v_promised, "code");
-rv t17914 = rt_add(rt_str_at("rt_top = rt_saved + 1;\n", 268, 17, 268, 43), t17913, 268, 17, 268, 59);
-rv t17915 = rt_add(t17914, rt_str_at("rt_leave(rt_saved);\nreturn ", 268, 62, 268, 92), 268, 17, 268, 92);
-rv t17916 = rt_field(v_held, "value");
-rv t17917 = rt_add(t17915, t17916, 268, 17, 268, 105);
-rv t17918 = rt_add(t17917, rt_str_at(";\n", 268, 108, 268, 113), 268, 17, 268, 113);
-rv v_leave = t17918;
-rv t17919 = rt_field(v_held, "value");
-rv t17920 = rt_add(rt_str_at("if (!(rt_is_kind(", 270, 9, 270, 28), t17919, 270, 9, 270, 41);
-rv t17921 = rt_add(t17920, rt_str_at(", \"Some\") || rt_is_kind(", 270, 44, 270, 72), 270, 9, 270, 72);
-rv t17922 = rt_field(v_held, "value");
-rv t17923 = rt_add(t17921, t17922, 270, 9, 270, 85);
-rv t17924 = rt_add(t17923, rt_str_at(", \"Ok\"))) {\n", 270, 88, 270, 106), 270, 9, 270, 106);
-rv t17925 = rt_add(t17924, v_leave, 270, 9, 270, 114);
-rv t17926 = rt_add(t17925, rt_str_at("}\n", 270, 117, 270, 122), 270, 9, 270, 122);
-rv v_guard = t17926;
-rv t17927 = rt_field(v_promised, "st");
-rv t17928 = rt_field(v_held, "value");
-rv t17929 = rt_add(rt_str_at("rt_arg(", 272, 42, 272, 51), t17928, 272, 42, 272, 64);
-rv t17930 = rt_add(t17929, rt_str_at(", 0)", 272, 67, 272, 73), 272, 42, 272, 73);
-rv t17931 = nx_temporary(272, 19, 272, 74, t17927, t17930);
-rv v_payload = t17931;
-rv t17932 = rt_field(v_operand, "code");
-rv t17933 = rt_field(v_held, "code");
-rv t17934 = rt_add(t17932, t17933, 273, 17, 273, 41);
-rv t17935 = rt_add(t17934, v_guard, 273, 17, 273, 49);
-rv t17936 = rt_field(v_payload, "code");
-rv t17937 = rt_add(t17935, t17936, 273, 17, 273, 64);
-rv t17938 = rt_field(v_payload, "value");
-rv t17939 = rt_field(v_payload, "st");
-rv t17940 = nx_part(273, 12, 273, 92, t17937, t17938, t17939);
-rv r17941 = t17940;
+rv t17916 = nx_field(265, 32, 265, 54, v_node, rt_str_at("operand", 265, 44, 265, 53));
+rv t17917 = nx_gen_expr(265, 19, 265, 55, v_st, t17916);
+rv v_operand = t17917;
+rv t17918 = rt_field(v_operand, "st");
+rv t17919 = rt_field(v_operand, "value");
+rv t17920 = nx_temporary(266, 16, 266, 52, t17918, t17919);
+rv v_held = t17920;
+rv t17921 = rt_field(v_held, "st");
+rv t17922 = nx_fresh(267, 33, 267, 47, t17921);
+rv t17923 = rt_field(v_held, "st");
+rv t17924 = rt_field(t17923, "scope");
+rv t17925 = rt_field(v_held, "value");
+rv t17926 = nx_promise_code(267, 20, 267, 81, t17922, t17924, t17925, rt_bool(true));
+rv v_promised = t17926;
+rv t17927 = rt_field(v_promised, "code");
+rv t17928 = rt_add(rt_str_at("rt_top = rt_saved + 1;\n", 268, 17, 268, 43), t17927, 268, 17, 268, 59);
+rv t17929 = rt_add(t17928, rt_str_at("rt_leave(rt_saved);\nreturn ", 268, 62, 268, 92), 268, 17, 268, 92);
+rv t17930 = rt_field(v_held, "value");
+rv t17931 = rt_add(t17929, t17930, 268, 17, 268, 105);
+rv t17932 = rt_add(t17931, rt_str_at(";\n", 268, 108, 268, 113), 268, 17, 268, 113);
+rv v_leave = t17932;
+rv t17933 = rt_field(v_held, "value");
+rv t17934 = rt_add(rt_str_at("if (!(rt_is_kind(", 270, 9, 270, 28), t17933, 270, 9, 270, 41);
+rv t17935 = rt_add(t17934, rt_str_at(", \"Some\") || rt_is_kind(", 270, 44, 270, 72), 270, 9, 270, 72);
+rv t17936 = rt_field(v_held, "value");
+rv t17937 = rt_add(t17935, t17936, 270, 9, 270, 85);
+rv t17938 = rt_add(t17937, rt_str_at(", \"Ok\"))) {\n", 270, 88, 270, 106), 270, 9, 270, 106);
+rv t17939 = rt_add(t17938, v_leave, 270, 9, 270, 114);
+rv t17940 = rt_add(t17939, rt_str_at("}\n", 270, 117, 270, 122), 270, 9, 270, 122);
+rv v_guard = t17940;
+rv t17941 = rt_field(v_promised, "st");
+rv t17942 = rt_field(v_held, "value");
+rv t17943 = rt_add(rt_str_at("rt_arg(", 272, 42, 272, 51), t17942, 272, 42, 272, 64);
+rv t17944 = rt_add(t17943, rt_str_at(", 0)", 272, 67, 272, 73), 272, 42, 272, 73);
+rv t17945 = nx_temporary(272, 19, 272, 74, t17941, t17944);
+rv v_payload = t17945;
+rv t17946 = rt_field(v_operand, "code");
+rv t17947 = rt_field(v_held, "code");
+rv t17948 = rt_add(t17946, t17947, 273, 17, 273, 41);
+rv t17949 = rt_add(t17948, v_guard, 273, 17, 273, 49);
+rv t17950 = rt_field(v_payload, "code");
+rv t17951 = rt_add(t17949, t17950, 273, 17, 273, 64);
+rv t17952 = rt_field(v_payload, "value");
+rv t17953 = rt_field(v_payload, "st");
+rv t17954 = nx_part(273, 12, 273, 92, t17951, t17952, t17953);
+rv r17955 = t17954;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17941;
+return r17955;
 }
 
 static rv nx_array_of(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_values) {
 int rt_saved = rt_enter("array_of", 10, s_l, s_c, s_el, s_ec);
-rv t17942 = rt_int(rt_list_len(v_values));
-rv t17943 = rt_bool(rt_eq(t17942, rt_int(INT64_C(0))));
-if (rt_truth(t17943)) {
-rv r17944 = rt_str_at("0, 0", 279, 16, 279, 22);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r17944;
-}
-rv t17945 = nx_parser__join_texts(281, 25, 281, 56, v_values, rt_str_at(", ", 281, 51, 281, 55));
-rv t17946 = rt_add(rt_str_at("(rv[]){", 281, 12, 281, 22), t17945, 281, 12, 281, 56);
-rv t17947 = rt_add(t17946, rt_str_at("}, ", 281, 59, 281, 64), 281, 12, 281, 64);
-rv t17948 = rt_int(rt_list_len(v_values));
-rv t17949 = rt_to_text(t17948, 281, 67, 281, 95);
-rv t17950 = rt_add(t17947, t17949, 281, 12, 281, 95);
-rv r17951 = t17950;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r17951;
-}
-
-static rv nx_array_values(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_values) {
-int rt_saved = rt_enter("array_values", 10, s_l, s_c, s_el, s_ec);
-rv t17952 = rt_int(rt_list_len(v_values));
-rv t17953 = rt_bool(rt_eq(t17952, rt_int(INT64_C(0))));
-if (rt_truth(t17953)) {
-rv r17954 = rt_str_at("0", 286, 16, 286, 19);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r17954;
-}
-rv t17955 = nx_parser__join_texts(288, 25, 288, 56, v_values, rt_str_at(", ", 288, 51, 288, 55));
-rv t17956 = rt_add(rt_str_at("(rv[]){", 288, 12, 288, 22), t17955, 288, 12, 288, 56);
-rv t17957 = rt_add(t17956, rt_str_at("}", 288, 59, 288, 62), 288, 12, 288, 62);
-rv r17958 = t17957;
+rv t17956 = rt_int(rt_list_len(v_values));
+rv t17957 = rt_bool(rt_eq(t17956, rt_int(INT64_C(0))));
+if (rt_truth(t17957)) {
+rv r17958 = rt_str_at("0, 0", 279, 16, 279, 22);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r17958;
 }
+rv t17959 = nx_parser__join_texts(281, 25, 281, 56, v_values, rt_str_at(", ", 281, 51, 281, 55));
+rv t17960 = rt_add(rt_str_at("(rv[]){", 281, 12, 281, 22), t17959, 281, 12, 281, 56);
+rv t17961 = rt_add(t17960, rt_str_at("}, ", 281, 59, 281, 64), 281, 12, 281, 64);
+rv t17962 = rt_int(rt_list_len(v_values));
+rv t17963 = rt_to_text(t17962, 281, 67, 281, 95);
+rv t17964 = rt_add(t17961, t17963, 281, 12, 281, 95);
+rv r17965 = t17964;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r17965;
+}
+
+static rv nx_array_values(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_values) {
+int rt_saved = rt_enter("array_values", 10, s_l, s_c, s_el, s_ec);
+rv t17966 = rt_int(rt_list_len(v_values));
+rv t17967 = rt_bool(rt_eq(t17966, rt_int(INT64_C(0))));
+if (rt_truth(t17967)) {
+rv r17968 = rt_str_at("0", 286, 16, 286, 19);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r17968;
+}
+rv t17969 = nx_parser__join_texts(288, 25, 288, 56, v_values, rt_str_at(", ", 288, 51, 288, 55));
+rv t17970 = rt_add(rt_str_at("(rv[]){", 288, 12, 288, 22), t17969, 288, 12, 288, 56);
+rv t17971 = rt_add(t17970, rt_str_at("}", 288, 59, 288, 62), 288, 12, 288, 62);
+rv r17972 = t17971;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r17972;
+}
 
 static rv nx_gen_unary(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_node) {
 int rt_saved = rt_enter("gen_unary", 10, s_l, s_c, s_el, s_ec);
-rv t17959 = nx_field(292, 32, 292, 54, v_node, rt_str_at("operand", 292, 44, 292, 53));
-rv t17960 = nx_gen_expr(292, 19, 292, 55, v_st, t17959);
-rv v_operand = t17960;
-rv t17961 = nx_field(293, 16, 293, 39, v_node, rt_str_at("operator", 293, 28, 293, 38));
-rv t17962 = nx_text_of(293, 8, 293, 40, t17961);
-rv t17963 = rt_bool(rt_eq(t17962, rt_str_at("not", 293, 44, 293, 49)));
-if (rt_truth(t17963)) {
-rv t17964 = rt_field(v_operand, "st");
-rv t17965 = rt_field(v_operand, "value");
-rv t17966 = rt_add(rt_str_at("rt_bool(!rt_truth(", 294, 42, 294, 62), t17965, 294, 42, 294, 78);
-rv t17967 = rt_add(t17966, rt_str_at("))", 294, 81, 294, 85), 294, 42, 294, 85);
-rv t17968 = nx_temporary(294, 20, 294, 86, t17964, t17967);
-rv v_made = t17968;
-rv t17969 = rt_field(v_operand, "code");
-rv t17970 = rt_field(v_made, "code");
-rv t17971 = rt_add(t17969, t17970, 295, 21, 295, 45);
-rv t17972 = rt_field(v_made, "value");
-rv t17973 = rt_field(v_made, "st");
-rv t17974 = nx_part(295, 16, 295, 67, t17971, t17972, t17973);
-rv r17975 = t17974;
+rv t17973 = nx_field(292, 32, 292, 54, v_node, rt_str_at("operand", 292, 44, 292, 53));
+rv t17974 = nx_gen_expr(292, 19, 292, 55, v_st, t17973);
+rv v_operand = t17974;
+rv t17975 = nx_field(293, 16, 293, 39, v_node, rt_str_at("operator", 293, 28, 293, 38));
+rv t17976 = nx_text_of(293, 8, 293, 40, t17975);
+rv t17977 = rt_bool(rt_eq(t17976, rt_str_at("not", 293, 44, 293, 49)));
+if (rt_truth(t17977)) {
+rv t17978 = rt_field(v_operand, "st");
+rv t17979 = rt_field(v_operand, "value");
+rv t17980 = rt_add(rt_str_at("rt_bool(!rt_truth(", 294, 42, 294, 62), t17979, 294, 42, 294, 78);
+rv t17981 = rt_add(t17980, rt_str_at("))", 294, 81, 294, 85), 294, 42, 294, 85);
+rv t17982 = nx_temporary(294, 20, 294, 86, t17978, t17981);
+rv v_made = t17982;
+rv t17983 = rt_field(v_operand, "code");
+rv t17984 = rt_field(v_made, "code");
+rv t17985 = rt_add(t17983, t17984, 295, 21, 295, 45);
+rv t17986 = rt_field(v_made, "value");
+rv t17987 = rt_field(v_made, "st");
+rv t17988 = nx_part(295, 16, 295, 67, t17985, t17986, t17987);
+rv r17989 = t17988;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17975;
+return r17989;
 }
-rv t17976 = rt_field(v_operand, "st");
-rv t17977 = rt_field(v_operand, "value");
-rv t17978 = rt_add(rt_str_at("rt_neg(", 297, 38, 297, 47), t17977, 297, 38, 297, 63);
-rv t17979 = rt_add(t17978, rt_str_at(", ", 297, 66, 297, 70), 297, 38, 297, 70);
-rv t17980 = nx_node_span(297, 73, 297, 88, v_node);
-rv t17981 = rt_add(t17979, t17980, 297, 38, 297, 88);
-rv t17982 = rt_add(t17981, rt_str_at(")", 297, 91, 297, 94), 297, 38, 297, 94);
-rv t17983 = nx_temporary(297, 16, 297, 95, t17976, t17982);
-rv v_made = t17983;
-rv t17984 = rt_field(v_operand, "code");
-rv t17985 = rt_field(v_made, "code");
-rv t17986 = rt_add(t17984, t17985, 298, 17, 298, 41);
-rv t17987 = rt_field(v_made, "value");
-rv t17988 = rt_field(v_made, "st");
-rv t17989 = nx_part(298, 12, 298, 63, t17986, t17987, t17988);
-rv r17990 = t17989;
+rv t17990 = rt_field(v_operand, "st");
+rv t17991 = rt_field(v_operand, "value");
+rv t17992 = rt_add(rt_str_at("rt_neg(", 297, 38, 297, 47), t17991, 297, 38, 297, 63);
+rv t17993 = rt_add(t17992, rt_str_at(", ", 297, 66, 297, 70), 297, 38, 297, 70);
+rv t17994 = nx_node_span(297, 73, 297, 88, v_node);
+rv t17995 = rt_add(t17993, t17994, 297, 38, 297, 88);
+rv t17996 = rt_add(t17995, rt_str_at(")", 297, 91, 297, 94), 297, 38, 297, 94);
+rv t17997 = nx_temporary(297, 16, 297, 95, t17990, t17996);
+rv v_made = t17997;
+rv t17998 = rt_field(v_operand, "code");
+rv t17999 = rt_field(v_made, "code");
+rv t18000 = rt_add(t17998, t17999, 298, 17, 298, 41);
+rv t18001 = rt_field(v_made, "value");
+rv t18002 = rt_field(v_made, "st");
+rv t18003 = nx_part(298, 12, 298, 63, t18000, t18001, t18002);
+rv r18004 = t18003;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17990;
+return r18004;
 }
 
 static rv nx_gen_binary(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_node) {
 int rt_saved = rt_enter("gen_binary", 10, s_l, s_c, s_el, s_ec);
-rv t17991 = nx_field(302, 28, 302, 51, v_node, rt_str_at("operator", 302, 40, 302, 50));
-rv t17992 = nx_text_of(302, 20, 302, 52, t17991);
-rv v_operator = t17992;
-rv t17993 = nx_field(303, 29, 303, 48, v_node, rt_str_at("left", 303, 41, 303, 47));
-rv t17994 = nx_gen_expr(303, 16, 303, 49, v_st, t17993);
-rv v_left = t17994;
-rv t17995 = rt_bool(rt_eq(v_operator, rt_str_at("and", 304, 20, 304, 25)));
-rv t17996 = t17995;
-if (!rt_truth(t17996)) {
-rv t17997 = rt_bool(rt_eq(v_operator, rt_str_at("or", 304, 41, 304, 45)));
-t17996 = t17997;
+rv t18005 = nx_field(302, 28, 302, 51, v_node, rt_str_at("operator", 302, 40, 302, 50));
+rv t18006 = nx_text_of(302, 20, 302, 52, t18005);
+rv v_operator = t18006;
+rv t18007 = nx_field(303, 29, 303, 48, v_node, rt_str_at("left", 303, 41, 303, 47));
+rv t18008 = nx_gen_expr(303, 16, 303, 49, v_st, t18007);
+rv v_left = t18008;
+rv t18009 = rt_bool(rt_eq(v_operator, rt_str_at("and", 304, 20, 304, 25)));
+rv t18010 = t18009;
+if (!rt_truth(t18010)) {
+rv t18011 = rt_bool(rt_eq(v_operator, rt_str_at("or", 304, 41, 304, 45)));
+t18010 = t18011;
 }
-if (rt_truth(t17996)) {
-rv t17998 = nx_gen_logic(305, 16, 305, 47, v_left, v_node, v_operator);
-rv r17999 = t17998;
+if (rt_truth(t18010)) {
+rv t18012 = nx_gen_logic(305, 16, 305, 47, v_left, v_node, v_operator);
+rv r18013 = t18012;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r17999;
+return r18013;
 }
-rv t18000 = rt_field(v_left, "st");
-rv t18001 = nx_field(307, 35, 307, 55, v_node, rt_str_at("right", 307, 47, 307, 54));
-rv t18002 = nx_gen_expr(307, 17, 307, 56, t18000, t18001);
-rv v_right = t18002;
-rv t18003 = rt_field(v_left, "code");
-rv t18004 = rt_field(v_right, "code");
-rv t18005 = rt_add(t18003, t18004, 308, 16, 308, 38);
-rv v_code = t18005;
-rv t18006 = rt_field(v_left, "value");
-rv v_a = t18006;
-rv t18007 = rt_field(v_right, "value");
-rv v_b = t18007;
+rv t18014 = rt_field(v_left, "st");
+rv t18015 = nx_field(307, 35, 307, 55, v_node, rt_str_at("right", 307, 47, 307, 54));
+rv t18016 = nx_gen_expr(307, 17, 307, 56, t18014, t18015);
+rv v_right = t18016;
+rv t18017 = rt_field(v_left, "code");
+rv t18018 = rt_field(v_right, "code");
+rv t18019 = rt_add(t18017, t18018, 308, 16, 308, 38);
+rv v_code = t18019;
+rv t18020 = rt_field(v_left, "value");
+rv v_a = t18020;
+rv t18021 = rt_field(v_right, "value");
+rv v_b = t18021;
 rv v_expression = rt_str_at("", 311, 22, 311, 24);
-rv t18008 = rt_bool(rt_eq(v_operator, rt_str_at("+", 312, 20, 312, 23)));
-if (rt_truth(t18008)) {
-rv t18009 = rt_add(rt_str_at("rt_add(", 313, 22, 313, 31), v_a, 313, 22, 313, 35);
-rv t18010 = rt_add(t18009, rt_str_at(", ", 313, 38, 313, 42), 313, 22, 313, 42);
-rv t18011 = rt_add(t18010, v_b, 313, 22, 313, 46);
-rv t18012 = rt_add(t18011, rt_str_at(", ", 313, 49, 313, 53), 313, 22, 313, 53);
-rv t18013 = nx_node_span(313, 56, 313, 71, v_node);
-rv t18014 = rt_add(t18012, t18013, 313, 22, 313, 71);
-rv t18015 = rt_add(t18014, rt_str_at(")", 313, 74, 313, 77), 313, 22, 313, 77);
-v_expression = t18015;
+rv t18022 = rt_bool(rt_eq(v_operator, rt_str_at("+", 312, 20, 312, 23)));
+if (rt_truth(t18022)) {
+rv t18023 = rt_add(rt_str_at("rt_add(", 313, 22, 313, 31), v_a, 313, 22, 313, 35);
+rv t18024 = rt_add(t18023, rt_str_at(", ", 313, 38, 313, 42), 313, 22, 313, 42);
+rv t18025 = rt_add(t18024, v_b, 313, 22, 313, 46);
+rv t18026 = rt_add(t18025, rt_str_at(", ", 313, 49, 313, 53), 313, 22, 313, 53);
+rv t18027 = nx_node_span(313, 56, 313, 71, v_node);
+rv t18028 = rt_add(t18026, t18027, 313, 22, 313, 71);
+rv t18029 = rt_add(t18028, rt_str_at(")", 313, 74, 313, 77), 313, 22, 313, 77);
+v_expression = t18029;
 } else {
-rv t18016 = rt_bool(rt_eq(v_operator, rt_str_at("-", 314, 27, 314, 30)));
-if (rt_truth(t18016)) {
-rv t18017 = rt_add(rt_str_at("rt_sub(", 315, 22, 315, 31), v_a, 315, 22, 315, 35);
-rv t18018 = rt_add(t18017, rt_str_at(", ", 315, 38, 315, 42), 315, 22, 315, 42);
-rv t18019 = rt_add(t18018, v_b, 315, 22, 315, 46);
-rv t18020 = rt_add(t18019, rt_str_at(", ", 315, 49, 315, 53), 315, 22, 315, 53);
-rv t18021 = nx_node_span(315, 56, 315, 71, v_node);
-rv t18022 = rt_add(t18020, t18021, 315, 22, 315, 71);
-rv t18023 = rt_add(t18022, rt_str_at(")", 315, 74, 315, 77), 315, 22, 315, 77);
-v_expression = t18023;
+rv t18030 = rt_bool(rt_eq(v_operator, rt_str_at("-", 314, 27, 314, 30)));
+if (rt_truth(t18030)) {
+rv t18031 = rt_add(rt_str_at("rt_sub(", 315, 22, 315, 31), v_a, 315, 22, 315, 35);
+rv t18032 = rt_add(t18031, rt_str_at(", ", 315, 38, 315, 42), 315, 22, 315, 42);
+rv t18033 = rt_add(t18032, v_b, 315, 22, 315, 46);
+rv t18034 = rt_add(t18033, rt_str_at(", ", 315, 49, 315, 53), 315, 22, 315, 53);
+rv t18035 = nx_node_span(315, 56, 315, 71, v_node);
+rv t18036 = rt_add(t18034, t18035, 315, 22, 315, 71);
+rv t18037 = rt_add(t18036, rt_str_at(")", 315, 74, 315, 77), 315, 22, 315, 77);
+v_expression = t18037;
 } else {
-rv t18024 = rt_bool(rt_eq(v_operator, rt_str_at("*", 316, 27, 316, 30)));
-if (rt_truth(t18024)) {
-rv t18025 = rt_add(rt_str_at("rt_mul(", 317, 22, 317, 31), v_a, 317, 22, 317, 35);
-rv t18026 = rt_add(t18025, rt_str_at(", ", 317, 38, 317, 42), 317, 22, 317, 42);
-rv t18027 = rt_add(t18026, v_b, 317, 22, 317, 46);
-rv t18028 = rt_add(t18027, rt_str_at(", ", 317, 49, 317, 53), 317, 22, 317, 53);
-rv t18029 = nx_node_span(317, 56, 317, 71, v_node);
-rv t18030 = rt_add(t18028, t18029, 317, 22, 317, 71);
-rv t18031 = rt_add(t18030, rt_str_at(")", 317, 74, 317, 77), 317, 22, 317, 77);
-v_expression = t18031;
+rv t18038 = rt_bool(rt_eq(v_operator, rt_str_at("*", 316, 27, 316, 30)));
+if (rt_truth(t18038)) {
+rv t18039 = rt_add(rt_str_at("rt_mul(", 317, 22, 317, 31), v_a, 317, 22, 317, 35);
+rv t18040 = rt_add(t18039, rt_str_at(", ", 317, 38, 317, 42), 317, 22, 317, 42);
+rv t18041 = rt_add(t18040, v_b, 317, 22, 317, 46);
+rv t18042 = rt_add(t18041, rt_str_at(", ", 317, 49, 317, 53), 317, 22, 317, 53);
+rv t18043 = nx_node_span(317, 56, 317, 71, v_node);
+rv t18044 = rt_add(t18042, t18043, 317, 22, 317, 71);
+rv t18045 = rt_add(t18044, rt_str_at(")", 317, 74, 317, 77), 317, 22, 317, 77);
+v_expression = t18045;
 } else {
-rv t18032 = rt_bool(rt_eq(v_operator, rt_str_at("/", 318, 27, 318, 30)));
-if (rt_truth(t18032)) {
-rv t18033 = rt_add(rt_str_at("rt_div(", 319, 22, 319, 31), v_a, 319, 22, 319, 35);
-rv t18034 = rt_add(t18033, rt_str_at(", ", 319, 38, 319, 42), 319, 22, 319, 42);
-rv t18035 = rt_add(t18034, v_b, 319, 22, 319, 46);
-rv t18036 = rt_add(t18035, rt_str_at(", ", 319, 49, 319, 53), 319, 22, 319, 53);
-rv t18037 = nx_node_span(319, 56, 319, 71, v_node);
-rv t18038 = rt_add(t18036, t18037, 319, 22, 319, 71);
-rv t18039 = rt_add(t18038, rt_str_at(", ", 319, 74, 319, 78), 319, 22, 319, 78);
-rv t18040 = nx_field(319, 91, 319, 111, v_node, rt_str_at("right", 319, 103, 319, 110));
-rv t18041 = nx_node_span(319, 81, 319, 112, t18040);
-rv t18042 = rt_add(t18039, t18041, 319, 22, 319, 112);
-rv t18043 = rt_add(t18042, rt_str_at(")", 319, 115, 319, 118), 319, 22, 319, 118);
-v_expression = t18043;
+rv t18046 = rt_bool(rt_eq(v_operator, rt_str_at("/", 318, 27, 318, 30)));
+if (rt_truth(t18046)) {
+rv t18047 = rt_add(rt_str_at("rt_div(", 319, 22, 319, 31), v_a, 319, 22, 319, 35);
+rv t18048 = rt_add(t18047, rt_str_at(", ", 319, 38, 319, 42), 319, 22, 319, 42);
+rv t18049 = rt_add(t18048, v_b, 319, 22, 319, 46);
+rv t18050 = rt_add(t18049, rt_str_at(", ", 319, 49, 319, 53), 319, 22, 319, 53);
+rv t18051 = nx_node_span(319, 56, 319, 71, v_node);
+rv t18052 = rt_add(t18050, t18051, 319, 22, 319, 71);
+rv t18053 = rt_add(t18052, rt_str_at(", ", 319, 74, 319, 78), 319, 22, 319, 78);
+rv t18054 = nx_field(319, 91, 319, 111, v_node, rt_str_at("right", 319, 103, 319, 110));
+rv t18055 = nx_node_span(319, 81, 319, 112, t18054);
+rv t18056 = rt_add(t18053, t18055, 319, 22, 319, 112);
+rv t18057 = rt_add(t18056, rt_str_at(")", 319, 115, 319, 118), 319, 22, 319, 118);
+v_expression = t18057;
 } else {
-rv t18044 = rt_bool(rt_eq(v_operator, rt_str_at("==", 320, 27, 320, 31)));
-if (rt_truth(t18044)) {
-rv t18045 = rt_add(rt_str_at("rt_bool(rt_eq(", 321, 22, 321, 38), v_a, 321, 22, 321, 42);
-rv t18046 = rt_add(t18045, rt_str_at(", ", 321, 45, 321, 49), 321, 22, 321, 49);
-rv t18047 = rt_add(t18046, v_b, 321, 22, 321, 53);
-rv t18048 = rt_add(t18047, rt_str_at("))", 321, 56, 321, 60), 321, 22, 321, 60);
-v_expression = t18048;
+rv t18058 = rt_bool(rt_eq(v_operator, rt_str_at("==", 320, 27, 320, 31)));
+if (rt_truth(t18058)) {
+rv t18059 = rt_add(rt_str_at("rt_bool(rt_eq(", 321, 22, 321, 38), v_a, 321, 22, 321, 42);
+rv t18060 = rt_add(t18059, rt_str_at(", ", 321, 45, 321, 49), 321, 22, 321, 49);
+rv t18061 = rt_add(t18060, v_b, 321, 22, 321, 53);
+rv t18062 = rt_add(t18061, rt_str_at("))", 321, 56, 321, 60), 321, 22, 321, 60);
+v_expression = t18062;
 } else {
-rv t18049 = rt_bool(rt_eq(v_operator, rt_str_at("!=", 322, 27, 322, 31)));
-if (rt_truth(t18049)) {
-rv t18050 = rt_add(rt_str_at("rt_bool(!rt_eq(", 323, 22, 323, 39), v_a, 323, 22, 323, 43);
-rv t18051 = rt_add(t18050, rt_str_at(", ", 323, 46, 323, 50), 323, 22, 323, 50);
-rv t18052 = rt_add(t18051, v_b, 323, 22, 323, 54);
-rv t18053 = rt_add(t18052, rt_str_at("))", 323, 57, 323, 61), 323, 22, 323, 61);
-v_expression = t18053;
+rv t18063 = rt_bool(rt_eq(v_operator, rt_str_at("!=", 322, 27, 322, 31)));
+if (rt_truth(t18063)) {
+rv t18064 = rt_add(rt_str_at("rt_bool(!rt_eq(", 323, 22, 323, 39), v_a, 323, 22, 323, 43);
+rv t18065 = rt_add(t18064, rt_str_at(", ", 323, 46, 323, 50), 323, 22, 323, 50);
+rv t18066 = rt_add(t18065, v_b, 323, 22, 323, 54);
+rv t18067 = rt_add(t18066, rt_str_at("))", 323, 57, 323, 61), 323, 22, 323, 61);
+v_expression = t18067;
 } else {
-rv t18054 = rt_bool(rt_eq(v_operator, rt_str_at("<", 324, 27, 324, 30)));
-if (rt_truth(t18054)) {
-rv t18055 = rt_add(rt_str_at("rt_bool(rt_less(", 325, 22, 325, 40), v_a, 325, 22, 325, 44);
-rv t18056 = rt_add(t18055, rt_str_at(", ", 325, 47, 325, 51), 325, 22, 325, 51);
-rv t18057 = rt_add(t18056, v_b, 325, 22, 325, 55);
-rv t18058 = rt_add(t18057, rt_str_at("))", 325, 58, 325, 62), 325, 22, 325, 62);
-v_expression = t18058;
+rv t18068 = rt_bool(rt_eq(v_operator, rt_str_at("<", 324, 27, 324, 30)));
+if (rt_truth(t18068)) {
+rv t18069 = rt_add(rt_str_at("rt_bool(rt_less(", 325, 22, 325, 40), v_a, 325, 22, 325, 44);
+rv t18070 = rt_add(t18069, rt_str_at(", ", 325, 47, 325, 51), 325, 22, 325, 51);
+rv t18071 = rt_add(t18070, v_b, 325, 22, 325, 55);
+rv t18072 = rt_add(t18071, rt_str_at("))", 325, 58, 325, 62), 325, 22, 325, 62);
+v_expression = t18072;
 } else {
-rv t18059 = rt_bool(rt_eq(v_operator, rt_str_at(">", 326, 27, 326, 30)));
-if (rt_truth(t18059)) {
-rv t18060 = rt_add(rt_str_at("rt_bool(rt_less(", 327, 22, 327, 40), v_b, 327, 22, 327, 44);
-rv t18061 = rt_add(t18060, rt_str_at(", ", 327, 47, 327, 51), 327, 22, 327, 51);
-rv t18062 = rt_add(t18061, v_a, 327, 22, 327, 55);
-rv t18063 = rt_add(t18062, rt_str_at("))", 327, 58, 327, 62), 327, 22, 327, 62);
-v_expression = t18063;
+rv t18073 = rt_bool(rt_eq(v_operator, rt_str_at(">", 326, 27, 326, 30)));
+if (rt_truth(t18073)) {
+rv t18074 = rt_add(rt_str_at("rt_bool(rt_less(", 327, 22, 327, 40), v_b, 327, 22, 327, 44);
+rv t18075 = rt_add(t18074, rt_str_at(", ", 327, 47, 327, 51), 327, 22, 327, 51);
+rv t18076 = rt_add(t18075, v_a, 327, 22, 327, 55);
+rv t18077 = rt_add(t18076, rt_str_at("))", 327, 58, 327, 62), 327, 22, 327, 62);
+v_expression = t18077;
 } else {
-rv t18064 = rt_bool(rt_eq(v_operator, rt_str_at("<=", 328, 27, 328, 31)));
-if (rt_truth(t18064)) {
-rv t18065 = rt_add(rt_str_at("rt_bool(!rt_less(", 329, 22, 329, 41), v_b, 329, 22, 329, 45);
-rv t18066 = rt_add(t18065, rt_str_at(", ", 329, 48, 329, 52), 329, 22, 329, 52);
-rv t18067 = rt_add(t18066, v_a, 329, 22, 329, 56);
-rv t18068 = rt_add(t18067, rt_str_at("))", 329, 59, 329, 63), 329, 22, 329, 63);
-v_expression = t18068;
+rv t18078 = rt_bool(rt_eq(v_operator, rt_str_at("<=", 328, 27, 328, 31)));
+if (rt_truth(t18078)) {
+rv t18079 = rt_add(rt_str_at("rt_bool(!rt_less(", 329, 22, 329, 41), v_b, 329, 22, 329, 45);
+rv t18080 = rt_add(t18079, rt_str_at(", ", 329, 48, 329, 52), 329, 22, 329, 52);
+rv t18081 = rt_add(t18080, v_a, 329, 22, 329, 56);
+rv t18082 = rt_add(t18081, rt_str_at("))", 329, 59, 329, 63), 329, 22, 329, 63);
+v_expression = t18082;
 } else {
-rv t18069 = rt_bool(rt_eq(v_operator, rt_str_at(">=", 330, 27, 330, 31)));
-if (rt_truth(t18069)) {
-rv t18070 = rt_add(rt_str_at("rt_bool(!rt_less(", 331, 22, 331, 41), v_a, 331, 22, 331, 45);
-rv t18071 = rt_add(t18070, rt_str_at(", ", 331, 48, 331, 52), 331, 22, 331, 52);
-rv t18072 = rt_add(t18071, v_b, 331, 22, 331, 56);
-rv t18073 = rt_add(t18072, rt_str_at("))", 331, 59, 331, 63), 331, 22, 331, 63);
-v_expression = t18073;
+rv t18083 = rt_bool(rt_eq(v_operator, rt_str_at(">=", 330, 27, 330, 31)));
+if (rt_truth(t18083)) {
+rv t18084 = rt_add(rt_str_at("rt_bool(!rt_less(", 331, 22, 331, 41), v_a, 331, 22, 331, 45);
+rv t18085 = rt_add(t18084, rt_str_at(", ", 331, 48, 331, 52), 331, 22, 331, 52);
+rv t18086 = rt_add(t18085, v_b, 331, 22, 331, 56);
+rv t18087 = rt_add(t18086, rt_str_at("))", 331, 59, 331, 63), 331, 22, 331, 63);
+v_expression = t18087;
 } else {
-rv t18074 = rt_field(v_right, "st");
-rv t18075 = rt_add(rt_str_at("the operator ", 333, 55, 333, 70), v_operator, 333, 55, 333, 81);
-rv t18076 = nx_refuse(333, 38, 333, 82, t18074, t18075);
-rv t18077 = nx_part(333, 16, 333, 83, rt_str_at("", 333, 21, 333, 23), rt_str_at("rt_unit()", 333, 25, 333, 36), t18076);
-rv r18078 = t18077;
+rv t18088 = rt_field(v_right, "st");
+rv t18089 = rt_add(rt_str_at("the operator ", 333, 55, 333, 70), v_operator, 333, 55, 333, 81);
+rv t18090 = nx_refuse(333, 38, 333, 82, t18088, t18089);
+rv t18091 = nx_part(333, 16, 333, 83, rt_str_at("", 333, 21, 333, 23), rt_str_at("rt_unit()", 333, 25, 333, 36), t18090);
+rv r18092 = t18091;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18078;
+return r18092;
 }
 }
 }
@@ -67331,121 +67387,121 @@ return r18078;
 }
 }
 }
-rv t18079 = rt_field(v_right, "st");
-rv t18080 = nx_temporary(335, 16, 335, 47, t18079, v_expression);
-rv v_made = t18080;
-rv t18081 = rt_field(v_made, "code");
-rv t18082 = rt_add(v_code, t18081, 336, 17, 336, 33);
-rv t18083 = rt_field(v_made, "value");
-rv t18084 = rt_field(v_made, "st");
-rv t18085 = nx_part(336, 12, 336, 55, t18082, t18083, t18084);
-rv r18086 = t18085;
+rv t18093 = rt_field(v_right, "st");
+rv t18094 = nx_temporary(335, 16, 335, 47, t18093, v_expression);
+rv v_made = t18094;
+rv t18095 = rt_field(v_made, "code");
+rv t18096 = rt_add(v_code, t18095, 336, 17, 336, 33);
+rv t18097 = rt_field(v_made, "value");
+rv t18098 = rt_field(v_made, "st");
+rv t18099 = nx_part(336, 12, 336, 55, t18096, t18097, t18098);
+rv r18100 = t18099;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18086;
+return r18100;
 }
 
 static rv nx_gen_logic(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_left, rv v_node, rv v_operator) {
 int rt_saved = rt_enter("gen_logic", 10, s_l, s_c, s_el, s_ec);
-rv t18087 = rt_field(v_left, "st");
-rv t18088 = rt_field(v_left, "value");
-rv t18089 = nx_temporary(341, 16, 341, 46, t18087, t18088);
-rv v_made = t18089;
-rv t18090 = rt_field(v_made, "st");
-rv t18091 = nx_field(342, 35, 342, 55, v_node, rt_str_at("right", 342, 47, 342, 54));
-rv t18092 = nx_gen_expr(342, 17, 342, 56, t18090, t18091);
-rv v_right = t18092;
-rv t18093 = rt_field(v_made, "value");
-rv t18094 = rt_add(rt_str_at("rt_truth(", 343, 21, 343, 32), t18093, 343, 21, 343, 45);
-rv t18095 = rt_add(t18094, rt_str_at(")", 343, 48, 343, 51), 343, 21, 343, 51);
-rv v_condition = t18095;
-rv t18096 = rt_bool(rt_eq(v_operator, rt_str_at("or", 344, 20, 344, 24)));
-if (rt_truth(t18096)) {
-rv t18097 = rt_field(v_made, "value");
-rv t18098 = rt_add(rt_str_at("!rt_truth(", 345, 21, 345, 33), t18097, 345, 21, 345, 46);
-rv t18099 = rt_add(t18098, rt_str_at(")", 345, 49, 345, 52), 345, 21, 345, 52);
-v_condition = t18099;
+rv t18101 = rt_field(v_left, "st");
+rv t18102 = rt_field(v_left, "value");
+rv t18103 = nx_temporary(341, 16, 341, 46, t18101, t18102);
+rv v_made = t18103;
+rv t18104 = rt_field(v_made, "st");
+rv t18105 = nx_field(342, 35, 342, 55, v_node, rt_str_at("right", 342, 47, 342, 54));
+rv t18106 = nx_gen_expr(342, 17, 342, 56, t18104, t18105);
+rv v_right = t18106;
+rv t18107 = rt_field(v_made, "value");
+rv t18108 = rt_add(rt_str_at("rt_truth(", 343, 21, 343, 32), t18107, 343, 21, 343, 45);
+rv t18109 = rt_add(t18108, rt_str_at(")", 343, 48, 343, 51), 343, 21, 343, 51);
+rv v_condition = t18109;
+rv t18110 = rt_bool(rt_eq(v_operator, rt_str_at("or", 344, 20, 344, 24)));
+if (rt_truth(t18110)) {
+rv t18111 = rt_field(v_made, "value");
+rv t18112 = rt_add(rt_str_at("!rt_truth(", 345, 21, 345, 33), t18111, 345, 21, 345, 46);
+rv t18113 = rt_add(t18112, rt_str_at(")", 345, 49, 345, 52), 345, 21, 345, 52);
+v_condition = t18113;
 }
-rv t18100 = rt_field(v_left, "code");
-rv t18101 = rt_field(v_made, "code");
-rv t18102 = rt_add(t18100, t18101, 348, 9, 348, 30);
-rv t18103 = rt_add(t18102, rt_str_at("if (", 348, 33, 348, 39), 348, 9, 348, 39);
-rv t18104 = rt_add(t18103, v_condition, 348, 9, 348, 51);
-rv t18105 = rt_add(t18104, rt_str_at(") {\n", 348, 54, 348, 62), 348, 9, 348, 62);
-rv t18106 = rt_field(v_right, "code");
-rv t18107 = rt_add(t18105, t18106, 348, 9, 348, 75);
-rv t18108 = rt_field(v_made, "value");
-rv t18109 = rt_add(t18107, t18108, 348, 9, 348, 88);
-rv t18110 = rt_add(t18109, rt_str_at(" = ", 348, 91, 348, 96), 348, 9, 348, 96);
-rv t18111 = rt_field(v_right, "value");
-rv t18112 = rt_add(t18110, t18111, 348, 9, 348, 110);
-rv t18113 = rt_add(t18112, rt_str_at(";\n}\n", 348, 113, 348, 121), 348, 9, 348, 121);
-rv v_code = t18113;
-rv t18114 = rt_field(v_made, "value");
-rv t18115 = rt_field(v_right, "st");
-rv t18116 = nx_part(350, 12, 350, 44, v_code, t18114, t18115);
-rv r18117 = t18116;
+rv t18114 = rt_field(v_left, "code");
+rv t18115 = rt_field(v_made, "code");
+rv t18116 = rt_add(t18114, t18115, 348, 9, 348, 30);
+rv t18117 = rt_add(t18116, rt_str_at("if (", 348, 33, 348, 39), 348, 9, 348, 39);
+rv t18118 = rt_add(t18117, v_condition, 348, 9, 348, 51);
+rv t18119 = rt_add(t18118, rt_str_at(") {\n", 348, 54, 348, 62), 348, 9, 348, 62);
+rv t18120 = rt_field(v_right, "code");
+rv t18121 = rt_add(t18119, t18120, 348, 9, 348, 75);
+rv t18122 = rt_field(v_made, "value");
+rv t18123 = rt_add(t18121, t18122, 348, 9, 348, 88);
+rv t18124 = rt_add(t18123, rt_str_at(" = ", 348, 91, 348, 96), 348, 9, 348, 96);
+rv t18125 = rt_field(v_right, "value");
+rv t18126 = rt_add(t18124, t18125, 348, 9, 348, 110);
+rv t18127 = rt_add(t18126, rt_str_at(";\n}\n", 348, 113, 348, 121), 348, 9, 348, 121);
+rv v_code = t18127;
+rv t18128 = rt_field(v_made, "value");
+rv t18129 = rt_field(v_right, "st");
+rv t18130 = nx_part(350, 12, 350, 44, v_code, t18128, t18129);
+rv r18131 = t18130;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18117;
+return r18131;
 }
 
 static rv nx_gen_args(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_nodes) {
 int rt_saved = rt_enter("gen_args", 10, s_l, s_c, s_el, s_ec);
 rv v_code = rt_str_at("", 356, 16, 356, 18);
-rv t18118 = rt_list_from(0, 0);
-rv v_values = t18118;
+rv t18132 = rt_list_from(0, 0);
+rv v_values = t18132;
 rv v_current = v_st;
 {
-rv it18119 = v_nodes;
-int64_t n18119 = rt_list_len(it18119);
+rv it18133 = v_nodes;
+int64_t n18133 = rt_list_len(it18133);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 359, turn);
 rt_pop();
-if (turn >= n18119) break;
-rv v_node = rt_list_at(it18119, turn);
+if (turn >= n18133) break;
+rv v_node = rt_list_at(it18133, turn);
 rt_push_loop(RT_BODY, 359, turn + 1);
-rv t18120 = nx_gen_expr(360, 20, 360, 43, v_current, v_node);
-rv v_made = t18120;
-rv t18121 = rt_field(v_made, "code");
-rv t18122 = rt_add(v_code, t18121, 361, 16, 361, 32);
-v_code = t18122;
-rv t18123 = rt_field(v_made, "value");
-rv t18124 = rt_list_append(v_values, t18123);
-v_values = t18124;
-rv t18125 = rt_field(v_made, "st");
-v_current = t18125;
+rv t18134 = nx_gen_expr(360, 20, 360, 43, v_current, v_node);
+rv v_made = t18134;
+rv t18135 = rt_field(v_made, "code");
+rv t18136 = rt_add(v_code, t18135, 361, 16, 361, 32);
+v_code = t18136;
+rv t18137 = rt_field(v_made, "value");
+rv t18138 = rt_list_append(v_values, t18137);
+v_values = t18138;
+rv t18139 = rt_field(v_made, "st");
+v_current = t18139;
 rt_pop();
 turn++;
 }
 }
-rv t18126 = rt_record_new("ArgParts", rec_ArgParts, 3, (rv[]){v_code, v_values, v_current});
-rv r18127 = t18126;
+rv t18140 = rt_record_new("ArgParts", rec_ArgParts, 3, (rv[]){v_code, v_values, v_current});
+rv r18141 = t18140;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18127;
+return r18141;
 }
 
 static rv nx_last_dot(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_text) {
 int rt_saved = rt_enter("last_dot", 10, s_l, s_c, s_el, s_ec);
-rv t18128 = rt_int(v_text.u.t.len);
-rv t18129 = rt_sub(t18128, rt_int(INT64_C(1)), 369, 13, 369, 34);
-rv v_i = t18129;
+rv t18142 = rt_int(v_text.u.t.len);
+rv t18143 = rt_sub(t18142, rt_int(INT64_C(1)), 369, 13, 369, 34);
+rv v_i = t18143;
 {
 int64_t turn = 0;
 bool turn_has_before = false;
 int64_t before = 0;
 for (;;) {
 rt_push_loop(RT_COND, 370, turn);
-rv t18131 = rt_bool(!rt_less(v_i, rt_int(INT64_C(0))));
-bool go = rt_truth(t18131);
+rv t18145 = rt_bool(!rt_less(v_i, rt_int(INT64_C(0))));
+bool go = rt_truth(t18145);
 rt_pop();
 if (!go) break;
 turn++;
 rt_push_loop(RT_MEASURE, 370, turn);
-rv t18130 = rt_add(v_i, rt_int(INT64_C(1)), 371, 17, 371, 22);
-int64_t m = t18130.u.i;
+rv t18144 = rt_add(v_i, rt_int(INT64_C(1)), 371, 17, 371, 22);
+int64_t m = t18144.u.i;
 rt_pop();
 if ((turn_has_before && m >= before) || m < 0) {
 rt_notes own = {{0}, 0};
@@ -67463,1124 +67519,1124 @@ rt_fail("contract", "E4006", "Loop measure did not decrease", label, "", &own, 0
 turn_has_before = true;
 before = m;
 rt_push_loop(RT_BODY, 370, turn);
-rv t18132 = rt_add(v_i, rt_int(INT64_C(1)), 373, 32, 373, 37);
-rv t18133 = rt_text_slice(v_text, v_i, t18132, 373, 12, 373, 38);
-rv t18134 = rt_bool(rt_eq(t18133, rt_str_at(".", 373, 42, 373, 45)));
-if (rt_truth(t18134)) {
-rv r18135 = v_i;
+rv t18146 = rt_add(v_i, rt_int(INT64_C(1)), 373, 32, 373, 37);
+rv t18147 = rt_text_slice(v_text, v_i, t18146, 373, 12, 373, 38);
+rv t18148 = rt_bool(rt_eq(t18147, rt_str_at(".", 373, 42, 373, 45)));
+if (rt_truth(t18148)) {
+rv r18149 = v_i;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18135;
+return r18149;
 }
-rv t18136 = rt_sub(v_i, rt_int(INT64_C(1)), 376, 13, 376, 18);
-v_i = t18136;
+rv t18150 = rt_sub(v_i, rt_int(INT64_C(1)), 376, 13, 376, 18);
+v_i = t18150;
 rt_pop();
 }
 }
-rv t18137 = rt_sub(rt_int(INT64_C(0)), rt_int(INT64_C(1)), 378, 12, 378, 17);
-rv r18138 = t18137;
+rv t18151 = rt_sub(rt_int(INT64_C(0)), rt_int(INT64_C(1)), 378, 12, 378, 17);
+rv r18152 = t18151;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18138;
+return r18152;
 }
 
 static rv nx_gen_record(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_node) {
 int rt_saved = rt_enter("gen_record", 10, s_l, s_c, s_el, s_ec);
-rv t18139 = nx_field(382, 24, 382, 43, v_node, rt_str_at("name", 382, 36, 382, 42));
-rv t18140 = nx_text_of(382, 16, 382, 44, t18139);
-rv v_name = t18140;
-rv t18141 = nx_field(383, 26, 383, 50, v_node, rt_str_at("qualifier", 383, 38, 383, 49));
-rv t18142 = nx_text_of(383, 18, 383, 51, t18141);
-rv v_module = t18142;
-rv t18143 = rt_bool(!rt_eq(v_module, rt_str_at("", 384, 18, 384, 20)));
-if (rt_truth(t18143)) {
-rv t18144 = rt_add(v_module, rt_str_at(".", 385, 25, 385, 28), 385, 16, 385, 28);
-rv t18145 = rt_add(t18144, v_name, 385, 16, 385, 35);
-v_name = t18145;
+rv t18153 = nx_field(382, 24, 382, 43, v_node, rt_str_at("name", 382, 36, 382, 42));
+rv t18154 = nx_text_of(382, 16, 382, 44, t18153);
+rv v_name = t18154;
+rv t18155 = nx_field(383, 26, 383, 50, v_node, rt_str_at("qualifier", 383, 38, 383, 49));
+rv t18156 = nx_text_of(383, 18, 383, 51, t18155);
+rv v_module = t18156;
+rv t18157 = rt_bool(!rt_eq(v_module, rt_str_at("", 384, 18, 384, 20)));
+if (rt_truth(t18157)) {
+rv t18158 = rt_add(v_module, rt_str_at(".", 385, 25, 385, 28), 385, 16, 385, 28);
+rv t18159 = rt_add(t18158, v_name, 385, 16, 385, 35);
+v_name = t18159;
 }
-rv t18146 = nx_field(387, 26, 387, 47, v_node, rt_str_at("target", 387, 38, 387, 46));
-rv t18147 = nx_text_of(387, 18, 387, 48, t18146);
-rv v_target = t18147;
-rv t18148 = rt_bool(!rt_eq(v_target, rt_str_at("", 388, 18, 388, 20)));
-if (rt_truth(t18148)) {
+rv t18160 = nx_field(387, 26, 387, 47, v_node, rt_str_at("target", 387, 38, 387, 46));
+rv t18161 = nx_text_of(387, 18, 387, 48, t18160);
+rv v_target = t18161;
+rv t18162 = rt_bool(!rt_eq(v_target, rt_str_at("", 388, 18, 388, 20)));
+if (rt_truth(t18162)) {
 v_name = v_target;
 }
-rv t18149 = rt_field(v_st, "info");
-rv t18150 = rt_field(t18149, "records");
-rv t18151 = nx_index_of(391, 14, 391, 45, t18150, v_name);
-rv v_at = t18151;
-rv t18152 = rt_bool(rt_less(v_at, rt_int(INT64_C(0))));
-if (rt_truth(t18152)) {
-rv t18153 = rt_add(rt_str_at("the record ", 393, 49, 393, 62), v_name, 393, 49, 393, 69);
-rv t18154 = nx_refuse(393, 38, 393, 70, v_st, t18153);
-rv t18155 = nx_part(393, 16, 393, 71, rt_str_at("", 393, 21, 393, 23), rt_str_at("rt_unit()", 393, 25, 393, 36), t18154);
-rv r18156 = t18155;
+rv t18163 = rt_field(v_st, "info");
+rv t18164 = rt_field(t18163, "records");
+rv t18165 = nx_index_of(391, 14, 391, 45, t18164, v_name);
+rv v_at = t18165;
+rv t18166 = rt_bool(rt_less(v_at, rt_int(INT64_C(0))));
+if (rt_truth(t18166)) {
+rv t18167 = rt_add(rt_str_at("the record ", 393, 49, 393, 62), v_name, 393, 49, 393, 69);
+rv t18168 = nx_refuse(393, 38, 393, 70, v_st, t18167);
+rv t18169 = nx_part(393, 16, 393, 71, rt_str_at("", 393, 21, 393, 23), rt_str_at("rt_unit()", 393, 25, 393, 36), t18168);
+rv r18170 = t18169;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18156;
+return r18170;
 }
-rv t18157 = rt_field(v_st, "info");
-rv t18158 = rt_field(t18157, "record_fields");
-rv t18159 = rt_list_get(t18158, v_at, 395, 20, 395, 55);
-rv v_declared = t18159;
-rv t18160 = rt_list_from(0, 0);
-rv v_values = t18160;
-rv t18161 = rt_list_from(0, 0);
-rv v_written = t18161;
-rv t18162 = nx_field(398, 33, 398, 54, v_node, rt_str_at("fields", 398, 45, 398, 53));
-rv t18163 = nx_items_of(398, 24, 398, 55, t18162);
+rv t18171 = rt_field(v_st, "info");
+rv t18172 = rt_field(t18171, "record_fields");
+rv t18173 = rt_list_get(t18172, v_at, 395, 20, 395, 55);
+rv v_declared = t18173;
+rv t18174 = rt_list_from(0, 0);
+rv v_values = t18174;
+rv t18175 = rt_list_from(0, 0);
+rv v_written = t18175;
+rv t18176 = nx_field(398, 33, 398, 54, v_node, rt_str_at("fields", 398, 45, 398, 53));
+rv t18177 = nx_items_of(398, 24, 398, 55, t18176);
 {
-rv it18164 = t18163;
-int64_t n18164 = rt_list_len(it18164);
+rv it18178 = t18177;
+int64_t n18178 = rt_list_len(it18178);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 398, turn);
 rt_pop();
-if (turn >= n18164) break;
-rv v_initializer = rt_list_at(it18164, turn);
+if (turn >= n18178) break;
+rv v_initializer = rt_list_at(it18178, turn);
 rt_push_loop(RT_BODY, 398, turn + 1);
-rv t18165 = nx_field(399, 38, 399, 65, v_initializer, rt_str_at("value", 399, 57, 399, 64));
-rv t18166 = rt_list_append(v_values, t18165);
-v_values = t18166;
-rv t18167 = nx_field(400, 48, 400, 74, v_initializer, rt_str_at("name", 400, 67, 400, 73));
-rv t18168 = nx_text_of(400, 40, 400, 75, t18167);
-rv t18169 = rt_list_append(v_written, t18168);
-v_written = t18169;
+rv t18179 = nx_field(399, 38, 399, 65, v_initializer, rt_str_at("value", 399, 57, 399, 64));
+rv t18180 = rt_list_append(v_values, t18179);
+v_values = t18180;
+rv t18181 = nx_field(400, 48, 400, 74, v_initializer, rt_str_at("name", 400, 67, 400, 73));
+rv t18182 = nx_text_of(400, 40, 400, 75, t18181);
+rv t18183 = rt_list_append(v_written, t18182);
+v_written = t18183;
 rt_pop();
 turn++;
 }
 }
-rv t18170 = nx_gen_args(402, 17, 402, 37, v_st, v_values);
-rv v_parts = t18170;
-rv t18171 = rt_list_from(0, 0);
-rv v_ordered = t18171;
+rv t18184 = nx_gen_args(402, 17, 402, 37, v_st, v_values);
+rv v_parts = t18184;
+rv t18185 = rt_list_from(0, 0);
+rv v_ordered = t18185;
 {
-rv it18172 = v_declared;
-int64_t n18172 = rt_list_len(it18172);
+rv it18186 = v_declared;
+int64_t n18186 = rt_list_len(it18186);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 404, turn);
 rt_pop();
-if (turn >= n18172) break;
-rv v_wanted = rt_list_at(it18172, turn);
+if (turn >= n18186) break;
+rv v_wanted = rt_list_at(it18186, turn);
 rt_push_loop(RT_BODY, 404, turn + 1);
-rv t18173 = nx_index_of(405, 21, 405, 46, v_written, v_wanted);
-rv v_place = t18173;
-rv t18174 = rt_bool(!rt_less(v_place, rt_int(INT64_C(0))));
-if (rt_truth(t18174)) {
-rv t18175 = rt_field(v_parts, "values");
-rv t18176 = rt_list_get(t18175, v_place, 407, 44, 407, 73);
-rv t18177 = rt_list_append(v_ordered, t18176);
-v_ordered = t18177;
+rv t18187 = nx_index_of(405, 21, 405, 46, v_written, v_wanted);
+rv v_place = t18187;
+rv t18188 = rt_bool(!rt_less(v_place, rt_int(INT64_C(0))));
+if (rt_truth(t18188)) {
+rv t18189 = rt_field(v_parts, "values");
+rv t18190 = rt_list_get(t18189, v_place, 407, 44, 407, 73);
+rv t18191 = rt_list_append(v_ordered, t18190);
+v_ordered = t18191;
 }
 rt_pop();
 turn++;
 }
 }
-rv t18178 = rt_field(v_parts, "st");
-rv t18179 = nx_c_string(411, 38, 411, 52, v_name);
-rv t18180 = rt_add(rt_str_at("rt_record_new(", 411, 19, 411, 35), t18179, 411, 19, 411, 52);
-rv t18181 = rt_add(t18180, rt_str_at(", rec_", 411, 55, 411, 63), 411, 19, 411, 63);
-rv t18182 = nx_c_name(411, 66, 411, 78, v_name);
-rv t18183 = rt_add(t18181, t18182, 411, 19, 411, 78);
-rv t18184 = rt_add(t18183, rt_str_at(", ", 411, 81, 411, 85), 411, 19, 411, 85);
-rv t18185 = rt_int(rt_list_len(v_ordered));
-rv t18186 = rt_to_text(t18185, 411, 88, 411, 117);
-rv t18187 = rt_add(t18184, t18186, 411, 19, 411, 117);
-rv t18188 = rt_add(t18187, rt_str_at(", ", 411, 120, 411, 124), 411, 19, 411, 124);
-rv t18189 = nx_array_values(412, 11, 412, 32, v_ordered);
-rv t18190 = rt_add(t18188, t18189, 411, 19, 412, 32);
-rv t18191 = rt_add(t18190, rt_str_at(")", 412, 35, 412, 38), 411, 19, 412, 38);
-rv t18192 = nx_temporary(410, 16, 413, 6, t18178, t18191);
-rv v_made = t18192;
-rv t18193 = rt_field(v_parts, "code");
-rv t18194 = rt_field(v_made, "code");
-rv t18195 = rt_add(t18193, t18194, 414, 17, 414, 39);
-rv t18196 = rt_field(v_made, "value");
-rv t18197 = rt_field(v_made, "st");
-rv t18198 = nx_part(414, 12, 414, 61, t18195, t18196, t18197);
-rv r18199 = t18198;
+rv t18192 = rt_field(v_parts, "st");
+rv t18193 = nx_c_string(411, 38, 411, 52, v_name);
+rv t18194 = rt_add(rt_str_at("rt_record_new(", 411, 19, 411, 35), t18193, 411, 19, 411, 52);
+rv t18195 = rt_add(t18194, rt_str_at(", rec_", 411, 55, 411, 63), 411, 19, 411, 63);
+rv t18196 = nx_c_name(411, 66, 411, 78, v_name);
+rv t18197 = rt_add(t18195, t18196, 411, 19, 411, 78);
+rv t18198 = rt_add(t18197, rt_str_at(", ", 411, 81, 411, 85), 411, 19, 411, 85);
+rv t18199 = rt_int(rt_list_len(v_ordered));
+rv t18200 = rt_to_text(t18199, 411, 88, 411, 117);
+rv t18201 = rt_add(t18198, t18200, 411, 19, 411, 117);
+rv t18202 = rt_add(t18201, rt_str_at(", ", 411, 120, 411, 124), 411, 19, 411, 124);
+rv t18203 = nx_array_values(412, 11, 412, 32, v_ordered);
+rv t18204 = rt_add(t18202, t18203, 411, 19, 412, 32);
+rv t18205 = rt_add(t18204, rt_str_at(")", 412, 35, 412, 38), 411, 19, 412, 38);
+rv t18206 = nx_temporary(410, 16, 413, 6, t18192, t18205);
+rv v_made = t18206;
+rv t18207 = rt_field(v_parts, "code");
+rv t18208 = rt_field(v_made, "code");
+rv t18209 = rt_add(t18207, t18208, 414, 17, 414, 39);
+rv t18210 = rt_field(v_made, "value");
+rv t18211 = rt_field(v_made, "st");
+rv t18212 = nx_part(414, 12, 414, 61, t18209, t18210, t18211);
+rv r18213 = t18212;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18199;
+return r18213;
 }
 
 static rv nx_arg_node(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_node, rv v_index) {
 int rt_saved = rt_enter("arg_node", 10, s_l, s_c, s_el, s_ec);
-rv t18200 = nx_field(418, 30, 418, 54, v_node, rt_str_at("arguments", 418, 42, 418, 53));
-rv t18201 = nx_items_of(418, 21, 418, 55, t18200);
-rv t18202 = rt_list_get(t18201, v_index, 418, 12, 418, 63);
-rv r18203 = t18202;
+rv t18214 = nx_field(418, 30, 418, 54, v_node, rt_str_at("arguments", 418, 42, 418, 53));
+rv t18215 = nx_items_of(418, 21, 418, 55, t18214);
+rv t18216 = rt_list_get(t18215, v_index, 418, 12, 418, 63);
+rv r18217 = t18216;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18203;
+return r18217;
 }
 
 static rv nx_callee_of(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_node) {
 int rt_saved = rt_enter("callee_of", 10, s_l, s_c, s_el, s_ec);
-rv t18204 = nx_field(423, 26, 423, 47, v_node, rt_str_at("target", 423, 38, 423, 46));
-rv t18205 = nx_text_of(423, 18, 423, 48, t18204);
-rv v_target = t18205;
-rv t18206 = rt_bool(!rt_eq(v_target, rt_str_at("", 424, 18, 424, 20)));
-if (rt_truth(t18206)) {
-rv r18207 = v_target;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18207;
-}
-rv t18208 = nx_field(427, 20, 427, 41, v_node, rt_str_at("callee", 427, 32, 427, 40));
-rv t18209 = nx_text_of(427, 12, 427, 42, t18208);
-rv r18210 = t18209;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18210;
-}
-
-static rv nx_builtin_expression(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_callee, rv v_values, rv v_here, rv v_node) {
-int rt_saved = rt_enter("builtin_expression", 10, s_l, s_c, s_el, s_ec);
-rv t18211 = rt_bool(rt_eq(v_callee, rt_str_at("args", 431, 18, 431, 24)));
-if (rt_truth(t18211)) {
-rv t18212 = rt_add(rt_str_at("rt_args(", 432, 16, 432, 26), v_here, 432, 16, 432, 33);
-rv t18213 = rt_add(t18212, rt_str_at(")", 432, 36, 432, 39), 432, 16, 432, 39);
-rv r18214 = t18213;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18214;
-}
-rv t18215 = rt_bool(rt_eq(v_callee, rt_str_at("input", 434, 18, 434, 25)));
-if (rt_truth(t18215)) {
-rv t18216 = rt_add(rt_str_at("rt_input(", 435, 16, 435, 27), v_here, 435, 16, 435, 34);
-rv t18217 = rt_add(t18216, rt_str_at(")", 435, 37, 435, 40), 435, 16, 435, 40);
-rv r18218 = t18217;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18218;
-}
-rv t18219 = rt_int(rt_list_len(v_values));
-rv t18220 = rt_bool(rt_eq(t18219, rt_int(INT64_C(0))));
+rv t18218 = nx_field(423, 26, 423, 47, v_node, rt_str_at("target", 423, 38, 423, 46));
+rv t18219 = nx_text_of(423, 18, 423, 48, t18218);
+rv v_target = t18219;
+rv t18220 = rt_bool(!rt_eq(v_target, rt_str_at("", 424, 18, 424, 20)));
 if (rt_truth(t18220)) {
-rv r18221 = rt_str_at("", 438, 16, 438, 18);
+rv r18221 = v_target;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r18221;
 }
-rv t18222 = rt_bool(rt_eq(v_callee, rt_str_at("Net.get", 440, 18, 440, 27)));
-if (rt_truth(t18222)) {
-rv t18223 = rt_list_get(v_values, rt_int(INT64_C(0)), 441, 32, 441, 51);
-rv t18224 = rt_add(rt_str_at("rt_net_get(", 441, 16, 441, 29), t18223, 441, 16, 441, 51);
-rv t18225 = rt_add(t18224, rt_str_at(", ", 441, 54, 441, 58), 441, 16, 441, 58);
-rv t18226 = nx_arg_node(441, 71, 441, 88, v_node, rt_int(INT64_C(0)));
-rv t18227 = nx_node_span(441, 61, 441, 89, t18226);
-rv t18228 = rt_add(t18225, t18227, 441, 16, 441, 89);
-rv t18229 = rt_add(t18228, rt_str_at(")", 441, 92, 441, 95), 441, 16, 441, 95);
-rv r18230 = t18229;
+rv t18222 = nx_field(427, 20, 427, 41, v_node, rt_str_at("callee", 427, 32, 427, 40));
+rv t18223 = nx_text_of(427, 12, 427, 42, t18222);
+rv r18224 = t18223;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18230;
+return r18224;
 }
-rv t18231 = rt_bool(rt_eq(v_callee, rt_str_at("Process.run", 443, 18, 443, 31)));
-if (rt_truth(t18231)) {
-rv t18232 = rt_list_get(v_values, rt_int(INT64_C(0)), 444, 36, 444, 55);
-rv t18233 = rt_add(rt_str_at("rt_process_run(", 444, 16, 444, 33), t18232, 444, 16, 444, 55);
-rv t18234 = rt_add(t18233, rt_str_at(", ", 444, 58, 444, 62), 444, 16, 444, 62);
-rv t18235 = rt_list_get(v_values, rt_int(INT64_C(1)), 444, 65, 444, 84);
-rv t18236 = rt_add(t18234, t18235, 444, 16, 444, 84);
-rv t18237 = rt_add(t18236, rt_str_at(", ", 444, 87, 444, 91), 444, 16, 444, 91);
-rv t18238 = nx_arg_node(444, 104, 444, 121, v_node, rt_int(INT64_C(0)));
-rv t18239 = nx_node_span(444, 94, 444, 122, t18238);
-rv t18240 = rt_add(t18237, t18239, 444, 16, 444, 122);
-rv t18241 = rt_add(t18240, rt_str_at(")", 444, 125, 444, 128), 444, 16, 444, 128);
-rv r18242 = t18241;
+
+static rv nx_builtin_expression(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_callee, rv v_values, rv v_here, rv v_node) {
+int rt_saved = rt_enter("builtin_expression", 10, s_l, s_c, s_el, s_ec);
+rv t18225 = rt_bool(rt_eq(v_callee, rt_str_at("args", 431, 18, 431, 24)));
+if (rt_truth(t18225)) {
+rv t18226 = rt_add(rt_str_at("rt_args(", 432, 16, 432, 26), v_here, 432, 16, 432, 33);
+rv t18227 = rt_add(t18226, rt_str_at(")", 432, 36, 432, 39), 432, 16, 432, 39);
+rv r18228 = t18227;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18242;
+return r18228;
 }
-rv t18243 = rt_bool(rt_eq(v_callee, rt_str_at("read_file", 446, 18, 446, 29)));
-if (rt_truth(t18243)) {
-rv t18244 = rt_list_get(v_values, rt_int(INT64_C(0)), 447, 34, 447, 53);
-rv t18245 = rt_add(rt_str_at("rt_read_file(", 447, 16, 447, 31), t18244, 447, 16, 447, 53);
-rv t18246 = rt_add(t18245, rt_str_at(", ", 447, 56, 447, 60), 447, 16, 447, 60);
-rv t18247 = nx_arg_node(447, 73, 447, 90, v_node, rt_int(INT64_C(0)));
-rv t18248 = nx_node_span(447, 63, 447, 91, t18247);
-rv t18249 = rt_add(t18246, t18248, 447, 16, 447, 91);
-rv t18250 = rt_add(t18249, rt_str_at(")", 447, 94, 447, 97), 447, 16, 447, 97);
-rv r18251 = t18250;
+rv t18229 = rt_bool(rt_eq(v_callee, rt_str_at("input", 434, 18, 434, 25)));
+if (rt_truth(t18229)) {
+rv t18230 = rt_add(rt_str_at("rt_input(", 435, 16, 435, 27), v_here, 435, 16, 435, 34);
+rv t18231 = rt_add(t18230, rt_str_at(")", 435, 37, 435, 40), 435, 16, 435, 40);
+rv r18232 = t18231;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18251;
+return r18232;
 }
-rv t18252 = rt_bool(rt_eq(v_callee, rt_str_at("write_file", 449, 18, 449, 30)));
-if (rt_truth(t18252)) {
-rv t18253 = rt_list_get(v_values, rt_int(INT64_C(0)), 450, 35, 450, 54);
-rv t18254 = rt_add(rt_str_at("rt_write_file(", 450, 16, 450, 32), t18253, 450, 16, 450, 54);
-rv t18255 = rt_add(t18254, rt_str_at(", ", 450, 57, 450, 61), 450, 16, 450, 61);
-rv t18256 = rt_list_get(v_values, rt_int(INT64_C(1)), 450, 64, 450, 83);
-rv t18257 = rt_add(t18255, t18256, 450, 16, 450, 83);
-rv t18258 = rt_add(t18257, rt_str_at(", ", 450, 86, 450, 90), 450, 16, 450, 90);
-rv t18259 = nx_arg_node(450, 103, 450, 120, v_node, rt_int(INT64_C(0)));
-rv t18260 = nx_node_span(450, 93, 450, 121, t18259);
-rv t18261 = rt_add(t18258, t18260, 450, 16, 450, 121);
-rv t18262 = rt_add(t18261, rt_str_at(")", 450, 124, 450, 127), 450, 16, 450, 127);
-rv r18263 = t18262;
+rv t18233 = rt_int(rt_list_len(v_values));
+rv t18234 = rt_bool(rt_eq(t18233, rt_int(INT64_C(0))));
+if (rt_truth(t18234)) {
+rv r18235 = rt_str_at("", 438, 16, 438, 18);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18263;
+return r18235;
 }
-rv t18264 = rt_list_get(v_values, rt_int(INT64_C(0)), 452, 17, 452, 36);
-rv v_first = t18264;
-rv t18265 = rt_bool(rt_eq(v_callee, rt_str_at("to_text", 453, 18, 453, 27)));
-if (rt_truth(t18265)) {
-rv t18266 = rt_add(rt_str_at("rt_to_text(", 454, 16, 454, 29), v_first, 454, 16, 454, 37);
-rv t18267 = rt_add(t18266, rt_str_at(", ", 454, 40, 454, 44), 454, 16, 454, 44);
-rv t18268 = rt_add(t18267, v_here, 454, 16, 454, 51);
-rv t18269 = rt_add(t18268, rt_str_at(")", 454, 54, 454, 57), 454, 16, 454, 57);
-rv r18270 = t18269;
+rv t18236 = rt_bool(rt_eq(v_callee, rt_str_at("Net.get", 440, 18, 440, 27)));
+if (rt_truth(t18236)) {
+rv t18237 = rt_list_get(v_values, rt_int(INT64_C(0)), 441, 32, 441, 51);
+rv t18238 = rt_add(rt_str_at("rt_net_get(", 441, 16, 441, 29), t18237, 441, 16, 441, 51);
+rv t18239 = rt_add(t18238, rt_str_at(", ", 441, 54, 441, 58), 441, 16, 441, 58);
+rv t18240 = nx_arg_node(441, 71, 441, 88, v_node, rt_int(INT64_C(0)));
+rv t18241 = nx_node_span(441, 61, 441, 89, t18240);
+rv t18242 = rt_add(t18239, t18241, 441, 16, 441, 89);
+rv t18243 = rt_add(t18242, rt_str_at(")", 441, 92, 441, 95), 441, 16, 441, 95);
+rv r18244 = t18243;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18270;
+return r18244;
 }
-rv t18271 = rt_bool(rt_eq(v_callee, rt_str_at("to_float", 456, 18, 456, 28)));
-if (rt_truth(t18271)) {
-rv t18272 = rt_add(rt_str_at("rt_to_float(", 457, 16, 457, 30), v_first, 457, 16, 457, 38);
-rv t18273 = rt_add(t18272, rt_str_at(")", 457, 41, 457, 44), 457, 16, 457, 44);
-rv r18274 = t18273;
+rv t18245 = rt_bool(rt_eq(v_callee, rt_str_at("Process.run", 443, 18, 443, 31)));
+if (rt_truth(t18245)) {
+rv t18246 = rt_list_get(v_values, rt_int(INT64_C(0)), 444, 36, 444, 55);
+rv t18247 = rt_add(rt_str_at("rt_process_run(", 444, 16, 444, 33), t18246, 444, 16, 444, 55);
+rv t18248 = rt_add(t18247, rt_str_at(", ", 444, 58, 444, 62), 444, 16, 444, 62);
+rv t18249 = rt_list_get(v_values, rt_int(INT64_C(1)), 444, 65, 444, 84);
+rv t18250 = rt_add(t18248, t18249, 444, 16, 444, 84);
+rv t18251 = rt_add(t18250, rt_str_at(", ", 444, 87, 444, 91), 444, 16, 444, 91);
+rv t18252 = nx_arg_node(444, 104, 444, 121, v_node, rt_int(INT64_C(0)));
+rv t18253 = nx_node_span(444, 94, 444, 122, t18252);
+rv t18254 = rt_add(t18251, t18253, 444, 16, 444, 122);
+rv t18255 = rt_add(t18254, rt_str_at(")", 444, 125, 444, 128), 444, 16, 444, 128);
+rv r18256 = t18255;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18274;
+return r18256;
 }
-rv t18275 = rt_bool(rt_eq(v_callee, rt_str_at("to_int", 459, 18, 459, 26)));
-if (rt_truth(t18275)) {
-rv t18276 = rt_add(rt_str_at("rt_to_int(", 460, 16, 460, 28), v_first, 460, 16, 460, 36);
-rv t18277 = rt_add(t18276, rt_str_at(", ", 460, 39, 460, 43), 460, 16, 460, 43);
-rv t18278 = nx_arg_node(460, 56, 460, 73, v_node, rt_int(INT64_C(0)));
-rv t18279 = nx_node_span(460, 46, 460, 74, t18278);
-rv t18280 = rt_add(t18277, t18279, 460, 16, 460, 74);
-rv t18281 = rt_add(t18280, rt_str_at(")", 460, 77, 460, 80), 460, 16, 460, 80);
-rv r18282 = t18281;
+rv t18257 = rt_bool(rt_eq(v_callee, rt_str_at("read_file", 446, 18, 446, 29)));
+if (rt_truth(t18257)) {
+rv t18258 = rt_list_get(v_values, rt_int(INT64_C(0)), 447, 34, 447, 53);
+rv t18259 = rt_add(rt_str_at("rt_read_file(", 447, 16, 447, 31), t18258, 447, 16, 447, 53);
+rv t18260 = rt_add(t18259, rt_str_at(", ", 447, 56, 447, 60), 447, 16, 447, 60);
+rv t18261 = nx_arg_node(447, 73, 447, 90, v_node, rt_int(INT64_C(0)));
+rv t18262 = nx_node_span(447, 63, 447, 91, t18261);
+rv t18263 = rt_add(t18260, t18262, 447, 16, 447, 91);
+rv t18264 = rt_add(t18263, rt_str_at(")", 447, 94, 447, 97), 447, 16, 447, 97);
+rv r18265 = t18264;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18282;
+return r18265;
 }
-rv t18283 = rt_bool(rt_eq(v_callee, rt_str_at("Text.length", 462, 18, 462, 31)));
-if (rt_truth(t18283)) {
-rv t18284 = rt_add(rt_str_at("rt_int(", 463, 16, 463, 25), v_first, 463, 16, 463, 33);
-rv t18285 = rt_add(t18284, rt_str_at(".u.t.len)", 463, 36, 463, 47), 463, 16, 463, 47);
-rv r18286 = t18285;
+rv t18266 = rt_bool(rt_eq(v_callee, rt_str_at("write_file", 449, 18, 449, 30)));
+if (rt_truth(t18266)) {
+rv t18267 = rt_list_get(v_values, rt_int(INT64_C(0)), 450, 35, 450, 54);
+rv t18268 = rt_add(rt_str_at("rt_write_file(", 450, 16, 450, 32), t18267, 450, 16, 450, 54);
+rv t18269 = rt_add(t18268, rt_str_at(", ", 450, 57, 450, 61), 450, 16, 450, 61);
+rv t18270 = rt_list_get(v_values, rt_int(INT64_C(1)), 450, 64, 450, 83);
+rv t18271 = rt_add(t18269, t18270, 450, 16, 450, 83);
+rv t18272 = rt_add(t18271, rt_str_at(", ", 450, 86, 450, 90), 450, 16, 450, 90);
+rv t18273 = nx_arg_node(450, 103, 450, 120, v_node, rt_int(INT64_C(0)));
+rv t18274 = nx_node_span(450, 93, 450, 121, t18273);
+rv t18275 = rt_add(t18272, t18274, 450, 16, 450, 121);
+rv t18276 = rt_add(t18275, rt_str_at(")", 450, 124, 450, 127), 450, 16, 450, 127);
+rv r18277 = t18276;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18286;
+return r18277;
 }
-rv t18287 = rt_bool(rt_eq(v_callee, rt_str_at("Text.slice", 465, 18, 465, 30)));
-if (rt_truth(t18287)) {
-rv t18288 = nx_parser__join_texts(466, 35, 466, 66, v_values, rt_str_at(", ", 466, 61, 466, 65));
-rv t18289 = rt_add(rt_str_at("rt_text_slice(", 466, 16, 466, 32), t18288, 466, 16, 466, 66);
-rv t18290 = rt_add(t18289, rt_str_at(", ", 466, 69, 466, 73), 466, 16, 466, 73);
-rv t18291 = rt_add(t18290, v_here, 466, 16, 466, 80);
-rv t18292 = rt_add(t18291, rt_str_at(")", 466, 83, 466, 86), 466, 16, 466, 86);
-rv r18293 = t18292;
+rv t18278 = rt_list_get(v_values, rt_int(INT64_C(0)), 452, 17, 452, 36);
+rv v_first = t18278;
+rv t18279 = rt_bool(rt_eq(v_callee, rt_str_at("to_text", 453, 18, 453, 27)));
+if (rt_truth(t18279)) {
+rv t18280 = rt_add(rt_str_at("rt_to_text(", 454, 16, 454, 29), v_first, 454, 16, 454, 37);
+rv t18281 = rt_add(t18280, rt_str_at(", ", 454, 40, 454, 44), 454, 16, 454, 44);
+rv t18282 = rt_add(t18281, v_here, 454, 16, 454, 51);
+rv t18283 = rt_add(t18282, rt_str_at(")", 454, 54, 454, 57), 454, 16, 454, 57);
+rv r18284 = t18283;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18293;
+return r18284;
 }
-rv t18294 = rt_bool(rt_eq(v_callee, rt_str_at("Text.contains", 468, 18, 468, 33)));
-if (rt_truth(t18294)) {
-rv t18295 = nx_parser__join_texts(469, 38, 469, 69, v_values, rt_str_at(", ", 469, 64, 469, 68));
-rv t18296 = rt_add(rt_str_at("rt_text_contains(", 469, 16, 469, 35), t18295, 469, 16, 469, 69);
-rv t18297 = rt_add(t18296, rt_str_at(")", 469, 72, 469, 75), 469, 16, 469, 75);
-rv r18298 = t18297;
+rv t18285 = rt_bool(rt_eq(v_callee, rt_str_at("to_float", 456, 18, 456, 28)));
+if (rt_truth(t18285)) {
+rv t18286 = rt_add(rt_str_at("rt_to_float(", 457, 16, 457, 30), v_first, 457, 16, 457, 38);
+rv t18287 = rt_add(t18286, rt_str_at(")", 457, 41, 457, 44), 457, 16, 457, 44);
+rv r18288 = t18287;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18298;
+return r18288;
 }
-rv t18299 = rt_bool(rt_eq(v_callee, rt_str_at("Text.starts_with", 471, 18, 471, 36)));
-if (rt_truth(t18299)) {
-rv t18300 = nx_parser__join_texts(472, 36, 472, 67, v_values, rt_str_at(", ", 472, 62, 472, 66));
-rv t18301 = rt_add(rt_str_at("rt_text_starts(", 472, 16, 472, 33), t18300, 472, 16, 472, 67);
-rv t18302 = rt_add(t18301, rt_str_at(")", 472, 70, 472, 73), 472, 16, 472, 73);
-rv r18303 = t18302;
+rv t18289 = rt_bool(rt_eq(v_callee, rt_str_at("to_int", 459, 18, 459, 26)));
+if (rt_truth(t18289)) {
+rv t18290 = rt_add(rt_str_at("rt_to_int(", 460, 16, 460, 28), v_first, 460, 16, 460, 36);
+rv t18291 = rt_add(t18290, rt_str_at(", ", 460, 39, 460, 43), 460, 16, 460, 43);
+rv t18292 = nx_arg_node(460, 56, 460, 73, v_node, rt_int(INT64_C(0)));
+rv t18293 = nx_node_span(460, 46, 460, 74, t18292);
+rv t18294 = rt_add(t18291, t18293, 460, 16, 460, 74);
+rv t18295 = rt_add(t18294, rt_str_at(")", 460, 77, 460, 80), 460, 16, 460, 80);
+rv r18296 = t18295;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18303;
+return r18296;
 }
-rv t18304 = rt_bool(rt_eq(v_callee, rt_str_at("Text.ends_with", 474, 18, 474, 34)));
-if (rt_truth(t18304)) {
-rv t18305 = nx_parser__join_texts(475, 34, 475, 65, v_values, rt_str_at(", ", 475, 60, 475, 64));
-rv t18306 = rt_add(rt_str_at("rt_text_ends(", 475, 16, 475, 31), t18305, 475, 16, 475, 65);
-rv t18307 = rt_add(t18306, rt_str_at(")", 475, 68, 475, 71), 475, 16, 475, 71);
-rv r18308 = t18307;
+rv t18297 = rt_bool(rt_eq(v_callee, rt_str_at("Text.length", 462, 18, 462, 31)));
+if (rt_truth(t18297)) {
+rv t18298 = rt_add(rt_str_at("rt_int(", 463, 16, 463, 25), v_first, 463, 16, 463, 33);
+rv t18299 = rt_add(t18298, rt_str_at(".u.t.len)", 463, 36, 463, 47), 463, 16, 463, 47);
+rv r18300 = t18299;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18308;
+return r18300;
 }
-rv t18309 = rt_bool(rt_eq(v_callee, rt_str_at("Int.can_parse", 477, 18, 477, 33)));
-if (rt_truth(t18309)) {
-rv t18310 = rt_add(rt_str_at("rt_int_can_parse(", 478, 16, 478, 35), v_first, 478, 16, 478, 43);
-rv t18311 = rt_add(t18310, rt_str_at(")", 478, 46, 478, 49), 478, 16, 478, 49);
+rv t18301 = rt_bool(rt_eq(v_callee, rt_str_at("Text.slice", 465, 18, 465, 30)));
+if (rt_truth(t18301)) {
+rv t18302 = nx_parser__join_texts(466, 35, 466, 66, v_values, rt_str_at(", ", 466, 61, 466, 65));
+rv t18303 = rt_add(rt_str_at("rt_text_slice(", 466, 16, 466, 32), t18302, 466, 16, 466, 66);
+rv t18304 = rt_add(t18303, rt_str_at(", ", 466, 69, 466, 73), 466, 16, 466, 73);
+rv t18305 = rt_add(t18304, v_here, 466, 16, 466, 80);
+rv t18306 = rt_add(t18305, rt_str_at(")", 466, 83, 466, 86), 466, 16, 466, 86);
+rv r18307 = t18306;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18307;
+}
+rv t18308 = rt_bool(rt_eq(v_callee, rt_str_at("Text.contains", 468, 18, 468, 33)));
+if (rt_truth(t18308)) {
+rv t18309 = nx_parser__join_texts(469, 38, 469, 69, v_values, rt_str_at(", ", 469, 64, 469, 68));
+rv t18310 = rt_add(rt_str_at("rt_text_contains(", 469, 16, 469, 35), t18309, 469, 16, 469, 69);
+rv t18311 = rt_add(t18310, rt_str_at(")", 469, 72, 469, 75), 469, 16, 469, 75);
 rv r18312 = t18311;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r18312;
 }
-rv t18313 = rt_bool(rt_eq(v_callee, rt_str_at("Float.can_parse", 480, 18, 480, 35)));
+rv t18313 = rt_bool(rt_eq(v_callee, rt_str_at("Text.starts_with", 471, 18, 471, 36)));
 if (rt_truth(t18313)) {
-rv t18314 = rt_add(rt_str_at("rt_float_can_parse(", 481, 16, 481, 37), v_first, 481, 16, 481, 45);
-rv t18315 = rt_add(t18314, rt_str_at(")", 481, 48, 481, 51), 481, 16, 481, 51);
-rv r18316 = t18315;
+rv t18314 = nx_parser__join_texts(472, 36, 472, 67, v_values, rt_str_at(", ", 472, 62, 472, 66));
+rv t18315 = rt_add(rt_str_at("rt_text_starts(", 472, 16, 472, 33), t18314, 472, 16, 472, 67);
+rv t18316 = rt_add(t18315, rt_str_at(")", 472, 70, 472, 73), 472, 16, 472, 73);
+rv r18317 = t18316;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18316;
+return r18317;
 }
-rv t18317 = rt_bool(rt_eq(v_callee, rt_str_at("Int.parse", 483, 18, 483, 29)));
-if (rt_truth(t18317)) {
-rv t18318 = rt_add(rt_str_at("rt_int_parse(", 484, 16, 484, 31), v_first, 484, 16, 484, 39);
-rv t18319 = rt_add(t18318, rt_str_at(", ", 484, 42, 484, 46), 484, 16, 484, 46);
-rv t18320 = rt_add(t18319, v_here, 484, 16, 484, 53);
-rv t18321 = rt_add(t18320, rt_str_at(")", 484, 56, 484, 59), 484, 16, 484, 59);
+rv t18318 = rt_bool(rt_eq(v_callee, rt_str_at("Text.ends_with", 474, 18, 474, 34)));
+if (rt_truth(t18318)) {
+rv t18319 = nx_parser__join_texts(475, 34, 475, 65, v_values, rt_str_at(", ", 475, 60, 475, 64));
+rv t18320 = rt_add(rt_str_at("rt_text_ends(", 475, 16, 475, 31), t18319, 475, 16, 475, 65);
+rv t18321 = rt_add(t18320, rt_str_at(")", 475, 68, 475, 71), 475, 16, 475, 71);
 rv r18322 = t18321;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r18322;
 }
-rv t18323 = rt_bool(rt_eq(v_callee, rt_str_at("Float.parse", 486, 18, 486, 31)));
+rv t18323 = rt_bool(rt_eq(v_callee, rt_str_at("Int.can_parse", 477, 18, 477, 33)));
 if (rt_truth(t18323)) {
-rv t18324 = rt_add(rt_str_at("rt_float_parse(", 487, 16, 487, 33), v_first, 487, 16, 487, 41);
-rv t18325 = rt_add(t18324, rt_str_at(", ", 487, 44, 487, 48), 487, 16, 487, 48);
-rv t18326 = rt_add(t18325, v_here, 487, 16, 487, 55);
-rv t18327 = rt_add(t18326, rt_str_at(")", 487, 58, 487, 61), 487, 16, 487, 61);
-rv r18328 = t18327;
+rv t18324 = rt_add(rt_str_at("rt_int_can_parse(", 478, 16, 478, 35), v_first, 478, 16, 478, 43);
+rv t18325 = rt_add(t18324, rt_str_at(")", 478, 46, 478, 49), 478, 16, 478, 49);
+rv r18326 = t18325;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18328;
+return r18326;
 }
-rv t18329 = rt_bool(rt_eq(v_callee, rt_str_at("List.length", 489, 18, 489, 31)));
-if (rt_truth(t18329)) {
-rv t18330 = rt_add(rt_str_at("rt_int(rt_list_len(", 490, 16, 490, 37), v_first, 490, 16, 490, 45);
-rv t18331 = rt_add(t18330, rt_str_at("))", 490, 48, 490, 52), 490, 16, 490, 52);
-rv r18332 = t18331;
+rv t18327 = rt_bool(rt_eq(v_callee, rt_str_at("Float.can_parse", 480, 18, 480, 35)));
+if (rt_truth(t18327)) {
+rv t18328 = rt_add(rt_str_at("rt_float_can_parse(", 481, 16, 481, 37), v_first, 481, 16, 481, 45);
+rv t18329 = rt_add(t18328, rt_str_at(")", 481, 48, 481, 51), 481, 16, 481, 51);
+rv r18330 = t18329;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18332;
+return r18330;
 }
-rv t18333 = rt_bool(rt_eq(v_callee, rt_str_at("List.get", 492, 18, 492, 28)));
-if (rt_truth(t18333)) {
-rv t18334 = rt_add(rt_str_at("rt_list_get(", 493, 16, 493, 30), v_first, 493, 16, 493, 38);
-rv t18335 = rt_add(t18334, rt_str_at(", ", 493, 41, 493, 45), 493, 16, 493, 45);
-rv t18336 = rt_list_get(v_values, rt_int(INT64_C(1)), 493, 48, 493, 67);
-rv t18337 = rt_add(t18335, t18336, 493, 16, 493, 67);
-rv t18338 = rt_add(t18337, rt_str_at(", ", 493, 70, 493, 74), 493, 16, 493, 74);
-rv t18339 = rt_add(t18338, v_here, 493, 16, 493, 81);
-rv t18340 = rt_add(t18339, rt_str_at(")", 493, 84, 493, 87), 493, 16, 493, 87);
-rv r18341 = t18340;
+rv t18331 = rt_bool(rt_eq(v_callee, rt_str_at("Int.parse", 483, 18, 483, 29)));
+if (rt_truth(t18331)) {
+rv t18332 = rt_add(rt_str_at("rt_int_parse(", 484, 16, 484, 31), v_first, 484, 16, 484, 39);
+rv t18333 = rt_add(t18332, rt_str_at(", ", 484, 42, 484, 46), 484, 16, 484, 46);
+rv t18334 = rt_add(t18333, v_here, 484, 16, 484, 53);
+rv t18335 = rt_add(t18334, rt_str_at(")", 484, 56, 484, 59), 484, 16, 484, 59);
+rv r18336 = t18335;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18341;
+return r18336;
 }
-rv t18342 = rt_bool(rt_eq(v_callee, rt_str_at("List.append", 495, 18, 495, 31)));
-if (rt_truth(t18342)) {
-rv t18343 = rt_add(rt_str_at("rt_list_append(", 496, 16, 496, 33), v_first, 496, 16, 496, 41);
-rv t18344 = rt_add(t18343, rt_str_at(", ", 496, 44, 496, 48), 496, 16, 496, 48);
-rv t18345 = rt_list_get(v_values, rt_int(INT64_C(1)), 496, 51, 496, 70);
-rv t18346 = rt_add(t18344, t18345, 496, 16, 496, 70);
-rv t18347 = rt_add(t18346, rt_str_at(")", 496, 73, 496, 76), 496, 16, 496, 76);
-rv r18348 = t18347;
+rv t18337 = rt_bool(rt_eq(v_callee, rt_str_at("Float.parse", 486, 18, 486, 31)));
+if (rt_truth(t18337)) {
+rv t18338 = rt_add(rt_str_at("rt_float_parse(", 487, 16, 487, 33), v_first, 487, 16, 487, 41);
+rv t18339 = rt_add(t18338, rt_str_at(", ", 487, 44, 487, 48), 487, 16, 487, 48);
+rv t18340 = rt_add(t18339, v_here, 487, 16, 487, 55);
+rv t18341 = rt_add(t18340, rt_str_at(")", 487, 58, 487, 61), 487, 16, 487, 61);
+rv r18342 = t18341;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18348;
+return r18342;
 }
-rv t18349 = rt_bool(rt_eq(v_callee, rt_str_at("List.concat", 498, 18, 498, 31)));
-if (rt_truth(t18349)) {
-rv t18350 = rt_add(rt_str_at("rt_list_concat(", 499, 16, 499, 33), v_first, 499, 16, 499, 41);
-rv t18351 = rt_add(t18350, rt_str_at(", ", 499, 44, 499, 48), 499, 16, 499, 48);
-rv t18352 = rt_list_get(v_values, rt_int(INT64_C(1)), 499, 51, 499, 70);
-rv t18353 = rt_add(t18351, t18352, 499, 16, 499, 70);
-rv t18354 = rt_add(t18353, rt_str_at(")", 499, 73, 499, 76), 499, 16, 499, 76);
+rv t18343 = rt_bool(rt_eq(v_callee, rt_str_at("List.length", 489, 18, 489, 31)));
+if (rt_truth(t18343)) {
+rv t18344 = rt_add(rt_str_at("rt_int(rt_list_len(", 490, 16, 490, 37), v_first, 490, 16, 490, 45);
+rv t18345 = rt_add(t18344, rt_str_at("))", 490, 48, 490, 52), 490, 16, 490, 52);
+rv r18346 = t18345;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18346;
+}
+rv t18347 = rt_bool(rt_eq(v_callee, rt_str_at("List.get", 492, 18, 492, 28)));
+if (rt_truth(t18347)) {
+rv t18348 = rt_add(rt_str_at("rt_list_get(", 493, 16, 493, 30), v_first, 493, 16, 493, 38);
+rv t18349 = rt_add(t18348, rt_str_at(", ", 493, 41, 493, 45), 493, 16, 493, 45);
+rv t18350 = rt_list_get(v_values, rt_int(INT64_C(1)), 493, 48, 493, 67);
+rv t18351 = rt_add(t18349, t18350, 493, 16, 493, 67);
+rv t18352 = rt_add(t18351, rt_str_at(", ", 493, 70, 493, 74), 493, 16, 493, 74);
+rv t18353 = rt_add(t18352, v_here, 493, 16, 493, 81);
+rv t18354 = rt_add(t18353, rt_str_at(")", 493, 84, 493, 87), 493, 16, 493, 87);
 rv r18355 = t18354;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r18355;
 }
-rv t18356 = rt_bool(rt_eq(v_callee, rt_str_at("List.contains", 501, 18, 501, 33)));
+rv t18356 = rt_bool(rt_eq(v_callee, rt_str_at("List.append", 495, 18, 495, 31)));
 if (rt_truth(t18356)) {
-rv t18357 = rt_add(rt_str_at("rt_list_contains(", 502, 16, 502, 35), v_first, 502, 16, 502, 43);
-rv t18358 = rt_add(t18357, rt_str_at(", ", 502, 46, 502, 50), 502, 16, 502, 50);
-rv t18359 = rt_list_get(v_values, rt_int(INT64_C(1)), 502, 53, 502, 72);
-rv t18360 = rt_add(t18358, t18359, 502, 16, 502, 72);
-rv t18361 = rt_add(t18360, rt_str_at(")", 502, 75, 502, 78), 502, 16, 502, 78);
+rv t18357 = rt_add(rt_str_at("rt_list_append(", 496, 16, 496, 33), v_first, 496, 16, 496, 41);
+rv t18358 = rt_add(t18357, rt_str_at(", ", 496, 44, 496, 48), 496, 16, 496, 48);
+rv t18359 = rt_list_get(v_values, rt_int(INT64_C(1)), 496, 51, 496, 70);
+rv t18360 = rt_add(t18358, t18359, 496, 16, 496, 70);
+rv t18361 = rt_add(t18360, rt_str_at(")", 496, 73, 496, 76), 496, 16, 496, 76);
 rv r18362 = t18361;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r18362;
 }
-rv t18363 = rt_bool(rt_eq(v_callee, rt_str_at("Some", 504, 18, 504, 24)));
+rv t18363 = rt_bool(rt_eq(v_callee, rt_str_at("List.concat", 498, 18, 498, 31)));
 if (rt_truth(t18363)) {
-rv t18364 = rt_add(rt_str_at("rt_some(", 505, 16, 505, 26), v_first, 505, 16, 505, 34);
-rv t18365 = rt_add(t18364, rt_str_at(")", 505, 37, 505, 40), 505, 16, 505, 40);
-rv r18366 = t18365;
+rv t18364 = rt_add(rt_str_at("rt_list_concat(", 499, 16, 499, 33), v_first, 499, 16, 499, 41);
+rv t18365 = rt_add(t18364, rt_str_at(", ", 499, 44, 499, 48), 499, 16, 499, 48);
+rv t18366 = rt_list_get(v_values, rt_int(INT64_C(1)), 499, 51, 499, 70);
+rv t18367 = rt_add(t18365, t18366, 499, 16, 499, 70);
+rv t18368 = rt_add(t18367, rt_str_at(")", 499, 73, 499, 76), 499, 16, 499, 76);
+rv r18369 = t18368;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18366;
+return r18369;
 }
-rv t18367 = rt_bool(rt_eq(v_callee, rt_str_at("Ok", 507, 18, 507, 22)));
-if (rt_truth(t18367)) {
-rv t18368 = rt_add(rt_str_at("rt_ok(", 508, 16, 508, 24), v_first, 508, 16, 508, 32);
-rv t18369 = rt_add(t18368, rt_str_at(")", 508, 35, 508, 38), 508, 16, 508, 38);
-rv r18370 = t18369;
+rv t18370 = rt_bool(rt_eq(v_callee, rt_str_at("List.contains", 501, 18, 501, 33)));
+if (rt_truth(t18370)) {
+rv t18371 = rt_add(rt_str_at("rt_list_contains(", 502, 16, 502, 35), v_first, 502, 16, 502, 43);
+rv t18372 = rt_add(t18371, rt_str_at(", ", 502, 46, 502, 50), 502, 16, 502, 50);
+rv t18373 = rt_list_get(v_values, rt_int(INT64_C(1)), 502, 53, 502, 72);
+rv t18374 = rt_add(t18372, t18373, 502, 16, 502, 72);
+rv t18375 = rt_add(t18374, rt_str_at(")", 502, 75, 502, 78), 502, 16, 502, 78);
+rv r18376 = t18375;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18370;
+return r18376;
 }
-rv t18371 = rt_bool(rt_eq(v_callee, rt_str_at("Err", 510, 18, 510, 23)));
-if (rt_truth(t18371)) {
-rv t18372 = rt_add(rt_str_at("rt_err(", 511, 16, 511, 25), v_first, 511, 16, 511, 33);
-rv t18373 = rt_add(t18372, rt_str_at(")", 511, 36, 511, 39), 511, 16, 511, 39);
-rv r18374 = t18373;
+rv t18377 = rt_bool(rt_eq(v_callee, rt_str_at("Some", 504, 18, 504, 24)));
+if (rt_truth(t18377)) {
+rv t18378 = rt_add(rt_str_at("rt_some(", 505, 16, 505, 26), v_first, 505, 16, 505, 34);
+rv t18379 = rt_add(t18378, rt_str_at(")", 505, 37, 505, 40), 505, 16, 505, 40);
+rv r18380 = t18379;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18374;
+return r18380;
 }
-rv t18375 = rt_bool(rt_eq(v_callee, rt_str_at("Option.is_some", 513, 18, 513, 34)));
-if (rt_truth(t18375)) {
-rv t18376 = rt_add(rt_str_at("rt_bool(rt_is_kind(", 514, 16, 514, 37), v_first, 514, 16, 514, 45);
-rv t18377 = rt_add(t18376, rt_str_at(", \"Some\"))", 514, 48, 514, 62), 514, 16, 514, 62);
-rv r18378 = t18377;
+rv t18381 = rt_bool(rt_eq(v_callee, rt_str_at("Ok", 507, 18, 507, 22)));
+if (rt_truth(t18381)) {
+rv t18382 = rt_add(rt_str_at("rt_ok(", 508, 16, 508, 24), v_first, 508, 16, 508, 32);
+rv t18383 = rt_add(t18382, rt_str_at(")", 508, 35, 508, 38), 508, 16, 508, 38);
+rv r18384 = t18383;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18378;
+return r18384;
 }
-rv t18379 = rt_bool(rt_eq(v_callee, rt_str_at("Option.is_none", 516, 18, 516, 34)));
-if (rt_truth(t18379)) {
-rv t18380 = rt_add(rt_str_at("rt_bool(rt_is_kind(", 517, 16, 517, 37), v_first, 517, 16, 517, 45);
-rv t18381 = rt_add(t18380, rt_str_at(", \"None\"))", 517, 48, 517, 62), 517, 16, 517, 62);
-rv r18382 = t18381;
+rv t18385 = rt_bool(rt_eq(v_callee, rt_str_at("Err", 510, 18, 510, 23)));
+if (rt_truth(t18385)) {
+rv t18386 = rt_add(rt_str_at("rt_err(", 511, 16, 511, 25), v_first, 511, 16, 511, 33);
+rv t18387 = rt_add(t18386, rt_str_at(")", 511, 36, 511, 39), 511, 16, 511, 39);
+rv r18388 = t18387;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18382;
+return r18388;
 }
-rv t18383 = rt_bool(rt_eq(v_callee, rt_str_at("Option.value_or", 519, 18, 519, 35)));
-if (rt_truth(t18383)) {
-rv t18384 = rt_add(rt_str_at("(rt_is_kind(", 520, 16, 520, 30), v_first, 520, 16, 520, 38);
-rv t18385 = rt_add(t18384, rt_str_at(", \"Some\") \? rt_arg(", 520, 41, 520, 64), 520, 16, 520, 64);
-rv t18386 = rt_add(t18385, v_first, 520, 16, 520, 72);
-rv t18387 = rt_add(t18386, rt_str_at(", 0) : ", 520, 75, 520, 84), 520, 16, 520, 84);
-rv t18388 = rt_list_get(v_values, rt_int(INT64_C(1)), 520, 87, 520, 106);
-rv t18389 = rt_add(t18387, t18388, 520, 16, 520, 106);
-rv t18390 = rt_add(t18389, rt_str_at(")", 520, 109, 520, 112), 520, 16, 520, 112);
-rv r18391 = t18390;
+rv t18389 = rt_bool(rt_eq(v_callee, rt_str_at("Option.is_some", 513, 18, 513, 34)));
+if (rt_truth(t18389)) {
+rv t18390 = rt_add(rt_str_at("rt_bool(rt_is_kind(", 514, 16, 514, 37), v_first, 514, 16, 514, 45);
+rv t18391 = rt_add(t18390, rt_str_at(", \"Some\"))", 514, 48, 514, 62), 514, 16, 514, 62);
+rv r18392 = t18391;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18391;
+return r18392;
 }
-rv t18392 = rt_bool(rt_eq(v_callee, rt_str_at("Result.value_or", 522, 18, 522, 35)));
-if (rt_truth(t18392)) {
-rv t18393 = rt_add(rt_str_at("(rt_is_kind(", 523, 16, 523, 30), v_first, 523, 16, 523, 38);
-rv t18394 = rt_add(t18393, rt_str_at(", \"Ok\") \? rt_arg(", 523, 41, 523, 62), 523, 16, 523, 62);
-rv t18395 = rt_add(t18394, v_first, 523, 16, 523, 70);
-rv t18396 = rt_add(t18395, rt_str_at(", 0) : ", 523, 73, 523, 82), 523, 16, 523, 82);
-rv t18397 = rt_list_get(v_values, rt_int(INT64_C(1)), 523, 85, 523, 104);
-rv t18398 = rt_add(t18396, t18397, 523, 16, 523, 104);
-rv t18399 = rt_add(t18398, rt_str_at(")", 523, 107, 523, 110), 523, 16, 523, 110);
-rv r18400 = t18399;
+rv t18393 = rt_bool(rt_eq(v_callee, rt_str_at("Option.is_none", 516, 18, 516, 34)));
+if (rt_truth(t18393)) {
+rv t18394 = rt_add(rt_str_at("rt_bool(rt_is_kind(", 517, 16, 517, 37), v_first, 517, 16, 517, 45);
+rv t18395 = rt_add(t18394, rt_str_at(", \"None\"))", 517, 48, 517, 62), 517, 16, 517, 62);
+rv r18396 = t18395;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18400;
+return r18396;
 }
-rv t18401 = rt_bool(rt_eq(v_callee, rt_str_at("Option.value", 525, 18, 525, 32)));
-if (rt_truth(t18401)) {
-rv t18402 = rt_add(rt_str_at("rt_option_value(", 526, 16, 526, 34), v_first, 526, 16, 526, 42);
-rv t18403 = rt_add(t18402, rt_str_at(", ", 526, 45, 526, 49), 526, 16, 526, 49);
-rv t18404 = nx_arg_node(526, 62, 526, 79, v_node, rt_int(INT64_C(0)));
-rv t18405 = nx_node_span(526, 52, 526, 80, t18404);
-rv t18406 = rt_add(t18403, t18405, 526, 16, 526, 80);
-rv t18407 = rt_add(t18406, rt_str_at(")", 526, 83, 526, 86), 526, 16, 526, 86);
-rv r18408 = t18407;
+rv t18397 = rt_bool(rt_eq(v_callee, rt_str_at("Option.value_or", 519, 18, 519, 35)));
+if (rt_truth(t18397)) {
+rv t18398 = rt_add(rt_str_at("(rt_is_kind(", 520, 16, 520, 30), v_first, 520, 16, 520, 38);
+rv t18399 = rt_add(t18398, rt_str_at(", \"Some\") \? rt_arg(", 520, 41, 520, 64), 520, 16, 520, 64);
+rv t18400 = rt_add(t18399, v_first, 520, 16, 520, 72);
+rv t18401 = rt_add(t18400, rt_str_at(", 0) : ", 520, 75, 520, 84), 520, 16, 520, 84);
+rv t18402 = rt_list_get(v_values, rt_int(INT64_C(1)), 520, 87, 520, 106);
+rv t18403 = rt_add(t18401, t18402, 520, 16, 520, 106);
+rv t18404 = rt_add(t18403, rt_str_at(")", 520, 109, 520, 112), 520, 16, 520, 112);
+rv r18405 = t18404;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18408;
+return r18405;
 }
-rv t18409 = rt_bool(rt_eq(v_callee, rt_str_at("Result.is_ok", 528, 18, 528, 32)));
-if (rt_truth(t18409)) {
-rv t18410 = rt_add(rt_str_at("rt_bool(rt_is_kind(", 529, 16, 529, 37), v_first, 529, 16, 529, 45);
-rv t18411 = rt_add(t18410, rt_str_at(", \"Ok\"))", 529, 48, 529, 60), 529, 16, 529, 60);
-rv r18412 = t18411;
+rv t18406 = rt_bool(rt_eq(v_callee, rt_str_at("Result.value_or", 522, 18, 522, 35)));
+if (rt_truth(t18406)) {
+rv t18407 = rt_add(rt_str_at("(rt_is_kind(", 523, 16, 523, 30), v_first, 523, 16, 523, 38);
+rv t18408 = rt_add(t18407, rt_str_at(", \"Ok\") \? rt_arg(", 523, 41, 523, 62), 523, 16, 523, 62);
+rv t18409 = rt_add(t18408, v_first, 523, 16, 523, 70);
+rv t18410 = rt_add(t18409, rt_str_at(", 0) : ", 523, 73, 523, 82), 523, 16, 523, 82);
+rv t18411 = rt_list_get(v_values, rt_int(INT64_C(1)), 523, 85, 523, 104);
+rv t18412 = rt_add(t18410, t18411, 523, 16, 523, 104);
+rv t18413 = rt_add(t18412, rt_str_at(")", 523, 107, 523, 110), 523, 16, 523, 110);
+rv r18414 = t18413;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18412;
+return r18414;
 }
-rv t18413 = rt_bool(rt_eq(v_callee, rt_str_at("Result.is_err", 531, 18, 531, 33)));
-if (rt_truth(t18413)) {
-rv t18414 = rt_add(rt_str_at("rt_bool(rt_is_kind(", 532, 16, 532, 37), v_first, 532, 16, 532, 45);
-rv t18415 = rt_add(t18414, rt_str_at(", \"Err\"))", 532, 48, 532, 61), 532, 16, 532, 61);
-rv r18416 = t18415;
+rv t18415 = rt_bool(rt_eq(v_callee, rt_str_at("Option.value", 525, 18, 525, 32)));
+if (rt_truth(t18415)) {
+rv t18416 = rt_add(rt_str_at("rt_option_value(", 526, 16, 526, 34), v_first, 526, 16, 526, 42);
+rv t18417 = rt_add(t18416, rt_str_at(", ", 526, 45, 526, 49), 526, 16, 526, 49);
+rv t18418 = nx_arg_node(526, 62, 526, 79, v_node, rt_int(INT64_C(0)));
+rv t18419 = nx_node_span(526, 52, 526, 80, t18418);
+rv t18420 = rt_add(t18417, t18419, 526, 16, 526, 80);
+rv t18421 = rt_add(t18420, rt_str_at(")", 526, 83, 526, 86), 526, 16, 526, 86);
+rv r18422 = t18421;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18416;
+return r18422;
 }
-rv t18417 = rt_bool(rt_eq(v_callee, rt_str_at("Result.value", 534, 18, 534, 32)));
-if (rt_truth(t18417)) {
-rv t18418 = rt_add(rt_str_at("rt_result_value(", 535, 16, 535, 34), v_first, 535, 16, 535, 42);
-rv t18419 = rt_add(t18418, rt_str_at(", ", 535, 45, 535, 49), 535, 16, 535, 49);
-rv t18420 = nx_arg_node(535, 62, 535, 79, v_node, rt_int(INT64_C(0)));
-rv t18421 = nx_node_span(535, 52, 535, 80, t18420);
-rv t18422 = rt_add(t18419, t18421, 535, 16, 535, 80);
-rv t18423 = rt_add(t18422, rt_str_at(")", 535, 83, 535, 86), 535, 16, 535, 86);
-rv r18424 = t18423;
+rv t18423 = rt_bool(rt_eq(v_callee, rt_str_at("Result.is_ok", 528, 18, 528, 32)));
+if (rt_truth(t18423)) {
+rv t18424 = rt_add(rt_str_at("rt_bool(rt_is_kind(", 529, 16, 529, 37), v_first, 529, 16, 529, 45);
+rv t18425 = rt_add(t18424, rt_str_at(", \"Ok\"))", 529, 48, 529, 60), 529, 16, 529, 60);
+rv r18426 = t18425;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18424;
+return r18426;
 }
-rv t18425 = rt_bool(rt_eq(v_callee, rt_str_at("Result.error", 537, 18, 537, 32)));
-if (rt_truth(t18425)) {
-rv t18426 = rt_add(rt_str_at("rt_result_error(", 538, 16, 538, 34), v_first, 538, 16, 538, 42);
-rv t18427 = rt_add(t18426, rt_str_at(", ", 538, 45, 538, 49), 538, 16, 538, 49);
-rv t18428 = nx_arg_node(538, 62, 538, 79, v_node, rt_int(INT64_C(0)));
-rv t18429 = nx_node_span(538, 52, 538, 80, t18428);
-rv t18430 = rt_add(t18427, t18429, 538, 16, 538, 80);
-rv t18431 = rt_add(t18430, rt_str_at(")", 538, 83, 538, 86), 538, 16, 538, 86);
-rv r18432 = t18431;
+rv t18427 = rt_bool(rt_eq(v_callee, rt_str_at("Result.is_err", 531, 18, 531, 33)));
+if (rt_truth(t18427)) {
+rv t18428 = rt_add(rt_str_at("rt_bool(rt_is_kind(", 532, 16, 532, 37), v_first, 532, 16, 532, 45);
+rv t18429 = rt_add(t18428, rt_str_at(", \"Err\"))", 532, 48, 532, 61), 532, 16, 532, 61);
+rv r18430 = t18429;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18432;
+return r18430;
 }
-rv r18433 = rt_str_at("", 540, 12, 540, 14);
+rv t18431 = rt_bool(rt_eq(v_callee, rt_str_at("Result.value", 534, 18, 534, 32)));
+if (rt_truth(t18431)) {
+rv t18432 = rt_add(rt_str_at("rt_result_value(", 535, 16, 535, 34), v_first, 535, 16, 535, 42);
+rv t18433 = rt_add(t18432, rt_str_at(", ", 535, 45, 535, 49), 535, 16, 535, 49);
+rv t18434 = nx_arg_node(535, 62, 535, 79, v_node, rt_int(INT64_C(0)));
+rv t18435 = nx_node_span(535, 52, 535, 80, t18434);
+rv t18436 = rt_add(t18433, t18435, 535, 16, 535, 80);
+rv t18437 = rt_add(t18436, rt_str_at(")", 535, 83, 535, 86), 535, 16, 535, 86);
+rv r18438 = t18437;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18433;
+return r18438;
+}
+rv t18439 = rt_bool(rt_eq(v_callee, rt_str_at("Result.error", 537, 18, 537, 32)));
+if (rt_truth(t18439)) {
+rv t18440 = rt_add(rt_str_at("rt_result_error(", 538, 16, 538, 34), v_first, 538, 16, 538, 42);
+rv t18441 = rt_add(t18440, rt_str_at(", ", 538, 45, 538, 49), 538, 16, 538, 49);
+rv t18442 = nx_arg_node(538, 62, 538, 79, v_node, rt_int(INT64_C(0)));
+rv t18443 = nx_node_span(538, 52, 538, 80, t18442);
+rv t18444 = rt_add(t18441, t18443, 538, 16, 538, 80);
+rv t18445 = rt_add(t18444, rt_str_at(")", 538, 83, 538, 86), 538, 16, 538, 86);
+rv r18446 = t18445;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18446;
+}
+rv r18447 = rt_str_at("", 540, 12, 540, 14);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18447;
 }
 
 static rv nx_gen_call(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_node) {
 int rt_saved = rt_enter("gen_call", 10, s_l, s_c, s_el, s_ec);
-rv t18434 = nx_callee_of(544, 18, 544, 33, v_node);
-rv v_callee = t18434;
-rv t18435 = nx_field(545, 43, 545, 67, v_node, rt_str_at("arguments", 545, 55, 545, 66));
-rv t18436 = nx_items_of(545, 34, 545, 68, t18435);
-rv t18437 = nx_gen_args(545, 21, 545, 69, v_st, t18436);
-rv v_arguments = t18437;
-rv t18438 = nx_node_span(546, 16, 546, 31, v_node);
-rv v_here = t18438;
-rv t18439 = rt_bool(rt_eq(v_callee, rt_str_at("print", 547, 18, 547, 25)));
-if (rt_truth(t18439)) {
-rv t18440 = rt_field(v_arguments, "code");
-rv t18441 = rt_add(t18440, rt_str_at("rt_print(", 548, 38, 548, 49), 548, 21, 548, 49);
-rv t18442 = rt_field(v_arguments, "values");
-rv t18443 = rt_list_get(t18442, rt_int(INT64_C(0)), 548, 52, 548, 81);
-rv t18444 = rt_add(t18441, t18443, 548, 21, 548, 81);
-rv t18445 = rt_add(t18444, rt_str_at(");\n", 548, 84, 548, 90), 548, 21, 548, 90);
-rv t18446 = rt_field(v_arguments, "st");
-rv t18447 = nx_part(548, 16, 548, 118, t18445, rt_str_at("rt_unit()", 548, 92, 548, 103), t18446);
-rv r18448 = t18447;
+rv t18448 = nx_callee_of(544, 18, 544, 33, v_node);
+rv v_callee = t18448;
+rv t18449 = nx_field(545, 43, 545, 67, v_node, rt_str_at("arguments", 545, 55, 545, 66));
+rv t18450 = nx_items_of(545, 34, 545, 68, t18449);
+rv t18451 = nx_gen_args(545, 21, 545, 69, v_st, t18450);
+rv v_arguments = t18451;
+rv t18452 = nx_node_span(546, 16, 546, 31, v_node);
+rv v_here = t18452;
+rv t18453 = rt_bool(rt_eq(v_callee, rt_str_at("print", 547, 18, 547, 25)));
+if (rt_truth(t18453)) {
+rv t18454 = rt_field(v_arguments, "code");
+rv t18455 = rt_add(t18454, rt_str_at("rt_print(", 548, 38, 548, 49), 548, 21, 548, 49);
+rv t18456 = rt_field(v_arguments, "values");
+rv t18457 = rt_list_get(t18456, rt_int(INT64_C(0)), 548, 52, 548, 81);
+rv t18458 = rt_add(t18455, t18457, 548, 21, 548, 81);
+rv t18459 = rt_add(t18458, rt_str_at(");\n", 548, 84, 548, 90), 548, 21, 548, 90);
+rv t18460 = rt_field(v_arguments, "st");
+rv t18461 = nx_part(548, 16, 548, 118, t18459, rt_str_at("rt_unit()", 548, 92, 548, 103), t18460);
+rv r18462 = t18461;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18448;
+return r18462;
 }
-rv t18449 = nx_checker__is_builtin(550, 8, 550, 34, v_callee);
-if (rt_truth(t18449)) {
-rv t18450 = rt_field(v_arguments, "values");
-rv t18451 = nx_builtin_expression(551, 26, 551, 82, v_callee, t18450, v_here, v_node);
-rv v_expression = t18451;
-rv t18452 = rt_bool(rt_eq(v_expression, rt_str_at("", 552, 26, 552, 28)));
-if (rt_truth(t18452)) {
-rv t18453 = rt_field(v_arguments, "st");
-rv t18454 = rt_add(rt_str_at("the call to ", 553, 63, 553, 77), v_callee, 553, 63, 553, 86);
-rv t18455 = nx_refuse(553, 42, 553, 87, t18453, t18454);
-rv t18456 = nx_part(553, 20, 553, 88, rt_str_at("", 553, 25, 553, 27), rt_str_at("rt_unit()", 553, 29, 553, 40), t18455);
-rv r18457 = t18456;
+rv t18463 = nx_checker__is_builtin(550, 8, 550, 34, v_callee);
+if (rt_truth(t18463)) {
+rv t18464 = rt_field(v_arguments, "values");
+rv t18465 = nx_builtin_expression(551, 26, 551, 82, v_callee, t18464, v_here, v_node);
+rv v_expression = t18465;
+rv t18466 = rt_bool(rt_eq(v_expression, rt_str_at("", 552, 26, 552, 28)));
+if (rt_truth(t18466)) {
+rv t18467 = rt_field(v_arguments, "st");
+rv t18468 = rt_add(rt_str_at("the call to ", 553, 63, 553, 77), v_callee, 553, 63, 553, 86);
+rv t18469 = nx_refuse(553, 42, 553, 87, t18467, t18468);
+rv t18470 = nx_part(553, 20, 553, 88, rt_str_at("", 553, 25, 553, 27), rt_str_at("rt_unit()", 553, 29, 553, 40), t18469);
+rv r18471 = t18470;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18457;
+return r18471;
 }
-rv t18458 = rt_field(v_arguments, "st");
-rv t18459 = nx_temporary(555, 20, 555, 55, t18458, v_expression);
-rv v_made = t18459;
-rv t18460 = rt_field(v_arguments, "code");
-rv t18461 = rt_field(v_made, "code");
-rv t18462 = rt_add(t18460, t18461, 556, 21, 556, 47);
-rv t18463 = rt_field(v_made, "value");
-rv t18464 = rt_field(v_made, "st");
-rv t18465 = nx_part(556, 16, 556, 69, t18462, t18463, t18464);
-rv r18466 = t18465;
+rv t18472 = rt_field(v_arguments, "st");
+rv t18473 = nx_temporary(555, 20, 555, 55, t18472, v_expression);
+rv v_made = t18473;
+rv t18474 = rt_field(v_arguments, "code");
+rv t18475 = rt_field(v_made, "code");
+rv t18476 = rt_add(t18474, t18475, 556, 21, 556, 47);
+rv t18477 = rt_field(v_made, "value");
+rv t18478 = rt_field(v_made, "st");
+rv t18479 = nx_part(556, 16, 556, 69, t18476, t18477, t18478);
+rv r18480 = t18479;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18466;
+return r18480;
 }
-rv t18467 = rt_field(v_st, "info");
-rv t18468 = rt_field(t18467, "refined");
-rv t18469 = nx_index_of(558, 8, 558, 41, t18468, v_callee);
-rv t18470 = rt_bool(!rt_less(t18469, rt_int(INT64_C(0))));
-if (rt_truth(t18470)) {
-rv t18471 = rt_field(v_arguments, "st");
-rv t18472 = nx_c_name(561, 22, 561, 36, v_callee);
-rv t18473 = rt_add(rt_str_at("nxr_", 561, 13, 561, 19), t18472, 561, 13, 561, 36);
-rv t18474 = rt_add(t18473, rt_str_at("(", 561, 39, 561, 42), 561, 13, 561, 42);
-rv t18475 = rt_field(v_arguments, "values");
-rv t18476 = rt_list_get(t18475, rt_int(INT64_C(0)), 561, 45, 561, 74);
-rv t18477 = rt_add(t18474, t18476, 561, 13, 561, 74);
-rv t18478 = rt_add(t18477, rt_str_at(", ", 561, 77, 561, 81), 561, 13, 561, 81);
-rv t18479 = nx_field(561, 101, 561, 122, v_node, rt_str_at("callee", 561, 113, 561, 121));
-rv t18480 = nx_text_of(561, 93, 561, 123, t18479);
-rv t18481 = nx_c_string(561, 84, 561, 124, t18480);
-rv t18482 = rt_add(t18478, t18481, 561, 13, 561, 124);
-rv t18483 = rt_add(t18482, rt_str_at(", ", 561, 127, 561, 131), 561, 13, 561, 131);
-rv t18484 = rt_add(t18483, v_here, 561, 13, 561, 138);
-rv t18485 = rt_add(t18484, rt_str_at(")", 561, 141, 561, 144), 561, 13, 561, 144);
-rv t18486 = nx_temporary(559, 20, 562, 10, t18471, t18485);
-rv v_made = t18486;
-rv t18487 = rt_field(v_arguments, "code");
-rv t18488 = rt_field(v_made, "code");
-rv t18489 = rt_add(t18487, t18488, 563, 21, 563, 47);
-rv t18490 = rt_field(v_made, "value");
-rv t18491 = rt_field(v_made, "st");
-rv t18492 = nx_part(563, 16, 563, 69, t18489, t18490, t18491);
-rv r18493 = t18492;
+rv t18481 = rt_field(v_st, "info");
+rv t18482 = rt_field(t18481, "refined");
+rv t18483 = nx_index_of(558, 8, 558, 41, t18482, v_callee);
+rv t18484 = rt_bool(!rt_less(t18483, rt_int(INT64_C(0))));
+if (rt_truth(t18484)) {
+rv t18485 = rt_field(v_arguments, "st");
+rv t18486 = nx_c_name(561, 22, 561, 36, v_callee);
+rv t18487 = rt_add(rt_str_at("nxr_", 561, 13, 561, 19), t18486, 561, 13, 561, 36);
+rv t18488 = rt_add(t18487, rt_str_at("(", 561, 39, 561, 42), 561, 13, 561, 42);
+rv t18489 = rt_field(v_arguments, "values");
+rv t18490 = rt_list_get(t18489, rt_int(INT64_C(0)), 561, 45, 561, 74);
+rv t18491 = rt_add(t18488, t18490, 561, 13, 561, 74);
+rv t18492 = rt_add(t18491, rt_str_at(", ", 561, 77, 561, 81), 561, 13, 561, 81);
+rv t18493 = nx_field(561, 101, 561, 122, v_node, rt_str_at("callee", 561, 113, 561, 121));
+rv t18494 = nx_text_of(561, 93, 561, 123, t18493);
+rv t18495 = nx_c_string(561, 84, 561, 124, t18494);
+rv t18496 = rt_add(t18492, t18495, 561, 13, 561, 124);
+rv t18497 = rt_add(t18496, rt_str_at(", ", 561, 127, 561, 131), 561, 13, 561, 131);
+rv t18498 = rt_add(t18497, v_here, 561, 13, 561, 138);
+rv t18499 = rt_add(t18498, rt_str_at(")", 561, 141, 561, 144), 561, 13, 561, 144);
+rv t18500 = nx_temporary(559, 20, 562, 10, t18485, t18499);
+rv v_made = t18500;
+rv t18501 = rt_field(v_arguments, "code");
+rv t18502 = rt_field(v_made, "code");
+rv t18503 = rt_add(t18501, t18502, 563, 21, 563, 47);
+rv t18504 = rt_field(v_made, "value");
+rv t18505 = rt_field(v_made, "st");
+rv t18506 = nx_part(563, 16, 563, 69, t18503, t18504, t18505);
+rv r18507 = t18506;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18493;
+return r18507;
 }
-rv t18494 = nx_gen_other_call(565, 12, 565, 51, v_arguments, v_node, v_callee);
-rv r18495 = t18494;
+rv t18508 = nx_gen_other_call(565, 12, 565, 51, v_arguments, v_node, v_callee);
+rv r18509 = t18508;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18495;
+return r18509;
 }
 
 static rv nx_gen_other_call(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_arguments, rv v_node, rv v_callee) {
 int rt_saved = rt_enter("gen_other_call", 10, s_l, s_c, s_el, s_ec);
-rv t18496 = rt_field(v_arguments, "st");
-rv v_st = t18496;
-rv t18497 = nx_last_dot(571, 15, 571, 31, v_callee);
-rv v_dot = t18497;
-rv t18498 = rt_bool(rt_less(rt_int(INT64_C(0)), v_dot));
-rv t18499 = t18498;
-if (rt_truth(t18499)) {
-rv t18500 = rt_field(v_st, "info");
-rv t18501 = rt_field(t18500, "enums");
-rv t18502 = rt_text_slice(v_callee, rt_int(INT64_C(0)), v_dot, 572, 44, 572, 70);
-rv t18503 = nx_index_of(572, 20, 572, 71, t18501, t18502);
-rv t18504 = rt_bool(!rt_less(t18503, rt_int(INT64_C(0))));
-t18499 = t18504;
+rv t18510 = rt_field(v_arguments, "st");
+rv v_st = t18510;
+rv t18511 = nx_last_dot(571, 15, 571, 31, v_callee);
+rv v_dot = t18511;
+rv t18512 = rt_bool(rt_less(rt_int(INT64_C(0)), v_dot));
+rv t18513 = t18512;
+if (rt_truth(t18513)) {
+rv t18514 = rt_field(v_st, "info");
+rv t18515 = rt_field(t18514, "enums");
+rv t18516 = rt_text_slice(v_callee, rt_int(INT64_C(0)), v_dot, 572, 44, 572, 70);
+rv t18517 = nx_index_of(572, 20, 572, 71, t18515, t18516);
+rv t18518 = rt_bool(!rt_less(t18517, rt_int(INT64_C(0))));
+t18513 = t18518;
 }
-if (rt_truth(t18499)) {
-rv t18505 = rt_text_slice(v_callee, rt_int(INT64_C(0)), v_dot, 575, 42, 575, 68);
-rv t18506 = nx_c_string(575, 33, 575, 69, t18505);
-rv t18507 = rt_add(rt_str_at("rt_variant_new(", 575, 13, 575, 30), t18506, 575, 13, 575, 69);
-rv t18508 = rt_add(t18507, rt_str_at(", ", 575, 72, 575, 76), 575, 13, 575, 76);
-rv t18509 = rt_add(v_dot, rt_int(INT64_C(1)), 575, 107, 575, 114);
-rv t18510 = rt_int(v_callee.u.t.len);
-rv t18511 = rt_text_slice(v_callee, t18509, t18510, 575, 88, 575, 136);
-rv t18512 = nx_c_string(575, 79, 575, 137, t18511);
-rv t18513 = rt_add(t18508, t18512, 575, 13, 575, 137);
-rv t18514 = rt_add(t18513, rt_str_at(", ", 576, 15, 576, 19), 575, 13, 576, 19);
-rv t18515 = rt_field(v_arguments, "values");
-rv t18516 = rt_int(rt_list_len(t18515));
-rv t18517 = rt_to_text(t18516, 576, 22, 576, 60);
-rv t18518 = rt_add(t18514, t18517, 575, 13, 576, 60);
-rv t18519 = rt_add(t18518, rt_str_at(", ", 576, 63, 576, 67), 575, 13, 576, 67);
-rv t18520 = rt_field(v_arguments, "values");
-rv t18521 = nx_array_values(576, 70, 576, 100, t18520);
-rv t18522 = rt_add(t18519, t18521, 575, 13, 576, 100);
-rv t18523 = rt_add(t18522, rt_str_at(")", 576, 103, 576, 106), 575, 13, 576, 106);
-rv t18524 = nx_temporary(573, 20, 577, 10, v_st, t18523);
-rv v_made = t18524;
-rv t18525 = rt_field(v_arguments, "code");
-rv t18526 = rt_field(v_made, "code");
-rv t18527 = rt_add(t18525, t18526, 578, 21, 578, 47);
-rv t18528 = rt_field(v_made, "value");
-rv t18529 = rt_field(v_made, "st");
-rv t18530 = nx_part(578, 16, 578, 69, t18527, t18528, t18529);
-rv r18531 = t18530;
+if (rt_truth(t18513)) {
+rv t18519 = rt_text_slice(v_callee, rt_int(INT64_C(0)), v_dot, 575, 42, 575, 68);
+rv t18520 = nx_c_string(575, 33, 575, 69, t18519);
+rv t18521 = rt_add(rt_str_at("rt_variant_new(", 575, 13, 575, 30), t18520, 575, 13, 575, 69);
+rv t18522 = rt_add(t18521, rt_str_at(", ", 575, 72, 575, 76), 575, 13, 575, 76);
+rv t18523 = rt_add(v_dot, rt_int(INT64_C(1)), 575, 107, 575, 114);
+rv t18524 = rt_int(v_callee.u.t.len);
+rv t18525 = rt_text_slice(v_callee, t18523, t18524, 575, 88, 575, 136);
+rv t18526 = nx_c_string(575, 79, 575, 137, t18525);
+rv t18527 = rt_add(t18522, t18526, 575, 13, 575, 137);
+rv t18528 = rt_add(t18527, rt_str_at(", ", 576, 15, 576, 19), 575, 13, 576, 19);
+rv t18529 = rt_field(v_arguments, "values");
+rv t18530 = rt_int(rt_list_len(t18529));
+rv t18531 = rt_to_text(t18530, 576, 22, 576, 60);
+rv t18532 = rt_add(t18528, t18531, 575, 13, 576, 60);
+rv t18533 = rt_add(t18532, rt_str_at(", ", 576, 63, 576, 67), 575, 13, 576, 67);
+rv t18534 = rt_field(v_arguments, "values");
+rv t18535 = nx_array_values(576, 70, 576, 100, t18534);
+rv t18536 = rt_add(t18533, t18535, 575, 13, 576, 100);
+rv t18537 = rt_add(t18536, rt_str_at(")", 576, 103, 576, 106), 575, 13, 576, 106);
+rv t18538 = nx_temporary(573, 20, 577, 10, v_st, t18537);
+rv v_made = t18538;
+rv t18539 = rt_field(v_arguments, "code");
+rv t18540 = rt_field(v_made, "code");
+rv t18541 = rt_add(t18539, t18540, 578, 21, 578, 47);
+rv t18542 = rt_field(v_made, "value");
+rv t18543 = rt_field(v_made, "st");
+rv t18544 = nx_part(578, 16, 578, 69, t18541, t18542, t18543);
+rv r18545 = t18544;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18531;
+return r18545;
 }
-rv t18532 = rt_field(v_st, "info");
-rv t18533 = rt_field(t18532, "fns");
-rv t18534 = nx_index_of(580, 8, 580, 37, t18533, v_callee);
-rv t18535 = rt_bool(rt_less(t18534, rt_int(INT64_C(0))));
-if (rt_truth(t18535)) {
-rv t18536 = rt_add(rt_str_at("the call to ", 581, 49, 581, 63), v_callee, 581, 49, 581, 72);
-rv t18537 = nx_refuse(581, 38, 581, 73, v_st, t18536);
-rv t18538 = nx_part(581, 16, 581, 74, rt_str_at("", 581, 21, 581, 23), rt_str_at("rt_unit()", 581, 25, 581, 36), t18537);
-rv r18539 = t18538;
+rv t18546 = rt_field(v_st, "info");
+rv t18547 = rt_field(t18546, "fns");
+rv t18548 = nx_index_of(580, 8, 580, 37, t18547, v_callee);
+rv t18549 = rt_bool(rt_less(t18548, rt_int(INT64_C(0))));
+if (rt_truth(t18549)) {
+rv t18550 = rt_add(rt_str_at("the call to ", 581, 49, 581, 63), v_callee, 581, 49, 581, 72);
+rv t18551 = nx_refuse(581, 38, 581, 73, v_st, t18550);
+rv t18552 = nx_part(581, 16, 581, 74, rt_str_at("", 581, 21, 581, 23), rt_str_at("rt_unit()", 581, 25, 581, 36), t18551);
+rv r18553 = t18552;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18539;
+return r18553;
 }
-rv t18540 = nx_node_span(583, 18, 583, 33, v_node);
-rv v_passed = t18540;
-rv t18541 = rt_field(v_arguments, "values");
+rv t18554 = nx_node_span(583, 18, 583, 33, v_node);
+rv v_passed = t18554;
+rv t18555 = rt_field(v_arguments, "values");
 {
-rv it18542 = t18541;
-int64_t n18542 = rt_list_len(it18542);
+rv it18556 = t18555;
+int64_t n18556 = rt_list_len(it18556);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 584, turn);
 rt_pop();
-if (turn >= n18542) break;
-rv v_value = rt_list_at(it18542, turn);
+if (turn >= n18556) break;
+rv v_value = rt_list_at(it18556, turn);
 rt_push_loop(RT_BODY, 584, turn + 1);
-rv t18543 = rt_add(v_passed, rt_str_at(", ", 585, 27, 585, 31), 585, 18, 585, 31);
-rv t18544 = rt_add(t18543, v_value, 585, 18, 585, 39);
-v_passed = t18544;
+rv t18557 = rt_add(v_passed, rt_str_at(", ", 585, 27, 585, 31), 585, 18, 585, 31);
+rv t18558 = rt_add(t18557, v_value, 585, 18, 585, 39);
+v_passed = t18558;
 rt_pop();
 turn++;
 }
 }
-rv t18545 = nx_c_name(587, 38, 587, 52, v_callee);
-rv t18546 = rt_add(rt_str_at("nx_", 587, 30, 587, 35), t18545, 587, 30, 587, 52);
-rv t18547 = rt_add(t18546, rt_str_at("(", 587, 55, 587, 58), 587, 30, 587, 58);
-rv t18548 = rt_add(t18547, v_passed, 587, 30, 587, 67);
-rv t18549 = rt_add(t18548, rt_str_at(")", 587, 70, 587, 73), 587, 30, 587, 73);
-rv t18550 = nx_temporary(587, 16, 587, 74, v_st, t18549);
-rv v_made = t18550;
-rv t18551 = rt_field(v_arguments, "code");
-rv t18552 = rt_field(v_made, "code");
-rv t18553 = rt_add(t18551, t18552, 588, 17, 588, 43);
-rv t18554 = rt_field(v_made, "value");
-rv t18555 = rt_field(v_made, "st");
-rv t18556 = nx_part(588, 12, 588, 65, t18553, t18554, t18555);
-rv r18557 = t18556;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18557;
-}
-
-static rv nx_pattern_names(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_pattern) {
-int rt_saved = rt_enter("pattern_names", 10, s_l, s_c, s_el, s_ec);
-rv t18558 = nx_kind_of(595, 16, 595, 32, v_pattern);
-rv v_kind = t18558;
-rv t18559 = rt_bool(rt_eq(v_kind, rt_str_at("BindingPattern", 596, 16, 596, 32)));
-if (rt_truth(t18559)) {
-rv t18560 = nx_field(597, 25, 597, 47, v_pattern, rt_str_at("name", 597, 40, 597, 46));
-rv t18561 = nx_text_of(597, 17, 597, 48, t18560);
-rv t18562 = rt_list_from((rv[]){t18561}, 1);
-rv r18563 = t18562;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18563;
-}
-rv t18564 = rt_list_from(0, 0);
-rv v_names = t18564;
-rv t18565 = rt_bool(rt_eq(v_kind, rt_str_at("VariantPattern", 600, 16, 600, 32)));
-if (rt_truth(t18565)) {
-rv t18566 = nx_field(601, 31, 601, 58, v_pattern, rt_str_at("arguments", 601, 46, 601, 57));
-rv t18567 = nx_items_of(601, 22, 601, 59, t18566);
-{
-rv it18568 = t18567;
-int64_t n18568 = rt_list_len(it18568);
-int64_t turn = 0;
-for (;;) {
-rt_push_loop(RT_COND, 601, turn);
-rt_pop();
-if (turn >= n18568) break;
-rv v_inner = rt_list_at(it18568, turn);
-rt_push_loop(RT_BODY, 601, turn + 1);
-rv t18569 = nx_pattern_names(602, 40, 602, 60, v_inner);
-rv t18570 = rt_list_concat(v_names, t18569);
-v_names = t18570;
-rt_pop();
-turn++;
-}
-}
-}
-rv r18571 = v_names;
+rv t18559 = nx_c_name(587, 38, 587, 52, v_callee);
+rv t18560 = rt_add(rt_str_at("nx_", 587, 30, 587, 35), t18559, 587, 30, 587, 52);
+rv t18561 = rt_add(t18560, rt_str_at("(", 587, 55, 587, 58), 587, 30, 587, 58);
+rv t18562 = rt_add(t18561, v_passed, 587, 30, 587, 67);
+rv t18563 = rt_add(t18562, rt_str_at(")", 587, 70, 587, 73), 587, 30, 587, 73);
+rv t18564 = nx_temporary(587, 16, 587, 74, v_st, t18563);
+rv v_made = t18564;
+rv t18565 = rt_field(v_arguments, "code");
+rv t18566 = rt_field(v_made, "code");
+rv t18567 = rt_add(t18565, t18566, 588, 17, 588, 43);
+rv t18568 = rt_field(v_made, "value");
+rv t18569 = rt_field(v_made, "st");
+rv t18570 = nx_part(588, 12, 588, 65, t18567, t18568, t18569);
+rv r18571 = t18570;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r18571;
 }
 
-static rv nx_gen_pattern(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_subject, rv v_pattern, rv v_ok) {
-int rt_saved = rt_enter("gen_pattern", 10, s_l, s_c, s_el, s_ec);
-rv t18572 = nx_kind_of(610, 16, 610, 32, v_pattern);
+static rv nx_pattern_names(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_pattern) {
+int rt_saved = rt_enter("pattern_names", 10, s_l, s_c, s_el, s_ec);
+rv t18572 = nx_kind_of(595, 16, 595, 32, v_pattern);
 rv v_kind = t18572;
-rv t18573 = rt_bool(rt_eq(v_kind, rt_str_at("BindingPattern", 611, 16, 611, 32)));
+rv t18573 = rt_bool(rt_eq(v_kind, rt_str_at("BindingPattern", 596, 16, 596, 32)));
 if (rt_truth(t18573)) {
-rv t18574 = rt_add(rt_str_at("if (", 612, 21, 612, 27), v_ok, 612, 21, 612, 32);
-rv t18575 = rt_add(t18574, rt_str_at(") v_", 612, 35, 612, 41), 612, 21, 612, 41);
-rv t18576 = nx_field(612, 52, 612, 74, v_pattern, rt_str_at("name", 612, 67, 612, 73));
-rv t18577 = nx_text_of(612, 44, 612, 75, t18576);
-rv t18578 = rt_add(t18575, t18577, 612, 21, 612, 75);
-rv t18579 = rt_add(t18578, rt_str_at(" = ", 612, 78, 612, 83), 612, 21, 612, 83);
-rv t18580 = rt_add(t18579, v_subject, 612, 21, 612, 93);
-rv t18581 = rt_add(t18580, rt_str_at(";\n", 612, 96, 612, 101), 612, 21, 612, 101);
-rv t18582 = nx_part(612, 16, 612, 110, t18581, rt_str_at("", 612, 103, 612, 105), v_st);
-rv r18583 = t18582;
+rv t18574 = nx_field(597, 25, 597, 47, v_pattern, rt_str_at("name", 597, 40, 597, 46));
+rv t18575 = nx_text_of(597, 17, 597, 48, t18574);
+rv t18576 = rt_list_from((rv[]){t18575}, 1);
+rv r18577 = t18576;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18583;
+return r18577;
 }
-rv t18584 = rt_bool(rt_eq(v_kind, rt_str_at("LiteralPattern", 614, 16, 614, 32)));
-if (rt_truth(t18584)) {
-rv t18585 = rt_add(rt_str_at("if (", 615, 21, 615, 27), v_ok, 615, 21, 615, 32);
-rv t18586 = rt_add(t18585, rt_str_at(") ", 615, 35, 615, 39), 615, 21, 615, 39);
-rv t18587 = rt_add(t18586, v_ok, 615, 21, 615, 44);
-rv t18588 = rt_add(t18587, rt_str_at(" = rt_eq(", 615, 47, 615, 58), 615, 21, 615, 58);
-rv t18589 = nx_field(615, 75, 615, 98, v_pattern, rt_str_at("value", 615, 90, 615, 97));
-rv t18590 = nx_literal_value(615, 61, 615, 99, t18589);
-rv t18591 = rt_add(t18588, t18590, 615, 21, 615, 99);
-rv t18592 = rt_add(t18591, rt_str_at(", ", 615, 102, 615, 106), 615, 21, 615, 106);
-rv t18593 = rt_add(t18592, v_subject, 615, 21, 615, 116);
-rv t18594 = rt_add(t18593, rt_str_at(");\n", 615, 119, 615, 125), 615, 21, 615, 125);
-rv t18595 = nx_part(615, 16, 615, 134, t18594, rt_str_at("", 615, 127, 615, 129), v_st);
-rv r18596 = t18595;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18596;
-}
-rv t18597 = rt_bool(!rt_eq(v_kind, rt_str_at("VariantPattern", 617, 16, 617, 32)));
-if (rt_truth(t18597)) {
-rv t18598 = nx_part(618, 16, 618, 32, rt_str_at("", 618, 21, 618, 23), rt_str_at("", 618, 25, 618, 27), v_st);
-rv r18599 = t18598;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18599;
-}
-rv t18600 = rt_add(rt_str_at("if (", 620, 16, 620, 22), v_ok, 620, 16, 620, 27);
-rv t18601 = rt_add(t18600, rt_str_at(") ", 620, 30, 620, 34), 620, 16, 620, 34);
-rv t18602 = rt_add(t18601, v_ok, 620, 16, 620, 39);
-rv t18603 = rt_add(t18602, rt_str_at(" = rt_is_kind(", 620, 42, 620, 58), 620, 16, 620, 58);
-rv t18604 = rt_add(t18603, v_subject, 620, 16, 620, 68);
-rv t18605 = rt_add(t18604, rt_str_at(", ", 620, 71, 620, 75), 620, 16, 620, 75);
-rv t18606 = nx_field(620, 95, 620, 117, v_pattern, rt_str_at("name", 620, 110, 620, 116));
-rv t18607 = nx_text_of(620, 87, 620, 118, t18606);
-rv t18608 = nx_c_string(620, 78, 620, 119, t18607);
-rv t18609 = rt_add(t18605, t18608, 620, 16, 620, 119);
-rv t18610 = rt_add(t18609, rt_str_at(");\n", 620, 122, 620, 128), 620, 16, 620, 128);
-rv v_code = t18610;
-rv v_current = v_st;
-rv v_index = rt_int(INT64_C(0));
-rv t18611 = nx_field(623, 27, 623, 54, v_pattern, rt_str_at("arguments", 623, 42, 623, 53));
-rv t18612 = nx_items_of(623, 18, 623, 55, t18611);
+rv t18578 = rt_list_from(0, 0);
+rv v_names = t18578;
+rv t18579 = rt_bool(rt_eq(v_kind, rt_str_at("VariantPattern", 600, 16, 600, 32)));
+if (rt_truth(t18579)) {
+rv t18580 = nx_field(601, 31, 601, 58, v_pattern, rt_str_at("arguments", 601, 46, 601, 57));
+rv t18581 = nx_items_of(601, 22, 601, 59, t18580);
 {
-rv it18613 = t18612;
-int64_t n18613 = rt_list_len(it18613);
+rv it18582 = t18581;
+int64_t n18582 = rt_list_len(it18582);
 int64_t turn = 0;
 for (;;) {
-rt_push_loop(RT_COND, 623, turn);
+rt_push_loop(RT_COND, 601, turn);
 rt_pop();
-if (turn >= n18613) break;
-rv v_inner = rt_list_at(it18613, turn);
-rt_push_loop(RT_BODY, 623, turn + 1);
-rv t18614 = rt_field(v_current, "next");
-rv t18615 = rt_to_text(t18614, 624, 26, 624, 47);
-rv t18616 = rt_add(rt_str_at("t", 624, 20, 624, 23), t18615, 624, 20, 624, 47);
-rv v_name = t18616;
-rv t18617 = nx_fresh(625, 19, 625, 33, v_current);
-v_current = t18617;
-rv t18618 = rt_add(v_code, rt_str_at("rv ", 626, 23, 626, 28), 626, 16, 626, 28);
-rv t18619 = rt_add(t18618, v_name, 626, 16, 626, 35);
-rv t18620 = rt_add(t18619, rt_str_at(" = rt_unit();\nif (", 626, 38, 626, 59), 626, 16, 626, 59);
-rv t18621 = rt_add(t18620, v_ok, 626, 16, 626, 64);
-rv t18622 = rt_add(t18621, rt_str_at(") ", 626, 67, 626, 71), 626, 16, 626, 71);
-rv t18623 = rt_add(t18622, v_name, 626, 16, 626, 78);
-rv t18624 = rt_add(t18623, rt_str_at(" = rt_arg(", 626, 81, 626, 93), 626, 16, 626, 93);
-rv t18625 = rt_add(t18624, v_subject, 626, 16, 626, 103);
-rv t18626 = rt_add(t18625, rt_str_at(", ", 626, 106, 626, 110), 626, 16, 626, 110);
-rv t18627 = rt_to_text(v_index, 626, 113, 626, 127);
-rv t18628 = rt_add(t18626, t18627, 626, 16, 626, 127);
-rv t18629 = rt_add(t18628, rt_str_at(");\n", 626, 130, 626, 136), 626, 16, 626, 136);
-v_code = t18629;
-rv t18630 = nx_gen_pattern(627, 22, 627, 59, v_current, v_name, v_inner, v_ok);
-rv v_nested = t18630;
-rv t18631 = rt_field(v_nested, "code");
-rv t18632 = rt_add(v_code, t18631, 628, 16, 628, 34);
-v_code = t18632;
-rv t18633 = rt_field(v_nested, "st");
-v_current = t18633;
-rv t18634 = rt_add(v_index, rt_int(INT64_C(1)), 630, 17, 630, 26);
-v_index = t18634;
+if (turn >= n18582) break;
+rv v_inner = rt_list_at(it18582, turn);
+rt_push_loop(RT_BODY, 601, turn + 1);
+rv t18583 = nx_pattern_names(602, 40, 602, 60, v_inner);
+rv t18584 = rt_list_concat(v_names, t18583);
+v_names = t18584;
 rt_pop();
 turn++;
 }
 }
-rv t18635 = nx_part(632, 12, 632, 35, v_code, rt_str_at("", 632, 23, 632, 25), v_current);
-rv r18636 = t18635;
+}
+rv r18585 = v_names;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18636;
+return r18585;
+}
+
+static rv nx_gen_pattern(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_subject, rv v_pattern, rv v_ok) {
+int rt_saved = rt_enter("gen_pattern", 10, s_l, s_c, s_el, s_ec);
+rv t18586 = nx_kind_of(610, 16, 610, 32, v_pattern);
+rv v_kind = t18586;
+rv t18587 = rt_bool(rt_eq(v_kind, rt_str_at("BindingPattern", 611, 16, 611, 32)));
+if (rt_truth(t18587)) {
+rv t18588 = rt_add(rt_str_at("if (", 612, 21, 612, 27), v_ok, 612, 21, 612, 32);
+rv t18589 = rt_add(t18588, rt_str_at(") v_", 612, 35, 612, 41), 612, 21, 612, 41);
+rv t18590 = nx_field(612, 52, 612, 74, v_pattern, rt_str_at("name", 612, 67, 612, 73));
+rv t18591 = nx_text_of(612, 44, 612, 75, t18590);
+rv t18592 = rt_add(t18589, t18591, 612, 21, 612, 75);
+rv t18593 = rt_add(t18592, rt_str_at(" = ", 612, 78, 612, 83), 612, 21, 612, 83);
+rv t18594 = rt_add(t18593, v_subject, 612, 21, 612, 93);
+rv t18595 = rt_add(t18594, rt_str_at(";\n", 612, 96, 612, 101), 612, 21, 612, 101);
+rv t18596 = nx_part(612, 16, 612, 110, t18595, rt_str_at("", 612, 103, 612, 105), v_st);
+rv r18597 = t18596;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18597;
+}
+rv t18598 = rt_bool(rt_eq(v_kind, rt_str_at("LiteralPattern", 614, 16, 614, 32)));
+if (rt_truth(t18598)) {
+rv t18599 = rt_add(rt_str_at("if (", 615, 21, 615, 27), v_ok, 615, 21, 615, 32);
+rv t18600 = rt_add(t18599, rt_str_at(") ", 615, 35, 615, 39), 615, 21, 615, 39);
+rv t18601 = rt_add(t18600, v_ok, 615, 21, 615, 44);
+rv t18602 = rt_add(t18601, rt_str_at(" = rt_eq(", 615, 47, 615, 58), 615, 21, 615, 58);
+rv t18603 = nx_field(615, 75, 615, 98, v_pattern, rt_str_at("value", 615, 90, 615, 97));
+rv t18604 = nx_literal_value(615, 61, 615, 99, t18603);
+rv t18605 = rt_add(t18602, t18604, 615, 21, 615, 99);
+rv t18606 = rt_add(t18605, rt_str_at(", ", 615, 102, 615, 106), 615, 21, 615, 106);
+rv t18607 = rt_add(t18606, v_subject, 615, 21, 615, 116);
+rv t18608 = rt_add(t18607, rt_str_at(");\n", 615, 119, 615, 125), 615, 21, 615, 125);
+rv t18609 = nx_part(615, 16, 615, 134, t18608, rt_str_at("", 615, 127, 615, 129), v_st);
+rv r18610 = t18609;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18610;
+}
+rv t18611 = rt_bool(!rt_eq(v_kind, rt_str_at("VariantPattern", 617, 16, 617, 32)));
+if (rt_truth(t18611)) {
+rv t18612 = nx_part(618, 16, 618, 32, rt_str_at("", 618, 21, 618, 23), rt_str_at("", 618, 25, 618, 27), v_st);
+rv r18613 = t18612;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18613;
+}
+rv t18614 = rt_add(rt_str_at("if (", 620, 16, 620, 22), v_ok, 620, 16, 620, 27);
+rv t18615 = rt_add(t18614, rt_str_at(") ", 620, 30, 620, 34), 620, 16, 620, 34);
+rv t18616 = rt_add(t18615, v_ok, 620, 16, 620, 39);
+rv t18617 = rt_add(t18616, rt_str_at(" = rt_is_kind(", 620, 42, 620, 58), 620, 16, 620, 58);
+rv t18618 = rt_add(t18617, v_subject, 620, 16, 620, 68);
+rv t18619 = rt_add(t18618, rt_str_at(", ", 620, 71, 620, 75), 620, 16, 620, 75);
+rv t18620 = nx_field(620, 95, 620, 117, v_pattern, rt_str_at("name", 620, 110, 620, 116));
+rv t18621 = nx_text_of(620, 87, 620, 118, t18620);
+rv t18622 = nx_c_string(620, 78, 620, 119, t18621);
+rv t18623 = rt_add(t18619, t18622, 620, 16, 620, 119);
+rv t18624 = rt_add(t18623, rt_str_at(");\n", 620, 122, 620, 128), 620, 16, 620, 128);
+rv v_code = t18624;
+rv v_current = v_st;
+rv v_index = rt_int(INT64_C(0));
+rv t18625 = nx_field(623, 27, 623, 54, v_pattern, rt_str_at("arguments", 623, 42, 623, 53));
+rv t18626 = nx_items_of(623, 18, 623, 55, t18625);
+{
+rv it18627 = t18626;
+int64_t n18627 = rt_list_len(it18627);
+int64_t turn = 0;
+for (;;) {
+rt_push_loop(RT_COND, 623, turn);
+rt_pop();
+if (turn >= n18627) break;
+rv v_inner = rt_list_at(it18627, turn);
+rt_push_loop(RT_BODY, 623, turn + 1);
+rv t18628 = rt_field(v_current, "next");
+rv t18629 = rt_to_text(t18628, 624, 26, 624, 47);
+rv t18630 = rt_add(rt_str_at("t", 624, 20, 624, 23), t18629, 624, 20, 624, 47);
+rv v_name = t18630;
+rv t18631 = nx_fresh(625, 19, 625, 33, v_current);
+v_current = t18631;
+rv t18632 = rt_add(v_code, rt_str_at("rv ", 626, 23, 626, 28), 626, 16, 626, 28);
+rv t18633 = rt_add(t18632, v_name, 626, 16, 626, 35);
+rv t18634 = rt_add(t18633, rt_str_at(" = rt_unit();\nif (", 626, 38, 626, 59), 626, 16, 626, 59);
+rv t18635 = rt_add(t18634, v_ok, 626, 16, 626, 64);
+rv t18636 = rt_add(t18635, rt_str_at(") ", 626, 67, 626, 71), 626, 16, 626, 71);
+rv t18637 = rt_add(t18636, v_name, 626, 16, 626, 78);
+rv t18638 = rt_add(t18637, rt_str_at(" = rt_arg(", 626, 81, 626, 93), 626, 16, 626, 93);
+rv t18639 = rt_add(t18638, v_subject, 626, 16, 626, 103);
+rv t18640 = rt_add(t18639, rt_str_at(", ", 626, 106, 626, 110), 626, 16, 626, 110);
+rv t18641 = rt_to_text(v_index, 626, 113, 626, 127);
+rv t18642 = rt_add(t18640, t18641, 626, 16, 626, 127);
+rv t18643 = rt_add(t18642, rt_str_at(");\n", 626, 130, 626, 136), 626, 16, 626, 136);
+v_code = t18643;
+rv t18644 = nx_gen_pattern(627, 22, 627, 59, v_current, v_name, v_inner, v_ok);
+rv v_nested = t18644;
+rv t18645 = rt_field(v_nested, "code");
+rv t18646 = rt_add(v_code, t18645, 628, 16, 628, 34);
+v_code = t18646;
+rv t18647 = rt_field(v_nested, "st");
+v_current = t18647;
+rv t18648 = rt_add(v_index, rt_int(INT64_C(1)), 630, 17, 630, 26);
+v_index = t18648;
+rt_pop();
+turn++;
+}
+}
+rv t18649 = nx_part(632, 12, 632, 35, v_code, rt_str_at("", 632, 23, 632, 25), v_current);
+rv r18650 = t18649;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18650;
 }
 
 static rv nx_declare_names(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_names) {
 int rt_saved = rt_enter("declare_names", 10, s_l, s_c, s_el, s_ec);
 rv v_out = rt_str_at("", 636, 15, 636, 17);
 {
-rv it18637 = v_names;
-int64_t n18637 = rt_list_len(it18637);
+rv it18651 = v_names;
+int64_t n18651 = rt_list_len(it18651);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 637, turn);
 rt_pop();
-if (turn >= n18637) break;
-rv v_name = rt_list_at(it18637, turn);
+if (turn >= n18651) break;
+rv v_name = rt_list_at(it18651, turn);
 rt_push_loop(RT_BODY, 637, turn + 1);
-rv t18638 = rt_add(v_out, rt_str_at("rv v_", 638, 21, 638, 28), 638, 15, 638, 28);
-rv t18639 = rt_add(t18638, v_name, 638, 15, 638, 35);
-rv t18640 = rt_add(t18639, rt_str_at(" = rt_unit();\n", 638, 38, 638, 55), 638, 15, 638, 55);
-v_out = t18640;
+rv t18652 = rt_add(v_out, rt_str_at("rv v_", 638, 21, 638, 28), 638, 15, 638, 28);
+rv t18653 = rt_add(t18652, v_name, 638, 15, 638, 35);
+rv t18654 = rt_add(t18653, rt_str_at(" = rt_unit();\n", 638, 38, 638, 55), 638, 15, 638, 55);
+v_out = t18654;
 rt_pop();
 turn++;
 }
 }
-rv r18641 = v_out;
+rv r18655 = v_out;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18641;
+return r18655;
 }
 
 static rv nx_gen_arm(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_scope, rv v_env, rv v_subject, rv v_done, rv v_outcome, rv v_arm) {
 int rt_saved = rt_enter("gen_arm", 10, s_l, s_c, s_el, s_ec);
-rv t18642 = nx_field(652, 19, 652, 40, v_arm, rt_str_at("pattern", 652, 30, 652, 39));
-rv v_pattern = t18642;
-rv t18643 = nx_pattern_names(653, 17, 653, 39, v_pattern);
-rv v_names = t18643;
-rv t18644 = rt_field(v_st, "next");
-rv t18645 = rt_to_text(t18644, 654, 21, 654, 37);
-rv t18646 = rt_add(rt_str_at("ok", 654, 14, 654, 18), t18645, 654, 14, 654, 37);
-rv v_ok = t18646;
-rv t18647 = nx_fresh(655, 30, 655, 39, v_st);
-rv t18648 = nx_gen_pattern(655, 18, 655, 62, t18647, v_subject, v_pattern, v_ok);
-rv v_tested = t18648;
+rv t18656 = nx_field(652, 19, 652, 40, v_arm, rt_str_at("pattern", 652, 30, 652, 39));
+rv v_pattern = t18656;
+rv t18657 = nx_pattern_names(653, 17, 653, 39, v_pattern);
+rv v_names = t18657;
+rv t18658 = rt_field(v_st, "next");
+rv t18659 = rt_to_text(t18658, 654, 21, 654, 37);
+rv t18660 = rt_add(rt_str_at("ok", 654, 14, 654, 18), t18659, 654, 14, 654, 37);
+rv v_ok = t18660;
+rv t18661 = nx_fresh(655, 30, 655, 39, v_st);
+rv t18662 = nx_gen_pattern(655, 18, 655, 62, t18661, v_subject, v_pattern, v_ok);
+rv v_tested = t18662;
 rv v_inner = v_env;
 {
-rv it18649 = v_names;
-int64_t n18649 = rt_list_len(it18649);
+rv it18663 = v_names;
+int64_t n18663 = rt_list_len(it18663);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 657, turn);
 rt_pop();
-if (turn >= n18649) break;
-rv v_name = rt_list_at(it18649, turn);
+if (turn >= n18663) break;
+rv v_name = rt_list_at(it18663, turn);
 rt_push_loop(RT_BODY, 657, turn + 1);
-rv t18650 = rt_record_new("Var", rec_Var, 1, (rv[]){v_name});
-rv t18651 = rt_list_append(v_inner, t18650);
-v_inner = t18651;
+rv t18664 = rt_record_new("Var", rec_Var, 1, (rv[]){v_name});
+rv t18665 = rt_list_append(v_inner, t18664);
+v_inner = t18665;
 rt_pop();
 turn++;
 }
 }
-rv t18652 = nx_field(660, 16, 660, 34, v_arm, rt_str_at("body", 660, 27, 660, 33));
-rv v_body = t18652;
+rv t18666 = nx_field(660, 16, 660, 34, v_arm, rt_str_at("body", 660, 27, 660, 33));
+rv v_body = t18666;
 rv v_run = rt_str_at("", 661, 15, 661, 17);
-rv t18653 = rt_field(v_tested, "st");
-rv v_current = t18653;
-rv t18654 = nx_kind_of(663, 8, 663, 21, v_body);
-rv t18655 = rt_bool(rt_eq(t18654, rt_str_at("Block", 663, 25, 663, 32)));
-if (rt_truth(t18655)) {
-rv t18656 = nx_gen_block(664, 21, 664, 59, v_current, v_scope, v_inner, v_body);
-rv v_block = t18656;
-rv t18657 = rt_field(v_block, "code");
-v_run = t18657;
-rv t18658 = rt_field(v_block, "st");
-v_current = t18658;
+rv t18667 = rt_field(v_tested, "st");
+rv v_current = t18667;
+rv t18668 = nx_kind_of(663, 8, 663, 21, v_body);
+rv t18669 = rt_bool(rt_eq(t18668, rt_str_at("Block", 663, 25, 663, 32)));
+if (rt_truth(t18669)) {
+rv t18670 = nx_gen_block(664, 21, 664, 59, v_current, v_scope, v_inner, v_body);
+rv v_block = t18670;
+rv t18671 = rt_field(v_block, "code");
+v_run = t18671;
+rv t18672 = rt_field(v_block, "st");
+v_current = t18672;
 } else {
-rv t18659 = nx_gen_expr(668, 21, 668, 44, v_current, v_body);
-rv v_value = t18659;
-rv t18660 = rt_field(v_value, "code");
-rv t18661 = rt_add(t18660, v_outcome, 669, 15, 669, 35);
-rv t18662 = rt_add(t18661, rt_str_at(" = ", 669, 38, 669, 43), 669, 15, 669, 43);
-rv t18663 = rt_field(v_value, "value");
-rv t18664 = rt_add(t18662, t18663, 669, 15, 669, 57);
-rv t18665 = rt_add(t18664, rt_str_at(";\n", 669, 60, 669, 65), 669, 15, 669, 65);
-v_run = t18665;
-rv t18666 = rt_field(v_value, "st");
-v_current = t18666;
+rv t18673 = nx_gen_expr(668, 21, 668, 44, v_current, v_body);
+rv v_value = t18673;
+rv t18674 = rt_field(v_value, "code");
+rv t18675 = rt_add(t18674, v_outcome, 669, 15, 669, 35);
+rv t18676 = rt_add(t18675, rt_str_at(" = ", 669, 38, 669, 43), 669, 15, 669, 43);
+rv t18677 = rt_field(v_value, "value");
+rv t18678 = rt_add(t18676, t18677, 669, 15, 669, 57);
+rv t18679 = rt_add(t18678, rt_str_at(";\n", 669, 60, 669, 65), 669, 15, 669, 65);
+v_run = t18679;
+rv t18680 = rt_field(v_value, "st");
+v_current = t18680;
 }
-rv t18667 = rt_add(rt_str_at("if (!", 673, 9, 673, 16), v_done, 673, 9, 673, 23);
-rv t18668 = rt_add(t18667, rt_str_at(") {\n", 673, 26, 673, 34), 673, 9, 673, 34);
-rv t18669 = nx_declare_names(673, 37, 673, 57, v_names);
-rv t18670 = rt_add(t18668, t18669, 673, 9, 673, 57);
-rv t18671 = rt_add(t18670, rt_str_at("bool ", 673, 60, 673, 67), 673, 9, 673, 67);
-rv t18672 = rt_add(t18671, v_ok, 673, 9, 673, 72);
-rv t18673 = rt_add(t18672, rt_str_at(" = true;\n", 673, 75, 673, 87), 673, 9, 673, 87);
-rv t18674 = rt_field(v_tested, "code");
-rv t18675 = rt_add(t18673, t18674, 673, 9, 673, 101);
-rv t18676 = rt_add(t18675, rt_str_at("if (", 673, 104, 673, 110), 673, 9, 673, 110);
-rv t18677 = rt_add(t18676, v_ok, 673, 9, 673, 115);
-rv t18678 = rt_add(t18677, rt_str_at(") {\n", 673, 118, 673, 126), 673, 9, 673, 126);
-rv t18679 = rt_add(t18678, v_done, 673, 9, 674, 15);
-rv t18680 = rt_add(t18679, rt_str_at(" = true;\n", 674, 18, 674, 30), 673, 9, 674, 30);
-rv t18681 = rt_add(t18680, v_run, 673, 9, 674, 36);
-rv t18682 = rt_add(t18681, rt_str_at("}\n}\n", 674, 39, 674, 47), 673, 9, 674, 47);
-rv v_code = t18682;
-rv t18683 = rt_record_new("Arm", rec_Arm, 2, (rv[]){v_code, v_current});
-rv r18684 = t18683;
+rv t18681 = rt_add(rt_str_at("if (!", 673, 9, 673, 16), v_done, 673, 9, 673, 23);
+rv t18682 = rt_add(t18681, rt_str_at(") {\n", 673, 26, 673, 34), 673, 9, 673, 34);
+rv t18683 = nx_declare_names(673, 37, 673, 57, v_names);
+rv t18684 = rt_add(t18682, t18683, 673, 9, 673, 57);
+rv t18685 = rt_add(t18684, rt_str_at("bool ", 673, 60, 673, 67), 673, 9, 673, 67);
+rv t18686 = rt_add(t18685, v_ok, 673, 9, 673, 72);
+rv t18687 = rt_add(t18686, rt_str_at(" = true;\n", 673, 75, 673, 87), 673, 9, 673, 87);
+rv t18688 = rt_field(v_tested, "code");
+rv t18689 = rt_add(t18687, t18688, 673, 9, 673, 101);
+rv t18690 = rt_add(t18689, rt_str_at("if (", 673, 104, 673, 110), 673, 9, 673, 110);
+rv t18691 = rt_add(t18690, v_ok, 673, 9, 673, 115);
+rv t18692 = rt_add(t18691, rt_str_at(") {\n", 673, 118, 673, 126), 673, 9, 673, 126);
+rv t18693 = rt_add(t18692, v_done, 673, 9, 674, 15);
+rv t18694 = rt_add(t18693, rt_str_at(" = true;\n", 674, 18, 674, 30), 673, 9, 674, 30);
+rv t18695 = rt_add(t18694, v_run, 673, 9, 674, 36);
+rv t18696 = rt_add(t18695, rt_str_at("}\n}\n", 674, 39, 674, 47), 673, 9, 674, 47);
+rv v_code = t18696;
+rv t18697 = rt_record_new("Arm", rec_Arm, 2, (rv[]){v_code, v_current});
+rv r18698 = t18697;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18684;
+return r18698;
 }
 
 static rv nx_gen_match(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_node) {
 int rt_saved = rt_enter("gen_match", 10, s_l, s_c, s_el, s_ec);
-rv t18685 = rt_list_from(0, 0);
-rv t18686 = rt_list_from(0, 0);
-rv t18687 = rt_record_new("Fn", rec_Fn, 3, (rv[]){rt_str_at("", 680, 38, 680, 40), t18685, t18686});
-rv t18688 = rt_list_from(0, 0);
-rv t18689 = nx_gen_match_in(680, 12, 680, 76, v_st, t18687, t18688, v_node);
-rv r18690 = t18689;
+rv t18699 = rt_list_from(0, 0);
+rv t18700 = rt_list_from(0, 0);
+rv t18701 = rt_record_new("Fn", rec_Fn, 3, (rv[]){rt_str_at("", 680, 38, 680, 40), t18699, t18700});
+rv t18702 = rt_list_from(0, 0);
+rv t18703 = nx_gen_match_in(680, 12, 680, 76, v_st, t18701, t18702, v_node);
+rv r18704 = t18703;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18690;
+return r18704;
 }
 
 static rv nx_gen_match_in(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_scope, rv v_env, rv v_node) {
 int rt_saved = rt_enter("gen_match_in", 10, s_l, s_c, s_el, s_ec);
-rv t18691 = nx_field(684, 32, 684, 52, v_node, rt_str_at("value", 684, 44, 684, 51));
-rv t18692 = nx_gen_expr(684, 19, 684, 53, v_st, t18691);
-rv v_subject = t18692;
-rv t18693 = rt_field(v_subject, "st");
-rv t18694 = rt_field(v_subject, "value");
-rv t18695 = nx_temporary(685, 16, 685, 52, t18693, t18694);
-rv v_held = t18695;
-rv t18696 = rt_field(v_held, "st");
-rv t18697 = nx_temporary(686, 18, 686, 49, t18696, rt_str_at("rt_unit()", 686, 37, 686, 48));
-rv v_result = t18697;
-rv t18698 = rt_field(v_result, "st");
-rv t18699 = rt_field(t18698, "next");
-rv t18700 = rt_to_text(t18699, 687, 25, 687, 48);
-rv t18701 = rt_add(rt_str_at("done", 687, 16, 687, 22), t18700, 687, 16, 687, 48);
-rv v_done = t18701;
-rv t18702 = rt_field(v_result, "st");
-rv t18703 = nx_fresh(688, 19, 688, 35, t18702);
-rv v_current = t18703;
-rv t18704 = rt_field(v_subject, "code");
-rv t18705 = rt_field(v_held, "code");
-rv t18706 = rt_add(t18704, t18705, 689, 16, 689, 40);
-rv t18707 = rt_field(v_result, "code");
-rv t18708 = rt_add(t18706, t18707, 689, 16, 689, 54);
-rv t18709 = rt_add(t18708, rt_str_at("{\nbool ", 689, 57, 689, 68), 689, 16, 689, 68);
-rv t18710 = rt_add(t18709, v_done, 689, 16, 689, 75);
-rv t18711 = rt_add(t18710, rt_str_at(" = false;\n", 689, 78, 689, 91), 689, 16, 689, 91);
-rv v_code = t18711;
-rv t18712 = nx_field(690, 25, 690, 44, v_node, rt_str_at("arms", 690, 37, 690, 43));
-rv t18713 = nx_items_of(690, 16, 690, 45, t18712);
+rv t18705 = nx_field(684, 32, 684, 52, v_node, rt_str_at("value", 684, 44, 684, 51));
+rv t18706 = nx_gen_expr(684, 19, 684, 53, v_st, t18705);
+rv v_subject = t18706;
+rv t18707 = rt_field(v_subject, "st");
+rv t18708 = rt_field(v_subject, "value");
+rv t18709 = nx_temporary(685, 16, 685, 52, t18707, t18708);
+rv v_held = t18709;
+rv t18710 = rt_field(v_held, "st");
+rv t18711 = nx_temporary(686, 18, 686, 49, t18710, rt_str_at("rt_unit()", 686, 37, 686, 48));
+rv v_result = t18711;
+rv t18712 = rt_field(v_result, "st");
+rv t18713 = rt_field(t18712, "next");
+rv t18714 = rt_to_text(t18713, 687, 25, 687, 48);
+rv t18715 = rt_add(rt_str_at("done", 687, 16, 687, 22), t18714, 687, 16, 687, 48);
+rv v_done = t18715;
+rv t18716 = rt_field(v_result, "st");
+rv t18717 = nx_fresh(688, 19, 688, 35, t18716);
+rv v_current = t18717;
+rv t18718 = rt_field(v_subject, "code");
+rv t18719 = rt_field(v_held, "code");
+rv t18720 = rt_add(t18718, t18719, 689, 16, 689, 40);
+rv t18721 = rt_field(v_result, "code");
+rv t18722 = rt_add(t18720, t18721, 689, 16, 689, 54);
+rv t18723 = rt_add(t18722, rt_str_at("{\nbool ", 689, 57, 689, 68), 689, 16, 689, 68);
+rv t18724 = rt_add(t18723, v_done, 689, 16, 689, 75);
+rv t18725 = rt_add(t18724, rt_str_at(" = false;\n", 689, 78, 689, 91), 689, 16, 689, 91);
+rv v_code = t18725;
+rv t18726 = nx_field(690, 25, 690, 44, v_node, rt_str_at("arms", 690, 37, 690, 43));
+rv t18727 = nx_items_of(690, 16, 690, 45, t18726);
 {
-rv it18714 = t18713;
-int64_t n18714 = rt_list_len(it18714);
+rv it18728 = t18727;
+int64_t n18728 = rt_list_len(it18728);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 690, turn);
 rt_pop();
-if (turn >= n18714) break;
-rv v_arm = rt_list_at(it18714, turn);
+if (turn >= n18728) break;
+rv v_arm = rt_list_at(it18728, turn);
 rt_push_loop(RT_BODY, 690, turn + 1);
-rv t18715 = rt_field(v_held, "value");
-rv t18716 = rt_field(v_result, "value");
-rv t18717 = nx_gen_arm(691, 20, 691, 85, v_current, v_scope, v_env, t18715, v_done, t18716, v_arm);
-rv v_made = t18717;
-rv t18718 = rt_field(v_made, "code");
-rv t18719 = rt_add(v_code, t18718, 692, 16, 692, 32);
-v_code = t18719;
-rv t18720 = rt_field(v_made, "st");
-v_current = t18720;
+rv t18729 = rt_field(v_held, "value");
+rv t18730 = rt_field(v_result, "value");
+rv t18731 = nx_gen_arm(691, 20, 691, 85, v_current, v_scope, v_env, t18729, v_done, t18730, v_arm);
+rv v_made = t18731;
+rv t18732 = rt_field(v_made, "code");
+rv t18733 = rt_add(v_code, t18732, 692, 16, 692, 32);
+v_code = t18733;
+rv t18734 = rt_field(v_made, "st");
+v_current = t18734;
 rt_pop();
 turn++;
 }
 }
-rv t18721 = rt_add(v_code, rt_str_at("}\n", 695, 24, 695, 29), 695, 17, 695, 29);
-rv t18722 = rt_field(v_result, "value");
-rv t18723 = nx_part(695, 12, 695, 53, t18721, t18722, v_current);
-rv r18724 = t18723;
+rv t18735 = rt_add(v_code, rt_str_at("}\n", 695, 24, 695, 29), 695, 17, 695, 29);
+rv t18736 = rt_field(v_result, "value");
+rv t18737 = nx_part(695, 12, 695, 53, t18735, t18736, v_current);
+rv r18738 = t18737;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18724;
+return r18738;
 }
 
 static rv nx_gen_block(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_scope, rv v_env, rv v_block) {
@@ -68589,126 +68645,99 @@ rv v_code = rt_str_at("", 701, 16, 701, 18);
 rv v_current = v_st;
 rv v_visible = v_env;
 rv v_returns = rt_bool(false);
-rv t18725 = nx_field(705, 31, 705, 57, v_block, rt_str_at("statements", 705, 44, 705, 56));
-rv t18726 = nx_items_of(705, 22, 705, 58, t18725);
+rv t18739 = nx_field(705, 31, 705, 57, v_block, rt_str_at("statements", 705, 44, 705, 56));
+rv t18740 = nx_items_of(705, 22, 705, 58, t18739);
 {
-rv it18727 = t18726;
-int64_t n18727 = rt_list_len(it18727);
+rv it18741 = t18740;
+int64_t n18741 = rt_list_len(it18741);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 705, turn);
 rt_pop();
-if (turn >= n18727) break;
-rv v_statement = rt_list_at(it18727, turn);
+if (turn >= n18741) break;
+rv v_statement = rt_list_at(it18741, turn);
 rt_push_loop(RT_BODY, 705, turn + 1);
-rv t18728 = nx_gen_statement(706, 20, 706, 69, v_current, v_scope, v_visible, v_statement);
-rv v_done = t18728;
-rv t18729 = rt_field(v_done, "code");
-rv t18730 = rt_add(v_code, t18729, 707, 16, 707, 32);
-v_code = t18730;
-rv t18731 = rt_field(v_done, "st");
-v_current = t18731;
-rv t18732 = nx_kind_of(709, 20, 709, 38, v_statement);
-rv v_kind = t18732;
-rv t18733 = rt_bool(rt_eq(v_kind, rt_str_at("Let", 710, 20, 710, 25)));
-rv t18734 = t18733;
-if (!rt_truth(t18734)) {
-rv t18735 = rt_bool(rt_eq(v_kind, rt_str_at("Var", 710, 37, 710, 42)));
-t18734 = t18735;
+rv t18742 = nx_gen_statement(706, 20, 706, 69, v_current, v_scope, v_visible, v_statement);
+rv v_done = t18742;
+rv t18743 = rt_field(v_done, "code");
+rv t18744 = rt_add(v_code, t18743, 707, 16, 707, 32);
+v_code = t18744;
+rv t18745 = rt_field(v_done, "st");
+v_current = t18745;
+rv t18746 = nx_kind_of(709, 20, 709, 38, v_statement);
+rv v_kind = t18746;
+rv t18747 = rt_bool(rt_eq(v_kind, rt_str_at("Let", 710, 20, 710, 25)));
+rv t18748 = t18747;
+if (!rt_truth(t18748)) {
+rv t18749 = rt_bool(rt_eq(v_kind, rt_str_at("Var", 710, 37, 710, 42)));
+t18748 = t18749;
 }
-if (rt_truth(t18734)) {
-rv t18736 = nx_field(711, 62, 711, 86, v_statement, rt_str_at("name", 711, 79, 711, 85));
-rv t18737 = nx_text_of(711, 54, 711, 87, t18736);
-rv t18738 = rt_record_new("Var", rec_Var, 1, (rv[]){t18737});
-rv t18739 = rt_list_append(v_visible, t18738);
-v_visible = t18739;
+if (rt_truth(t18748)) {
+rv t18750 = nx_field(711, 62, 711, 86, v_statement, rt_str_at("name", 711, 79, 711, 85));
+rv t18751 = nx_text_of(711, 54, 711, 87, t18750);
+rv t18752 = rt_record_new("Var", rec_Var, 1, (rv[]){t18751});
+rv t18753 = rt_list_append(v_visible, t18752);
+v_visible = t18753;
 }
-rv t18740 = rt_field(v_done, "returns");
-if (rt_truth(t18740)) {
+rv t18754 = rt_field(v_done, "returns");
+if (rt_truth(t18754)) {
 v_returns = rt_bool(true);
 }
 rt_pop();
 turn++;
 }
 }
-rv t18741 = rt_record_new("Block", rec_Block, 3, (rv[]){v_code, v_current, v_returns});
-rv r18742 = t18741;
+rv t18755 = rt_record_new("Block", rec_Block, 3, (rv[]){v_code, v_current, v_returns});
+rv r18756 = t18755;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18742;
+return r18756;
 }
 
 static rv nx_gen_statement(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_scope, rv v_env, rv v_node) {
 int rt_saved = rt_enter("gen_statement", 10, s_l, s_c, s_el, s_ec);
-rv t18743 = nx_kind_of(721, 16, 721, 29, v_node);
-rv v_kind = t18743;
-rv t18744 = rt_bool(rt_eq(v_kind, rt_str_at("Let", 722, 16, 722, 21)));
-rv t18745 = t18744;
-if (!rt_truth(t18745)) {
-rv t18746 = rt_bool(rt_eq(v_kind, rt_str_at("Var", 722, 33, 722, 38)));
-t18745 = t18746;
+rv t18757 = nx_kind_of(721, 16, 721, 29, v_node);
+rv v_kind = t18757;
+rv t18758 = rt_bool(rt_eq(v_kind, rt_str_at("Let", 722, 16, 722, 21)));
+rv t18759 = t18758;
+if (!rt_truth(t18759)) {
+rv t18760 = rt_bool(rt_eq(v_kind, rt_str_at("Var", 722, 33, 722, 38)));
+t18759 = t18760;
 }
-if (rt_truth(t18745)) {
-rv t18747 = nx_field(723, 34, 723, 54, v_node, rt_str_at("value", 723, 46, 723, 53));
-rv t18748 = nx_gen_expr(723, 21, 723, 55, v_st, t18747);
-rv v_value = t18748;
-rv t18749 = rt_field(v_value, "code");
-rv t18750 = rt_add(t18749, rt_str_at("rv v_", 725, 32, 725, 39), 725, 19, 725, 39);
-rv t18751 = nx_field(725, 50, 725, 69, v_node, rt_str_at("name", 725, 62, 725, 68));
-rv t18752 = nx_text_of(725, 42, 725, 70, t18751);
-rv t18753 = rt_add(t18750, t18752, 725, 19, 725, 70);
-rv t18754 = rt_add(t18753, rt_str_at(" = ", 725, 73, 725, 78), 725, 19, 725, 78);
-rv t18755 = rt_field(v_value, "value");
-rv t18756 = rt_add(t18754, t18755, 725, 19, 725, 92);
-rv t18757 = rt_add(t18756, rt_str_at(";\n", 725, 95, 725, 100), 725, 19, 725, 100);
-rv t18758 = rt_field(v_value, "st");
-rv t18759 = rt_record_new("Block", rec_Block, 3, (rv[]){t18757, t18758, rt_bool(false)});
-rv r18760 = t18759;
+if (rt_truth(t18759)) {
+rv t18761 = nx_field(723, 34, 723, 54, v_node, rt_str_at("value", 723, 46, 723, 53));
+rv t18762 = nx_gen_expr(723, 21, 723, 55, v_st, t18761);
+rv v_value = t18762;
+rv t18763 = rt_field(v_value, "code");
+rv t18764 = rt_add(t18763, rt_str_at("rv v_", 725, 32, 725, 39), 725, 19, 725, 39);
+rv t18765 = nx_field(725, 50, 725, 69, v_node, rt_str_at("name", 725, 62, 725, 68));
+rv t18766 = nx_text_of(725, 42, 725, 70, t18765);
+rv t18767 = rt_add(t18764, t18766, 725, 19, 725, 70);
+rv t18768 = rt_add(t18767, rt_str_at(" = ", 725, 73, 725, 78), 725, 19, 725, 78);
+rv t18769 = rt_field(v_value, "value");
+rv t18770 = rt_add(t18768, t18769, 725, 19, 725, 92);
+rv t18771 = rt_add(t18770, rt_str_at(";\n", 725, 95, 725, 100), 725, 19, 725, 100);
+rv t18772 = rt_field(v_value, "st");
+rv t18773 = rt_record_new("Block", rec_Block, 3, (rv[]){t18771, t18772, rt_bool(false)});
+rv r18774 = t18773;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18760;
+return r18774;
 }
-rv t18761 = rt_bool(rt_eq(v_kind, rt_str_at("Assign", 728, 16, 728, 24)));
-if (rt_truth(t18761)) {
-rv t18762 = nx_field(729, 34, 729, 54, v_node, rt_str_at("value", 729, 46, 729, 53));
-rv t18763 = nx_gen_expr(729, 21, 729, 55, v_st, t18762);
-rv v_value = t18763;
-rv t18764 = rt_field(v_value, "code");
-rv t18765 = rt_add(t18764, rt_str_at("v_", 731, 32, 731, 36), 731, 19, 731, 36);
-rv t18766 = nx_field(731, 47, 731, 66, v_node, rt_str_at("name", 731, 59, 731, 65));
-rv t18767 = nx_text_of(731, 39, 731, 67, t18766);
-rv t18768 = rt_add(t18765, t18767, 731, 19, 731, 67);
-rv t18769 = rt_add(t18768, rt_str_at(" = ", 731, 70, 731, 75), 731, 19, 731, 75);
-rv t18770 = rt_field(v_value, "value");
-rv t18771 = rt_add(t18769, t18770, 731, 19, 731, 89);
-rv t18772 = rt_add(t18771, rt_str_at(";\n", 731, 92, 731, 97), 731, 19, 731, 97);
-rv t18773 = rt_field(v_value, "st");
-rv t18774 = rt_record_new("Block", rec_Block, 3, (rv[]){t18772, t18773, rt_bool(false)});
-rv r18775 = t18774;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18775;
-}
-rv t18776 = rt_bool(rt_eq(v_kind, rt_str_at("ExprStatement", 734, 16, 734, 31)));
-if (rt_truth(t18776)) {
-rv t18777 = nx_field(735, 26, 735, 51, v_node, rt_str_at("expression", 735, 38, 735, 50));
-rv v_expression = t18777;
-rv t18778 = nx_kind_of(736, 12, 736, 31, v_expression);
-rv t18779 = rt_bool(rt_eq(t18778, rt_str_at("MatchExpr", 736, 35, 736, 46)));
-if (rt_truth(t18779)) {
-rv t18780 = nx_gen_match_in(737, 24, 737, 64, v_st, v_scope, v_env, v_expression);
-rv v_made = t18780;
-rv t18781 = rt_field(v_made, "code");
-rv t18782 = rt_field(v_made, "st");
-rv t18783 = rt_record_new("Block", rec_Block, 3, (rv[]){t18781, t18782, rt_bool(false)});
-rv r18784 = t18783;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18784;
-}
-rv t18785 = nx_gen_expr(740, 21, 740, 45, v_st, v_expression);
-rv v_value = t18785;
-rv t18786 = rt_field(v_value, "code");
+rv t18775 = rt_bool(rt_eq(v_kind, rt_str_at("Assign", 728, 16, 728, 24)));
+if (rt_truth(t18775)) {
+rv t18776 = nx_field(729, 34, 729, 54, v_node, rt_str_at("value", 729, 46, 729, 53));
+rv t18777 = nx_gen_expr(729, 21, 729, 55, v_st, t18776);
+rv v_value = t18777;
+rv t18778 = rt_field(v_value, "code");
+rv t18779 = rt_add(t18778, rt_str_at("v_", 731, 32, 731, 36), 731, 19, 731, 36);
+rv t18780 = nx_field(731, 47, 731, 66, v_node, rt_str_at("name", 731, 59, 731, 65));
+rv t18781 = nx_text_of(731, 39, 731, 67, t18780);
+rv t18782 = rt_add(t18779, t18781, 731, 19, 731, 67);
+rv t18783 = rt_add(t18782, rt_str_at(" = ", 731, 70, 731, 75), 731, 19, 731, 75);
+rv t18784 = rt_field(v_value, "value");
+rv t18785 = rt_add(t18783, t18784, 731, 19, 731, 89);
+rv t18786 = rt_add(t18785, rt_str_at(";\n", 731, 92, 731, 97), 731, 19, 731, 97);
 rv t18787 = rt_field(v_value, "st");
 rv t18788 = rt_record_new("Block", rec_Block, 3, (rv[]){t18786, t18787, rt_bool(false)});
 rv r18789 = t18788;
@@ -68716,1947 +68745,1974 @@ rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r18789;
 }
-rv t18790 = rt_bool(rt_eq(v_kind, rt_str_at("Return", 743, 16, 743, 24)));
+rv t18790 = rt_bool(rt_eq(v_kind, rt_str_at("ExprStatement", 734, 16, 734, 31)));
 if (rt_truth(t18790)) {
-rv t18791 = nx_gen_return(744, 16, 744, 43, v_st, v_scope, v_node);
-rv r18792 = t18791;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18792;
-}
-rv t18793 = rt_bool(rt_eq(v_kind, rt_str_at("If", 746, 16, 746, 20)));
+rv t18791 = nx_field(735, 26, 735, 51, v_node, rt_str_at("expression", 735, 38, 735, 50));
+rv v_expression = t18791;
+rv t18792 = nx_kind_of(736, 12, 736, 31, v_expression);
+rv t18793 = rt_bool(rt_eq(t18792, rt_str_at("MatchExpr", 736, 35, 736, 46)));
 if (rt_truth(t18793)) {
-rv t18794 = nx_gen_if(747, 16, 747, 44, v_st, v_scope, v_env, v_node);
-rv r18795 = t18794;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18795;
-}
-rv t18796 = rt_bool(rt_eq(v_kind, rt_str_at("IfLet", 749, 16, 749, 23)));
-if (rt_truth(t18796)) {
-rv t18797 = nx_gen_if_let(750, 16, 750, 48, v_st, v_scope, v_env, v_node);
+rv t18794 = nx_gen_match_in(737, 24, 737, 64, v_st, v_scope, v_env, v_expression);
+rv v_made = t18794;
+rv t18795 = rt_field(v_made, "code");
+rv t18796 = rt_field(v_made, "st");
+rv t18797 = rt_record_new("Block", rec_Block, 3, (rv[]){t18795, t18796, rt_bool(false)});
 rv r18798 = t18797;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r18798;
 }
-rv t18799 = rt_bool(rt_eq(v_kind, rt_str_at("While", 752, 16, 752, 23)));
-if (rt_truth(t18799)) {
-rv t18800 = nx_gen_while(753, 16, 753, 47, v_st, v_scope, v_env, v_node);
-rv r18801 = t18800;
+rv t18799 = nx_gen_expr(740, 21, 740, 45, v_st, v_expression);
+rv v_value = t18799;
+rv t18800 = rt_field(v_value, "code");
+rv t18801 = rt_field(v_value, "st");
+rv t18802 = rt_record_new("Block", rec_Block, 3, (rv[]){t18800, t18801, rt_bool(false)});
+rv r18803 = t18802;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18801;
+return r18803;
 }
-rv t18802 = rt_bool(rt_eq(v_kind, rt_str_at("For", 755, 16, 755, 21)));
-if (rt_truth(t18802)) {
-rv t18803 = nx_gen_for(756, 16, 756, 45, v_st, v_scope, v_env, v_node);
-rv r18804 = t18803;
+rv t18804 = rt_bool(rt_eq(v_kind, rt_str_at("Return", 743, 16, 743, 24)));
+if (rt_truth(t18804)) {
+rv t18805 = nx_gen_return(744, 16, 744, 43, v_st, v_scope, v_node);
+rv r18806 = t18805;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18804;
+return r18806;
 }
-rv t18805 = rt_bool(rt_eq(v_kind, rt_str_at("Block", 758, 16, 758, 23)));
-if (rt_truth(t18805)) {
-rv t18806 = nx_gen_block(759, 21, 759, 52, v_st, v_scope, v_env, v_node);
-rv v_inner = t18806;
-rv t18807 = rt_field(v_inner, "code");
-rv t18808 = rt_add(rt_str_at("{\n", 760, 28, 760, 34), t18807, 760, 28, 760, 47);
-rv t18809 = rt_add(t18808, rt_str_at("}\n", 760, 50, 760, 55), 760, 28, 760, 55);
-rv t18810 = rt_field(v_inner, "st");
-rv t18811 = rt_field(v_inner, "returns");
-rv t18812 = rt_record_new("Block", rec_Block, 3, (rv[]){t18809, t18810, t18811});
-rv r18813 = t18812;
+rv t18807 = rt_bool(rt_eq(v_kind, rt_str_at("If", 746, 16, 746, 20)));
+if (rt_truth(t18807)) {
+rv t18808 = nx_gen_if(747, 16, 747, 44, v_st, v_scope, v_env, v_node);
+rv r18809 = t18808;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18813;
+return r18809;
 }
-rv t18814 = rt_add(rt_str_at("the statement ", 762, 43, 762, 59), v_kind, 762, 43, 762, 66);
-rv t18815 = nx_refuse(762, 32, 762, 67, v_st, t18814);
-rv t18816 = rt_record_new("Block", rec_Block, 3, (rv[]){rt_str_at("", 762, 24, 762, 26), t18815, rt_bool(false)});
-rv r18817 = t18816;
+rv t18810 = rt_bool(rt_eq(v_kind, rt_str_at("IfLet", 749, 16, 749, 23)));
+if (rt_truth(t18810)) {
+rv t18811 = nx_gen_if_let(750, 16, 750, 48, v_st, v_scope, v_env, v_node);
+rv r18812 = t18811;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18817;
+return r18812;
 }
-
-static rv nx_gen_branch(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_scope, rv v_env, rv v_node) {
-int rt_saved = rt_enter("gen_branch", 10, s_l, s_c, s_el, s_ec);
-rv t18818 = nx_kind_of(766, 8, 766, 21, v_node);
-rv t18819 = rt_bool(rt_eq(t18818, rt_str_at("If", 766, 25, 766, 29)));
+rv t18813 = rt_bool(rt_eq(v_kind, rt_str_at("While", 752, 16, 752, 23)));
+if (rt_truth(t18813)) {
+rv t18814 = nx_gen_while(753, 16, 753, 47, v_st, v_scope, v_env, v_node);
+rv r18815 = t18814;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18815;
+}
+rv t18816 = rt_bool(rt_eq(v_kind, rt_str_at("For", 755, 16, 755, 21)));
+if (rt_truth(t18816)) {
+rv t18817 = nx_gen_for(756, 16, 756, 45, v_st, v_scope, v_env, v_node);
+rv r18818 = t18817;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18818;
+}
+rv t18819 = rt_bool(rt_eq(v_kind, rt_str_at("Block", 758, 16, 758, 23)));
 if (rt_truth(t18819)) {
-rv t18820 = nx_gen_if(767, 16, 767, 44, v_st, v_scope, v_env, v_node);
-rv r18821 = t18820;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18821;
-}
-rv t18822 = nx_kind_of(769, 8, 769, 21, v_node);
-rv t18823 = rt_bool(rt_eq(t18822, rt_str_at("IfLet", 769, 25, 769, 32)));
-if (rt_truth(t18823)) {
-rv t18824 = nx_gen_if_let(770, 16, 770, 48, v_st, v_scope, v_env, v_node);
-rv r18825 = t18824;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r18825;
-}
-rv t18826 = nx_gen_block(772, 12, 772, 43, v_st, v_scope, v_env, v_node);
+rv t18820 = nx_gen_block(759, 21, 759, 52, v_st, v_scope, v_env, v_node);
+rv v_inner = t18820;
+rv t18821 = rt_field(v_inner, "code");
+rv t18822 = rt_add(rt_str_at("{\n", 760, 28, 760, 34), t18821, 760, 28, 760, 47);
+rv t18823 = rt_add(t18822, rt_str_at("}\n", 760, 50, 760, 55), 760, 28, 760, 55);
+rv t18824 = rt_field(v_inner, "st");
+rv t18825 = rt_field(v_inner, "returns");
+rv t18826 = rt_record_new("Block", rec_Block, 3, (rv[]){t18823, t18824, t18825});
 rv r18827 = t18826;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r18827;
 }
+rv t18828 = rt_add(rt_str_at("the statement ", 762, 43, 762, 59), v_kind, 762, 43, 762, 66);
+rv t18829 = nx_refuse(762, 32, 762, 67, v_st, t18828);
+rv t18830 = rt_record_new("Block", rec_Block, 3, (rv[]){rt_str_at("", 762, 24, 762, 26), t18829, rt_bool(false)});
+rv r18831 = t18830;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18831;
+}
+
+static rv nx_gen_branch(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_scope, rv v_env, rv v_node) {
+int rt_saved = rt_enter("gen_branch", 10, s_l, s_c, s_el, s_ec);
+rv t18832 = nx_kind_of(766, 8, 766, 21, v_node);
+rv t18833 = rt_bool(rt_eq(t18832, rt_str_at("If", 766, 25, 766, 29)));
+if (rt_truth(t18833)) {
+rv t18834 = nx_gen_if(767, 16, 767, 44, v_st, v_scope, v_env, v_node);
+rv r18835 = t18834;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18835;
+}
+rv t18836 = nx_kind_of(769, 8, 769, 21, v_node);
+rv t18837 = rt_bool(rt_eq(t18836, rt_str_at("IfLet", 769, 25, 769, 32)));
+if (rt_truth(t18837)) {
+rv t18838 = nx_gen_if_let(770, 16, 770, 48, v_st, v_scope, v_env, v_node);
+rv r18839 = t18838;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18839;
+}
+rv t18840 = nx_gen_block(772, 12, 772, 43, v_st, v_scope, v_env, v_node);
+rv r18841 = t18840;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r18841;
+}
 
 static rv nx_gen_if(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_scope, rv v_env, rv v_node) {
 int rt_saved = rt_enter("gen_if", 10, s_l, s_c, s_el, s_ec);
-rv t18828 = nx_field(776, 34, 776, 58, v_node, rt_str_at("condition", 776, 46, 776, 57));
-rv t18829 = nx_gen_expr(776, 21, 776, 59, v_st, t18828);
-rv v_condition = t18829;
-rv t18830 = rt_field(v_condition, "st");
-rv t18831 = nx_field(777, 58, 777, 83, v_node, rt_str_at("then_block", 777, 70, 777, 82));
-rv t18832 = nx_gen_block(777, 22, 777, 84, t18830, v_scope, v_env, t18831);
-rv v_then_block = t18832;
-rv t18833 = rt_field(v_condition, "code");
-rv t18834 = rt_add(t18833, rt_str_at("if (rt_truth(", 778, 33, 778, 48), 778, 16, 778, 48);
-rv t18835 = rt_field(v_condition, "value");
-rv t18836 = rt_add(t18834, t18835, 778, 16, 778, 66);
-rv t18837 = rt_add(t18836, rt_str_at(")) {\n", 778, 69, 778, 78), 778, 16, 778, 78);
-rv t18838 = rt_field(v_then_block, "code");
-rv t18839 = rt_add(t18837, t18838, 778, 16, 778, 96);
-rv t18840 = rt_add(t18839, rt_str_at("}", 778, 99, 778, 102), 778, 16, 778, 102);
-rv v_code = t18840;
-rv t18841 = rt_field(v_then_block, "st");
-rv v_current = t18841;
-rv t18842 = rt_field(v_then_block, "returns");
-rv v_returns = t18842;
-rv t18843 = nx_field(781, 21, 781, 47, v_node, rt_str_at("else_branch", 781, 33, 781, 46));
-rv v_otherwise = t18843;
-rv t18844 = nx_is_null(782, 12, 782, 30, v_otherwise);
-rv t18845 = rt_bool(!rt_truth(t18844));
-if (rt_truth(t18845)) {
-rv t18846 = nx_gen_branch(783, 21, 783, 63, v_current, v_scope, v_env, v_otherwise);
-rv v_other = t18846;
-rv t18847 = rt_add(v_code, rt_str_at(" else {\n", 784, 23, 784, 35), 784, 16, 784, 35);
-rv t18848 = rt_field(v_other, "code");
-rv t18849 = rt_add(t18847, t18848, 784, 16, 784, 48);
-rv t18850 = rt_add(t18849, rt_str_at("}", 784, 51, 784, 54), 784, 16, 784, 54);
-v_code = t18850;
-rv t18851 = rt_field(v_other, "st");
-v_current = t18851;
-rv t18852 = v_returns;
-if (rt_truth(t18852)) {
-rv t18853 = rt_field(v_other, "returns");
-t18852 = t18853;
+rv t18842 = nx_field(776, 34, 776, 58, v_node, rt_str_at("condition", 776, 46, 776, 57));
+rv t18843 = nx_gen_expr(776, 21, 776, 59, v_st, t18842);
+rv v_condition = t18843;
+rv t18844 = rt_field(v_condition, "st");
+rv t18845 = nx_field(777, 58, 777, 83, v_node, rt_str_at("then_block", 777, 70, 777, 82));
+rv t18846 = nx_gen_block(777, 22, 777, 84, t18844, v_scope, v_env, t18845);
+rv v_then_block = t18846;
+rv t18847 = rt_field(v_condition, "code");
+rv t18848 = rt_add(t18847, rt_str_at("if (rt_truth(", 778, 33, 778, 48), 778, 16, 778, 48);
+rv t18849 = rt_field(v_condition, "value");
+rv t18850 = rt_add(t18848, t18849, 778, 16, 778, 66);
+rv t18851 = rt_add(t18850, rt_str_at(")) {\n", 778, 69, 778, 78), 778, 16, 778, 78);
+rv t18852 = rt_field(v_then_block, "code");
+rv t18853 = rt_add(t18851, t18852, 778, 16, 778, 96);
+rv t18854 = rt_add(t18853, rt_str_at("}", 778, 99, 778, 102), 778, 16, 778, 102);
+rv v_code = t18854;
+rv t18855 = rt_field(v_then_block, "st");
+rv v_current = t18855;
+rv t18856 = rt_field(v_then_block, "returns");
+rv v_returns = t18856;
+rv t18857 = nx_field(781, 21, 781, 47, v_node, rt_str_at("else_branch", 781, 33, 781, 46));
+rv v_otherwise = t18857;
+rv t18858 = nx_is_null(782, 12, 782, 30, v_otherwise);
+rv t18859 = rt_bool(!rt_truth(t18858));
+if (rt_truth(t18859)) {
+rv t18860 = nx_gen_branch(783, 21, 783, 63, v_current, v_scope, v_env, v_otherwise);
+rv v_other = t18860;
+rv t18861 = rt_add(v_code, rt_str_at(" else {\n", 784, 23, 784, 35), 784, 16, 784, 35);
+rv t18862 = rt_field(v_other, "code");
+rv t18863 = rt_add(t18861, t18862, 784, 16, 784, 48);
+rv t18864 = rt_add(t18863, rt_str_at("}", 784, 51, 784, 54), 784, 16, 784, 54);
+v_code = t18864;
+rv t18865 = rt_field(v_other, "st");
+v_current = t18865;
+rv t18866 = v_returns;
+if (rt_truth(t18866)) {
+rv t18867 = rt_field(v_other, "returns");
+t18866 = t18867;
 }
-v_returns = t18852;
+v_returns = t18866;
 } else {
 v_returns = rt_bool(false);
 }
-rv t18854 = rt_add(v_code, rt_str_at("\n", 790, 31, 790, 35), 790, 24, 790, 35);
-rv t18855 = rt_record_new("Block", rec_Block, 3, (rv[]){t18854, v_current, v_returns});
-rv r18856 = t18855;
+rv t18868 = rt_add(v_code, rt_str_at("\n", 790, 31, 790, 35), 790, 24, 790, 35);
+rv t18869 = rt_record_new("Block", rec_Block, 3, (rv[]){t18868, v_current, v_returns});
+rv r18870 = t18869;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18856;
+return r18870;
 }
 
 static rv nx_gen_if_let(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_scope, rv v_env, rv v_node) {
 int rt_saved = rt_enter("gen_if_let", 10, s_l, s_c, s_el, s_ec);
-rv t18857 = nx_field(794, 19, 794, 41, v_node, rt_str_at("pattern", 794, 31, 794, 40));
-rv v_pattern = t18857;
-rv t18858 = nx_pattern_names(795, 17, 795, 39, v_pattern);
-rv v_names = t18858;
-rv t18859 = nx_field(796, 32, 796, 52, v_node, rt_str_at("value", 796, 44, 796, 51));
-rv t18860 = nx_gen_expr(796, 19, 796, 53, v_st, t18859);
-rv v_subject = t18860;
-rv t18861 = rt_field(v_subject, "st");
-rv t18862 = rt_field(v_subject, "value");
-rv t18863 = nx_temporary(797, 16, 797, 52, t18861, t18862);
-rv v_held = t18863;
-rv t18864 = rt_field(v_held, "st");
-rv t18865 = rt_field(t18864, "next");
-rv t18866 = rt_to_text(t18865, 798, 21, 798, 42);
-rv t18867 = rt_add(rt_str_at("ok", 798, 14, 798, 18), t18866, 798, 14, 798, 42);
-rv v_ok = t18867;
-rv t18868 = rt_field(v_held, "st");
-rv t18869 = nx_fresh(799, 30, 799, 44, t18868);
-rv t18870 = rt_field(v_held, "value");
-rv t18871 = nx_gen_pattern(799, 18, 799, 70, t18869, t18870, v_pattern, v_ok);
-rv v_tested = t18871;
+rv t18871 = nx_field(794, 19, 794, 41, v_node, rt_str_at("pattern", 794, 31, 794, 40));
+rv v_pattern = t18871;
+rv t18872 = nx_pattern_names(795, 17, 795, 39, v_pattern);
+rv v_names = t18872;
+rv t18873 = nx_field(796, 32, 796, 52, v_node, rt_str_at("value", 796, 44, 796, 51));
+rv t18874 = nx_gen_expr(796, 19, 796, 53, v_st, t18873);
+rv v_subject = t18874;
+rv t18875 = rt_field(v_subject, "st");
+rv t18876 = rt_field(v_subject, "value");
+rv t18877 = nx_temporary(797, 16, 797, 52, t18875, t18876);
+rv v_held = t18877;
+rv t18878 = rt_field(v_held, "st");
+rv t18879 = rt_field(t18878, "next");
+rv t18880 = rt_to_text(t18879, 798, 21, 798, 42);
+rv t18881 = rt_add(rt_str_at("ok", 798, 14, 798, 18), t18880, 798, 14, 798, 42);
+rv v_ok = t18881;
+rv t18882 = rt_field(v_held, "st");
+rv t18883 = nx_fresh(799, 30, 799, 44, t18882);
+rv t18884 = rt_field(v_held, "value");
+rv t18885 = nx_gen_pattern(799, 18, 799, 70, t18883, t18884, v_pattern, v_ok);
+rv v_tested = t18885;
 rv v_inner = v_env;
 {
-rv it18872 = v_names;
-int64_t n18872 = rt_list_len(it18872);
+rv it18886 = v_names;
+int64_t n18886 = rt_list_len(it18886);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 801, turn);
 rt_pop();
-if (turn >= n18872) break;
-rv v_name = rt_list_at(it18872, turn);
+if (turn >= n18886) break;
+rv v_name = rt_list_at(it18886, turn);
 rt_push_loop(RT_BODY, 801, turn + 1);
-rv t18873 = rt_record_new("Var", rec_Var, 1, (rv[]){v_name});
-rv t18874 = rt_list_append(v_inner, t18873);
-v_inner = t18874;
+rv t18887 = rt_record_new("Var", rec_Var, 1, (rv[]){v_name});
+rv t18888 = rt_list_append(v_inner, t18887);
+v_inner = t18888;
 rt_pop();
 turn++;
 }
 }
-rv t18875 = rt_field(v_tested, "st");
-rv t18876 = nx_field(804, 57, 804, 82, v_node, rt_str_at("then_block", 804, 69, 804, 81));
-rv t18877 = nx_gen_block(804, 22, 804, 83, t18875, v_scope, v_inner, t18876);
-rv v_then_block = t18877;
-rv t18878 = rt_field(v_subject, "code");
-rv t18879 = rt_field(v_held, "code");
-rv t18880 = rt_add(t18878, t18879, 805, 16, 805, 40);
-rv t18881 = rt_add(t18880, rt_str_at("{\n", 805, 43, 805, 49), 805, 16, 805, 49);
-rv t18882 = nx_declare_names(805, 52, 805, 72, v_names);
-rv t18883 = rt_add(t18881, t18882, 805, 16, 805, 72);
-rv t18884 = rt_add(t18883, rt_str_at("bool ", 805, 75, 805, 82), 805, 16, 805, 82);
-rv t18885 = rt_add(t18884, v_ok, 805, 16, 805, 87);
-rv t18886 = rt_add(t18885, rt_str_at(" = true;\n", 805, 90, 805, 102), 805, 16, 805, 102);
-rv t18887 = rt_field(v_tested, "code");
-rv t18888 = rt_add(t18886, t18887, 805, 16, 805, 116);
-rv v_code = t18888;
-rv t18889 = rt_add(v_code, rt_str_at("if (", 806, 19, 806, 25), 806, 12, 806, 25);
-rv t18890 = rt_add(t18889, v_ok, 806, 12, 806, 30);
-rv t18891 = rt_add(t18890, rt_str_at(") {\n", 806, 33, 806, 41), 806, 12, 806, 41);
-rv t18892 = rt_field(v_then_block, "code");
-rv t18893 = rt_add(t18891, t18892, 806, 12, 806, 59);
-rv t18894 = rt_add(t18893, rt_str_at("}", 806, 62, 806, 65), 806, 12, 806, 65);
-v_code = t18894;
-rv t18895 = rt_field(v_then_block, "st");
-rv v_current = t18895;
-rv t18896 = rt_field(v_then_block, "returns");
-rv v_returns = t18896;
-rv t18897 = nx_field(809, 21, 809, 47, v_node, rt_str_at("else_branch", 809, 33, 809, 46));
-rv v_otherwise = t18897;
-rv t18898 = nx_is_null(810, 12, 810, 30, v_otherwise);
-rv t18899 = rt_bool(!rt_truth(t18898));
-if (rt_truth(t18899)) {
-rv t18900 = nx_gen_branch(811, 21, 811, 63, v_current, v_scope, v_env, v_otherwise);
-rv v_other = t18900;
-rv t18901 = rt_add(v_code, rt_str_at(" else {\n", 812, 23, 812, 35), 812, 16, 812, 35);
-rv t18902 = rt_field(v_other, "code");
-rv t18903 = rt_add(t18901, t18902, 812, 16, 812, 48);
-rv t18904 = rt_add(t18903, rt_str_at("}", 812, 51, 812, 54), 812, 16, 812, 54);
-v_code = t18904;
-rv t18905 = rt_field(v_other, "st");
-v_current = t18905;
-rv t18906 = v_returns;
-if (rt_truth(t18906)) {
-rv t18907 = rt_field(v_other, "returns");
-t18906 = t18907;
+rv t18889 = rt_field(v_tested, "st");
+rv t18890 = nx_field(804, 57, 804, 82, v_node, rt_str_at("then_block", 804, 69, 804, 81));
+rv t18891 = nx_gen_block(804, 22, 804, 83, t18889, v_scope, v_inner, t18890);
+rv v_then_block = t18891;
+rv t18892 = rt_field(v_subject, "code");
+rv t18893 = rt_field(v_held, "code");
+rv t18894 = rt_add(t18892, t18893, 805, 16, 805, 40);
+rv t18895 = rt_add(t18894, rt_str_at("{\n", 805, 43, 805, 49), 805, 16, 805, 49);
+rv t18896 = nx_declare_names(805, 52, 805, 72, v_names);
+rv t18897 = rt_add(t18895, t18896, 805, 16, 805, 72);
+rv t18898 = rt_add(t18897, rt_str_at("bool ", 805, 75, 805, 82), 805, 16, 805, 82);
+rv t18899 = rt_add(t18898, v_ok, 805, 16, 805, 87);
+rv t18900 = rt_add(t18899, rt_str_at(" = true;\n", 805, 90, 805, 102), 805, 16, 805, 102);
+rv t18901 = rt_field(v_tested, "code");
+rv t18902 = rt_add(t18900, t18901, 805, 16, 805, 116);
+rv v_code = t18902;
+rv t18903 = rt_add(v_code, rt_str_at("if (", 806, 19, 806, 25), 806, 12, 806, 25);
+rv t18904 = rt_add(t18903, v_ok, 806, 12, 806, 30);
+rv t18905 = rt_add(t18904, rt_str_at(") {\n", 806, 33, 806, 41), 806, 12, 806, 41);
+rv t18906 = rt_field(v_then_block, "code");
+rv t18907 = rt_add(t18905, t18906, 806, 12, 806, 59);
+rv t18908 = rt_add(t18907, rt_str_at("}", 806, 62, 806, 65), 806, 12, 806, 65);
+v_code = t18908;
+rv t18909 = rt_field(v_then_block, "st");
+rv v_current = t18909;
+rv t18910 = rt_field(v_then_block, "returns");
+rv v_returns = t18910;
+rv t18911 = nx_field(809, 21, 809, 47, v_node, rt_str_at("else_branch", 809, 33, 809, 46));
+rv v_otherwise = t18911;
+rv t18912 = nx_is_null(810, 12, 810, 30, v_otherwise);
+rv t18913 = rt_bool(!rt_truth(t18912));
+if (rt_truth(t18913)) {
+rv t18914 = nx_gen_branch(811, 21, 811, 63, v_current, v_scope, v_env, v_otherwise);
+rv v_other = t18914;
+rv t18915 = rt_add(v_code, rt_str_at(" else {\n", 812, 23, 812, 35), 812, 16, 812, 35);
+rv t18916 = rt_field(v_other, "code");
+rv t18917 = rt_add(t18915, t18916, 812, 16, 812, 48);
+rv t18918 = rt_add(t18917, rt_str_at("}", 812, 51, 812, 54), 812, 16, 812, 54);
+v_code = t18918;
+rv t18919 = rt_field(v_other, "st");
+v_current = t18919;
+rv t18920 = v_returns;
+if (rt_truth(t18920)) {
+rv t18921 = rt_field(v_other, "returns");
+t18920 = t18921;
 }
-v_returns = t18906;
+v_returns = t18920;
 } else {
 v_returns = rt_bool(false);
 }
-rv t18908 = rt_add(v_code, rt_str_at("\n}\n", 818, 31, 818, 38), 818, 24, 818, 38);
-rv t18909 = rt_record_new("Block", rec_Block, 3, (rv[]){t18908, v_current, v_returns});
-rv r18910 = t18909;
+rv t18922 = rt_add(v_code, rt_str_at("\n}\n", 818, 31, 818, 38), 818, 24, 818, 38);
+rv t18923 = rt_record_new("Block", rec_Block, 3, (rv[]){t18922, v_current, v_returns});
+rv r18924 = t18923;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18910;
+return r18924;
 }
 
 static rv nx_clause_of(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_node, rv v_clause) {
 int rt_saved = rt_enter("clause_of", 10, s_l, s_c, s_el, s_ec);
-rv t18911 = nx_field(822, 26, 822, 48, v_node, rt_str_at("clauses", 822, 38, 822, 47));
-rv t18912 = nx_items_of(822, 17, 822, 49, t18911);
+rv t18925 = nx_field(822, 26, 822, 48, v_node, rt_str_at("clauses", 822, 38, 822, 47));
+rv t18926 = nx_items_of(822, 17, 822, 49, t18925);
 {
-rv it18913 = t18912;
-int64_t n18913 = rt_list_len(it18913);
+rv it18927 = t18926;
+int64_t n18927 = rt_list_len(it18927);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 822, turn);
 rt_pop();
-if (turn >= n18913) break;
-rv v_item = rt_list_at(it18913, turn);
+if (turn >= n18927) break;
+rv v_item = rt_list_at(it18927, turn);
 rt_push_loop(RT_BODY, 822, turn + 1);
-rv t18914 = nx_field(823, 20, 823, 41, v_item, rt_str_at("clause", 823, 32, 823, 40));
-rv t18915 = nx_text_of(823, 12, 823, 42, t18914);
-rv t18916 = rt_bool(rt_eq(t18915, v_clause));
-if (rt_truth(t18916)) {
-rv r18917 = v_item;
+rv t18928 = nx_field(823, 20, 823, 41, v_item, rt_str_at("clause", 823, 32, 823, 40));
+rv t18929 = nx_text_of(823, 12, 823, 42, t18928);
+rv t18930 = rt_bool(rt_eq(t18929, v_clause));
+if (rt_truth(t18930)) {
+rv r18931 = v_item;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18917;
+return r18931;
 }
 rt_pop();
 turn++;
 }
 }
-rv t18918 = rt_variant_new("parser.Node", "Null", 0, 0);
-rv r18919 = t18918;
+rv t18932 = rt_variant_new("parser.Node", "Null", 0, 0);
+rv r18933 = t18932;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18919;
+return r18933;
 }
 
 static rv nx_keeps_code(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_env, rv v_node, rv v_line) {
 int rt_saved = rt_enter("keeps_code", 10, s_l, s_c, s_el, s_ec);
 rv v_code = rt_str_at("", 833, 16, 833, 18);
 rv v_current = v_st;
-rv t18920 = nx_field(835, 26, 835, 48, v_node, rt_str_at("clauses", 835, 38, 835, 47));
-rv t18921 = nx_items_of(835, 17, 835, 49, t18920);
+rv t18934 = nx_field(835, 26, 835, 48, v_node, rt_str_at("clauses", 835, 38, 835, 47));
+rv t18935 = nx_items_of(835, 17, 835, 49, t18934);
 {
-rv it18922 = t18921;
-int64_t n18922 = rt_list_len(it18922);
+rv it18936 = t18935;
+int64_t n18936 = rt_list_len(it18936);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 835, turn);
 rt_pop();
-if (turn >= n18922) break;
-rv v_item = rt_list_at(it18922, turn);
+if (turn >= n18936) break;
+rv v_item = rt_list_at(it18936, turn);
 rt_push_loop(RT_BODY, 835, turn + 1);
-rv t18923 = nx_field(836, 20, 836, 41, v_item, rt_str_at("clause", 836, 32, 836, 40));
-rv t18924 = nx_text_of(836, 12, 836, 42, t18923);
-rv t18925 = rt_bool(rt_eq(t18924, rt_str_at("keeps", 836, 46, 836, 53)));
-if (rt_truth(t18925)) {
-rv t18926 = nx_field(837, 47, 837, 71, v_item, rt_str_at("condition", 837, 59, 837, 70));
-rv t18927 = nx_gen_expr(837, 29, 837, 72, v_current, t18926);
-rv v_condition = t18927;
-rv t18928 = rt_field(v_condition, "st");
-v_current = t18928;
-rv t18929 = nx_place_of(839, 22, 839, 36, v_item);
-rv v_at = t18929;
+rv t18937 = nx_field(836, 20, 836, 41, v_item, rt_str_at("clause", 836, 32, 836, 40));
+rv t18938 = nx_text_of(836, 12, 836, 42, t18937);
+rv t18939 = rt_bool(rt_eq(t18938, rt_str_at("keeps", 836, 46, 836, 53)));
+if (rt_truth(t18939)) {
+rv t18940 = nx_field(837, 47, 837, 71, v_item, rt_str_at("condition", 837, 59, 837, 70));
+rv t18941 = nx_gen_expr(837, 29, 837, 72, v_current, t18940);
+rv v_condition = t18941;
+rv t18942 = rt_field(v_condition, "st");
+v_current = t18942;
+rv t18943 = nx_place_of(839, 22, 839, 36, v_item);
+rv v_at = t18943;
 rv v_reason = rt_str_at("", 840, 26, 840, 28);
-rv t18930 = nx_field(841, 28, 841, 50, v_item, rt_str_at("message", 841, 40, 841, 49));
-rv t18931 = nx_is_null(841, 20, 841, 51, t18930);
-rv t18932 = rt_bool(!rt_truth(t18931));
-if (rt_truth(t18932)) {
-rv t18933 = nx_field(842, 88, 842, 110, v_item, rt_str_at("message", 842, 100, 842, 109));
-rv t18934 = nx_text_of(842, 80, 842, 111, t18933);
-rv t18935 = nx_c_string(842, 71, 842, 112, t18934);
-rv t18936 = rt_add(rt_str_at("rt_note(&own, rt_format(\"Reason: %s\", ", 842, 26, 842, 68), t18935, 842, 26, 842, 112);
-rv t18937 = rt_add(t18936, rt_str_at("));\n", 842, 115, 842, 122), 842, 26, 842, 122);
-v_reason = t18937;
+rv t18944 = nx_field(841, 28, 841, 50, v_item, rt_str_at("message", 841, 40, 841, 49));
+rv t18945 = nx_is_null(841, 20, 841, 51, t18944);
+rv t18946 = rt_bool(!rt_truth(t18945));
+if (rt_truth(t18946)) {
+rv t18947 = nx_field(842, 88, 842, 110, v_item, rt_str_at("message", 842, 100, 842, 109));
+rv t18948 = nx_text_of(842, 80, 842, 111, t18947);
+rv t18949 = nx_c_string(842, 71, 842, 112, t18948);
+rv t18950 = rt_add(rt_str_at("rt_note(&own, rt_format(\"Reason: %s\", ", 842, 26, 842, 68), t18949, 842, 26, 842, 112);
+rv t18951 = rt_add(t18950, rt_str_at("));\n", 842, 115, 842, 122), 842, 26, 842, 122);
+v_reason = t18951;
 }
-rv t18938 = rt_add(v_code, rt_str_at("{\n", 844, 27, 844, 33), 844, 20, 844, 33);
-rv t18939 = rt_field(v_condition, "code");
-rv t18940 = rt_add(t18938, t18939, 844, 20, 844, 50);
-rv t18941 = rt_add(t18940, rt_str_at("if (!rt_truth(", 844, 53, 844, 69), 844, 20, 844, 69);
-rv t18942 = rt_field(v_condition, "value");
-rv t18943 = rt_add(t18941, t18942, 844, 20, 844, 87);
-rv t18944 = rt_add(t18943, rt_str_at(")) {\nrt_pop();\nrt_notes own = {{0}, 0};\n", 844, 90, 844, 138), 844, 20, 844, 138);
-v_code = t18944;
-rv t18945 = rt_add(v_code, rt_str_at("rt_note(&own, rt_format(\"The condition at line %d is false: %s\", ", 845, 27, 845, 96), 845, 20, 845, 96);
-rv t18946 = rt_field(v_at, "line");
-rv t18947 = rt_to_text(t18946, 845, 99, 845, 115);
-rv t18948 = rt_add(t18945, t18947, 845, 20, 845, 115);
-rv t18949 = rt_add(t18948, rt_str_at(", ", 845, 118, 845, 122), 845, 20, 845, 122);
-v_code = t18949;
-rv t18950 = nx_contract_source(846, 36, 846, 57, v_item);
-rv t18951 = nx_c_string(846, 27, 846, 58, t18950);
-rv t18952 = rt_add(v_code, t18951, 846, 20, 846, 58);
-rv t18953 = rt_add(t18952, rt_str_at("));\n", 846, 61, 846, 68), 846, 20, 846, 68);
-rv t18954 = rt_add(t18953, v_reason, 846, 20, 846, 77);
-v_code = t18954;
-rv t18955 = rt_add(v_code, rt_str_at("if (turn == 0) rt_note(&own, rt_format(\"Before the first turn of the loop at line ", 847, 27, 847, 112), 847, 20, 847, 112);
-rv t18956 = rt_add(t18955, v_line, 847, 20, 847, 119);
-rv t18957 = rt_add(t18956, rt_str_at(".\"));\n", 847, 122, 847, 132), 847, 20, 847, 132);
-v_code = t18957;
-rv t18958 = rt_add(v_code, rt_str_at("else rt_note(&own, rt_format(\"After turn %lld of the loop at line ", 848, 27, 848, 96), 848, 20, 848, 96);
-rv t18959 = rt_add(t18958, v_line, 848, 20, 848, 103);
-rv t18960 = rt_add(t18959, rt_str_at(".\", (long long)turn));\n", 848, 106, 848, 133), 848, 20, 848, 133);
-v_code = t18960;
-rv t18961 = rt_add(v_code, rt_str_at("rt_buf b = {0, 0, 0, 0};\n", 849, 27, 849, 56), 849, 20, 849, 56);
-rv t18962 = nx_values_code(849, 59, 849, 75, v_env);
-rv t18963 = rt_add(t18961, t18962, 849, 20, 849, 75);
-rv t18964 = rt_add(t18963, rt_str_at("rt_buf_note(&own, \"The values: \", &b);\n", 849, 78, 849, 122), 849, 20, 849, 122);
-v_code = t18964;
-rv t18965 = rt_add(v_code, rt_str_at("rt_fail(\"contract\", \"E4005\", \"Loop invariant violated\", \"This condition is false\", \"\", &own, 0, ", 850, 27, 850, 135), 850, 20, 850, 135);
-v_code = t18965;
-rv t18966 = nx_field(851, 37, 851, 61, v_item, rt_str_at("condition", 851, 49, 851, 60));
-rv t18967 = nx_node_span(851, 27, 851, 62, t18966);
-rv t18968 = rt_add(v_code, t18967, 851, 20, 851, 62);
-rv t18969 = rt_add(t18968, rt_str_at(");\n}\n}\n", 851, 65, 851, 77), 851, 20, 851, 77);
-v_code = t18969;
+rv t18952 = rt_add(v_code, rt_str_at("{\n", 844, 27, 844, 33), 844, 20, 844, 33);
+rv t18953 = rt_field(v_condition, "code");
+rv t18954 = rt_add(t18952, t18953, 844, 20, 844, 50);
+rv t18955 = rt_add(t18954, rt_str_at("if (!rt_truth(", 844, 53, 844, 69), 844, 20, 844, 69);
+rv t18956 = rt_field(v_condition, "value");
+rv t18957 = rt_add(t18955, t18956, 844, 20, 844, 87);
+rv t18958 = rt_add(t18957, rt_str_at(")) {\nrt_pop();\nrt_notes own = {{0}, 0};\n", 844, 90, 844, 138), 844, 20, 844, 138);
+v_code = t18958;
+rv t18959 = rt_add(v_code, rt_str_at("rt_note(&own, rt_format(\"The condition at line %d is false: %s\", ", 845, 27, 845, 96), 845, 20, 845, 96);
+rv t18960 = rt_field(v_at, "line");
+rv t18961 = rt_to_text(t18960, 845, 99, 845, 115);
+rv t18962 = rt_add(t18959, t18961, 845, 20, 845, 115);
+rv t18963 = rt_add(t18962, rt_str_at(", ", 845, 118, 845, 122), 845, 20, 845, 122);
+v_code = t18963;
+rv t18964 = nx_contract_source(846, 36, 846, 57, v_item);
+rv t18965 = nx_c_string(846, 27, 846, 58, t18964);
+rv t18966 = rt_add(v_code, t18965, 846, 20, 846, 58);
+rv t18967 = rt_add(t18966, rt_str_at("));\n", 846, 61, 846, 68), 846, 20, 846, 68);
+rv t18968 = rt_add(t18967, v_reason, 846, 20, 846, 77);
+v_code = t18968;
+rv t18969 = rt_add(v_code, rt_str_at("if (turn == 0) rt_note(&own, rt_format(\"Before the first turn of the loop at line ", 847, 27, 847, 112), 847, 20, 847, 112);
+rv t18970 = rt_add(t18969, v_line, 847, 20, 847, 119);
+rv t18971 = rt_add(t18970, rt_str_at(".\"));\n", 847, 122, 847, 132), 847, 20, 847, 132);
+v_code = t18971;
+rv t18972 = rt_add(v_code, rt_str_at("else rt_note(&own, rt_format(\"After turn %lld of the loop at line ", 848, 27, 848, 96), 848, 20, 848, 96);
+rv t18973 = rt_add(t18972, v_line, 848, 20, 848, 103);
+rv t18974 = rt_add(t18973, rt_str_at(".\", (long long)turn));\n", 848, 106, 848, 133), 848, 20, 848, 133);
+v_code = t18974;
+rv t18975 = rt_add(v_code, rt_str_at("rt_buf b = {0, 0, 0, 0};\n", 849, 27, 849, 56), 849, 20, 849, 56);
+rv t18976 = nx_values_code(849, 59, 849, 75, v_env);
+rv t18977 = rt_add(t18975, t18976, 849, 20, 849, 75);
+rv t18978 = rt_add(t18977, rt_str_at("rt_buf_note(&own, \"The values: \", &b);\n", 849, 78, 849, 122), 849, 20, 849, 122);
+v_code = t18978;
+rv t18979 = rt_add(v_code, rt_str_at("rt_fail(\"contract\", \"E4005\", \"Loop invariant violated\", \"This condition is false\", \"\", &own, 0, ", 850, 27, 850, 135), 850, 20, 850, 135);
+v_code = t18979;
+rv t18980 = nx_field(851, 37, 851, 61, v_item, rt_str_at("condition", 851, 49, 851, 60));
+rv t18981 = nx_node_span(851, 27, 851, 62, t18980);
+rv t18982 = rt_add(v_code, t18981, 851, 20, 851, 62);
+rv t18983 = rt_add(t18982, rt_str_at(");\n}\n}\n", 851, 65, 851, 77), 851, 20, 851, 77);
+v_code = t18983;
 }
 rt_pop();
 turn++;
 }
 }
-rv t18970 = nx_part(854, 12, 854, 35, v_code, rt_str_at("", 854, 23, 854, 25), v_current);
-rv r18971 = t18970;
+rv t18984 = nx_part(854, 12, 854, 35, v_code, rt_str_at("", 854, 23, 854, 25), v_current);
+rv r18985 = t18984;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r18971;
+return r18985;
 }
 
 static rv nx_gen_for(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_scope, rv v_env, rv v_node) {
 int rt_saved = rt_enter("gen_for", 10, s_l, s_c, s_el, s_ec);
-rv t18972 = nx_place_of(858, 19, 858, 33, v_node);
-rv v_loop_at = t18972;
-rv t18973 = rt_field(v_loop_at, "line");
-rv t18974 = rt_to_text(t18973, 859, 16, 859, 37);
-rv v_line = t18974;
-rv t18975 = nx_field(860, 24, 860, 43, v_node, rt_str_at("name", 860, 36, 860, 42));
-rv t18976 = nx_text_of(860, 16, 860, 44, t18975);
-rv v_name = t18976;
-rv t18977 = nx_field(861, 33, 861, 56, v_node, rt_str_at("iterable", 861, 45, 861, 55));
-rv t18978 = nx_gen_expr(861, 20, 861, 57, v_st, t18977);
-rv v_iterable = t18978;
+rv t18986 = nx_place_of(858, 19, 858, 33, v_node);
+rv v_loop_at = t18986;
+rv t18987 = rt_field(v_loop_at, "line");
+rv t18988 = rt_to_text(t18987, 859, 16, 859, 37);
+rv v_line = t18988;
+rv t18989 = nx_field(860, 24, 860, 43, v_node, rt_str_at("name", 860, 36, 860, 42));
+rv t18990 = nx_text_of(860, 16, 860, 44, t18989);
+rv v_name = t18990;
+rv t18991 = nx_field(861, 33, 861, 56, v_node, rt_str_at("iterable", 861, 45, 861, 55));
+rv t18992 = nx_gen_expr(861, 20, 861, 57, v_st, t18991);
+rv v_iterable = t18992;
 rv v_inner = v_env;
-rv t18979 = rt_record_new("Var", rec_Var, 1, (rv[]){v_name});
-rv t18980 = rt_list_append(v_inner, t18979);
-v_inner = t18980;
-rv t18981 = rt_field(v_iterable, "st");
-rv t18982 = nx_fresh(864, 27, 864, 45, t18981);
-rv t18983 = nx_keeps_code(864, 16, 864, 63, t18982, v_env, v_node, v_line);
-rv v_kept = t18983;
-rv t18984 = rt_field(v_kept, "st");
-rv t18985 = nx_field(865, 49, 865, 68, v_node, rt_str_at("body", 865, 61, 865, 67));
-rv t18986 = nx_gen_block(865, 16, 865, 69, t18984, v_scope, v_inner, t18985);
-rv v_body = t18986;
-rv t18987 = rt_field(v_iterable, "st");
-rv t18988 = rt_field(t18987, "next");
-rv t18989 = rt_to_text(t18988, 866, 14, 866, 39);
-rv v_id = t18989;
-rv t18990 = rt_field(v_iterable, "code");
-rv t18991 = rt_add(t18990, rt_str_at("{\nrv it", 868, 25, 868, 36), 868, 9, 868, 36);
-rv t18992 = rt_add(t18991, v_id, 868, 9, 868, 41);
-rv t18993 = rt_add(t18992, rt_str_at(" = ", 868, 44, 868, 49), 868, 9, 868, 49);
-rv t18994 = rt_field(v_iterable, "value");
-rv t18995 = rt_add(t18993, t18994, 868, 9, 868, 66);
-rv t18996 = rt_add(t18995, rt_str_at(";\nint64_t n", 868, 69, 868, 83), 868, 9, 868, 83);
-rv t18997 = rt_add(t18996, v_id, 868, 9, 868, 88);
-rv t18998 = rt_add(t18997, rt_str_at(" = rt_list_len(it", 868, 91, 868, 110), 868, 9, 868, 110);
-rv t18999 = rt_add(t18998, v_id, 868, 9, 868, 115);
-rv t19000 = rt_add(t18999, rt_str_at(");\n", 868, 118, 868, 124), 868, 9, 868, 124);
-rv t19001 = rt_add(t19000, rt_str_at("int64_t turn = 0;\nfor (;;) {\n", 869, 11, 869, 45), 868, 9, 869, 45);
-rv t19002 = rt_add(t19001, rt_str_at("rt_push_loop(RT_COND, ", 869, 48, 869, 72), 868, 9, 869, 72);
-rv t19003 = rt_add(t19002, v_line, 868, 9, 869, 79);
-rv t19004 = rt_add(t19003, rt_str_at(", turn);\n", 869, 82, 869, 94), 868, 9, 869, 94);
-rv t19005 = rt_field(v_kept, "code");
-rv t19006 = rt_add(t19004, t19005, 868, 9, 869, 106);
-rv t19007 = rt_add(t19006, rt_str_at("rt_pop();\n", 869, 109, 869, 122), 868, 9, 869, 122);
-rv t19008 = rt_add(t19007, rt_str_at("if (turn >= n", 870, 11, 870, 26), 868, 9, 870, 26);
-rv t19009 = rt_add(t19008, v_id, 868, 9, 870, 31);
-rv t19010 = rt_add(t19009, rt_str_at(") break;\nrv v_", 870, 34, 870, 51), 868, 9, 870, 51);
-rv t19011 = rt_add(t19010, v_name, 868, 9, 870, 58);
-rv t19012 = rt_add(t19011, rt_str_at(" = rt_list_at(it", 870, 61, 870, 79), 868, 9, 870, 79);
-rv t19013 = rt_add(t19012, v_id, 868, 9, 870, 84);
-rv t19014 = rt_add(t19013, rt_str_at(", turn);\n", 870, 87, 870, 99), 868, 9, 870, 99);
-rv t19015 = rt_add(t19014, rt_str_at("rt_push_loop(RT_BODY, ", 871, 11, 871, 35), 868, 9, 871, 35);
-rv t19016 = rt_add(t19015, v_line, 868, 9, 871, 42);
-rv t19017 = rt_add(t19016, rt_str_at(", turn + 1);\n", 871, 45, 871, 61), 868, 9, 871, 61);
-rv t19018 = rt_field(v_body, "code");
-rv t19019 = rt_add(t19017, t19018, 868, 9, 871, 73);
-rv t19020 = rt_add(t19019, rt_str_at("rt_pop();\nturn++;\n}\n}\n", 871, 76, 871, 104), 868, 9, 871, 104);
-rv v_code = t19020;
-rv t19021 = rt_field(v_body, "st");
-rv t19022 = rt_record_new("Block", rec_Block, 3, (rv[]){v_code, t19021, rt_bool(false)});
-rv r19023 = t19022;
+rv t18993 = rt_record_new("Var", rec_Var, 1, (rv[]){v_name});
+rv t18994 = rt_list_append(v_inner, t18993);
+v_inner = t18994;
+rv t18995 = rt_field(v_iterable, "st");
+rv t18996 = nx_fresh(864, 27, 864, 45, t18995);
+rv t18997 = nx_keeps_code(864, 16, 864, 63, t18996, v_env, v_node, v_line);
+rv v_kept = t18997;
+rv t18998 = rt_field(v_kept, "st");
+rv t18999 = nx_field(865, 49, 865, 68, v_node, rt_str_at("body", 865, 61, 865, 67));
+rv t19000 = nx_gen_block(865, 16, 865, 69, t18998, v_scope, v_inner, t18999);
+rv v_body = t19000;
+rv t19001 = rt_field(v_iterable, "st");
+rv t19002 = rt_field(t19001, "next");
+rv t19003 = rt_to_text(t19002, 866, 14, 866, 39);
+rv v_id = t19003;
+rv t19004 = rt_field(v_iterable, "code");
+rv t19005 = rt_add(t19004, rt_str_at("{\nrv it", 868, 25, 868, 36), 868, 9, 868, 36);
+rv t19006 = rt_add(t19005, v_id, 868, 9, 868, 41);
+rv t19007 = rt_add(t19006, rt_str_at(" = ", 868, 44, 868, 49), 868, 9, 868, 49);
+rv t19008 = rt_field(v_iterable, "value");
+rv t19009 = rt_add(t19007, t19008, 868, 9, 868, 66);
+rv t19010 = rt_add(t19009, rt_str_at(";\nint64_t n", 868, 69, 868, 83), 868, 9, 868, 83);
+rv t19011 = rt_add(t19010, v_id, 868, 9, 868, 88);
+rv t19012 = rt_add(t19011, rt_str_at(" = rt_list_len(it", 868, 91, 868, 110), 868, 9, 868, 110);
+rv t19013 = rt_add(t19012, v_id, 868, 9, 868, 115);
+rv t19014 = rt_add(t19013, rt_str_at(");\n", 868, 118, 868, 124), 868, 9, 868, 124);
+rv t19015 = rt_add(t19014, rt_str_at("int64_t turn = 0;\nfor (;;) {\n", 869, 11, 869, 45), 868, 9, 869, 45);
+rv t19016 = rt_add(t19015, rt_str_at("rt_push_loop(RT_COND, ", 869, 48, 869, 72), 868, 9, 869, 72);
+rv t19017 = rt_add(t19016, v_line, 868, 9, 869, 79);
+rv t19018 = rt_add(t19017, rt_str_at(", turn);\n", 869, 82, 869, 94), 868, 9, 869, 94);
+rv t19019 = rt_field(v_kept, "code");
+rv t19020 = rt_add(t19018, t19019, 868, 9, 869, 106);
+rv t19021 = rt_add(t19020, rt_str_at("rt_pop();\n", 869, 109, 869, 122), 868, 9, 869, 122);
+rv t19022 = rt_add(t19021, rt_str_at("if (turn >= n", 870, 11, 870, 26), 868, 9, 870, 26);
+rv t19023 = rt_add(t19022, v_id, 868, 9, 870, 31);
+rv t19024 = rt_add(t19023, rt_str_at(") break;\nrv v_", 870, 34, 870, 51), 868, 9, 870, 51);
+rv t19025 = rt_add(t19024, v_name, 868, 9, 870, 58);
+rv t19026 = rt_add(t19025, rt_str_at(" = rt_list_at(it", 870, 61, 870, 79), 868, 9, 870, 79);
+rv t19027 = rt_add(t19026, v_id, 868, 9, 870, 84);
+rv t19028 = rt_add(t19027, rt_str_at(", turn);\n", 870, 87, 870, 99), 868, 9, 870, 99);
+rv t19029 = rt_add(t19028, rt_str_at("rt_push_loop(RT_BODY, ", 871, 11, 871, 35), 868, 9, 871, 35);
+rv t19030 = rt_add(t19029, v_line, 868, 9, 871, 42);
+rv t19031 = rt_add(t19030, rt_str_at(", turn + 1);\n", 871, 45, 871, 61), 868, 9, 871, 61);
+rv t19032 = rt_field(v_body, "code");
+rv t19033 = rt_add(t19031, t19032, 868, 9, 871, 73);
+rv t19034 = rt_add(t19033, rt_str_at("rt_pop();\nturn++;\n}\n}\n", 871, 76, 871, 104), 868, 9, 871, 104);
+rv v_code = t19034;
+rv t19035 = rt_field(v_body, "st");
+rv t19036 = rt_record_new("Block", rec_Block, 3, (rv[]){v_code, t19035, rt_bool(false)});
+rv r19037 = t19036;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19023;
+return r19037;
 }
 
 static rv nx_gen_while(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_scope, rv v_env, rv v_node) {
 int rt_saved = rt_enter("gen_while", 10, s_l, s_c, s_el, s_ec);
-rv t19024 = nx_place_of(877, 19, 877, 33, v_node);
-rv v_loop_at = t19024;
-rv t19025 = rt_field(v_loop_at, "line");
-rv t19026 = rt_to_text(t19025, 878, 16, 878, 37);
-rv v_line = t19026;
-rv t19027 = nx_clause_of(879, 19, 879, 45, v_node, rt_str_at("shrinks", 879, 35, 879, 44));
-rv v_measure = t19027;
-rv t19028 = nx_field(880, 33, 880, 60, v_measure, rt_str_at("condition", 880, 48, 880, 59));
-rv t19029 = nx_gen_expr(880, 20, 880, 61, v_st, t19028);
-rv v_measured = t19029;
-rv t19030 = rt_field(v_measured, "st");
-rv t19031 = nx_keeps_code(881, 16, 881, 56, t19030, v_env, v_node, v_line);
-rv v_kept = t19031;
-rv t19032 = rt_field(v_kept, "st");
-rv t19033 = nx_field(882, 39, 882, 63, v_node, rt_str_at("condition", 882, 51, 882, 62));
-rv t19034 = nx_gen_expr(882, 21, 882, 64, t19032, t19033);
-rv v_condition = t19034;
-rv t19035 = rt_field(v_condition, "st");
-rv t19036 = nx_field(883, 52, 883, 71, v_node, rt_str_at("body", 883, 64, 883, 70));
-rv t19037 = nx_gen_block(883, 16, 883, 72, t19035, v_scope, v_env, t19036);
-rv v_body = t19037;
-rv t19038 = nx_place_of(884, 24, 884, 41, v_measure);
-rv v_measure_span = t19038;
-rv t19039 = nx_field(885, 54, 885, 81, v_measure, rt_str_at("condition", 885, 69, 885, 80));
-rv t19040 = nx_checker__unparse(885, 38, 885, 82, t19039);
-rv t19041 = rt_add(rt_str_at("shrinks ", 885, 25, 885, 35), t19040, 885, 25, 885, 82);
-rv v_shown_measure = t19041;
+rv t19038 = nx_place_of(877, 19, 877, 33, v_node);
+rv v_loop_at = t19038;
+rv t19039 = rt_field(v_loop_at, "line");
+rv t19040 = rt_to_text(t19039, 878, 16, 878, 37);
+rv v_line = t19040;
+rv t19041 = nx_clause_of(879, 19, 879, 45, v_node, rt_str_at("shrinks", 879, 35, 879, 44));
+rv v_measure = t19041;
+rv t19042 = nx_field(880, 33, 880, 60, v_measure, rt_str_at("condition", 880, 48, 880, 59));
+rv t19043 = nx_gen_expr(880, 20, 880, 61, v_st, t19042);
+rv v_measured = t19043;
+rv t19044 = rt_field(v_measured, "st");
+rv t19045 = nx_keeps_code(881, 16, 881, 56, t19044, v_env, v_node, v_line);
+rv v_kept = t19045;
+rv t19046 = rt_field(v_kept, "st");
+rv t19047 = nx_field(882, 39, 882, 63, v_node, rt_str_at("condition", 882, 51, 882, 62));
+rv t19048 = nx_gen_expr(882, 21, 882, 64, t19046, t19047);
+rv v_condition = t19048;
+rv t19049 = rt_field(v_condition, "st");
+rv t19050 = nx_field(883, 52, 883, 71, v_node, rt_str_at("body", 883, 64, 883, 70));
+rv t19051 = nx_gen_block(883, 16, 883, 72, t19049, v_scope, v_env, t19050);
+rv v_body = t19051;
+rv t19052 = nx_place_of(884, 24, 884, 41, v_measure);
+rv v_measure_span = t19052;
+rv t19053 = nx_field(885, 54, 885, 81, v_measure, rt_str_at("condition", 885, 69, 885, 80));
+rv t19054 = nx_checker__unparse(885, 38, 885, 82, t19053);
+rv t19055 = rt_add(rt_str_at("shrinks ", 885, 25, 885, 35), t19054, 885, 25, 885, 82);
+rv v_shown_measure = t19055;
 rv v_reason = rt_str_at("", 886, 18, 886, 20);
-rv t19042 = nx_field(887, 20, 887, 45, v_measure, rt_str_at("message", 887, 35, 887, 44));
-rv t19043 = nx_is_null(887, 12, 887, 46, t19042);
-rv t19044 = rt_bool(!rt_truth(t19043));
-if (rt_truth(t19044)) {
-rv t19045 = nx_field(888, 80, 888, 105, v_measure, rt_str_at("message", 888, 95, 888, 104));
-rv t19046 = nx_text_of(888, 72, 888, 106, t19045);
-rv t19047 = nx_c_string(888, 63, 888, 107, t19046);
-rv t19048 = rt_add(rt_str_at("rt_note(&own, rt_format(\"Reason: %s\", ", 888, 18, 888, 60), t19047, 888, 18, 888, 107);
-rv t19049 = rt_add(t19048, rt_str_at("));\n", 888, 110, 888, 117), 888, 18, 888, 117);
-v_reason = t19049;
+rv t19056 = nx_field(887, 20, 887, 45, v_measure, rt_str_at("message", 887, 35, 887, 44));
+rv t19057 = nx_is_null(887, 12, 887, 46, t19056);
+rv t19058 = rt_bool(!rt_truth(t19057));
+if (rt_truth(t19058)) {
+rv t19059 = nx_field(888, 80, 888, 105, v_measure, rt_str_at("message", 888, 95, 888, 104));
+rv t19060 = nx_text_of(888, 72, 888, 106, t19059);
+rv t19061 = nx_c_string(888, 63, 888, 107, t19060);
+rv t19062 = rt_add(rt_str_at("rt_note(&own, rt_format(\"Reason: %s\", ", 888, 18, 888, 60), t19061, 888, 18, 888, 107);
+rv t19063 = rt_add(t19062, rt_str_at("));\n", 888, 110, 888, 117), 888, 18, 888, 117);
+v_reason = t19063;
 }
-rv t19050 = rt_add(rt_str_at("if ((turn_has_before && m >= before) || m < 0) {\n", 891, 9, 891, 62), rt_str_at("rt_notes own = {{0}, 0};\n", 892, 11, 892, 41), 891, 9, 892, 41);
-rv t19051 = rt_add(t19050, rt_str_at("rt_note(&own, rt_format(\"The measure at line %d: %s\", ", 893, 11, 893, 69), 891, 9, 893, 69);
-rv t19052 = rt_field(v_measure_span, "line");
-rv t19053 = rt_to_text(t19052, 893, 72, 893, 98);
-rv t19054 = rt_add(t19051, t19053, 891, 9, 893, 98);
-rv t19055 = rt_add(t19054, rt_str_at(", ", 893, 101, 893, 105), 891, 9, 893, 105);
-rv t19056 = nx_c_string(893, 108, 893, 131, v_shown_measure);
-rv t19057 = rt_add(t19055, t19056, 891, 9, 893, 131);
-rv t19058 = rt_add(t19057, rt_str_at("));\n", 893, 134, 893, 141), 891, 9, 893, 141);
-rv t19059 = rt_add(t19058, v_reason, 891, 9, 894, 17);
-rv t19060 = rt_add(t19059, rt_str_at("rt_note(&own, rt_format(\"Before turn %lld of the loop at line ", 895, 11, 895, 76), 891, 9, 895, 76);
-rv t19061 = rt_add(t19060, v_line, 891, 9, 895, 83);
-rv t19062 = rt_add(t19061, rt_str_at(".\", (long long)turn));\n", 895, 86, 895, 113), 891, 9, 895, 113);
-rv t19063 = rt_add(t19062, rt_str_at("rt_buf b = {0, 0, 0, 0};\n", 896, 11, 896, 40), 891, 9, 896, 40);
-rv t19064 = nx_values_code(896, 43, 896, 59, v_env);
-rv t19065 = rt_add(t19063, t19064, 891, 9, 896, 59);
-rv t19066 = rt_add(t19065, rt_str_at("rt_buf_note(&own, \"The values: \", &b);\n", 896, 62, 896, 106), 891, 9, 896, 106);
-rv t19067 = rt_add(t19066, rt_str_at("char *label = m < 0 \? rt_format(\"The measure is %lld; it must be 0 or more\", (long long)m)\n", 897, 11, 897, 107), 891, 9, 897, 107);
-rv t19068 = rt_add(t19067, rt_str_at("    : (m == before \? rt_format(\"The measure was %lld and is still %lld\", (long long)before, (long long)m)\n", 898, 11, 898, 122), 891, 9, 898, 122);
-rv t19069 = rt_add(t19068, rt_str_at("    : rt_format(\"The measure was %lld and is now %lld\", (long long)before, (long long)m));\n", 899, 11, 899, 107), 891, 9, 899, 107);
-rv t19070 = rt_add(t19069, rt_str_at("rt_fail(\"contract\", \"E4006\", \"Loop measure did not decrease\", label, \"\", &own, 0, ", 900, 11, 900, 103), 891, 9, 900, 103);
-rv t19071 = nx_field(901, 21, 901, 48, v_measure, rt_str_at("condition", 901, 36, 901, 47));
-rv t19072 = nx_node_span(901, 11, 901, 49, t19071);
-rv t19073 = rt_add(t19070, t19072, 891, 9, 901, 49);
-rv t19074 = rt_add(t19073, rt_str_at(");\n}\n", 901, 52, 901, 61), 891, 9, 901, 61);
-rv v_broken = t19074;
-rv t19075 = rt_add(rt_str_at("{\nint64_t turn = 0;\nbool turn_has_before = false;\nint64_t before = 0;\nfor (;;) {\n", 904, 9, 904, 99), rt_str_at("rt_push_loop(RT_COND, ", 905, 11, 905, 35), 904, 9, 905, 35);
-rv t19076 = rt_add(t19075, v_line, 904, 9, 905, 42);
-rv t19077 = rt_add(t19076, rt_str_at(", turn);\n", 905, 45, 905, 57), 904, 9, 905, 57);
-rv t19078 = rt_field(v_kept, "code");
-rv t19079 = rt_add(t19077, t19078, 904, 9, 906, 20);
-rv t19080 = rt_field(v_condition, "code");
-rv t19081 = rt_add(t19079, t19080, 904, 9, 906, 37);
-rv t19082 = rt_add(t19081, rt_str_at("bool go = rt_truth(", 906, 40, 906, 61), 904, 9, 906, 61);
-rv t19083 = rt_field(v_condition, "value");
-rv t19084 = rt_add(t19082, t19083, 904, 9, 906, 79);
-rv t19085 = rt_add(t19084, rt_str_at(");\nrt_pop();\nif (!go) break;\nturn++;\n", 906, 82, 906, 125), 904, 9, 906, 125);
-rv t19086 = rt_add(t19085, rt_str_at("rt_push_loop(RT_MEASURE, ", 907, 11, 907, 38), 904, 9, 907, 38);
-rv t19087 = rt_add(t19086, v_line, 904, 9, 907, 45);
-rv t19088 = rt_add(t19087, rt_str_at(", turn);\n", 907, 48, 907, 60), 904, 9, 907, 60);
-rv t19089 = rt_field(v_measured, "code");
-rv t19090 = rt_add(t19088, t19089, 904, 9, 908, 24);
-rv t19091 = rt_add(t19090, rt_str_at("int64_t m = ", 908, 27, 908, 41), 904, 9, 908, 41);
-rv t19092 = rt_field(v_measured, "value");
-rv t19093 = rt_add(t19091, t19092, 904, 9, 908, 58);
-rv t19094 = rt_add(t19093, rt_str_at(".u.i;\nrt_pop();\n", 908, 61, 908, 81), 904, 9, 908, 81);
-rv t19095 = rt_add(t19094, v_broken, 904, 9, 909, 17);
-rv t19096 = rt_add(t19095, rt_str_at("turn_has_before = true;\nbefore = m;\n", 910, 11, 910, 51), 904, 9, 910, 51);
-rv t19097 = rt_add(t19096, rt_str_at("rt_push_loop(RT_BODY, ", 911, 11, 911, 35), 904, 9, 911, 35);
-rv t19098 = rt_add(t19097, v_line, 904, 9, 911, 42);
-rv t19099 = rt_add(t19098, rt_str_at(", turn);\n", 911, 45, 911, 57), 904, 9, 911, 57);
-rv t19100 = rt_field(v_body, "code");
-rv t19101 = rt_add(t19099, t19100, 904, 9, 912, 20);
-rv t19102 = rt_add(t19101, rt_str_at("rt_pop();\n}\n}\n", 912, 23, 912, 42), 904, 9, 912, 42);
-rv v_code = t19102;
-rv t19103 = rt_field(v_body, "st");
-rv t19104 = rt_record_new("Block", rec_Block, 3, (rv[]){v_code, t19103, rt_bool(false)});
-rv r19105 = t19104;
+rv t19064 = rt_add(rt_str_at("if ((turn_has_before && m >= before) || m < 0) {\n", 891, 9, 891, 62), rt_str_at("rt_notes own = {{0}, 0};\n", 892, 11, 892, 41), 891, 9, 892, 41);
+rv t19065 = rt_add(t19064, rt_str_at("rt_note(&own, rt_format(\"The measure at line %d: %s\", ", 893, 11, 893, 69), 891, 9, 893, 69);
+rv t19066 = rt_field(v_measure_span, "line");
+rv t19067 = rt_to_text(t19066, 893, 72, 893, 98);
+rv t19068 = rt_add(t19065, t19067, 891, 9, 893, 98);
+rv t19069 = rt_add(t19068, rt_str_at(", ", 893, 101, 893, 105), 891, 9, 893, 105);
+rv t19070 = nx_c_string(893, 108, 893, 131, v_shown_measure);
+rv t19071 = rt_add(t19069, t19070, 891, 9, 893, 131);
+rv t19072 = rt_add(t19071, rt_str_at("));\n", 893, 134, 893, 141), 891, 9, 893, 141);
+rv t19073 = rt_add(t19072, v_reason, 891, 9, 894, 17);
+rv t19074 = rt_add(t19073, rt_str_at("rt_note(&own, rt_format(\"Before turn %lld of the loop at line ", 895, 11, 895, 76), 891, 9, 895, 76);
+rv t19075 = rt_add(t19074, v_line, 891, 9, 895, 83);
+rv t19076 = rt_add(t19075, rt_str_at(".\", (long long)turn));\n", 895, 86, 895, 113), 891, 9, 895, 113);
+rv t19077 = rt_add(t19076, rt_str_at("rt_buf b = {0, 0, 0, 0};\n", 896, 11, 896, 40), 891, 9, 896, 40);
+rv t19078 = nx_values_code(896, 43, 896, 59, v_env);
+rv t19079 = rt_add(t19077, t19078, 891, 9, 896, 59);
+rv t19080 = rt_add(t19079, rt_str_at("rt_buf_note(&own, \"The values: \", &b);\n", 896, 62, 896, 106), 891, 9, 896, 106);
+rv t19081 = rt_add(t19080, rt_str_at("char *label = m < 0 \? rt_format(\"The measure is %lld; it must be 0 or more\", (long long)m)\n", 897, 11, 897, 107), 891, 9, 897, 107);
+rv t19082 = rt_add(t19081, rt_str_at("    : (m == before \? rt_format(\"The measure was %lld and is still %lld\", (long long)before, (long long)m)\n", 898, 11, 898, 122), 891, 9, 898, 122);
+rv t19083 = rt_add(t19082, rt_str_at("    : rt_format(\"The measure was %lld and is now %lld\", (long long)before, (long long)m));\n", 899, 11, 899, 107), 891, 9, 899, 107);
+rv t19084 = rt_add(t19083, rt_str_at("rt_fail(\"contract\", \"E4006\", \"Loop measure did not decrease\", label, \"\", &own, 0, ", 900, 11, 900, 103), 891, 9, 900, 103);
+rv t19085 = nx_field(901, 21, 901, 48, v_measure, rt_str_at("condition", 901, 36, 901, 47));
+rv t19086 = nx_node_span(901, 11, 901, 49, t19085);
+rv t19087 = rt_add(t19084, t19086, 891, 9, 901, 49);
+rv t19088 = rt_add(t19087, rt_str_at(");\n}\n", 901, 52, 901, 61), 891, 9, 901, 61);
+rv v_broken = t19088;
+rv t19089 = rt_add(rt_str_at("{\nint64_t turn = 0;\nbool turn_has_before = false;\nint64_t before = 0;\nfor (;;) {\n", 904, 9, 904, 99), rt_str_at("rt_push_loop(RT_COND, ", 905, 11, 905, 35), 904, 9, 905, 35);
+rv t19090 = rt_add(t19089, v_line, 904, 9, 905, 42);
+rv t19091 = rt_add(t19090, rt_str_at(", turn);\n", 905, 45, 905, 57), 904, 9, 905, 57);
+rv t19092 = rt_field(v_kept, "code");
+rv t19093 = rt_add(t19091, t19092, 904, 9, 906, 20);
+rv t19094 = rt_field(v_condition, "code");
+rv t19095 = rt_add(t19093, t19094, 904, 9, 906, 37);
+rv t19096 = rt_add(t19095, rt_str_at("bool go = rt_truth(", 906, 40, 906, 61), 904, 9, 906, 61);
+rv t19097 = rt_field(v_condition, "value");
+rv t19098 = rt_add(t19096, t19097, 904, 9, 906, 79);
+rv t19099 = rt_add(t19098, rt_str_at(");\nrt_pop();\nif (!go) break;\nturn++;\n", 906, 82, 906, 125), 904, 9, 906, 125);
+rv t19100 = rt_add(t19099, rt_str_at("rt_push_loop(RT_MEASURE, ", 907, 11, 907, 38), 904, 9, 907, 38);
+rv t19101 = rt_add(t19100, v_line, 904, 9, 907, 45);
+rv t19102 = rt_add(t19101, rt_str_at(", turn);\n", 907, 48, 907, 60), 904, 9, 907, 60);
+rv t19103 = rt_field(v_measured, "code");
+rv t19104 = rt_add(t19102, t19103, 904, 9, 908, 24);
+rv t19105 = rt_add(t19104, rt_str_at("int64_t m = ", 908, 27, 908, 41), 904, 9, 908, 41);
+rv t19106 = rt_field(v_measured, "value");
+rv t19107 = rt_add(t19105, t19106, 904, 9, 908, 58);
+rv t19108 = rt_add(t19107, rt_str_at(".u.i;\nrt_pop();\n", 908, 61, 908, 81), 904, 9, 908, 81);
+rv t19109 = rt_add(t19108, v_broken, 904, 9, 909, 17);
+rv t19110 = rt_add(t19109, rt_str_at("turn_has_before = true;\nbefore = m;\n", 910, 11, 910, 51), 904, 9, 910, 51);
+rv t19111 = rt_add(t19110, rt_str_at("rt_push_loop(RT_BODY, ", 911, 11, 911, 35), 904, 9, 911, 35);
+rv t19112 = rt_add(t19111, v_line, 904, 9, 911, 42);
+rv t19113 = rt_add(t19112, rt_str_at(", turn);\n", 911, 45, 911, 57), 904, 9, 911, 57);
+rv t19114 = rt_field(v_body, "code");
+rv t19115 = rt_add(t19113, t19114, 904, 9, 912, 20);
+rv t19116 = rt_add(t19115, rt_str_at("rt_pop();\n}\n}\n", 912, 23, 912, 42), 904, 9, 912, 42);
+rv v_code = t19116;
+rv t19117 = rt_field(v_body, "st");
+rv t19118 = rt_record_new("Block", rec_Block, 3, (rv[]){v_code, t19117, rt_bool(false)});
+rv r19119 = t19118;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19105;
+return r19119;
 }
 
 static rv nx_gen_return(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_scope, rv v_node) {
 int rt_saved = rt_enter("gen_return", 10, s_l, s_c, s_el, s_ec);
-rv t19106 = nx_field(920, 22, 920, 42, v_node, rt_str_at("value", 920, 34, 920, 41));
-rv v_value_node = t19106;
-rv t19107 = nx_part(921, 20, 921, 45, rt_str_at("", 921, 25, 921, 27), rt_str_at("rt_unit()", 921, 29, 921, 40), v_st);
-rv v_computed = t19107;
-rv t19108 = nx_is_null(922, 12, 922, 31, v_value_node);
-rv t19109 = rt_bool(!rt_truth(t19108));
-if (rt_truth(t19109)) {
-rv t19110 = nx_gen_expr(923, 20, 923, 44, v_st, v_value_node);
-v_computed = t19110;
+rv t19120 = nx_field(920, 22, 920, 42, v_node, rt_str_at("value", 920, 34, 920, 41));
+rv v_value_node = t19120;
+rv t19121 = nx_part(921, 20, 921, 45, rt_str_at("", 921, 25, 921, 27), rt_str_at("rt_unit()", 921, 29, 921, 40), v_st);
+rv v_computed = t19121;
+rv t19122 = nx_is_null(922, 12, 922, 31, v_value_node);
+rv t19123 = rt_bool(!rt_truth(t19122));
+if (rt_truth(t19123)) {
+rv t19124 = nx_gen_expr(923, 20, 923, 44, v_st, v_value_node);
+v_computed = t19124;
 }
-rv t19111 = rt_field(v_computed, "st");
-rv t19112 = rt_field(t19111, "next");
-rv t19113 = rt_to_text(t19112, 925, 24, 925, 49);
-rv t19114 = rt_add(rt_str_at("r", 925, 18, 925, 21), t19113, 925, 18, 925, 49);
-rv v_result = t19114;
-rv t19115 = rt_field(v_computed, "code");
-rv t19116 = rt_add(t19115, rt_str_at("rv ", 926, 32, 926, 37), 926, 16, 926, 37);
-rv t19117 = rt_add(t19116, v_result, 926, 16, 926, 46);
-rv t19118 = rt_add(t19117, rt_str_at(" = ", 926, 49, 926, 54), 926, 16, 926, 54);
-rv t19119 = rt_field(v_computed, "value");
-rv t19120 = rt_add(t19118, t19119, 926, 16, 926, 71);
-rv t19121 = rt_add(t19120, rt_str_at(";\n", 926, 74, 926, 79), 926, 16, 926, 79);
-rv v_code = t19121;
-rv t19122 = rt_field(v_computed, "st");
-rv t19123 = nx_fresh(927, 16, 927, 34, t19122);
-rv v_next = t19123;
-rv t19124 = nx_is_null(928, 58, 928, 77, v_value_node);
-rv t19125 = rt_bool(!rt_truth(t19124));
-rv t19126 = nx_promise_code(928, 20, 928, 78, v_next, v_scope, v_result, t19125);
-rv v_promised = t19126;
-rv t19127 = rt_add(v_code, rt_str_at("rt_top = rt_saved + 1;\n", 929, 19, 929, 45), 929, 12, 929, 45);
-rv t19128 = rt_field(v_promised, "code");
-rv t19129 = rt_add(t19127, t19128, 929, 12, 929, 61);
-rv t19130 = rt_add(t19129, rt_str_at("rt_leave(rt_saved);\nreturn ", 929, 64, 929, 94), 929, 12, 929, 94);
-rv t19131 = rt_add(t19130, v_result, 929, 12, 929, 103);
-rv t19132 = rt_add(t19131, rt_str_at(";\n", 929, 106, 929, 111), 929, 12, 929, 111);
-v_code = t19132;
-rv t19133 = rt_field(v_promised, "st");
-rv t19134 = rt_record_new("Block", rec_Block, 3, (rv[]){v_code, t19133, rt_bool(true)});
-rv r19135 = t19134;
+rv t19125 = rt_field(v_computed, "st");
+rv t19126 = rt_field(t19125, "next");
+rv t19127 = rt_to_text(t19126, 925, 24, 925, 49);
+rv t19128 = rt_add(rt_str_at("r", 925, 18, 925, 21), t19127, 925, 18, 925, 49);
+rv v_result = t19128;
+rv t19129 = rt_field(v_computed, "code");
+rv t19130 = rt_add(t19129, rt_str_at("rv ", 926, 32, 926, 37), 926, 16, 926, 37);
+rv t19131 = rt_add(t19130, v_result, 926, 16, 926, 46);
+rv t19132 = rt_add(t19131, rt_str_at(" = ", 926, 49, 926, 54), 926, 16, 926, 54);
+rv t19133 = rt_field(v_computed, "value");
+rv t19134 = rt_add(t19132, t19133, 926, 16, 926, 71);
+rv t19135 = rt_add(t19134, rt_str_at(";\n", 926, 74, 926, 79), 926, 16, 926, 79);
+rv v_code = t19135;
+rv t19136 = rt_field(v_computed, "st");
+rv t19137 = nx_fresh(927, 16, 927, 34, t19136);
+rv v_next = t19137;
+rv t19138 = nx_is_null(928, 58, 928, 77, v_value_node);
+rv t19139 = rt_bool(!rt_truth(t19138));
+rv t19140 = nx_promise_code(928, 20, 928, 78, v_next, v_scope, v_result, t19139);
+rv v_promised = t19140;
+rv t19141 = rt_add(v_code, rt_str_at("rt_top = rt_saved + 1;\n", 929, 19, 929, 45), 929, 12, 929, 45);
+rv t19142 = rt_field(v_promised, "code");
+rv t19143 = rt_add(t19141, t19142, 929, 12, 929, 61);
+rv t19144 = rt_add(t19143, rt_str_at("rt_leave(rt_saved);\nreturn ", 929, 64, 929, 94), 929, 12, 929, 94);
+rv t19145 = rt_add(t19144, v_result, 929, 12, 929, 103);
+rv t19146 = rt_add(t19145, rt_str_at(";\n", 929, 106, 929, 111), 929, 12, 929, 111);
+v_code = t19146;
+rv t19147 = rt_field(v_promised, "st");
+rv t19148 = rt_record_new("Block", rec_Block, 3, (rv[]){v_code, t19147, rt_bool(true)});
+rv r19149 = t19148;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19135;
+return r19149;
 }
 
 static rv nx_promise_code(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_scope, rv v_held, rv v_gives_value) {
 int rt_saved = rt_enter("promise_code", 10, s_l, s_c, s_el, s_ec);
 rv v_code = rt_str_at("", 935, 16, 935, 18);
 rv v_current = v_st;
-rv t19136 = rt_field(v_scope, "afters");
+rv t19150 = rt_field(v_scope, "afters");
 {
-rv it19137 = t19136;
-int64_t n19137 = rt_list_len(it19137);
+rv it19151 = t19150;
+int64_t n19151 = rt_list_len(it19151);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 937, turn);
 rt_pop();
-if (turn >= n19137) break;
-rv v_contract = rt_list_at(it19137, turn);
+if (turn >= n19151) break;
+rv v_contract = rt_list_at(it19151, turn);
 rt_push_loop(RT_BODY, 937, turn + 1);
-rv t19138 = nx_field(938, 43, 938, 71, v_contract, rt_str_at("condition", 938, 59, 938, 70));
-rv t19139 = nx_gen_expr(938, 25, 938, 72, v_current, t19138);
-rv v_condition = t19139;
-rv t19140 = rt_field(v_condition, "st");
-v_current = t19140;
+rv t19152 = nx_field(938, 43, 938, 71, v_contract, rt_str_at("condition", 938, 59, 938, 70));
+rv t19153 = nx_gen_expr(938, 25, 938, 72, v_current, t19152);
+rv v_condition = t19153;
+rv t19154 = rt_field(v_condition, "st");
+v_current = t19154;
 rv v_bind = rt_str_at("", 940, 20, 940, 22);
 if (rt_truth(v_gives_value)) {
-rv t19141 = rt_add(rt_str_at("rv v_result = ", 942, 20, 942, 36), v_held, 942, 20, 942, 43);
-rv t19142 = rt_add(t19141, rt_str_at(";\n", 942, 46, 942, 51), 942, 20, 942, 51);
-v_bind = t19142;
+rv t19155 = rt_add(rt_str_at("rv v_result = ", 942, 20, 942, 36), v_held, 942, 20, 942, 43);
+rv t19156 = rt_add(t19155, rt_str_at(";\n", 942, 46, 942, 51), 942, 20, 942, 51);
+v_bind = t19156;
 }
-rv t19143 = nx_place_of(944, 18, 944, 36, v_contract);
-rv v_at = t19143;
+rv t19157 = nx_place_of(944, 18, 944, 36, v_contract);
+rv v_at = t19157;
 rv v_reason = rt_str_at("", 945, 22, 945, 24);
-rv t19144 = nx_field(946, 24, 946, 50, v_contract, rt_str_at("message", 946, 40, 946, 49));
-rv t19145 = nx_is_null(946, 16, 946, 51, t19144);
-rv t19146 = rt_bool(!rt_truth(t19145));
-if (rt_truth(t19146)) {
-rv t19147 = nx_field(947, 84, 947, 110, v_contract, rt_str_at("message", 947, 100, 947, 109));
-rv t19148 = nx_text_of(947, 76, 947, 111, t19147);
-rv t19149 = nx_c_string(947, 67, 947, 112, t19148);
-rv t19150 = rt_add(rt_str_at("rt_note(&own, rt_format(\"Reason: %s\", ", 947, 22, 947, 64), t19149, 947, 22, 947, 112);
-rv t19151 = rt_add(t19150, rt_str_at("));\n", 947, 115, 947, 122), 947, 22, 947, 122);
-v_reason = t19151;
+rv t19158 = nx_field(946, 24, 946, 50, v_contract, rt_str_at("message", 946, 40, 946, 49));
+rv t19159 = nx_is_null(946, 16, 946, 51, t19158);
+rv t19160 = rt_bool(!rt_truth(t19159));
+if (rt_truth(t19160)) {
+rv t19161 = nx_field(947, 84, 947, 110, v_contract, rt_str_at("message", 947, 100, 947, 109));
+rv t19162 = nx_text_of(947, 76, 947, 111, t19161);
+rv t19163 = nx_c_string(947, 67, 947, 112, t19162);
+rv t19164 = rt_add(rt_str_at("rt_note(&own, rt_format(\"Reason: %s\", ", 947, 22, 947, 64), t19163, 947, 22, 947, 112);
+rv t19165 = rt_add(t19164, rt_str_at("));\n", 947, 115, 947, 122), 947, 22, 947, 122);
+v_reason = t19165;
 }
 rv v_returned = rt_str_at("", 949, 24, 949, 26);
 if (rt_truth(v_gives_value)) {
-rv t19152 = rt_add(rt_str_at("{ rt_buf r = {0, 0, 0, 0};\nrt_buf_val(&r, \"result\", ", 952, 17, 952, 76), v_held, 952, 17, 952, 83);
-rv t19153 = rt_add(t19152, rt_str_at(");\n", 952, 86, 952, 92), 952, 17, 952, 92);
-rv t19154 = rt_add(t19153, rt_str_at("rt_note(&own, rt_format(\"It returned: %s\", r.p)); }\n", 953, 19, 953, 76), 952, 17, 953, 76);
-v_returned = t19154;
+rv t19166 = rt_add(rt_str_at("{ rt_buf r = {0, 0, 0, 0};\nrt_buf_val(&r, \"result\", ", 952, 17, 952, 76), v_held, 952, 17, 952, 83);
+rv t19167 = rt_add(t19166, rt_str_at(");\n", 952, 86, 952, 92), 952, 17, 952, 92);
+rv t19168 = rt_add(t19167, rt_str_at("rt_note(&own, rt_format(\"It returned: %s\", r.p)); }\n", 953, 19, 953, 76), 952, 17, 953, 76);
+v_returned = t19168;
 }
-rv t19155 = rt_add(v_code, rt_str_at("{\n", 956, 23, 956, 29), 956, 16, 956, 29);
-rv t19156 = rt_add(t19155, v_bind, 956, 16, 956, 36);
-rv t19157 = rt_field(v_condition, "code");
-rv t19158 = rt_add(t19156, t19157, 956, 16, 956, 53);
-rv t19159 = rt_add(t19158, rt_str_at("if (!rt_truth(", 956, 56, 956, 72), 956, 16, 956, 72);
-rv t19160 = rt_field(v_condition, "value");
-rv t19161 = rt_add(t19159, t19160, 956, 16, 956, 90);
-rv t19162 = rt_add(t19161, rt_str_at(")) {\n", 956, 93, 956, 102), 956, 16, 956, 102);
-rv t19163 = rt_add(t19162, rt_str_at("rt_notes own = {{0}, 0};\n", 956, 105, 956, 135), 956, 16, 956, 135);
-v_code = t19163;
-rv t19164 = rt_add(v_code, rt_str_at("rt_note(&own, rt_format(\"'%s' finished, but its condition is false: %s\", ", 957, 23, 957, 100), 957, 16, 957, 100);
-v_code = t19164;
-rv t19165 = rt_field(v_scope, "name");
-rv t19166 = nx_c_string(958, 23, 958, 43, t19165);
-rv t19167 = rt_add(v_code, t19166, 958, 16, 958, 43);
-rv t19168 = rt_add(t19167, rt_str_at(", ", 958, 46, 958, 50), 958, 16, 958, 50);
-rv t19169 = nx_contract_source(958, 62, 958, 87, v_contract);
-rv t19170 = nx_c_string(958, 53, 958, 88, t19169);
-rv t19171 = rt_add(t19168, t19170, 958, 16, 958, 88);
-rv t19172 = rt_add(t19171, rt_str_at("));\n", 958, 91, 958, 98), 958, 16, 958, 98);
-rv t19173 = rt_add(t19172, v_reason, 958, 16, 958, 107);
-rv t19174 = rt_add(t19173, v_returned, 958, 16, 958, 118);
-v_code = t19174;
-rv t19175 = rt_add(v_code, rt_str_at("rt_buf b = {0, 0, 0, 0};\n", 959, 23, 959, 52), 959, 16, 959, 52);
-rv t19176 = rt_field(v_scope, "params");
-rv t19177 = nx_values_code(959, 55, 959, 80, t19176);
-rv t19178 = rt_add(t19175, t19177, 959, 16, 959, 80);
-rv t19179 = rt_add(t19178, rt_str_at("rt_buf_note(&own, \"It was called with: \", &b);\n", 959, 83, 959, 135), 959, 16, 959, 135);
-v_code = t19179;
-rv t19180 = rt_add(v_code, rt_str_at("rt_fail(\"contract\", \"E4002\", \"Postcondition violated\", ", 960, 23, 960, 86), 960, 16, 960, 86);
-v_code = t19180;
-rv t19181 = rt_field(v_scope, "name");
-rv t19182 = rt_add(rt_str_at("'", 961, 32, 961, 35), t19181, 961, 32, 961, 48);
-rv t19183 = rt_add(t19182, rt_str_at("' breaks its own ", 961, 51, 961, 70), 961, 32, 961, 70);
-rv t19184 = nx_clause_label(961, 73, 961, 95, v_contract);
-rv t19185 = rt_add(t19183, t19184, 961, 32, 961, 95);
-rv t19186 = nx_c_string(961, 23, 961, 96, t19185);
-rv t19187 = rt_add(v_code, t19186, 961, 16, 961, 96);
-rv t19188 = rt_add(t19187, rt_str_at(", \"\", &own, 0, ", 961, 99, 961, 118), 961, 16, 961, 118);
+rv t19169 = rt_add(v_code, rt_str_at("{\n", 956, 23, 956, 29), 956, 16, 956, 29);
+rv t19170 = rt_add(t19169, v_bind, 956, 16, 956, 36);
+rv t19171 = rt_field(v_condition, "code");
+rv t19172 = rt_add(t19170, t19171, 956, 16, 956, 53);
+rv t19173 = rt_add(t19172, rt_str_at("if (!rt_truth(", 956, 56, 956, 72), 956, 16, 956, 72);
+rv t19174 = rt_field(v_condition, "value");
+rv t19175 = rt_add(t19173, t19174, 956, 16, 956, 90);
+rv t19176 = rt_add(t19175, rt_str_at(")) {\n", 956, 93, 956, 102), 956, 16, 956, 102);
+rv t19177 = rt_add(t19176, rt_str_at("rt_notes own = {{0}, 0};\n", 956, 105, 956, 135), 956, 16, 956, 135);
+v_code = t19177;
+rv t19178 = rt_add(v_code, rt_str_at("rt_note(&own, rt_format(\"'%s' finished, but its condition is false: %s\", ", 957, 23, 957, 100), 957, 16, 957, 100);
+v_code = t19178;
+rv t19179 = rt_field(v_scope, "name");
+rv t19180 = nx_c_string(958, 23, 958, 43, t19179);
+rv t19181 = rt_add(v_code, t19180, 958, 16, 958, 43);
+rv t19182 = rt_add(t19181, rt_str_at(", ", 958, 46, 958, 50), 958, 16, 958, 50);
+rv t19183 = nx_contract_source(958, 62, 958, 87, v_contract);
+rv t19184 = nx_c_string(958, 53, 958, 88, t19183);
+rv t19185 = rt_add(t19182, t19184, 958, 16, 958, 88);
+rv t19186 = rt_add(t19185, rt_str_at("));\n", 958, 91, 958, 98), 958, 16, 958, 98);
+rv t19187 = rt_add(t19186, v_reason, 958, 16, 958, 107);
+rv t19188 = rt_add(t19187, v_returned, 958, 16, 958, 118);
 v_code = t19188;
-rv t19189 = nx_span4(962, 23, 962, 32, v_at);
-rv t19190 = rt_add(v_code, t19189, 962, 16, 962, 32);
-rv t19191 = rt_add(t19190, rt_str_at(");\n}\n}\n", 962, 35, 962, 47), 962, 16, 962, 47);
-v_code = t19191;
+rv t19189 = rt_add(v_code, rt_str_at("rt_buf b = {0, 0, 0, 0};\n", 959, 23, 959, 52), 959, 16, 959, 52);
+rv t19190 = rt_field(v_scope, "params");
+rv t19191 = nx_values_code(959, 55, 959, 80, t19190);
+rv t19192 = rt_add(t19189, t19191, 959, 16, 959, 80);
+rv t19193 = rt_add(t19192, rt_str_at("rt_buf_note(&own, \"It was called with: \", &b);\n", 959, 83, 959, 135), 959, 16, 959, 135);
+v_code = t19193;
+rv t19194 = rt_add(v_code, rt_str_at("rt_fail(\"contract\", \"E4002\", \"Postcondition violated\", ", 960, 23, 960, 86), 960, 16, 960, 86);
+v_code = t19194;
+rv t19195 = rt_field(v_scope, "name");
+rv t19196 = rt_add(rt_str_at("'", 961, 32, 961, 35), t19195, 961, 32, 961, 48);
+rv t19197 = rt_add(t19196, rt_str_at("' breaks its own ", 961, 51, 961, 70), 961, 32, 961, 70);
+rv t19198 = nx_clause_label(961, 73, 961, 95, v_contract);
+rv t19199 = rt_add(t19197, t19198, 961, 32, 961, 95);
+rv t19200 = nx_c_string(961, 23, 961, 96, t19199);
+rv t19201 = rt_add(v_code, t19200, 961, 16, 961, 96);
+rv t19202 = rt_add(t19201, rt_str_at(", \"\", &own, 0, ", 961, 99, 961, 118), 961, 16, 961, 118);
+v_code = t19202;
+rv t19203 = nx_span4(962, 23, 962, 32, v_at);
+rv t19204 = rt_add(v_code, t19203, 962, 16, 962, 32);
+rv t19205 = rt_add(t19204, rt_str_at(");\n}\n}\n", 962, 35, 962, 47), 962, 16, 962, 47);
+v_code = t19205;
 rt_pop();
 turn++;
 }
 }
-rv t19192 = nx_part(964, 12, 964, 35, v_code, rt_str_at("", 964, 23, 964, 25), v_current);
-rv r19193 = t19192;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19193;
-}
-
-static rv nx_contract_source(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_contract) {
-int rt_saved = rt_enter("contract_source", 10, s_l, s_c, s_el, s_ec);
-rv v_name = rt_str_at("", 968, 16, 968, 18);
-rv t19194 = nx_field(969, 20, 969, 43, v_contract, rt_str_at("name", 969, 36, 969, 42));
-rv t19195 = nx_is_null(969, 12, 969, 44, t19194);
-rv t19196 = rt_bool(!rt_truth(t19195));
-if (rt_truth(t19196)) {
-rv t19197 = nx_field(970, 24, 970, 47, v_contract, rt_str_at("name", 970, 40, 970, 46));
-rv t19198 = nx_text_of(970, 16, 970, 48, t19197);
-rv t19199 = rt_add(t19198, rt_str_at(": ", 970, 51, 970, 55), 970, 16, 970, 55);
-v_name = t19199;
-}
-rv t19200 = nx_field(972, 20, 972, 45, v_contract, rt_str_at("clause", 972, 36, 972, 44));
-rv t19201 = nx_text_of(972, 12, 972, 46, t19200);
-rv t19202 = rt_add(t19201, rt_str_at(" ", 972, 49, 972, 52), 972, 12, 972, 52);
-rv t19203 = rt_add(t19202, v_name, 972, 12, 972, 59);
-rv t19204 = nx_field(972, 78, 972, 106, v_contract, rt_str_at("condition", 972, 94, 972, 105));
-rv t19205 = nx_checker__unparse(972, 62, 972, 107, t19204);
-rv t19206 = rt_add(t19203, t19205, 972, 12, 972, 107);
+rv t19206 = nx_part(964, 12, 964, 35, v_code, rt_str_at("", 964, 23, 964, 25), v_current);
 rv r19207 = t19206;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19207;
 }
 
-static rv nx_clause_label(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_contract) {
-int rt_saved = rt_enter("clause_label", 10, s_l, s_c, s_el, s_ec);
-rv t19208 = nx_field(976, 26, 976, 51, v_contract, rt_str_at("clause", 976, 42, 976, 50));
-rv t19209 = nx_text_of(976, 18, 976, 52, t19208);
-rv v_clause = t19209;
-rv t19210 = nx_field(977, 16, 977, 39, v_contract, rt_str_at("name", 977, 32, 977, 38));
-rv v_name = t19210;
-rv t19211 = nx_is_null(978, 12, 978, 25, v_name);
-rv t19212 = rt_bool(!rt_truth(t19211));
-if (rt_truth(t19212)) {
-rv t19213 = rt_add(v_clause, rt_str_at(" '", 979, 25, 979, 29), 979, 16, 979, 29);
-rv t19214 = nx_text_of(979, 32, 979, 45, v_name);
-rv t19215 = rt_add(t19213, t19214, 979, 16, 979, 45);
-rv t19216 = rt_add(t19215, rt_str_at("'", 979, 48, 979, 51), 979, 16, 979, 51);
-rv r19217 = t19216;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19217;
+static rv nx_contract_source(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_contract) {
+int rt_saved = rt_enter("contract_source", 10, s_l, s_c, s_el, s_ec);
+rv v_name = rt_str_at("", 968, 16, 968, 18);
+rv t19208 = nx_field(969, 20, 969, 43, v_contract, rt_str_at("name", 969, 36, 969, 42));
+rv t19209 = nx_is_null(969, 12, 969, 44, t19208);
+rv t19210 = rt_bool(!rt_truth(t19209));
+if (rt_truth(t19210)) {
+rv t19211 = nx_field(970, 24, 970, 47, v_contract, rt_str_at("name", 970, 40, 970, 46));
+rv t19212 = nx_text_of(970, 16, 970, 48, t19211);
+rv t19213 = rt_add(t19212, rt_str_at(": ", 970, 51, 970, 55), 970, 16, 970, 55);
+v_name = t19213;
 }
-rv t19218 = rt_bool(rt_eq(v_clause, rt_str_at("needs", 981, 18, 981, 25)));
-if (rt_truth(t19218)) {
-rv t19219 = rt_add(rt_str_at("a '", 982, 16, 982, 21), v_clause, 982, 16, 982, 30);
-rv t19220 = rt_add(t19219, rt_str_at("' condition", 982, 33, 982, 46), 982, 16, 982, 46);
+rv t19214 = nx_field(972, 20, 972, 45, v_contract, rt_str_at("clause", 972, 36, 972, 44));
+rv t19215 = nx_text_of(972, 12, 972, 46, t19214);
+rv t19216 = rt_add(t19215, rt_str_at(" ", 972, 49, 972, 52), 972, 12, 972, 52);
+rv t19217 = rt_add(t19216, v_name, 972, 12, 972, 59);
+rv t19218 = nx_field(972, 78, 972, 106, v_contract, rt_str_at("condition", 972, 94, 972, 105));
+rv t19219 = nx_checker__unparse(972, 62, 972, 107, t19218);
+rv t19220 = rt_add(t19217, t19219, 972, 12, 972, 107);
 rv r19221 = t19220;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19221;
 }
-rv t19222 = rt_add(rt_str_at("'", 984, 12, 984, 15), v_clause, 984, 12, 984, 24);
-rv t19223 = rt_add(t19222, rt_str_at("' condition", 984, 27, 984, 40), 984, 12, 984, 40);
-rv r19224 = t19223;
+
+static rv nx_clause_label(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_contract) {
+int rt_saved = rt_enter("clause_label", 10, s_l, s_c, s_el, s_ec);
+rv t19222 = nx_field(976, 26, 976, 51, v_contract, rt_str_at("clause", 976, 42, 976, 50));
+rv t19223 = nx_text_of(976, 18, 976, 52, t19222);
+rv v_clause = t19223;
+rv t19224 = nx_field(977, 16, 977, 39, v_contract, rt_str_at("name", 977, 32, 977, 38));
+rv v_name = t19224;
+rv t19225 = nx_is_null(978, 12, 978, 25, v_name);
+rv t19226 = rt_bool(!rt_truth(t19225));
+if (rt_truth(t19226)) {
+rv t19227 = rt_add(v_clause, rt_str_at(" '", 979, 25, 979, 29), 979, 16, 979, 29);
+rv t19228 = nx_text_of(979, 32, 979, 45, v_name);
+rv t19229 = rt_add(t19227, t19228, 979, 16, 979, 45);
+rv t19230 = rt_add(t19229, rt_str_at("'", 979, 48, 979, 51), 979, 16, 979, 51);
+rv r19231 = t19230;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19224;
+return r19231;
+}
+rv t19232 = rt_bool(rt_eq(v_clause, rt_str_at("needs", 981, 18, 981, 25)));
+if (rt_truth(t19232)) {
+rv t19233 = rt_add(rt_str_at("a '", 982, 16, 982, 21), v_clause, 982, 16, 982, 30);
+rv t19234 = rt_add(t19233, rt_str_at("' condition", 982, 33, 982, 46), 982, 16, 982, 46);
+rv r19235 = t19234;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19235;
+}
+rv t19236 = rt_add(rt_str_at("'", 984, 12, 984, 15), v_clause, 984, 12, 984, 24);
+rv t19237 = rt_add(t19236, rt_str_at("' condition", 984, 27, 984, 40), 984, 12, 984, 40);
+rv r19238 = t19237;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19238;
 }
 
 static rv nx_clauses_of(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_function, rv v_clause) {
 int rt_saved = rt_enter("clauses_of", 10, s_l, s_c, s_el, s_ec);
-rv t19225 = rt_list_from(0, 0);
-rv v_found = t19225;
-rv t19226 = nx_field(991, 26, 991, 51, v_function, rt_str_at("header", 991, 42, 991, 50));
-rv t19227 = nx_items_of(991, 17, 991, 52, t19226);
+rv t19239 = rt_list_from(0, 0);
+rv v_found = t19239;
+rv t19240 = nx_field(991, 26, 991, 51, v_function, rt_str_at("header", 991, 42, 991, 50));
+rv t19241 = nx_items_of(991, 17, 991, 52, t19240);
 {
-rv it19228 = t19227;
-int64_t n19228 = rt_list_len(it19228);
+rv it19242 = t19241;
+int64_t n19242 = rt_list_len(it19242);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 991, turn);
 rt_pop();
-if (turn >= n19228) break;
-rv v_item = rt_list_at(it19228, turn);
+if (turn >= n19242) break;
+rv v_item = rt_list_at(it19242, turn);
 rt_push_loop(RT_BODY, 991, turn + 1);
-rv t19229 = nx_kind_of(992, 12, 992, 25, v_item);
-rv t19230 = rt_bool(rt_eq(t19229, rt_str_at("Contract", 992, 29, 992, 39)));
-rv t19231 = t19230;
-if (rt_truth(t19231)) {
-rv t19232 = nx_field(992, 52, 992, 73, v_item, rt_str_at("clause", 992, 64, 992, 72));
-rv t19233 = nx_text_of(992, 44, 992, 74, t19232);
-rv t19234 = rt_bool(rt_eq(t19233, v_clause));
-t19231 = t19234;
+rv t19243 = nx_kind_of(992, 12, 992, 25, v_item);
+rv t19244 = rt_bool(rt_eq(t19243, rt_str_at("Contract", 992, 29, 992, 39)));
+rv t19245 = t19244;
+if (rt_truth(t19245)) {
+rv t19246 = nx_field(992, 52, 992, 73, v_item, rt_str_at("clause", 992, 64, 992, 72));
+rv t19247 = nx_text_of(992, 44, 992, 74, t19246);
+rv t19248 = rt_bool(rt_eq(t19247, v_clause));
+t19245 = t19248;
 }
-if (rt_truth(t19231)) {
-rv t19235 = rt_list_append(v_found, v_item);
-v_found = t19235;
+if (rt_truth(t19245)) {
+rv t19249 = rt_list_append(v_found, v_item);
+v_found = t19249;
 }
 rt_pop();
 turn++;
 }
 }
-rv r19236 = v_found;
+rv r19250 = v_found;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19236;
+return r19250;
 }
 
 static rv nx_param_vars(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_function) {
 int rt_saved = rt_enter("param_vars", 10, s_l, s_c, s_el, s_ec);
-rv t19237 = rt_list_from(0, 0);
-rv v_params = t19237;
-rv t19238 = nx_field(1001, 27, 1001, 52, v_function, rt_str_at("params", 1001, 43, 1001, 51));
-rv t19239 = nx_items_of(1001, 18, 1001, 53, t19238);
-{
-rv it19240 = t19239;
-int64_t n19240 = rt_list_len(it19240);
-int64_t turn = 0;
-for (;;) {
-rt_push_loop(RT_COND, 1001, turn);
-rt_pop();
-if (turn >= n19240) break;
-rv v_param = rt_list_at(it19240, turn);
-rt_push_loop(RT_BODY, 1001, turn + 1);
-rv t19241 = nx_field(1002, 56, 1002, 76, v_param, rt_str_at("name", 1002, 69, 1002, 75));
-rv t19242 = nx_text_of(1002, 48, 1002, 77, t19241);
-rv t19243 = rt_record_new("Var", rec_Var, 1, (rv[]){t19242});
-rv t19244 = rt_list_append(v_params, t19243);
-v_params = t19244;
-rt_pop();
-turn++;
-}
-}
-rv r19245 = v_params;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19245;
-}
-
-static rv nx_declared_name(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_declaration) {
-int rt_saved = rt_enter("declared_name", 10, s_l, s_c, s_el, s_ec);
-rv t19246 = nx_field(1009, 23, 1009, 48, v_declaration, rt_str_at("key", 1009, 42, 1009, 47));
-rv t19247 = nx_text_of(1009, 15, 1009, 49, t19246);
-rv v_key = t19247;
-rv t19248 = rt_bool(!rt_eq(v_key, rt_str_at("", 1010, 15, 1010, 17)));
-if (rt_truth(t19248)) {
-rv r19249 = v_key;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19249;
-}
-rv t19250 = nx_field(1013, 20, 1013, 46, v_declaration, rt_str_at("name", 1013, 39, 1013, 45));
-rv t19251 = nx_text_of(1013, 12, 1013, 47, t19250);
-rv r19252 = t19251;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19252;
-}
-
-static rv nx_signature(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_function) {
-int rt_saved = rt_enter("signature", 10, s_l, s_c, s_el, s_ec);
-rv v_params = rt_str_at("int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec", 1017, 18, 1017, 72);
-rv t19253 = nx_param_vars(1018, 18, 1018, 38, v_function);
+rv t19251 = rt_list_from(0, 0);
+rv v_params = t19251;
+rv t19252 = nx_field(1001, 27, 1001, 52, v_function, rt_str_at("params", 1001, 43, 1001, 51));
+rv t19253 = nx_items_of(1001, 18, 1001, 53, t19252);
 {
 rv it19254 = t19253;
 int64_t n19254 = rt_list_len(it19254);
 int64_t turn = 0;
 for (;;) {
-rt_push_loop(RT_COND, 1018, turn);
+rt_push_loop(RT_COND, 1001, turn);
 rt_pop();
 if (turn >= n19254) break;
 rv v_param = rt_list_at(it19254, turn);
-rt_push_loop(RT_BODY, 1018, turn + 1);
-rv t19255 = rt_add(v_params, rt_str_at(", rv v_", 1019, 27, 1019, 36), 1019, 18, 1019, 36);
-rv t19256 = rt_field(v_param, "name");
-rv t19257 = rt_add(t19255, t19256, 1019, 18, 1019, 49);
-v_params = t19257;
+rt_push_loop(RT_BODY, 1001, turn + 1);
+rv t19255 = nx_field(1002, 56, 1002, 76, v_param, rt_str_at("name", 1002, 69, 1002, 75));
+rv t19256 = nx_text_of(1002, 48, 1002, 77, t19255);
+rv t19257 = rt_record_new("Var", rec_Var, 1, (rv[]){t19256});
+rv t19258 = rt_list_append(v_params, t19257);
+v_params = t19258;
 rt_pop();
 turn++;
 }
 }
-rv t19258 = nx_declared_name(1021, 37, 1021, 60, v_function);
-rv t19259 = nx_c_name(1021, 30, 1021, 61, t19258);
-rv t19260 = rt_add(rt_str_at("static rv nx_", 1021, 12, 1021, 27), t19259, 1021, 12, 1021, 61);
-rv t19261 = rt_add(t19260, rt_str_at("(", 1021, 64, 1021, 67), 1021, 12, 1021, 67);
-rv t19262 = rt_add(t19261, v_params, 1021, 12, 1021, 76);
-rv t19263 = rt_add(t19262, rt_str_at(")", 1021, 79, 1021, 82), 1021, 12, 1021, 82);
-rv r19264 = t19263;
+rv r19259 = v_params;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19264;
+return r19259;
+}
+
+static rv nx_declared_name(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_declaration) {
+int rt_saved = rt_enter("declared_name", 10, s_l, s_c, s_el, s_ec);
+rv t19260 = nx_field(1009, 23, 1009, 48, v_declaration, rt_str_at("key", 1009, 42, 1009, 47));
+rv t19261 = nx_text_of(1009, 15, 1009, 49, t19260);
+rv v_key = t19261;
+rv t19262 = rt_bool(!rt_eq(v_key, rt_str_at("", 1010, 15, 1010, 17)));
+if (rt_truth(t19262)) {
+rv r19263 = v_key;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19263;
+}
+rv t19264 = nx_field(1013, 20, 1013, 46, v_declaration, rt_str_at("name", 1013, 39, 1013, 45));
+rv t19265 = nx_text_of(1013, 12, 1013, 47, t19264);
+rv r19266 = t19265;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19266;
+}
+
+static rv nx_signature(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_function) {
+int rt_saved = rt_enter("signature", 10, s_l, s_c, s_el, s_ec);
+rv v_params = rt_str_at("int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec", 1017, 18, 1017, 72);
+rv t19267 = nx_param_vars(1018, 18, 1018, 38, v_function);
+{
+rv it19268 = t19267;
+int64_t n19268 = rt_list_len(it19268);
+int64_t turn = 0;
+for (;;) {
+rt_push_loop(RT_COND, 1018, turn);
+rt_pop();
+if (turn >= n19268) break;
+rv v_param = rt_list_at(it19268, turn);
+rt_push_loop(RT_BODY, 1018, turn + 1);
+rv t19269 = rt_add(v_params, rt_str_at(", rv v_", 1019, 27, 1019, 36), 1019, 18, 1019, 36);
+rv t19270 = rt_field(v_param, "name");
+rv t19271 = rt_add(t19269, t19270, 1019, 18, 1019, 49);
+v_params = t19271;
+rt_pop();
+turn++;
+}
+}
+rv t19272 = nx_declared_name(1021, 37, 1021, 60, v_function);
+rv t19273 = nx_c_name(1021, 30, 1021, 61, t19272);
+rv t19274 = rt_add(rt_str_at("static rv nx_", 1021, 12, 1021, 27), t19273, 1021, 12, 1021, 61);
+rv t19275 = rt_add(t19274, rt_str_at("(", 1021, 64, 1021, 67), 1021, 12, 1021, 67);
+rv t19276 = rt_add(t19275, v_params, 1021, 12, 1021, 76);
+rv t19277 = rt_add(t19276, rt_str_at(")", 1021, 79, 1021, 82), 1021, 12, 1021, 82);
+rv r19278 = t19277;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19278;
 }
 
 static rv nx_needs_code(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_function, rv v_scope) {
 int rt_saved = rt_enter("needs_code", 10, s_l, s_c, s_el, s_ec);
 rv v_code = rt_str_at("", 1025, 16, 1025, 18);
 rv v_current = v_st;
-rv t19265 = nx_clauses_of(1027, 21, 1027, 50, v_function, rt_str_at("needs", 1027, 42, 1027, 49));
+rv t19279 = nx_clauses_of(1027, 21, 1027, 50, v_function, rt_str_at("needs", 1027, 42, 1027, 49));
 {
-rv it19266 = t19265;
-int64_t n19266 = rt_list_len(it19266);
+rv it19280 = t19279;
+int64_t n19280 = rt_list_len(it19280);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1027, turn);
 rt_pop();
-if (turn >= n19266) break;
-rv v_contract = rt_list_at(it19266, turn);
+if (turn >= n19280) break;
+rv v_contract = rt_list_at(it19280, turn);
 rt_push_loop(RT_BODY, 1027, turn + 1);
-rv t19267 = nx_field(1028, 43, 1028, 71, v_contract, rt_str_at("condition", 1028, 59, 1028, 70));
-rv t19268 = nx_gen_expr(1028, 25, 1028, 72, v_current, t19267);
-rv v_condition = t19268;
-rv t19269 = rt_field(v_condition, "st");
-v_current = t19269;
-rv t19270 = nx_place_of(1030, 18, 1030, 36, v_contract);
-rv v_at = t19270;
+rv t19281 = nx_field(1028, 43, 1028, 71, v_contract, rt_str_at("condition", 1028, 59, 1028, 70));
+rv t19282 = nx_gen_expr(1028, 25, 1028, 72, v_current, t19281);
+rv v_condition = t19282;
+rv t19283 = rt_field(v_condition, "st");
+v_current = t19283;
+rv t19284 = nx_place_of(1030, 18, 1030, 36, v_contract);
+rv v_at = t19284;
 rv v_reason = rt_str_at("", 1031, 22, 1031, 24);
-rv t19271 = nx_field(1032, 24, 1032, 50, v_contract, rt_str_at("message", 1032, 40, 1032, 49));
-rv t19272 = nx_is_null(1032, 16, 1032, 51, t19271);
-rv t19273 = rt_bool(!rt_truth(t19272));
-if (rt_truth(t19273)) {
-rv t19274 = nx_field(1033, 84, 1033, 110, v_contract, rt_str_at("message", 1033, 100, 1033, 109));
-rv t19275 = nx_text_of(1033, 76, 1033, 111, t19274);
-rv t19276 = nx_c_string(1033, 67, 1033, 112, t19275);
-rv t19277 = rt_add(rt_str_at("rt_note(&own, rt_format(\"Reason: %s\", ", 1033, 22, 1033, 64), t19276, 1033, 22, 1033, 112);
-rv t19278 = rt_add(t19277, rt_str_at("));\n", 1033, 115, 1033, 122), 1033, 22, 1033, 122);
-v_reason = t19278;
+rv t19285 = nx_field(1032, 24, 1032, 50, v_contract, rt_str_at("message", 1032, 40, 1032, 49));
+rv t19286 = nx_is_null(1032, 16, 1032, 51, t19285);
+rv t19287 = rt_bool(!rt_truth(t19286));
+if (rt_truth(t19287)) {
+rv t19288 = nx_field(1033, 84, 1033, 110, v_contract, rt_str_at("message", 1033, 100, 1033, 109));
+rv t19289 = nx_text_of(1033, 76, 1033, 111, t19288);
+rv t19290 = nx_c_string(1033, 67, 1033, 112, t19289);
+rv t19291 = rt_add(rt_str_at("rt_note(&own, rt_format(\"Reason: %s\", ", 1033, 22, 1033, 64), t19290, 1033, 22, 1033, 112);
+rv t19292 = rt_add(t19291, rt_str_at("));\n", 1033, 115, 1033, 122), 1033, 22, 1033, 122);
+v_reason = t19292;
 }
-rv t19279 = rt_add(v_code, rt_str_at("{\n", 1035, 23, 1035, 29), 1035, 16, 1035, 29);
-rv t19280 = rt_field(v_condition, "code");
-rv t19281 = rt_add(t19279, t19280, 1035, 16, 1035, 46);
-rv t19282 = rt_add(t19281, rt_str_at("if (!rt_truth(", 1035, 49, 1035, 65), 1035, 16, 1035, 65);
-rv t19283 = rt_field(v_condition, "value");
-rv t19284 = rt_add(t19282, t19283, 1035, 16, 1035, 83);
-rv t19285 = rt_add(t19284, rt_str_at(")) {\nrt_notes own = {{0}, 0};\n", 1035, 86, 1035, 123), 1035, 16, 1035, 123);
-v_code = t19285;
-rv t19286 = rt_add(v_code, rt_str_at("rt_note(&own, rt_format(\"The condition at line %d is false: %s\", ", 1036, 23, 1036, 92), 1036, 16, 1036, 92);
-rv t19287 = rt_field(v_at, "line");
-rv t19288 = rt_to_text(t19287, 1036, 95, 1036, 111);
-rv t19289 = rt_add(t19286, t19288, 1036, 16, 1036, 111);
-rv t19290 = rt_add(t19289, rt_str_at(", ", 1036, 114, 1036, 118), 1036, 16, 1036, 118);
-v_code = t19290;
-rv t19291 = nx_contract_source(1037, 32, 1037, 57, v_contract);
-rv t19292 = nx_c_string(1037, 23, 1037, 58, t19291);
-rv t19293 = rt_add(v_code, t19292, 1037, 16, 1037, 58);
-rv t19294 = rt_add(t19293, rt_str_at("));\n", 1037, 61, 1037, 68), 1037, 16, 1037, 68);
-rv t19295 = rt_add(t19294, v_reason, 1037, 16, 1037, 77);
-v_code = t19295;
-rv t19296 = rt_add(v_code, rt_str_at("rt_buf b = {0, 0, 0, 0};\n", 1038, 23, 1038, 52), 1038, 16, 1038, 52);
-rv t19297 = rt_field(v_scope, "params");
-rv t19298 = nx_values_code(1038, 55, 1038, 80, t19297);
-rv t19299 = rt_add(t19296, t19298, 1038, 16, 1038, 80);
+rv t19293 = rt_add(v_code, rt_str_at("{\n", 1035, 23, 1035, 29), 1035, 16, 1035, 29);
+rv t19294 = rt_field(v_condition, "code");
+rv t19295 = rt_add(t19293, t19294, 1035, 16, 1035, 46);
+rv t19296 = rt_add(t19295, rt_str_at("if (!rt_truth(", 1035, 49, 1035, 65), 1035, 16, 1035, 65);
+rv t19297 = rt_field(v_condition, "value");
+rv t19298 = rt_add(t19296, t19297, 1035, 16, 1035, 83);
+rv t19299 = rt_add(t19298, rt_str_at(")) {\nrt_notes own = {{0}, 0};\n", 1035, 86, 1035, 123), 1035, 16, 1035, 123);
 v_code = t19299;
-rv t19300 = rt_add(v_code, rt_str_at("rt_buf_note(&own, \"It was called with: \", &b);\n", 1039, 23, 1039, 75), 1039, 16, 1039, 75);
-v_code = t19300;
-rv t19301 = rt_add(v_code, rt_str_at("rt_fail(\"contract\", \"E4001\", \"Precondition violated\", ", 1040, 23, 1040, 85), 1040, 16, 1040, 85);
-v_code = t19301;
-rv t19302 = nx_clause_label(1041, 54, 1041, 76, v_contract);
-rv t19303 = rt_add(rt_str_at("This call breaks ", 1041, 32, 1041, 51), t19302, 1041, 32, 1041, 76);
-rv t19304 = rt_add(t19303, rt_str_at(" of '", 1041, 79, 1041, 86), 1041, 32, 1041, 86);
-rv t19305 = rt_field(v_scope, "name");
-rv t19306 = rt_add(t19304, t19305, 1041, 32, 1041, 99);
-rv t19307 = rt_add(t19306, rt_str_at("'", 1041, 102, 1041, 105), 1041, 32, 1041, 105);
-rv t19308 = nx_c_string(1041, 23, 1041, 106, t19307);
-rv t19309 = rt_add(v_code, t19308, 1041, 16, 1041, 106);
+rv t19300 = rt_add(v_code, rt_str_at("rt_note(&own, rt_format(\"The condition at line %d is false: %s\", ", 1036, 23, 1036, 92), 1036, 16, 1036, 92);
+rv t19301 = rt_field(v_at, "line");
+rv t19302 = rt_to_text(t19301, 1036, 95, 1036, 111);
+rv t19303 = rt_add(t19300, t19302, 1036, 16, 1036, 111);
+rv t19304 = rt_add(t19303, rt_str_at(", ", 1036, 114, 1036, 118), 1036, 16, 1036, 118);
+v_code = t19304;
+rv t19305 = nx_contract_source(1037, 32, 1037, 57, v_contract);
+rv t19306 = nx_c_string(1037, 23, 1037, 58, t19305);
+rv t19307 = rt_add(v_code, t19306, 1037, 16, 1037, 58);
+rv t19308 = rt_add(t19307, rt_str_at("));\n", 1037, 61, 1037, 68), 1037, 16, 1037, 68);
+rv t19309 = rt_add(t19308, v_reason, 1037, 16, 1037, 77);
 v_code = t19309;
-rv t19310 = rt_add(v_code, rt_str_at(", \"\", &own, 1, s_l, s_c, s_el, s_ec);\n}\n}\n", 1042, 23, 1042, 72), 1042, 16, 1042, 72);
-v_code = t19310;
+rv t19310 = rt_add(v_code, rt_str_at("rt_buf b = {0, 0, 0, 0};\n", 1038, 23, 1038, 52), 1038, 16, 1038, 52);
+rv t19311 = rt_field(v_scope, "params");
+rv t19312 = nx_values_code(1038, 55, 1038, 80, t19311);
+rv t19313 = rt_add(t19310, t19312, 1038, 16, 1038, 80);
+v_code = t19313;
+rv t19314 = rt_add(v_code, rt_str_at("rt_buf_note(&own, \"It was called with: \", &b);\n", 1039, 23, 1039, 75), 1039, 16, 1039, 75);
+v_code = t19314;
+rv t19315 = rt_add(v_code, rt_str_at("rt_fail(\"contract\", \"E4001\", \"Precondition violated\", ", 1040, 23, 1040, 85), 1040, 16, 1040, 85);
+v_code = t19315;
+rv t19316 = nx_clause_label(1041, 54, 1041, 76, v_contract);
+rv t19317 = rt_add(rt_str_at("This call breaks ", 1041, 32, 1041, 51), t19316, 1041, 32, 1041, 76);
+rv t19318 = rt_add(t19317, rt_str_at(" of '", 1041, 79, 1041, 86), 1041, 32, 1041, 86);
+rv t19319 = rt_field(v_scope, "name");
+rv t19320 = rt_add(t19318, t19319, 1041, 32, 1041, 99);
+rv t19321 = rt_add(t19320, rt_str_at("'", 1041, 102, 1041, 105), 1041, 32, 1041, 105);
+rv t19322 = nx_c_string(1041, 23, 1041, 106, t19321);
+rv t19323 = rt_add(v_code, t19322, 1041, 16, 1041, 106);
+v_code = t19323;
+rv t19324 = rt_add(v_code, rt_str_at(", \"\", &own, 1, s_l, s_c, s_el, s_ec);\n}\n}\n", 1042, 23, 1042, 72), 1042, 16, 1042, 72);
+v_code = t19324;
 rt_pop();
 turn++;
 }
 }
-rv t19311 = nx_part(1044, 12, 1044, 35, v_code, rt_str_at("", 1044, 23, 1044, 25), v_current);
-rv r19312 = t19311;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19312;
-}
-
-static rv nx_is_compiler_file(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_file) {
-int rt_saved = rt_enter("is_compiler_file", 10, s_l, s_c, s_el, s_ec);
-rv t19313 = rt_list_from((rv[]){rt_str_at("selfhost/lexer.nex", 1052, 13, 1052, 33), rt_str_at("selfhost/parser.nex", 1052, 35, 1052, 56), rt_str_at("selfhost/checker.nex", 1052, 58, 1052, 80), rt_str_at("selfhost/project.nex", 1052, 82, 1052, 104), rt_str_at("selfhost/interpreter.nex", 1053, 13, 1053, 39), rt_str_at("selfhost/render.nex", 1053, 41, 1053, 62), rt_str_at("selfhost/cgen.nex", 1053, 64, 1053, 83), rt_str_at("selfhost/nex.nex", 1053, 85, 1053, 103), rt_str_at("selfhost/lsp.nex", 1053, 105, 1053, 123), rt_str_at("selfhost/mcp.nex", 1053, 125, 1053, 143)}, 10);
-rv t19314 = rt_list_contains(t19313, v_file);
-rv r19315 = t19314;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19315;
-}
-
-static rv nx_intrinsic_of(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_function) {
-int rt_saved = rt_enter("intrinsic_of", 10, s_l, s_c, s_el, s_ec);
-rv t19316 = nx_field(1060, 24, 1060, 47, v_function, rt_str_at("file", 1060, 40, 1060, 46));
-rv t19317 = nx_text_of(1060, 16, 1060, 48, t19316);
-rv v_file = t19317;
-rv t19318 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/nex.nex", 1061, 16, 1061, 34)));
-if (rt_truth(t19318)) {
-rv t19319 = nx_field(1062, 33, 1062, 56, v_function, rt_str_at("name", 1062, 49, 1062, 55));
-rv t19320 = nx_text_of(1062, 25, 1062, 57, t19319);
-rv v_tool_name = t19320;
-rv t19321 = rt_bool(rt_eq(v_tool_name, rt_str_at("err", 1063, 25, 1063, 30)));
-if (rt_truth(t19321)) {
-rv r19322 = rt_str_at("rt_intr_eprint", 1064, 20, 1064, 36);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19322;
-}
-rv t19323 = rt_bool(rt_eq(v_tool_name, rt_str_at("exit_with", 1066, 25, 1066, 36)));
-if (rt_truth(t19323)) {
-rv r19324 = rt_str_at("rt_intr_exit_with", 1067, 20, 1067, 39);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19324;
-}
-rv t19325 = rt_bool(rt_eq(v_tool_name, rt_str_at("file_problem", 1069, 25, 1069, 39)));
-if (rt_truth(t19325)) {
-rv r19326 = rt_str_at("rt_intr_file_problem", 1070, 20, 1070, 42);
+rv t19325 = nx_part(1044, 12, 1044, 35, v_code, rt_str_at("", 1044, 23, 1044, 25), v_current);
+rv r19326 = t19325;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19326;
 }
-rv t19327 = rt_bool(rt_eq(v_tool_name, rt_str_at("prepare_timeout", 1072, 25, 1072, 42)));
-if (rt_truth(t19327)) {
-rv r19328 = rt_str_at("rt_intr_prepare_timeout", 1073, 20, 1073, 45);
+
+static rv nx_is_compiler_file(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_file) {
+int rt_saved = rt_enter("is_compiler_file", 10, s_l, s_c, s_el, s_ec);
+rv t19327 = rt_list_from((rv[]){rt_str_at("selfhost/lexer.nex", 1052, 13, 1052, 33), rt_str_at("selfhost/parser.nex", 1052, 35, 1052, 56), rt_str_at("selfhost/checker.nex", 1052, 58, 1052, 80), rt_str_at("selfhost/project.nex", 1052, 82, 1052, 104), rt_str_at("selfhost/interpreter.nex", 1053, 13, 1053, 39), rt_str_at("selfhost/render.nex", 1053, 41, 1053, 62), rt_str_at("selfhost/cgen.nex", 1053, 64, 1053, 83), rt_str_at("selfhost/nex.nex", 1053, 85, 1053, 103), rt_str_at("selfhost/lsp.nex", 1053, 105, 1053, 123), rt_str_at("selfhost/mcp.nex", 1053, 125, 1053, 143)}, 10);
+rv t19328 = rt_list_contains(t19327, v_file);
+rv r19329 = t19328;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19328;
+return r19329;
 }
-rv t19329 = rt_bool(rt_eq(v_tool_name, rt_str_at("start_timeout", 1075, 25, 1075, 40)));
-if (rt_truth(t19329)) {
-rv r19330 = rt_str_at("rt_intr_start_timeout", 1076, 20, 1076, 43);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19330;
-}
-rv t19331 = rt_bool(rt_eq(v_tool_name, rt_str_at("set_memory_limit", 1078, 25, 1078, 43)));
-if (rt_truth(t19331)) {
-rv r19332 = rt_str_at("rt_intr_set_memory_limit", 1079, 20, 1079, 46);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19332;
-}
-rv t19333 = rt_bool(rt_eq(v_tool_name, rt_str_at("absolute_path", 1081, 25, 1081, 40)));
-if (rt_truth(t19333)) {
-rv r19334 = rt_str_at("rt_intr_absolute_path", 1082, 20, 1082, 43);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19334;
-}
-rv t19335 = rt_bool(rt_eq(v_tool_name, rt_str_at("read_exact", 1084, 25, 1084, 37)));
+
+static rv nx_intrinsic_of(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_function) {
+int rt_saved = rt_enter("intrinsic_of", 10, s_l, s_c, s_el, s_ec);
+rv t19330 = nx_field(1060, 24, 1060, 47, v_function, rt_str_at("file", 1060, 40, 1060, 46));
+rv t19331 = nx_text_of(1060, 16, 1060, 48, t19330);
+rv v_file = t19331;
+rv t19332 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/nex.nex", 1061, 16, 1061, 34)));
+if (rt_truth(t19332)) {
+rv t19333 = nx_field(1062, 33, 1062, 56, v_function, rt_str_at("name", 1062, 49, 1062, 55));
+rv t19334 = nx_text_of(1062, 25, 1062, 57, t19333);
+rv v_tool_name = t19334;
+rv t19335 = rt_bool(rt_eq(v_tool_name, rt_str_at("err", 1063, 25, 1063, 30)));
 if (rt_truth(t19335)) {
-rv r19336 = rt_str_at("rt_intr_read_exact", 1085, 20, 1085, 40);
+rv r19336 = rt_str_at("rt_intr_eprint", 1064, 20, 1064, 36);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19336;
 }
-rv t19337 = rt_bool(rt_eq(v_tool_name, rt_str_at("write_exclusive", 1087, 25, 1087, 42)));
+rv t19337 = rt_bool(rt_eq(v_tool_name, rt_str_at("exit_with", 1066, 25, 1066, 36)));
 if (rt_truth(t19337)) {
-rv r19338 = rt_str_at("rt_intr_write_exclusive", 1088, 20, 1088, 45);
+rv r19338 = rt_str_at("rt_intr_exit_with", 1067, 20, 1067, 39);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19338;
 }
-rv t19339 = rt_bool(rt_eq(v_tool_name, rt_str_at("copy_permissions", 1090, 25, 1090, 43)));
+rv t19339 = rt_bool(rt_eq(v_tool_name, rt_str_at("file_problem", 1069, 25, 1069, 39)));
 if (rt_truth(t19339)) {
-rv r19340 = rt_str_at("rt_intr_copy_permissions", 1091, 20, 1091, 46);
+rv r19340 = rt_str_at("rt_intr_file_problem", 1070, 20, 1070, 42);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19340;
 }
-rv t19341 = rt_bool(rt_eq(v_tool_name, rt_str_at("replace_file", 1093, 25, 1093, 39)));
+rv t19341 = rt_bool(rt_eq(v_tool_name, rt_str_at("prepare_timeout", 1072, 25, 1072, 42)));
 if (rt_truth(t19341)) {
-rv r19342 = rt_str_at("rt_intr_replace_file", 1094, 20, 1094, 42);
+rv r19342 = rt_str_at("rt_intr_prepare_timeout", 1073, 20, 1073, 45);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19342;
 }
-rv t19343 = rt_bool(rt_eq(v_tool_name, rt_str_at("remove_file", 1096, 25, 1096, 38)));
+rv t19343 = rt_bool(rt_eq(v_tool_name, rt_str_at("start_timeout", 1075, 25, 1075, 40)));
 if (rt_truth(t19343)) {
-rv r19344 = rt_str_at("rt_intr_remove_file", 1097, 20, 1097, 41);
+rv r19344 = rt_str_at("rt_intr_start_timeout", 1076, 20, 1076, 43);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19344;
 }
-rv t19345 = rt_bool(rt_eq(v_tool_name, rt_str_at("temp_name", 1099, 25, 1099, 36)));
+rv t19345 = rt_bool(rt_eq(v_tool_name, rt_str_at("set_memory_limit", 1078, 25, 1078, 43)));
 if (rt_truth(t19345)) {
-rv r19346 = rt_str_at("rt_intr_temp_name", 1100, 20, 1100, 39);
+rv r19346 = rt_str_at("rt_intr_set_memory_limit", 1079, 20, 1079, 46);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19346;
 }
-rv t19347 = rt_bool(rt_eq(v_tool_name, rt_str_at("watch_interrupt", 1102, 25, 1102, 42)));
+rv t19347 = rt_bool(rt_eq(v_tool_name, rt_str_at("absolute_path", 1081, 25, 1081, 40)));
 if (rt_truth(t19347)) {
-rv r19348 = rt_str_at("rt_intr_watch_interrupt", 1103, 20, 1103, 45);
+rv r19348 = rt_str_at("rt_intr_absolute_path", 1082, 20, 1082, 43);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19348;
 }
-rv t19349 = rt_bool(rt_eq(v_tool_name, rt_str_at("was_interrupted", 1105, 25, 1105, 42)));
+rv t19349 = rt_bool(rt_eq(v_tool_name, rt_str_at("read_exact", 1084, 25, 1084, 37)));
 if (rt_truth(t19349)) {
-rv r19350 = rt_str_at("rt_intr_was_interrupted", 1106, 20, 1106, 45);
+rv r19350 = rt_str_at("rt_intr_read_exact", 1085, 20, 1085, 40);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19350;
 }
-rv t19351 = rt_bool(rt_eq(v_tool_name, rt_str_at("err_raw", 1108, 25, 1108, 34)));
+rv t19351 = rt_bool(rt_eq(v_tool_name, rt_str_at("write_exclusive", 1087, 25, 1087, 42)));
 if (rt_truth(t19351)) {
-rv r19352 = rt_str_at("rt_intr_eprint_raw", 1109, 20, 1109, 40);
+rv r19352 = rt_str_at("rt_intr_write_exclusive", 1088, 20, 1088, 45);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19352;
 }
-rv t19353 = rt_bool(rt_eq(v_tool_name, rt_str_at("console_open", 1111, 25, 1111, 39)));
+rv t19353 = rt_bool(rt_eq(v_tool_name, rt_str_at("copy_permissions", 1090, 25, 1090, 43)));
 if (rt_truth(t19353)) {
-rv r19354 = rt_str_at("rt_intr_console_open", 1112, 20, 1112, 42);
+rv r19354 = rt_str_at("rt_intr_copy_permissions", 1091, 20, 1091, 46);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19354;
 }
-rv t19355 = rt_bool(rt_eq(v_tool_name, rt_str_at("console_line", 1114, 25, 1114, 39)));
+rv t19355 = rt_bool(rt_eq(v_tool_name, rt_str_at("replace_file", 1093, 25, 1093, 39)));
 if (rt_truth(t19355)) {
-rv r19356 = rt_str_at("rt_intr_console_line", 1115, 20, 1115, 42);
+rv r19356 = rt_str_at("rt_intr_replace_file", 1094, 20, 1094, 42);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19356;
 }
-rv t19357 = rt_bool(rt_eq(v_tool_name, rt_str_at("pause_timeout", 1117, 25, 1117, 40)));
+rv t19357 = rt_bool(rt_eq(v_tool_name, rt_str_at("remove_file", 1096, 25, 1096, 38)));
 if (rt_truth(t19357)) {
-rv r19358 = rt_str_at("rt_intr_pause_timeout", 1118, 20, 1118, 43);
+rv r19358 = rt_str_at("rt_intr_remove_file", 1097, 20, 1097, 41);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19358;
 }
-rv t19359 = rt_bool(rt_eq(v_tool_name, rt_str_at("resume_timeout", 1120, 25, 1120, 41)));
+rv t19359 = rt_bool(rt_eq(v_tool_name, rt_str_at("temp_name", 1099, 25, 1099, 36)));
 if (rt_truth(t19359)) {
-rv r19360 = rt_str_at("rt_intr_resume_timeout", 1121, 20, 1121, 44);
+rv r19360 = rt_str_at("rt_intr_temp_name", 1100, 20, 1100, 39);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19360;
 }
+rv t19361 = rt_bool(rt_eq(v_tool_name, rt_str_at("watch_interrupt", 1102, 25, 1102, 42)));
+if (rt_truth(t19361)) {
+rv r19362 = rt_str_at("rt_intr_watch_interrupt", 1103, 20, 1103, 45);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19362;
 }
-rv t19361 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/project.nex", 1124, 16, 1124, 38)));
-rv t19362 = t19361;
-if (rt_truth(t19362)) {
-rv t19363 = nx_field(1124, 51, 1124, 74, v_function, rt_str_at("name", 1124, 67, 1124, 73));
-rv t19364 = nx_text_of(1124, 43, 1124, 75, t19363);
-rv t19365 = rt_bool(rt_eq(t19364, rt_str_at("module_problem", 1124, 79, 1124, 95)));
-t19362 = t19365;
+rv t19363 = rt_bool(rt_eq(v_tool_name, rt_str_at("was_interrupted", 1105, 25, 1105, 42)));
+if (rt_truth(t19363)) {
+rv r19364 = rt_str_at("rt_intr_was_interrupted", 1106, 20, 1106, 45);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19364;
 }
-if (rt_truth(t19362)) {
-rv r19366 = rt_str_at("rt_intr_module_problem", 1125, 16, 1125, 40);
+rv t19365 = rt_bool(rt_eq(v_tool_name, rt_str_at("err_raw", 1108, 25, 1108, 34)));
+if (rt_truth(t19365)) {
+rv r19366 = rt_str_at("rt_intr_eprint_raw", 1109, 20, 1109, 40);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19366;
 }
-rv t19367 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/worker.nex", 1127, 16, 1127, 37)));
+rv t19367 = rt_bool(rt_eq(v_tool_name, rt_str_at("console_open", 1111, 25, 1111, 39)));
 if (rt_truth(t19367)) {
-rv t19368 = nx_field(1128, 20, 1128, 43, v_function, rt_str_at("name", 1128, 36, 1128, 42));
-rv t19369 = nx_text_of(1128, 12, 1128, 44, t19368);
-rv t19370 = rt_bool(rt_eq(t19369, rt_str_at("apply_limits", 1128, 48, 1128, 62)));
-if (rt_truth(t19370)) {
-rv r19371 = rt_str_at("rt_intr_apply_limits", 1129, 20, 1129, 42);
+rv r19368 = rt_str_at("rt_intr_console_open", 1112, 20, 1112, 42);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19371;
+return r19368;
 }
-rv r19372 = rt_str_at("", 1131, 16, 1131, 18);
+rv t19369 = rt_bool(rt_eq(v_tool_name, rt_str_at("console_line", 1114, 25, 1114, 39)));
+if (rt_truth(t19369)) {
+rv r19370 = rt_str_at("rt_intr_console_line", 1115, 20, 1115, 42);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19370;
+}
+rv t19371 = rt_bool(rt_eq(v_tool_name, rt_str_at("pause_timeout", 1117, 25, 1117, 40)));
+if (rt_truth(t19371)) {
+rv r19372 = rt_str_at("rt_intr_pause_timeout", 1118, 20, 1118, 43);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19372;
 }
-rv t19373 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/json.nex", 1133, 16, 1133, 35)));
+rv t19373 = rt_bool(rt_eq(v_tool_name, rt_str_at("resume_timeout", 1120, 25, 1120, 41)));
 if (rt_truth(t19373)) {
-rv t19374 = nx_field(1134, 33, 1134, 56, v_function, rt_str_at("name", 1134, 49, 1134, 55));
-rv t19375 = nx_text_of(1134, 25, 1134, 57, t19374);
-rv v_json_name = t19375;
-rv t19376 = rt_bool(rt_eq(v_json_name, rt_str_at("code_of", 1135, 25, 1135, 34)));
+rv r19374 = rt_str_at("rt_intr_resume_timeout", 1121, 20, 1121, 44);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19374;
+}
+}
+rv t19375 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/project.nex", 1124, 16, 1124, 38)));
+rv t19376 = t19375;
 if (rt_truth(t19376)) {
-rv r19377 = rt_str_at("rt_intr_code_of", 1136, 20, 1136, 37);
+rv t19377 = nx_field(1124, 51, 1124, 74, v_function, rt_str_at("name", 1124, 67, 1124, 73));
+rv t19378 = nx_text_of(1124, 43, 1124, 75, t19377);
+rv t19379 = rt_bool(rt_eq(t19378, rt_str_at("module_problem", 1124, 79, 1124, 95)));
+t19376 = t19379;
+}
+if (rt_truth(t19376)) {
+rv r19380 = rt_str_at("rt_intr_module_problem", 1125, 16, 1125, 40);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19377;
+return r19380;
 }
-rv t19378 = rt_bool(rt_eq(v_json_name, rt_str_at("char_from_code", 1138, 25, 1138, 41)));
-if (rt_truth(t19378)) {
-rv r19379 = rt_str_at("rt_intr_char_from_code", 1139, 20, 1139, 44);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19379;
-}
-rv t19380 = rt_bool(rt_eq(v_json_name, rt_str_at("escaped", 1141, 25, 1141, 34)));
-if (rt_truth(t19380)) {
-rv r19381 = rt_str_at("rt_intr_json_escaped", 1142, 20, 1142, 42);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19381;
-}
-rv r19382 = rt_str_at("", 1144, 16, 1144, 18);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19382;
-}
-rv t19383 = nx_is_compiler_file(1146, 12, 1146, 34, v_file);
-rv t19384 = rt_bool(!rt_truth(t19383));
+rv t19381 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/worker.nex", 1127, 16, 1127, 37)));
+if (rt_truth(t19381)) {
+rv t19382 = nx_field(1128, 20, 1128, 43, v_function, rt_str_at("name", 1128, 36, 1128, 42));
+rv t19383 = nx_text_of(1128, 12, 1128, 44, t19382);
+rv t19384 = rt_bool(rt_eq(t19383, rt_str_at("apply_limits", 1128, 48, 1128, 62)));
 if (rt_truth(t19384)) {
-rv r19385 = rt_str_at("", 1147, 16, 1147, 18);
+rv r19385 = rt_str_at("rt_intr_apply_limits", 1129, 20, 1129, 42);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19385;
 }
-rv t19386 = nx_field(1149, 24, 1149, 47, v_function, rt_str_at("name", 1149, 40, 1149, 46));
-rv t19387 = nx_text_of(1149, 16, 1149, 48, t19386);
-rv v_name = t19387;
-rv t19388 = nx_field(1150, 38, 1150, 63, v_function, rt_str_at("params", 1150, 54, 1150, 62));
-rv t19389 = nx_items_of(1150, 29, 1150, 64, t19388);
-rv t19390 = rt_int(rt_list_len(t19389));
-rv v_count = t19390;
-rv t19391 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
-if (rt_truth(t19391)) {
-rv t19392 = rt_bool(rt_eq(v_name, rt_str_at("code_of", 1152, 20, 1152, 29)));
-rv t19393 = t19392;
-if (rt_truth(t19393)) {
-rv t19394 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/lexer.nex", 1152, 42, 1152, 62)));
-t19393 = t19394;
+rv r19386 = rt_str_at("", 1131, 16, 1131, 18);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19386;
 }
-if (rt_truth(t19393)) {
-rv r19395 = rt_str_at("rt_intr_code_of", 1153, 20, 1153, 37);
+rv t19387 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/json.nex", 1133, 16, 1133, 35)));
+if (rt_truth(t19387)) {
+rv t19388 = nx_field(1134, 33, 1134, 56, v_function, rt_str_at("name", 1134, 49, 1134, 55));
+rv t19389 = nx_text_of(1134, 25, 1134, 57, t19388);
+rv v_json_name = t19389;
+rv t19390 = rt_bool(rt_eq(v_json_name, rt_str_at("code_of", 1135, 25, 1135, 34)));
+if (rt_truth(t19390)) {
+rv r19391 = rt_str_at("rt_intr_code_of", 1136, 20, 1136, 37);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19391;
+}
+rv t19392 = rt_bool(rt_eq(v_json_name, rt_str_at("char_from_code", 1138, 25, 1138, 41)));
+if (rt_truth(t19392)) {
+rv r19393 = rt_str_at("rt_intr_char_from_code", 1139, 20, 1139, 44);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19393;
+}
+rv t19394 = rt_bool(rt_eq(v_json_name, rt_str_at("escaped", 1141, 25, 1141, 34)));
+if (rt_truth(t19394)) {
+rv r19395 = rt_str_at("rt_intr_json_escaped", 1142, 20, 1142, 42);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19395;
 }
-rv t19396 = rt_bool(rt_eq(v_name, rt_str_at("kind_of", 1155, 20, 1155, 29)));
-if (rt_truth(t19396)) {
-rv r19397 = rt_str_at("rt_intr_kind_of", 1156, 20, 1156, 37);
+rv r19396 = rt_str_at("", 1144, 16, 1144, 18);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19397;
+return r19396;
 }
-rv t19398 = rt_bool(rt_eq(v_name, rt_str_at("text_of", 1158, 20, 1158, 29)));
+rv t19397 = nx_is_compiler_file(1146, 12, 1146, 34, v_file);
+rv t19398 = rt_bool(!rt_truth(t19397));
 if (rt_truth(t19398)) {
-rv r19399 = rt_str_at("rt_intr_text_of", 1159, 20, 1159, 37);
+rv r19399 = rt_str_at("", 1147, 16, 1147, 18);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19399;
 }
-rv t19400 = rt_bool(rt_eq(v_name, rt_str_at("items_of", 1161, 20, 1161, 30)));
-if (rt_truth(t19400)) {
-rv r19401 = rt_str_at("rt_intr_items_of", 1162, 20, 1162, 38);
+rv t19400 = nx_field(1149, 24, 1149, 47, v_function, rt_str_at("name", 1149, 40, 1149, 46));
+rv t19401 = nx_text_of(1149, 16, 1149, 48, t19400);
+rv v_name = t19401;
+rv t19402 = nx_field(1150, 38, 1150, 63, v_function, rt_str_at("params", 1150, 54, 1150, 62));
+rv t19403 = nx_items_of(1150, 29, 1150, 64, t19402);
+rv t19404 = rt_int(rt_list_len(t19403));
+rv v_count = t19404;
+rv t19405 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
+if (rt_truth(t19405)) {
+rv t19406 = rt_bool(rt_eq(v_name, rt_str_at("code_of", 1152, 20, 1152, 29)));
+rv t19407 = t19406;
+if (rt_truth(t19407)) {
+rv t19408 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/lexer.nex", 1152, 42, 1152, 62)));
+t19407 = t19408;
+}
+if (rt_truth(t19407)) {
+rv r19409 = rt_str_at("rt_intr_code_of", 1153, 20, 1153, 37);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19401;
+return r19409;
 }
-rv t19402 = rt_bool(rt_eq(v_name, rt_str_at("is_null", 1164, 20, 1164, 29)));
-if (rt_truth(t19402)) {
-rv r19403 = rt_str_at("rt_intr_is_null", 1165, 20, 1165, 37);
+rv t19410 = rt_bool(rt_eq(v_name, rt_str_at("kind_of", 1155, 20, 1155, 29)));
+if (rt_truth(t19410)) {
+rv r19411 = rt_str_at("rt_intr_kind_of", 1156, 20, 1156, 37);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19403;
+return r19411;
 }
-rv t19404 = rt_bool(rt_eq(v_name, rt_str_at("flag_of", 1167, 20, 1167, 29)));
-if (rt_truth(t19404)) {
-rv r19405 = rt_str_at("rt_intr_flag_of", 1168, 20, 1168, 37);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19405;
-}
-rv t19406 = rt_bool(rt_eq(v_name, rt_str_at("int_of", 1170, 20, 1170, 28)));
-if (rt_truth(t19406)) {
-rv r19407 = rt_str_at("rt_intr_int_of", 1171, 20, 1171, 36);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19407;
-}
-}
-rv t19408 = rt_bool(rt_eq(v_count, rt_int(INT64_C(2))));
-rv t19409 = t19408;
-if (rt_truth(t19409)) {
-rv t19410 = rt_bool(rt_eq(v_name, rt_str_at("join_texts", 1174, 31, 1174, 43)));
-t19409 = t19410;
-}
-rv t19411 = t19409;
-if (rt_truth(t19411)) {
-rv t19412 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/parser.nex", 1174, 56, 1174, 77)));
-t19411 = t19412;
-}
-if (rt_truth(t19411)) {
-rv r19413 = rt_str_at("rt_intr_join_texts", 1175, 16, 1175, 36);
+rv t19412 = rt_bool(rt_eq(v_name, rt_str_at("text_of", 1158, 20, 1158, 29)));
+if (rt_truth(t19412)) {
+rv r19413 = rt_str_at("rt_intr_text_of", 1159, 20, 1159, 37);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19413;
 }
-rv t19414 = rt_bool(rt_eq(v_count, rt_int(INT64_C(0))));
-rv t19415 = t19414;
-if (rt_truth(t19415)) {
-rv t19416 = rt_bool(rt_eq(v_name, rt_str_at("can_stream", 1177, 31, 1177, 43)));
-t19415 = t19416;
+rv t19414 = rt_bool(rt_eq(v_name, rt_str_at("items_of", 1161, 20, 1161, 30)));
+if (rt_truth(t19414)) {
+rv r19415 = rt_str_at("rt_intr_items_of", 1162, 20, 1162, 38);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19415;
 }
-rv t19417 = t19415;
-if (rt_truth(t19417)) {
-rv t19418 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1177, 56, 1177, 82)));
-t19417 = t19418;
+rv t19416 = rt_bool(rt_eq(v_name, rt_str_at("is_null", 1164, 20, 1164, 29)));
+if (rt_truth(t19416)) {
+rv r19417 = rt_str_at("rt_intr_is_null", 1165, 20, 1165, 37);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19417;
 }
-if (rt_truth(t19417)) {
-rv r19419 = rt_str_at("rt_intr_can_stream", 1178, 16, 1178, 36);
+rv t19418 = rt_bool(rt_eq(v_name, rt_str_at("flag_of", 1167, 20, 1167, 29)));
+if (rt_truth(t19418)) {
+rv r19419 = rt_str_at("rt_intr_flag_of", 1168, 20, 1168, 37);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19419;
 }
-rv t19420 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
-rv t19421 = t19420;
-if (rt_truth(t19421)) {
-rv t19422 = rt_bool(rt_eq(v_name, rt_str_at("stream_text", 1180, 31, 1180, 44)));
-t19421 = t19422;
+rv t19420 = rt_bool(rt_eq(v_name, rt_str_at("int_of", 1170, 20, 1170, 28)));
+if (rt_truth(t19420)) {
+rv r19421 = rt_str_at("rt_intr_int_of", 1171, 20, 1171, 36);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19421;
 }
-rv t19423 = t19421;
+}
+rv t19422 = rt_bool(rt_eq(v_count, rt_int(INT64_C(2))));
+rv t19423 = t19422;
 if (rt_truth(t19423)) {
-rv t19424 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1180, 57, 1180, 83)));
+rv t19424 = rt_bool(rt_eq(v_name, rt_str_at("join_texts", 1174, 31, 1174, 43)));
 t19423 = t19424;
 }
-if (rt_truth(t19423)) {
-rv r19425 = rt_str_at("rt_intr_stream_text", 1181, 16, 1181, 37);
+rv t19425 = t19423;
+if (rt_truth(t19425)) {
+rv t19426 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/parser.nex", 1174, 56, 1174, 77)));
+t19425 = t19426;
+}
+if (rt_truth(t19425)) {
+rv r19427 = rt_str_at("rt_intr_join_texts", 1175, 16, 1175, 36);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19425;
+return r19427;
 }
-rv t19426 = rt_bool(rt_eq(v_count, rt_int(INT64_C(0))));
-rv t19427 = t19426;
-if (rt_truth(t19427)) {
-rv t19428 = rt_bool(rt_eq(v_name, rt_str_at("read_stdin_line", 1183, 31, 1183, 48)));
-t19427 = t19428;
-}
-rv t19429 = t19427;
+rv t19428 = rt_bool(rt_eq(v_count, rt_int(INT64_C(0))));
+rv t19429 = t19428;
 if (rt_truth(t19429)) {
-rv t19430 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1183, 61, 1183, 87)));
+rv t19430 = rt_bool(rt_eq(v_name, rt_str_at("can_stream", 1177, 31, 1177, 43)));
 t19429 = t19430;
 }
-if (rt_truth(t19429)) {
-rv r19431 = rt_str_at("rt_intr_read_stdin_line", 1184, 16, 1184, 41);
+rv t19431 = t19429;
+if (rt_truth(t19431)) {
+rv t19432 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1177, 56, 1177, 82)));
+t19431 = t19432;
+}
+if (rt_truth(t19431)) {
+rv r19433 = rt_str_at("rt_intr_can_stream", 1178, 16, 1178, 36);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19431;
+return r19433;
 }
-rv t19432 = rt_bool(rt_eq(v_count, rt_int(INT64_C(2))));
-rv t19433 = t19432;
-if (rt_truth(t19433)) {
-rv t19434 = rt_bool(rt_eq(v_name, rt_str_at("read_stdin_limited", 1186, 31, 1186, 51)));
-t19433 = t19434;
-}
-rv t19435 = t19433;
+rv t19434 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
+rv t19435 = t19434;
 if (rt_truth(t19435)) {
-rv t19436 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1186, 64, 1186, 90)));
+rv t19436 = rt_bool(rt_eq(v_name, rt_str_at("stream_text", 1180, 31, 1180, 44)));
 t19435 = t19436;
 }
-if (rt_truth(t19435)) {
-rv r19437 = rt_str_at("rt_intr_read_stdin_limited", 1187, 16, 1187, 44);
+rv t19437 = t19435;
+if (rt_truth(t19437)) {
+rv t19438 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1180, 57, 1180, 83)));
+t19437 = t19438;
+}
+if (rt_truth(t19437)) {
+rv r19439 = rt_str_at("rt_intr_stream_text", 1181, 16, 1181, 37);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19437;
+return r19439;
 }
-rv t19438 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
-rv t19439 = t19438;
-if (rt_truth(t19439)) {
-rv t19440 = rt_bool(rt_eq(v_name, rt_str_at("host_get", 1189, 31, 1189, 41)));
-t19439 = t19440;
-}
-rv t19441 = t19439;
+rv t19440 = rt_bool(rt_eq(v_count, rt_int(INT64_C(0))));
+rv t19441 = t19440;
 if (rt_truth(t19441)) {
-rv t19442 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1189, 54, 1189, 80)));
+rv t19442 = rt_bool(rt_eq(v_name, rt_str_at("read_stdin_line", 1183, 31, 1183, 48)));
 t19441 = t19442;
 }
-if (rt_truth(t19441)) {
-rv r19443 = rt_str_at("rt_intr_host_get", 1190, 16, 1190, 34);
+rv t19443 = t19441;
+if (rt_truth(t19443)) {
+rv t19444 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1183, 61, 1183, 87)));
+t19443 = t19444;
+}
+if (rt_truth(t19443)) {
+rv r19445 = rt_str_at("rt_intr_read_stdin_line", 1184, 16, 1184, 41);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19443;
+return r19445;
 }
-rv t19444 = rt_bool(rt_eq(v_count, rt_int(INT64_C(2))));
-rv t19445 = t19444;
-if (rt_truth(t19445)) {
-rv t19446 = rt_bool(rt_eq(v_name, rt_str_at("host_run", 1192, 31, 1192, 41)));
-t19445 = t19446;
-}
-rv t19447 = t19445;
+rv t19446 = rt_bool(rt_eq(v_count, rt_int(INT64_C(2))));
+rv t19447 = t19446;
 if (rt_truth(t19447)) {
-rv t19448 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1192, 54, 1192, 80)));
+rv t19448 = rt_bool(rt_eq(v_name, rt_str_at("read_stdin_limited", 1186, 31, 1186, 51)));
 t19447 = t19448;
 }
-if (rt_truth(t19447)) {
-rv r19449 = rt_str_at("rt_intr_host_run", 1193, 16, 1193, 34);
+rv t19449 = t19447;
+if (rt_truth(t19449)) {
+rv t19450 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1186, 64, 1186, 90)));
+t19449 = t19450;
+}
+if (rt_truth(t19449)) {
+rv r19451 = rt_str_at("rt_intr_read_stdin_limited", 1187, 16, 1187, 44);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19449;
+return r19451;
 }
-rv t19450 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
-rv t19451 = t19450;
-if (rt_truth(t19451)) {
-rv t19452 = rt_bool(rt_eq(v_name, rt_str_at("host_real", 1195, 31, 1195, 42)));
-t19451 = t19452;
-}
-rv t19453 = t19451;
+rv t19452 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
+rv t19453 = t19452;
 if (rt_truth(t19453)) {
-rv t19454 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1195, 55, 1195, 81)));
+rv t19454 = rt_bool(rt_eq(v_name, rt_str_at("host_get", 1189, 31, 1189, 41)));
 t19453 = t19454;
 }
-if (rt_truth(t19453)) {
-rv r19455 = rt_str_at("rt_intr_host_real", 1196, 16, 1196, 35);
+rv t19455 = t19453;
+if (rt_truth(t19455)) {
+rv t19456 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1189, 54, 1189, 80)));
+t19455 = t19456;
+}
+if (rt_truth(t19455)) {
+rv r19457 = rt_str_at("rt_intr_host_get", 1190, 16, 1190, 34);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19455;
+return r19457;
 }
-rv t19456 = rt_bool(rt_eq(v_count, rt_int(INT64_C(0))));
-rv t19457 = t19456;
-if (rt_truth(t19457)) {
-rv t19458 = rt_bool(rt_eq(v_name, rt_str_at("mcp_line", 1198, 31, 1198, 41)));
-t19457 = t19458;
-}
-rv t19459 = t19457;
+rv t19458 = rt_bool(rt_eq(v_count, rt_int(INT64_C(2))));
+rv t19459 = t19458;
 if (rt_truth(t19459)) {
-rv t19460 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/mcp.nex", 1198, 54, 1198, 72)));
+rv t19460 = rt_bool(rt_eq(v_name, rt_str_at("host_run", 1192, 31, 1192, 41)));
 t19459 = t19460;
 }
-if (rt_truth(t19459)) {
-rv r19461 = rt_str_at("rt_intr_read_stdin_line", 1199, 16, 1199, 41);
+rv t19461 = t19459;
+if (rt_truth(t19461)) {
+rv t19462 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1192, 54, 1192, 80)));
+t19461 = t19462;
+}
+if (rt_truth(t19461)) {
+rv r19463 = rt_str_at("rt_intr_host_run", 1193, 16, 1193, 34);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19461;
+return r19463;
 }
-rv t19462 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
-rv t19463 = t19462;
-if (rt_truth(t19463)) {
-rv t19464 = rt_bool(rt_eq(v_name, rt_str_at("mcp_send", 1201, 31, 1201, 41)));
-t19463 = t19464;
-}
-rv t19465 = t19463;
+rv t19464 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
+rv t19465 = t19464;
 if (rt_truth(t19465)) {
-rv t19466 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/mcp.nex", 1201, 54, 1201, 72)));
+rv t19466 = rt_bool(rt_eq(v_name, rt_str_at("host_real", 1195, 31, 1195, 42)));
 t19465 = t19466;
 }
-if (rt_truth(t19465)) {
-rv r19467 = rt_str_at("rt_intr_mcp_send", 1202, 16, 1202, 34);
+rv t19467 = t19465;
+if (rt_truth(t19467)) {
+rv t19468 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1195, 55, 1195, 81)));
+t19467 = t19468;
+}
+if (rt_truth(t19467)) {
+rv r19469 = rt_str_at("rt_intr_host_real", 1196, 16, 1196, 35);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19467;
+return r19469;
 }
-rv t19468 = rt_bool(rt_eq(v_count, rt_int(INT64_C(0))));
-rv t19469 = t19468;
-if (rt_truth(t19469)) {
-rv t19470 = rt_bool(rt_eq(v_name, rt_str_at("lsp_line", 1204, 31, 1204, 41)));
-t19469 = t19470;
-}
-rv t19471 = t19469;
+rv t19470 = rt_bool(rt_eq(v_count, rt_int(INT64_C(0))));
+rv t19471 = t19470;
 if (rt_truth(t19471)) {
-rv t19472 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/lsp.nex", 1204, 54, 1204, 72)));
+rv t19472 = rt_bool(rt_eq(v_name, rt_str_at("mcp_line", 1198, 31, 1198, 41)));
 t19471 = t19472;
 }
-if (rt_truth(t19471)) {
-rv r19473 = rt_str_at("rt_intr_read_stdin_line", 1205, 16, 1205, 41);
+rv t19473 = t19471;
+if (rt_truth(t19473)) {
+rv t19474 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/mcp.nex", 1198, 54, 1198, 72)));
+t19473 = t19474;
+}
+if (rt_truth(t19473)) {
+rv r19475 = rt_str_at("rt_intr_read_stdin_line", 1199, 16, 1199, 41);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19473;
+return r19475;
 }
-rv t19474 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
-rv t19475 = t19474;
-if (rt_truth(t19475)) {
-rv t19476 = rt_bool(rt_eq(v_name, rt_str_at("lsp_body", 1207, 31, 1207, 41)));
-t19475 = t19476;
-}
-rv t19477 = t19475;
+rv t19476 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
+rv t19477 = t19476;
 if (rt_truth(t19477)) {
-rv t19478 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/lsp.nex", 1207, 54, 1207, 72)));
+rv t19478 = rt_bool(rt_eq(v_name, rt_str_at("mcp_send", 1201, 31, 1201, 41)));
 t19477 = t19478;
 }
-if (rt_truth(t19477)) {
-rv r19479 = rt_str_at("rt_intr_lsp_body", 1208, 16, 1208, 34);
+rv t19479 = t19477;
+if (rt_truth(t19479)) {
+rv t19480 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/mcp.nex", 1201, 54, 1201, 72)));
+t19479 = t19480;
+}
+if (rt_truth(t19479)) {
+rv r19481 = rt_str_at("rt_intr_mcp_send", 1202, 16, 1202, 34);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19479;
+return r19481;
 }
-rv t19480 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
-rv t19481 = t19480;
-if (rt_truth(t19481)) {
-rv t19482 = rt_bool(rt_eq(v_name, rt_str_at("lsp_send", 1210, 31, 1210, 41)));
-t19481 = t19482;
-}
-rv t19483 = t19481;
+rv t19482 = rt_bool(rt_eq(v_count, rt_int(INT64_C(0))));
+rv t19483 = t19482;
 if (rt_truth(t19483)) {
-rv t19484 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/lsp.nex", 1210, 54, 1210, 72)));
+rv t19484 = rt_bool(rt_eq(v_name, rt_str_at("lsp_line", 1204, 31, 1204, 41)));
 t19483 = t19484;
 }
-if (rt_truth(t19483)) {
-rv r19485 = rt_str_at("rt_intr_lsp_send", 1211, 16, 1211, 34);
+rv t19485 = t19483;
+if (rt_truth(t19485)) {
+rv t19486 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/lsp.nex", 1204, 54, 1204, 72)));
+t19485 = t19486;
+}
+if (rt_truth(t19485)) {
+rv r19487 = rt_str_at("rt_intr_read_stdin_line", 1205, 16, 1205, 41);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19485;
+return r19487;
 }
-rv t19486 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
-rv t19487 = t19486;
-if (rt_truth(t19487)) {
-rv t19488 = rt_bool(rt_eq(v_name, rt_str_at("byte_length", 1213, 31, 1213, 44)));
-t19487 = t19488;
-}
-rv t19489 = t19487;
+rv t19488 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
+rv t19489 = t19488;
 if (rt_truth(t19489)) {
-rv t19490 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/project.nex", 1213, 57, 1213, 79)));
+rv t19490 = rt_bool(rt_eq(v_name, rt_str_at("lsp_body", 1207, 31, 1207, 41)));
 t19489 = t19490;
 }
-if (rt_truth(t19489)) {
-rv r19491 = rt_str_at("rt_intr_byte_length", 1214, 16, 1214, 37);
+rv t19491 = t19489;
+if (rt_truth(t19491)) {
+rv t19492 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/lsp.nex", 1207, 54, 1207, 72)));
+t19491 = t19492;
+}
+if (rt_truth(t19491)) {
+rv r19493 = rt_str_at("rt_intr_lsp_body", 1208, 16, 1208, 34);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19491;
+return r19493;
 }
-rv t19492 = rt_bool(rt_eq(v_count, rt_int(INT64_C(2))));
-rv t19493 = t19492;
-if (rt_truth(t19493)) {
-rv t19494 = rt_bool(rt_eq(v_name, rt_str_at("field", 1216, 31, 1216, 38)));
-t19493 = t19494;
+rv t19494 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
+rv t19495 = t19494;
+if (rt_truth(t19495)) {
+rv t19496 = rt_bool(rt_eq(v_name, rt_str_at("lsp_send", 1210, 31, 1210, 41)));
+t19495 = t19496;
 }
-if (rt_truth(t19493)) {
-rv r19495 = rt_str_at("rt_intr_field", 1217, 16, 1217, 31);
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19495;
-}
-rv t19496 = rt_bool(rt_eq(v_count, rt_int(INT64_C(2))));
-rv t19497 = t19496;
+rv t19497 = t19495;
 if (rt_truth(t19497)) {
-rv t19498 = rt_bool(rt_eq(v_name, rt_str_at("index_of", 1219, 31, 1219, 41)));
+rv t19498 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/lsp.nex", 1210, 54, 1210, 72)));
 t19497 = t19498;
 }
 if (rt_truth(t19497)) {
-rv r19499 = rt_str_at("rt_intr_index_of", 1220, 16, 1220, 34);
+rv r19499 = rt_str_at("rt_intr_lsp_send", 1211, 16, 1211, 34);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19499;
 }
-rv t19500 = rt_bool(rt_eq(v_count, rt_int(INT64_C(3))));
+rv t19500 = rt_bool(rt_eq(v_count, rt_int(INT64_C(1))));
 rv t19501 = t19500;
 if (rt_truth(t19501)) {
-rv t19502 = rt_bool(rt_eq(v_name, rt_str_at("field_at", 1222, 31, 1222, 41)));
+rv t19502 = rt_bool(rt_eq(v_name, rt_str_at("byte_length", 1213, 31, 1213, 44)));
 t19501 = t19502;
 }
-if (rt_truth(t19501)) {
-rv r19503 = rt_str_at("rt_intr_field_at", 1223, 16, 1223, 34);
+rv t19503 = t19501;
+if (rt_truth(t19503)) {
+rv t19504 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/project.nex", 1213, 57, 1213, 79)));
+t19503 = t19504;
+}
+if (rt_truth(t19503)) {
+rv r19505 = rt_str_at("rt_intr_byte_length", 1214, 16, 1214, 37);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19503;
+return r19505;
 }
-rv t19504 = rt_bool(rt_eq(v_count, rt_int(INT64_C(3))));
-rv t19505 = t19504;
-if (rt_truth(t19505)) {
-rv t19506 = rt_bool(rt_eq(v_name, rt_str_at("replace_val", 1225, 31, 1225, 44)));
-t19505 = t19506;
-}
-rv t19507 = t19505;
+rv t19506 = rt_bool(rt_eq(v_count, rt_int(INT64_C(2))));
+rv t19507 = t19506;
 if (rt_truth(t19507)) {
-rv t19508 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1225, 57, 1225, 83)));
+rv t19508 = rt_bool(rt_eq(v_name, rt_str_at("field", 1216, 31, 1216, 38)));
 t19507 = t19508;
 }
 if (rt_truth(t19507)) {
-rv r19509 = rt_str_at("rt_intr_replace_val", 1226, 16, 1226, 37);
+rv r19509 = rt_str_at("rt_intr_field", 1217, 16, 1217, 31);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19509;
 }
-rv t19510 = rt_bool(rt_eq(v_count, rt_int(INT64_C(3))));
+rv t19510 = rt_bool(rt_eq(v_count, rt_int(INT64_C(2))));
 rv t19511 = t19510;
 if (rt_truth(t19511)) {
-rv t19512 = rt_bool(rt_eq(v_name, rt_str_at("assign", 1228, 31, 1228, 39)));
+rv t19512 = rt_bool(rt_eq(v_name, rt_str_at("index_of", 1219, 31, 1219, 41)));
 t19511 = t19512;
 }
-rv t19513 = t19511;
-if (rt_truth(t19513)) {
-rv t19514 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1228, 52, 1228, 78)));
-t19513 = t19514;
-}
-if (rt_truth(t19513)) {
-rv r19515 = rt_str_at("rt_intr_assign", 1229, 16, 1229, 32);
+if (rt_truth(t19511)) {
+rv r19513 = rt_str_at("rt_intr_index_of", 1220, 16, 1220, 34);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19515;
+return r19513;
 }
-rv r19516 = rt_str_at("", 1231, 12, 1231, 14);
+rv t19514 = rt_bool(rt_eq(v_count, rt_int(INT64_C(3))));
+rv t19515 = t19514;
+if (rt_truth(t19515)) {
+rv t19516 = rt_bool(rt_eq(v_name, rt_str_at("field_at", 1222, 31, 1222, 41)));
+t19515 = t19516;
+}
+if (rt_truth(t19515)) {
+rv r19517 = rt_str_at("rt_intr_field_at", 1223, 16, 1223, 34);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19516;
+return r19517;
+}
+rv t19518 = rt_bool(rt_eq(v_count, rt_int(INT64_C(3))));
+rv t19519 = t19518;
+if (rt_truth(t19519)) {
+rv t19520 = rt_bool(rt_eq(v_name, rt_str_at("replace_val", 1225, 31, 1225, 44)));
+t19519 = t19520;
+}
+rv t19521 = t19519;
+if (rt_truth(t19521)) {
+rv t19522 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1225, 57, 1225, 83)));
+t19521 = t19522;
+}
+if (rt_truth(t19521)) {
+rv r19523 = rt_str_at("rt_intr_replace_val", 1226, 16, 1226, 37);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19523;
+}
+rv t19524 = rt_bool(rt_eq(v_count, rt_int(INT64_C(3))));
+rv t19525 = t19524;
+if (rt_truth(t19525)) {
+rv t19526 = rt_bool(rt_eq(v_name, rt_str_at("assign", 1228, 31, 1228, 39)));
+t19525 = t19526;
+}
+rv t19527 = t19525;
+if (rt_truth(t19527)) {
+rv t19528 = rt_bool(rt_eq(v_file, rt_str_at("selfhost/interpreter.nex", 1228, 52, 1228, 78)));
+t19527 = t19528;
+}
+if (rt_truth(t19527)) {
+rv r19529 = rt_str_at("rt_intr_assign", 1229, 16, 1229, 32);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19529;
+}
+rv r19530 = rt_str_at("", 1231, 12, 1231, 14);
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19530;
 }
 
 static rv nx_gen_function(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_function) {
 int rt_saved = rt_enter("gen_function", 10, s_l, s_c, s_el, s_ec);
-rv t19517 = nx_intrinsic_of(1235, 21, 1235, 43, v_function);
-rv v_intrinsic = t19517;
-rv t19518 = rt_bool(!rt_eq(v_intrinsic, rt_str_at("", 1236, 21, 1236, 23)));
-if (rt_truth(t19518)) {
-rv t19519 = rt_list_from(0, 0);
-rv v_passed = t19519;
-rv t19520 = nx_param_vars(1238, 22, 1238, 42, v_function);
+rv t19531 = nx_intrinsic_of(1235, 21, 1235, 43, v_function);
+rv v_intrinsic = t19531;
+rv t19532 = rt_bool(!rt_eq(v_intrinsic, rt_str_at("", 1236, 21, 1236, 23)));
+if (rt_truth(t19532)) {
+rv t19533 = rt_list_from(0, 0);
+rv v_passed = t19533;
+rv t19534 = nx_param_vars(1238, 22, 1238, 42, v_function);
 {
-rv it19521 = t19520;
-int64_t n19521 = rt_list_len(it19521);
+rv it19535 = t19534;
+int64_t n19535 = rt_list_len(it19535);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1238, turn);
 rt_pop();
-if (turn >= n19521) break;
-rv v_param = rt_list_at(it19521, turn);
+if (turn >= n19535) break;
+rv v_param = rt_list_at(it19535, turn);
 rt_push_loop(RT_BODY, 1238, turn + 1);
-rv t19522 = rt_field(v_param, "name");
-rv t19523 = rt_add(rt_str_at("v_", 1239, 42, 1239, 46), t19522, 1239, 42, 1239, 59);
-rv t19524 = rt_list_append(v_passed, t19523);
-v_passed = t19524;
+rv t19536 = rt_field(v_param, "name");
+rv t19537 = rt_add(rt_str_at("v_", 1239, 42, 1239, 46), t19536, 1239, 42, 1239, 59);
+rv t19538 = rt_list_append(v_passed, t19537);
+v_passed = t19538;
 rt_pop();
 turn++;
 }
 }
-rv t19525 = nx_signature(1241, 21, 1241, 40, v_function);
-rv t19526 = rt_add(t19525, rt_str_at(" {\nreturn ", 1241, 43, 1241, 57), 1241, 21, 1241, 57);
-rv t19527 = rt_add(t19526, v_intrinsic, 1241, 21, 1241, 69);
-rv t19528 = rt_add(t19527, rt_str_at("(", 1241, 72, 1241, 75), 1241, 21, 1241, 75);
-rv t19529 = nx_parser__join_texts(1241, 78, 1241, 109, v_passed, rt_str_at(", ", 1241, 104, 1241, 108));
-rv t19530 = rt_add(t19528, t19529, 1241, 21, 1241, 109);
-rv t19531 = rt_add(t19530, rt_str_at(");\n}\n\n", 1241, 112, 1241, 123), 1241, 21, 1241, 123);
-rv t19532 = nx_part(1241, 16, 1241, 132, t19531, rt_str_at("", 1241, 125, 1241, 127), v_st);
-rv r19533 = t19532;
+rv t19539 = nx_signature(1241, 21, 1241, 40, v_function);
+rv t19540 = rt_add(t19539, rt_str_at(" {\nreturn ", 1241, 43, 1241, 57), 1241, 21, 1241, 57);
+rv t19541 = rt_add(t19540, v_intrinsic, 1241, 21, 1241, 69);
+rv t19542 = rt_add(t19541, rt_str_at("(", 1241, 72, 1241, 75), 1241, 21, 1241, 75);
+rv t19543 = nx_parser__join_texts(1241, 78, 1241, 109, v_passed, rt_str_at(", ", 1241, 104, 1241, 108));
+rv t19544 = rt_add(t19542, t19543, 1241, 21, 1241, 109);
+rv t19545 = rt_add(t19544, rt_str_at(");\n}\n\n", 1241, 112, 1241, 123), 1241, 21, 1241, 123);
+rv t19546 = nx_part(1241, 16, 1241, 132, t19545, rt_str_at("", 1241, 125, 1241, 127), v_st);
+rv r19547 = t19546;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19533;
+return r19547;
 }
-rv t19534 = nx_field(1243, 24, 1243, 47, v_function, rt_str_at("name", 1243, 40, 1243, 46));
-rv t19535 = nx_text_of(1243, 16, 1243, 48, t19534);
-rv v_name = t19535;
-rv t19536 = nx_param_vars(1244, 40, 1244, 60, v_function);
-rv t19537 = nx_clauses_of(1244, 70, 1244, 102, v_function, rt_str_at("promises", 1244, 91, 1244, 101));
-rv t19538 = rt_record_new("Fn", rec_Fn, 3, (rv[]){v_name, t19536, t19537});
-rv v_scope = t19538;
-rv t19539 = rt_field(v_st, "next");
-rv t19540 = rt_field(v_st, "bad");
-rv t19541 = rt_field(v_st, "info");
-rv t19542 = rt_record_new("St", rec_St, 4, (rv[]){t19539, t19540, t19541, v_scope});
-rv t19543 = nx_needs_code(1245, 17, 1245, 105, t19542, v_function, v_scope);
-rv v_entry = t19543;
-rv t19544 = rt_field(v_entry, "st");
-rv t19545 = rt_field(v_scope, "params");
-rv t19546 = nx_field(1246, 57, 1246, 80, v_function, rt_str_at("body", 1246, 73, 1246, 79));
-rv t19547 = nx_gen_block(1246, 16, 1246, 81, t19544, v_scope, t19545, t19546);
-rv v_body = t19547;
-rv t19548 = rt_field(v_st, "info");
-rv t19549 = rt_field(t19548, "files");
-rv t19550 = nx_field(1247, 48, 1247, 71, v_function, rt_str_at("file", 1247, 64, 1247, 70));
-rv t19551 = nx_text_of(1247, 40, 1247, 72, t19550);
-rv t19552 = nx_index_of(1247, 16, 1247, 73, t19549, t19551);
-rv v_file = t19552;
+rv t19548 = nx_field(1243, 24, 1243, 47, v_function, rt_str_at("name", 1243, 40, 1243, 46));
+rv t19549 = nx_text_of(1243, 16, 1243, 48, t19548);
+rv v_name = t19549;
+rv t19550 = nx_param_vars(1244, 40, 1244, 60, v_function);
+rv t19551 = nx_clauses_of(1244, 70, 1244, 102, v_function, rt_str_at("promises", 1244, 91, 1244, 101));
+rv t19552 = rt_record_new("Fn", rec_Fn, 3, (rv[]){v_name, t19550, t19551});
+rv v_scope = t19552;
+rv t19553 = rt_field(v_st, "next");
+rv t19554 = rt_field(v_st, "bad");
+rv t19555 = rt_field(v_st, "info");
+rv t19556 = rt_record_new("St", rec_St, 4, (rv[]){t19553, t19554, t19555, v_scope});
+rv t19557 = nx_needs_code(1245, 17, 1245, 105, t19556, v_function, v_scope);
+rv v_entry = t19557;
+rv t19558 = rt_field(v_entry, "st");
+rv t19559 = rt_field(v_scope, "params");
+rv t19560 = nx_field(1246, 57, 1246, 80, v_function, rt_str_at("body", 1246, 73, 1246, 79));
+rv t19561 = nx_gen_block(1246, 16, 1246, 81, t19558, v_scope, t19559, t19560);
+rv v_body = t19561;
+rv t19562 = rt_field(v_st, "info");
+rv t19563 = rt_field(t19562, "files");
+rv t19564 = nx_field(1247, 48, 1247, 71, v_function, rt_str_at("file", 1247, 64, 1247, 70));
+rv t19565 = nx_text_of(1247, 40, 1247, 72, t19564);
+rv t19566 = nx_index_of(1247, 16, 1247, 73, t19563, t19565);
+rv v_file = t19566;
 rv v_file_index = rt_int(INT64_C(0));
-rv t19553 = rt_bool(rt_less(rt_int(INT64_C(0)), v_file));
-if (rt_truth(t19553)) {
+rv t19567 = rt_bool(rt_less(rt_int(INT64_C(0)), v_file));
+if (rt_truth(t19567)) {
 v_file_index = v_file;
 }
-rv t19554 = nx_signature(1253, 9, 1253, 28, v_function);
-rv t19555 = rt_add(t19554, rt_str_at(" {\nint rt_saved = rt_enter(", 1253, 31, 1253, 62), 1253, 9, 1253, 62);
-rv t19556 = nx_c_string(1253, 65, 1253, 79, v_name);
-rv t19557 = rt_add(t19555, t19556, 1253, 9, 1253, 79);
-rv t19558 = rt_add(t19557, rt_str_at(", ", 1253, 82, 1253, 86), 1253, 9, 1253, 86);
-rv t19559 = rt_to_text(v_file_index, 1253, 89, 1253, 108);
-rv t19560 = rt_add(t19558, t19559, 1253, 9, 1253, 108);
-rv t19561 = rt_add(t19560, rt_str_at(", s_l, s_c, s_el, s_ec);\n", 1253, 111, 1253, 139), 1253, 9, 1253, 139);
-rv v_opening = t19561;
-rv t19562 = rt_field(v_body, "returns");
-if (rt_truth(t19562)) {
-rv t19563 = rt_field(v_entry, "code");
-rv t19564 = rt_add(v_opening, t19563, 1256, 21, 1256, 41);
-rv t19565 = rt_field(v_body, "code");
-rv t19566 = rt_add(t19564, t19565, 1256, 21, 1256, 53);
-rv t19567 = rt_add(t19566, rt_str_at("}\n\n", 1256, 56, 1256, 63), 1256, 21, 1256, 63);
-rv t19568 = rt_field(v_body, "st");
-rv t19569 = nx_part(1256, 16, 1256, 77, t19567, rt_str_at("", 1256, 65, 1256, 67), t19568);
-rv r19570 = t19569;
-rt_top = rt_saved + 1;
-rt_leave(rt_saved);
-return r19570;
-}
-rv t19571 = rt_field(v_body, "st");
-rv t19572 = nx_promise_code(1258, 20, 1258, 68, t19571, v_scope, rt_str_at("rt_unit()", 1258, 49, 1258, 60), rt_bool(false));
-rv v_promised = t19572;
-rv t19573 = rt_field(v_promised, "code");
-rv t19574 = rt_add(rt_str_at("rt_top = rt_saved + 1;\n", 1259, 15, 1259, 41), t19573, 1259, 15, 1259, 57);
-rv t19575 = rt_add(t19574, rt_str_at("rt_leave(rt_saved);\nreturn rt_unit();\n", 1259, 60, 1259, 102), 1259, 15, 1259, 102);
-rv v_end = t19575;
-rv t19576 = rt_field(v_entry, "code");
-rv t19577 = rt_add(v_opening, t19576, 1260, 17, 1260, 37);
-rv t19578 = rt_field(v_body, "code");
-rv t19579 = rt_add(t19577, t19578, 1260, 17, 1260, 49);
-rv t19580 = rt_add(t19579, v_end, 1260, 17, 1260, 55);
-rv t19581 = rt_add(t19580, rt_str_at("}\n\n", 1260, 58, 1260, 65), 1260, 17, 1260, 65);
-rv t19582 = rt_field(v_promised, "st");
-rv t19583 = nx_part(1260, 12, 1260, 83, t19581, rt_str_at("", 1260, 67, 1260, 69), t19582);
+rv t19568 = nx_signature(1253, 9, 1253, 28, v_function);
+rv t19569 = rt_add(t19568, rt_str_at(" {\nint rt_saved = rt_enter(", 1253, 31, 1253, 62), 1253, 9, 1253, 62);
+rv t19570 = nx_c_string(1253, 65, 1253, 79, v_name);
+rv t19571 = rt_add(t19569, t19570, 1253, 9, 1253, 79);
+rv t19572 = rt_add(t19571, rt_str_at(", ", 1253, 82, 1253, 86), 1253, 9, 1253, 86);
+rv t19573 = rt_to_text(v_file_index, 1253, 89, 1253, 108);
+rv t19574 = rt_add(t19572, t19573, 1253, 9, 1253, 108);
+rv t19575 = rt_add(t19574, rt_str_at(", s_l, s_c, s_el, s_ec);\n", 1253, 111, 1253, 139), 1253, 9, 1253, 139);
+rv v_opening = t19575;
+rv t19576 = rt_field(v_body, "returns");
+if (rt_truth(t19576)) {
+rv t19577 = rt_field(v_entry, "code");
+rv t19578 = rt_add(v_opening, t19577, 1256, 21, 1256, 41);
+rv t19579 = rt_field(v_body, "code");
+rv t19580 = rt_add(t19578, t19579, 1256, 21, 1256, 53);
+rv t19581 = rt_add(t19580, rt_str_at("}\n\n", 1256, 56, 1256, 63), 1256, 21, 1256, 63);
+rv t19582 = rt_field(v_body, "st");
+rv t19583 = nx_part(1256, 16, 1256, 77, t19581, rt_str_at("", 1256, 65, 1256, 67), t19582);
 rv r19584 = t19583;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return r19584;
 }
+rv t19585 = rt_field(v_body, "st");
+rv t19586 = nx_promise_code(1258, 20, 1258, 68, t19585, v_scope, rt_str_at("rt_unit()", 1258, 49, 1258, 60), rt_bool(false));
+rv v_promised = t19586;
+rv t19587 = rt_field(v_promised, "code");
+rv t19588 = rt_add(rt_str_at("rt_top = rt_saved + 1;\n", 1259, 15, 1259, 41), t19587, 1259, 15, 1259, 57);
+rv t19589 = rt_add(t19588, rt_str_at("rt_leave(rt_saved);\nreturn rt_unit();\n", 1259, 60, 1259, 102), 1259, 15, 1259, 102);
+rv v_end = t19589;
+rv t19590 = rt_field(v_entry, "code");
+rv t19591 = rt_add(v_opening, t19590, 1260, 17, 1260, 37);
+rv t19592 = rt_field(v_body, "code");
+rv t19593 = rt_add(t19591, t19592, 1260, 17, 1260, 49);
+rv t19594 = rt_add(t19593, v_end, 1260, 17, 1260, 55);
+rv t19595 = rt_add(t19594, rt_str_at("}\n\n", 1260, 58, 1260, 65), 1260, 17, 1260, 65);
+rv t19596 = rt_field(v_promised, "st");
+rv t19597 = nx_part(1260, 12, 1260, 83, t19595, rt_str_at("", 1260, 67, 1260, 69), t19596);
+rv r19598 = t19597;
+rt_top = rt_saved + 1;
+rt_leave(rt_saved);
+return r19598;
+}
 
 static rv nx_base_of(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_declaration) {
 int rt_saved = rt_enter("base_of", 10, s_l, s_c, s_el, s_ec);
-rv t19585 = nx_field(1266, 23, 1266, 53, v_declaration, rt_str_at("base_key", 1266, 42, 1266, 52));
-rv t19586 = nx_text_of(1266, 15, 1266, 54, t19585);
-rv v_key = t19586;
-rv t19587 = rt_bool(!rt_eq(v_key, rt_str_at("", 1267, 15, 1267, 17)));
-if (rt_truth(t19587)) {
-rv r19588 = v_key;
+rv t19599 = nx_field(1266, 23, 1266, 53, v_declaration, rt_str_at("base_key", 1266, 42, 1266, 52));
+rv t19600 = nx_text_of(1266, 15, 1266, 54, t19599);
+rv v_key = t19600;
+rv t19601 = rt_bool(!rt_eq(v_key, rt_str_at("", 1267, 15, 1267, 17)));
+if (rt_truth(t19601)) {
+rv r19602 = v_key;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19588;
+return r19602;
 }
-rv t19589 = nx_field(1270, 26, 1270, 52, v_declaration, rt_str_at("base", 1270, 45, 1270, 51));
-rv t19590 = nx_field(1270, 20, 1270, 61, t19589, rt_str_at("name", 1270, 54, 1270, 60));
-rv t19591 = nx_text_of(1270, 12, 1270, 62, t19590);
-rv r19592 = t19591;
+rv t19603 = nx_field(1270, 26, 1270, 52, v_declaration, rt_str_at("base", 1270, 45, 1270, 51));
+rv t19604 = nx_field(1270, 20, 1270, 61, t19603, rt_str_at("name", 1270, 54, 1270, 60));
+rv t19605 = nx_text_of(1270, 12, 1270, 62, t19604);
+rv r19606 = t19605;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19592;
+return r19606;
 }
 
 static rv nx_refine_signature(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_declaration) {
 int rt_saved = rt_enter("refine_signature", 10, s_l, s_c, s_el, s_ec);
-rv t19593 = nx_declared_name(1275, 35, 1275, 61, v_declaration);
-rv t19594 = nx_c_name(1275, 28, 1275, 62, t19593);
-rv t19595 = rt_add(rt_str_at("static rv nxr_", 1275, 9, 1275, 25), t19594, 1275, 9, 1275, 62);
-rv t19596 = rt_add(t19595, rt_str_at("(rv v_value, const char *written, int64_t l, int64_t c, int64_t el, int64_t ec)", 1276, 11, 1276, 92), 1275, 9, 1276, 92);
-rv r19597 = t19596;
+rv t19607 = nx_declared_name(1275, 35, 1275, 61, v_declaration);
+rv t19608 = nx_c_name(1275, 28, 1275, 62, t19607);
+rv t19609 = rt_add(rt_str_at("static rv nxr_", 1275, 9, 1275, 25), t19608, 1275, 9, 1275, 62);
+rv t19610 = rt_add(t19609, rt_str_at("(rv v_value, const char *written, int64_t l, int64_t c, int64_t el, int64_t ec)", 1276, 11, 1276, 92), 1275, 9, 1276, 92);
+rv r19611 = t19610;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19597;
+return r19611;
 }
 
 static rv nx_gen_refined(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_st, rv v_declaration) {
 int rt_saved = rt_enter("gen_refined", 10, s_l, s_c, s_el, s_ec);
-rv t19598 = nx_field(1281, 24, 1281, 50, v_declaration, rt_str_at("name", 1281, 43, 1281, 49));
-rv t19599 = nx_text_of(1281, 16, 1281, 51, t19598);
-rv v_name = t19599;
-rv t19600 = nx_refine_signature(1282, 16, 1282, 45, v_declaration);
-rv t19601 = rt_add(t19600, rt_str_at(" {\n", 1282, 48, 1282, 55), 1282, 16, 1282, 55);
-rv v_code = t19601;
-rv t19602 = nx_base_of(1283, 16, 1283, 36, v_declaration);
-rv v_base = t19602;
-rv t19603 = rt_field(v_st, "info");
-rv t19604 = rt_field(t19603, "refined");
-rv t19605 = nx_index_of(1284, 8, 1284, 39, t19604, v_base);
-rv t19606 = rt_bool(!rt_less(t19605, rt_int(INT64_C(0))));
-if (rt_truth(t19606)) {
-rv t19607 = rt_add(v_code, rt_str_at("v_value = nxr_", 1285, 23, 1285, 39), 1285, 16, 1285, 39);
-rv t19608 = nx_c_name(1285, 42, 1285, 54, v_base);
-rv t19609 = rt_add(t19607, t19608, 1285, 16, 1285, 54);
-rv t19610 = rt_add(t19609, rt_str_at("(v_value, written, l, c, el, ec);\n", 1285, 57, 1285, 94), 1285, 16, 1285, 94);
-v_code = t19610;
+rv t19612 = nx_field(1281, 24, 1281, 50, v_declaration, rt_str_at("name", 1281, 43, 1281, 49));
+rv t19613 = nx_text_of(1281, 16, 1281, 51, t19612);
+rv v_name = t19613;
+rv t19614 = nx_refine_signature(1282, 16, 1282, 45, v_declaration);
+rv t19615 = rt_add(t19614, rt_str_at(" {\n", 1282, 48, 1282, 55), 1282, 16, 1282, 55);
+rv v_code = t19615;
+rv t19616 = nx_base_of(1283, 16, 1283, 36, v_declaration);
+rv v_base = t19616;
+rv t19617 = rt_field(v_st, "info");
+rv t19618 = rt_field(t19617, "refined");
+rv t19619 = nx_index_of(1284, 8, 1284, 39, t19618, v_base);
+rv t19620 = rt_bool(!rt_less(t19619, rt_int(INT64_C(0))));
+if (rt_truth(t19620)) {
+rv t19621 = rt_add(v_code, rt_str_at("v_value = nxr_", 1285, 23, 1285, 39), 1285, 16, 1285, 39);
+rv t19622 = nx_c_name(1285, 42, 1285, 54, v_base);
+rv t19623 = rt_add(t19621, t19622, 1285, 16, 1285, 54);
+rv t19624 = rt_add(t19623, rt_str_at("(v_value, written, l, c, el, ec);\n", 1285, 57, 1285, 94), 1285, 16, 1285, 94);
+v_code = t19624;
 }
-rv t19611 = nx_field(1287, 34, 1287, 65, v_declaration, rt_str_at("condition", 1287, 53, 1287, 64));
-rv t19612 = nx_gen_expr(1287, 21, 1287, 66, v_st, t19611);
-rv v_condition = t19612;
+rv t19625 = nx_field(1287, 34, 1287, 65, v_declaration, rt_str_at("condition", 1287, 53, 1287, 64));
+rv t19626 = nx_gen_expr(1287, 21, 1287, 66, v_st, t19625);
+rv v_condition = t19626;
 rv v_reason = rt_str_at("\"\"", 1288, 18, 1288, 24);
-rv t19613 = nx_field(1289, 20, 1289, 49, v_declaration, rt_str_at("message", 1289, 39, 1289, 48));
-rv t19614 = nx_is_null(1289, 12, 1289, 50, t19613);
-rv t19615 = rt_bool(!rt_truth(t19614));
-if (rt_truth(t19615)) {
-rv t19616 = nx_field(1290, 35, 1290, 64, v_declaration, rt_str_at("message", 1290, 54, 1290, 63));
-rv t19617 = nx_text_of(1290, 27, 1290, 65, t19616);
-rv t19618 = nx_c_string(1290, 18, 1290, 66, t19617);
-v_reason = t19618;
+rv t19627 = nx_field(1289, 20, 1289, 49, v_declaration, rt_str_at("message", 1289, 39, 1289, 48));
+rv t19628 = nx_is_null(1289, 12, 1289, 50, t19627);
+rv t19629 = rt_bool(!rt_truth(t19628));
+if (rt_truth(t19629)) {
+rv t19630 = nx_field(1290, 35, 1290, 64, v_declaration, rt_str_at("message", 1290, 54, 1290, 63));
+rv t19631 = nx_text_of(1290, 27, 1290, 65, t19630);
+rv t19632 = nx_c_string(1290, 18, 1290, 66, t19631);
+v_reason = t19632;
 }
-rv t19619 = rt_field(v_condition, "code");
-rv t19620 = rt_add(v_code, t19619, 1292, 12, 1292, 33);
-rv t19621 = rt_add(t19620, rt_str_at("if (!rt_truth(", 1292, 36, 1292, 52), 1292, 12, 1292, 52);
-rv t19622 = rt_field(v_condition, "value");
-rv t19623 = rt_add(t19621, t19622, 1292, 12, 1292, 70);
-rv t19624 = rt_add(t19623, rt_str_at(")) rt_refine_fail(written, ", 1292, 73, 1292, 102), 1292, 12, 1292, 102);
-rv t19625 = nx_c_string(1292, 105, 1292, 119, v_name);
-rv t19626 = rt_add(t19624, t19625, 1292, 12, 1292, 119);
-rv t19627 = rt_add(t19626, rt_str_at(", ", 1292, 122, 1292, 126), 1292, 12, 1292, 126);
-v_code = t19627;
-rv t19628 = nx_field(1293, 44, 1293, 75, v_declaration, rt_str_at("condition", 1293, 63, 1293, 74));
-rv t19629 = nx_checker__unparse(1293, 28, 1293, 76, t19628);
-rv t19630 = nx_c_string(1293, 19, 1293, 77, t19629);
-rv t19631 = rt_add(v_code, t19630, 1293, 12, 1293, 77);
-rv t19632 = rt_add(t19631, rt_str_at(", v_value, ", 1293, 80, 1293, 93), 1293, 12, 1293, 93);
-rv t19633 = rt_add(t19632, v_reason, 1293, 12, 1293, 102);
-rv t19634 = rt_add(t19633, rt_str_at(", l, c, el, ec);\n", 1293, 105, 1293, 125), 1293, 12, 1293, 125);
-v_code = t19634;
-rv t19635 = rt_add(v_code, rt_str_at("return v_value;\n}\n\n", 1294, 19, 1294, 43), 1294, 12, 1294, 43);
-v_code = t19635;
-rv t19636 = rt_field(v_condition, "st");
-rv t19637 = nx_part(1295, 12, 1295, 40, v_code, rt_str_at("", 1295, 23, 1295, 25), t19636);
-rv r19638 = t19637;
+rv t19633 = rt_field(v_condition, "code");
+rv t19634 = rt_add(v_code, t19633, 1292, 12, 1292, 33);
+rv t19635 = rt_add(t19634, rt_str_at("if (!rt_truth(", 1292, 36, 1292, 52), 1292, 12, 1292, 52);
+rv t19636 = rt_field(v_condition, "value");
+rv t19637 = rt_add(t19635, t19636, 1292, 12, 1292, 70);
+rv t19638 = rt_add(t19637, rt_str_at(")) rt_refine_fail(written, ", 1292, 73, 1292, 102), 1292, 12, 1292, 102);
+rv t19639 = nx_c_string(1292, 105, 1292, 119, v_name);
+rv t19640 = rt_add(t19638, t19639, 1292, 12, 1292, 119);
+rv t19641 = rt_add(t19640, rt_str_at(", ", 1292, 122, 1292, 126), 1292, 12, 1292, 126);
+v_code = t19641;
+rv t19642 = nx_field(1293, 44, 1293, 75, v_declaration, rt_str_at("condition", 1293, 63, 1293, 74));
+rv t19643 = nx_checker__unparse(1293, 28, 1293, 76, t19642);
+rv t19644 = nx_c_string(1293, 19, 1293, 77, t19643);
+rv t19645 = rt_add(v_code, t19644, 1293, 12, 1293, 77);
+rv t19646 = rt_add(t19645, rt_str_at(", v_value, ", 1293, 80, 1293, 93), 1293, 12, 1293, 93);
+rv t19647 = rt_add(t19646, v_reason, 1293, 12, 1293, 102);
+rv t19648 = rt_add(t19647, rt_str_at(", l, c, el, ec);\n", 1293, 105, 1293, 125), 1293, 12, 1293, 125);
+v_code = t19648;
+rv t19649 = rt_add(v_code, rt_str_at("return v_value;\n}\n\n", 1294, 19, 1294, 43), 1294, 12, 1294, 43);
+v_code = t19649;
+rv t19650 = rt_field(v_condition, "st");
+rv t19651 = nx_part(1295, 12, 1295, 40, v_code, rt_str_at("", 1295, 23, 1295, 25), t19650);
+rv r19652 = t19651;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19638;
+return r19652;
 }
 
 static rv nx_record_descriptor(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_record) {
 int rt_saved = rt_enter("record_descriptor", 10, s_l, s_c, s_el, s_ec);
-rv t19639 = rt_list_from(0, 0);
-rv v_names = t19639;
-rv t19640 = nx_field(1302, 30, 1302, 53, v_record, rt_str_at("fields", 1302, 44, 1302, 52));
-rv t19641 = nx_items_of(1302, 21, 1302, 54, t19640);
+rv t19653 = rt_list_from(0, 0);
+rv v_names = t19653;
+rv t19654 = nx_field(1302, 30, 1302, 53, v_record, rt_str_at("fields", 1302, 44, 1302, 52));
+rv t19655 = nx_items_of(1302, 21, 1302, 54, t19654);
 {
-rv it19642 = t19641;
-int64_t n19642 = rt_list_len(it19642);
+rv it19656 = t19655;
+int64_t n19656 = rt_list_len(it19656);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1302, turn);
 rt_pop();
-if (turn >= n19642) break;
-rv v_declared = rt_list_at(it19642, turn);
+if (turn >= n19656) break;
+rv v_declared = rt_list_at(it19656, turn);
 rt_push_loop(RT_BODY, 1302, turn + 1);
-rv t19643 = nx_field(1303, 53, 1303, 76, v_declared, rt_str_at("name", 1303, 69, 1303, 75));
-rv t19644 = nx_text_of(1303, 45, 1303, 77, t19643);
-rv t19645 = nx_c_string(1303, 36, 1303, 78, t19644);
-rv t19646 = rt_list_append(v_names, t19645);
-v_names = t19646;
+rv t19657 = nx_field(1303, 53, 1303, 76, v_declared, rt_str_at("name", 1303, 69, 1303, 75));
+rv t19658 = nx_text_of(1303, 45, 1303, 77, t19657);
+rv t19659 = nx_c_string(1303, 36, 1303, 78, t19658);
+rv t19660 = rt_list_append(v_names, t19659);
+v_names = t19660;
 rt_pop();
 turn++;
 }
 }
 rv v_list = rt_str_at("0", 1305, 16, 1305, 19);
-rv t19647 = rt_int(rt_list_len(v_names));
-rv t19648 = rt_bool(rt_less(rt_int(INT64_C(0)), t19647));
-if (rt_truth(t19648)) {
-rv t19649 = nx_parser__join_texts(1307, 16, 1307, 46, v_names, rt_str_at(", ", 1307, 41, 1307, 45));
-v_list = t19649;
+rv t19661 = rt_int(rt_list_len(v_names));
+rv t19662 = rt_bool(rt_less(rt_int(INT64_C(0)), t19661));
+if (rt_truth(t19662)) {
+rv t19663 = nx_parser__join_texts(1307, 16, 1307, 46, v_names, rt_str_at(", ", 1307, 41, 1307, 45));
+v_list = t19663;
 }
-rv t19650 = nx_declared_name(1309, 53, 1309, 74, v_record);
-rv t19651 = nx_c_name(1309, 46, 1309, 75, t19650);
-rv t19652 = rt_add(rt_str_at("static const char *const rec_", 1309, 12, 1309, 43), t19651, 1309, 12, 1309, 75);
-rv t19653 = rt_add(t19652, rt_str_at("[] = {", 1309, 78, 1309, 87), 1309, 12, 1309, 87);
-rv t19654 = rt_add(t19653, v_list, 1309, 12, 1309, 94);
-rv t19655 = rt_add(t19654, rt_str_at("};\n", 1309, 97, 1309, 103), 1309, 12, 1309, 103);
-rv r19656 = t19655;
+rv t19664 = nx_declared_name(1309, 53, 1309, 74, v_record);
+rv t19665 = nx_c_name(1309, 46, 1309, 75, t19664);
+rv t19666 = rt_add(rt_str_at("static const char *const rec_", 1309, 12, 1309, 43), t19665, 1309, 12, 1309, 75);
+rv t19667 = rt_add(t19666, rt_str_at("[] = {", 1309, 78, 1309, 87), 1309, 12, 1309, 87);
+rv t19668 = rt_add(t19667, v_list, 1309, 12, 1309, 94);
+rv t19669 = rt_add(t19668, rt_str_at("};\n", 1309, 97, 1309, 103), 1309, 12, 1309, 103);
+rv r19670 = t19669;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19656;
+return r19670;
 }
 
 static rv nx_sources_code(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_paths) {
 int rt_saved = rt_enter("sources_code", 10, s_l, s_c, s_el, s_ec);
 rv v_code = rt_str_at("", 1314, 16, 1314, 18);
-rv t19657 = rt_list_from(0, 0);
-rv v_names = t19657;
-rv t19658 = rt_list_from(0, 0);
-rv v_arrays = t19658;
-rv t19659 = rt_list_from(0, 0);
-rv v_counts = t19659;
+rv t19671 = rt_list_from(0, 0);
+rv v_names = t19671;
+rv t19672 = rt_list_from(0, 0);
+rv v_arrays = t19672;
+rv t19673 = rt_list_from(0, 0);
+rv v_counts = t19673;
 rv v_index = rt_int(INT64_C(0));
 {
-rv it19660 = v_paths;
-int64_t n19660 = rt_list_len(it19660);
+rv it19674 = v_paths;
+int64_t n19674 = rt_list_len(it19674);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1319, turn);
 rt_pop();
-if (turn >= n19660) break;
-rv v_path = rt_list_at(it19660, turn);
+if (turn >= n19674) break;
+rv v_path = rt_list_at(it19674, turn);
 rt_push_loop(RT_BODY, 1319, turn + 1);
-rv t19661 = rt_read_file(v_path, 1320, 47, 1320, 51);
-rv t19662 = nx_render__lines_of(1320, 21, 1320, 53, t19661);
-rv v_lines = t19662;
-rv t19663 = rt_add(v_code, rt_str_at("static const char *const nx_lines", 1321, 23, 1321, 58), 1321, 16, 1321, 58);
-rv t19664 = rt_to_text(v_index, 1321, 61, 1321, 75);
-rv t19665 = rt_add(t19663, t19664, 1321, 16, 1321, 75);
-rv t19666 = rt_add(t19665, rt_str_at("[] = {\n", 1321, 78, 1321, 89), 1321, 16, 1321, 89);
-v_code = t19666;
+rv t19675 = rt_read_file(v_path, 1320, 47, 1320, 51);
+rv t19676 = nx_render__lines_of(1320, 21, 1320, 53, t19675);
+rv v_lines = t19676;
+rv t19677 = rt_add(v_code, rt_str_at("static const char *const nx_lines", 1321, 23, 1321, 58), 1321, 16, 1321, 58);
+rv t19678 = rt_to_text(v_index, 1321, 61, 1321, 75);
+rv t19679 = rt_add(t19677, t19678, 1321, 16, 1321, 75);
+rv t19680 = rt_add(t19679, rt_str_at("[] = {\n", 1321, 78, 1321, 89), 1321, 16, 1321, 89);
+v_code = t19680;
 {
-rv it19667 = v_lines;
-int64_t n19667 = rt_list_len(it19667);
+rv it19681 = v_lines;
+int64_t n19681 = rt_list_len(it19681);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1322, turn);
 rt_pop();
-if (turn >= n19667) break;
-rv v_line = rt_list_at(it19667, turn);
+if (turn >= n19681) break;
+rv v_line = rt_list_at(it19681, turn);
 rt_push_loop(RT_BODY, 1322, turn + 1);
-rv t19668 = nx_c_string(1323, 27, 1323, 41, v_line);
-rv t19669 = rt_add(v_code, t19668, 1323, 20, 1323, 41);
-rv t19670 = rt_add(t19669, rt_str_at(",\n", 1323, 44, 1323, 49), 1323, 20, 1323, 49);
-v_code = t19670;
-rt_pop();
-turn++;
-}
-}
-rv t19671 = rt_add(v_code, rt_str_at("0};\n", 1325, 23, 1325, 30), 1325, 16, 1325, 30);
-v_code = t19671;
-rv t19672 = nx_c_string(1326, 36, 1326, 50, v_path);
-rv t19673 = rt_list_append(v_names, t19672);
-v_names = t19673;
-rv t19674 = rt_to_text(v_index, 1327, 51, 1327, 65);
-rv t19675 = rt_add(rt_str_at("nx_lines", 1327, 38, 1327, 48), t19674, 1327, 38, 1327, 65);
-rv t19676 = rt_list_append(v_arrays, t19675);
-v_arrays = t19676;
-rv t19677 = rt_int(rt_list_len(v_lines));
-rv t19678 = rt_to_text(t19677, 1328, 38, 1328, 65);
-rv t19679 = rt_list_append(v_counts, t19678);
-v_counts = t19679;
-rv t19680 = rt_add(v_index, rt_int(INT64_C(1)), 1329, 17, 1329, 26);
-v_index = t19680;
-rt_pop();
-turn++;
-}
-}
-rv t19681 = rt_add(v_code, rt_str_at("static const char *const nx_paths[] = {", 1331, 19, 1331, 61), 1331, 12, 1331, 61);
-rv t19682 = nx_parser__join_texts(1331, 64, 1331, 94, v_names, rt_str_at(", ", 1331, 89, 1331, 93));
-rv t19683 = rt_add(t19681, t19682, 1331, 12, 1331, 94);
-rv t19684 = rt_add(t19683, rt_str_at("};\n", 1331, 97, 1331, 103), 1331, 12, 1331, 103);
+rv t19682 = nx_c_string(1323, 27, 1323, 41, v_line);
+rv t19683 = rt_add(v_code, t19682, 1323, 20, 1323, 41);
+rv t19684 = rt_add(t19683, rt_str_at(",\n", 1323, 44, 1323, 49), 1323, 20, 1323, 49);
 v_code = t19684;
-rv t19685 = rt_add(v_code, rt_str_at("static const char *const *const nx_files[] = {", 1332, 19, 1332, 68), 1332, 12, 1332, 68);
-rv t19686 = nx_parser__join_texts(1332, 71, 1332, 102, v_arrays, rt_str_at(", ", 1332, 97, 1332, 101));
-rv t19687 = rt_add(t19685, t19686, 1332, 12, 1332, 102);
-rv t19688 = rt_add(t19687, rt_str_at("};\n", 1332, 105, 1332, 111), 1332, 12, 1332, 111);
-v_code = t19688;
-rv t19689 = rt_add(v_code, rt_str_at("static const int nx_counts[] = {", 1333, 19, 1333, 54), 1333, 12, 1333, 54);
-rv t19690 = nx_parser__join_texts(1333, 57, 1333, 88, v_counts, rt_str_at(", ", 1333, 83, 1333, 87));
-rv t19691 = rt_add(t19689, t19690, 1333, 12, 1333, 88);
-rv t19692 = rt_add(t19691, rt_str_at("};\n\n", 1333, 91, 1333, 99), 1333, 12, 1333, 99);
-v_code = t19692;
-rv r19693 = v_code;
+rt_pop();
+turn++;
+}
+}
+rv t19685 = rt_add(v_code, rt_str_at("0};\n", 1325, 23, 1325, 30), 1325, 16, 1325, 30);
+v_code = t19685;
+rv t19686 = nx_c_string(1326, 36, 1326, 50, v_path);
+rv t19687 = rt_list_append(v_names, t19686);
+v_names = t19687;
+rv t19688 = rt_to_text(v_index, 1327, 51, 1327, 65);
+rv t19689 = rt_add(rt_str_at("nx_lines", 1327, 38, 1327, 48), t19688, 1327, 38, 1327, 65);
+rv t19690 = rt_list_append(v_arrays, t19689);
+v_arrays = t19690;
+rv t19691 = rt_int(rt_list_len(v_lines));
+rv t19692 = rt_to_text(t19691, 1328, 38, 1328, 65);
+rv t19693 = rt_list_append(v_counts, t19692);
+v_counts = t19693;
+rv t19694 = rt_add(v_index, rt_int(INT64_C(1)), 1329, 17, 1329, 26);
+v_index = t19694;
+rt_pop();
+turn++;
+}
+}
+rv t19695 = rt_add(v_code, rt_str_at("static const char *const nx_paths[] = {", 1331, 19, 1331, 61), 1331, 12, 1331, 61);
+rv t19696 = nx_parser__join_texts(1331, 64, 1331, 94, v_names, rt_str_at(", ", 1331, 89, 1331, 93));
+rv t19697 = rt_add(t19695, t19696, 1331, 12, 1331, 94);
+rv t19698 = rt_add(t19697, rt_str_at("};\n", 1331, 97, 1331, 103), 1331, 12, 1331, 103);
+v_code = t19698;
+rv t19699 = rt_add(v_code, rt_str_at("static const char *const *const nx_files[] = {", 1332, 19, 1332, 68), 1332, 12, 1332, 68);
+rv t19700 = nx_parser__join_texts(1332, 71, 1332, 102, v_arrays, rt_str_at(", ", 1332, 97, 1332, 101));
+rv t19701 = rt_add(t19699, t19700, 1332, 12, 1332, 102);
+rv t19702 = rt_add(t19701, rt_str_at("};\n", 1332, 105, 1332, 111), 1332, 12, 1332, 111);
+v_code = t19702;
+rv t19703 = rt_add(v_code, rt_str_at("static const int nx_counts[] = {", 1333, 19, 1333, 54), 1333, 12, 1333, 54);
+rv t19704 = nx_parser__join_texts(1333, 57, 1333, 88, v_counts, rt_str_at(", ", 1333, 83, 1333, 87));
+rv t19705 = rt_add(t19703, t19704, 1333, 12, 1333, 88);
+rv t19706 = rt_add(t19705, rt_str_at("};\n\n", 1333, 91, 1333, 99), 1333, 12, 1333, 99);
+v_code = t19706;
+rv r19707 = v_code;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19693;
+return r19707;
 }
 
 static rv nx_uses_code(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_program) {
 int rt_saved = rt_enter("uses_code", 10, s_l, s_c, s_el, s_ec);
 rv v_code = rt_str_at("", 1338, 16, 1338, 18);
-rv t19694 = nx_field(1339, 33, 1339, 55, v_program, rt_str_at("uses", 1339, 48, 1339, 54));
-rv t19695 = nx_items_of(1339, 24, 1339, 56, t19694);
+rv t19708 = nx_field(1339, 33, 1339, 55, v_program, rt_str_at("uses", 1339, 48, 1339, 54));
+rv t19709 = nx_items_of(1339, 24, 1339, 56, t19708);
 {
-rv it19696 = t19695;
-int64_t n19696 = rt_list_len(it19696);
+rv it19710 = t19709;
+int64_t n19710 = rt_list_len(it19710);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1339, turn);
 rt_pop();
-if (turn >= n19696) break;
-rv v_declaration = rt_list_at(it19696, turn);
+if (turn >= n19710) break;
+rv v_declaration = rt_list_at(it19710, turn);
 rt_push_loop(RT_BODY, 1339, turn + 1);
-rv t19697 = rt_add(v_code, rt_str_at("rt_declare(", 1340, 23, 1340, 36), 1340, 16, 1340, 36);
-rv t19698 = nx_field(1340, 56, 1340, 88, v_declaration, rt_str_at("capability", 1340, 75, 1340, 87));
-rv t19699 = nx_text_of(1340, 48, 1340, 89, t19698);
-rv t19700 = nx_c_string(1340, 39, 1340, 90, t19699);
-rv t19701 = rt_add(t19697, t19700, 1340, 16, 1340, 90);
-rv t19702 = rt_add(t19701, rt_str_at(", ", 1340, 93, 1340, 97), 1340, 16, 1340, 97);
-rv t19703 = nx_field(1340, 117, 1340, 143, v_declaration, rt_str_at("path", 1340, 136, 1340, 142));
-rv t19704 = nx_text_of(1340, 109, 1340, 144, t19703);
-rv t19705 = nx_c_string(1340, 100, 1340, 145, t19704);
-rv t19706 = rt_add(t19702, t19705, 1340, 16, 1340, 145);
-rv t19707 = rt_add(t19706, rt_str_at(");\n", 1340, 148, 1340, 154), 1340, 16, 1340, 154);
-v_code = t19707;
+rv t19711 = rt_add(v_code, rt_str_at("rt_declare(", 1340, 23, 1340, 36), 1340, 16, 1340, 36);
+rv t19712 = nx_field(1340, 56, 1340, 88, v_declaration, rt_str_at("capability", 1340, 75, 1340, 87));
+rv t19713 = nx_text_of(1340, 48, 1340, 89, t19712);
+rv t19714 = nx_c_string(1340, 39, 1340, 90, t19713);
+rv t19715 = rt_add(t19711, t19714, 1340, 16, 1340, 90);
+rv t19716 = rt_add(t19715, rt_str_at(", ", 1340, 93, 1340, 97), 1340, 16, 1340, 97);
+rv t19717 = nx_field(1340, 117, 1340, 143, v_declaration, rt_str_at("path", 1340, 136, 1340, 142));
+rv t19718 = nx_text_of(1340, 109, 1340, 144, t19717);
+rv t19719 = nx_c_string(1340, 100, 1340, 145, t19718);
+rv t19720 = rt_add(t19716, t19719, 1340, 16, 1340, 145);
+rv t19721 = rt_add(t19720, rt_str_at(");\n", 1340, 148, 1340, 154), 1340, 16, 1340, 154);
+v_code = t19721;
 rt_pop();
 turn++;
 }
 }
-rv r19708 = v_code;
+rv r19722 = v_code;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19708;
+return r19722;
 }
 
 static rv nx_generate(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_program, rv v_path, rv v_paths, rv v_trusted, rv v_cli) {
@@ -70666,306 +70722,306 @@ if (rt_truth(v_trusted)) {
 v_code = rt_str_at("#define RT_NO_FRAMES\n", 1352, 16, 1352, 40);
 }
 if (rt_truth(v_cli)) {
-rv t19709 = rt_add(v_code, rt_str_at("#define RT_CLI\n", 1355, 23, 1355, 41), 1355, 16, 1355, 41);
-v_code = t19709;
+rv t19723 = rt_add(v_code, rt_str_at("#define RT_CLI\n", 1355, 23, 1355, 41), 1355, 16, 1355, 41);
+v_code = t19723;
 }
-rv t19710 = nx_runtime_text__runtime_lines(1357, 17, 1357, 45);
+rv t19724 = nx_runtime_text__runtime_lines(1357, 17, 1357, 45);
 {
-rv it19711 = t19710;
-int64_t n19711 = rt_list_len(it19711);
+rv it19725 = t19724;
+int64_t n19725 = rt_list_len(it19725);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1357, turn);
 rt_pop();
-if (turn >= n19711) break;
-rv v_line = rt_list_at(it19711, turn);
+if (turn >= n19725) break;
+rv v_line = rt_list_at(it19725, turn);
 rt_push_loop(RT_BODY, 1357, turn + 1);
-rv t19712 = rt_add(v_code, v_line, 1358, 16, 1358, 27);
-rv t19713 = rt_add(t19712, rt_str_at("\n", 1358, 30, 1358, 34), 1358, 16, 1358, 34);
-v_code = t19713;
+rv t19726 = rt_add(v_code, v_line, 1358, 16, 1358, 27);
+rv t19727 = rt_add(t19726, rt_str_at("\n", 1358, 30, 1358, 34), 1358, 16, 1358, 34);
+v_code = t19727;
 rt_pop();
 turn++;
 }
 }
-rv t19714 = rt_add(v_code, rt_str_at("\n/* The program: ", 1360, 19, 1360, 39), 1360, 12, 1360, 39);
-rv t19715 = rt_add(t19714, v_path, 1360, 12, 1360, 46);
-rv t19716 = rt_add(t19715, rt_str_at(" */\n\n", 1360, 49, 1360, 58), 1360, 12, 1360, 58);
-rv t19717 = nx_sources_code(1360, 61, 1360, 80, v_paths);
-rv t19718 = rt_add(t19716, t19717, 1360, 12, 1360, 80);
-v_code = t19718;
-rv t19719 = rt_list_from(0, 0);
-rv v_fns = t19719;
-rv t19720 = nx_field(1362, 30, 1362, 57, v_program, rt_str_at("functions", 1362, 45, 1362, 56));
-rv t19721 = nx_items_of(1362, 21, 1362, 58, t19720);
+rv t19728 = rt_add(v_code, rt_str_at("\n/* The program: ", 1360, 19, 1360, 39), 1360, 12, 1360, 39);
+rv t19729 = rt_add(t19728, v_path, 1360, 12, 1360, 46);
+rv t19730 = rt_add(t19729, rt_str_at(" */\n\n", 1360, 49, 1360, 58), 1360, 12, 1360, 58);
+rv t19731 = nx_sources_code(1360, 61, 1360, 80, v_paths);
+rv t19732 = rt_add(t19730, t19731, 1360, 12, 1360, 80);
+v_code = t19732;
+rv t19733 = rt_list_from(0, 0);
+rv v_fns = t19733;
+rv t19734 = nx_field(1362, 30, 1362, 57, v_program, rt_str_at("functions", 1362, 45, 1362, 56));
+rv t19735 = nx_items_of(1362, 21, 1362, 58, t19734);
 {
-rv it19722 = t19721;
-int64_t n19722 = rt_list_len(it19722);
+rv it19736 = t19735;
+int64_t n19736 = rt_list_len(it19736);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1362, turn);
 rt_pop();
-if (turn >= n19722) break;
-rv v_function = rt_list_at(it19722, turn);
+if (turn >= n19736) break;
+rv v_function = rt_list_at(it19736, turn);
 rt_push_loop(RT_BODY, 1362, turn + 1);
-rv t19723 = nx_declared_name(1363, 32, 1363, 55, v_function);
-rv t19724 = rt_list_append(v_fns, t19723);
-v_fns = t19724;
+rv t19737 = nx_declared_name(1363, 32, 1363, 55, v_function);
+rv t19738 = rt_list_append(v_fns, t19737);
+v_fns = t19738;
 rt_pop();
 turn++;
 }
 }
-rv t19725 = rt_list_from(0, 0);
-rv v_record_names = t19725;
-rv t19726 = rt_list_from(0, 0);
-rv v_record_fields = t19726;
-rv t19727 = nx_field(1367, 28, 1367, 53, v_program, rt_str_at("records", 1367, 43, 1367, 52));
-rv t19728 = nx_items_of(1367, 19, 1367, 54, t19727);
+rv t19739 = rt_list_from(0, 0);
+rv v_record_names = t19739;
+rv t19740 = rt_list_from(0, 0);
+rv v_record_fields = t19740;
+rv t19741 = nx_field(1367, 28, 1367, 53, v_program, rt_str_at("records", 1367, 43, 1367, 52));
+rv t19742 = nx_items_of(1367, 19, 1367, 54, t19741);
 {
-rv it19729 = t19728;
-int64_t n19729 = rt_list_len(it19729);
+rv it19743 = t19742;
+int64_t n19743 = rt_list_len(it19743);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1367, turn);
 rt_pop();
-if (turn >= n19729) break;
-rv v_record = rt_list_at(it19729, turn);
+if (turn >= n19743) break;
+rv v_record = rt_list_at(it19743, turn);
 rt_push_loop(RT_BODY, 1367, turn + 1);
-rv t19730 = rt_list_from(0, 0);
-rv v_declared = t19730;
-rv t19731 = nx_field(1369, 30, 1369, 53, v_record, rt_str_at("fields", 1369, 44, 1369, 52));
-rv t19732 = nx_items_of(1369, 21, 1369, 54, t19731);
+rv t19744 = rt_list_from(0, 0);
+rv v_declared = t19744;
+rv t19745 = nx_field(1369, 30, 1369, 53, v_record, rt_str_at("fields", 1369, 44, 1369, 52));
+rv t19746 = nx_items_of(1369, 21, 1369, 54, t19745);
 {
-rv it19733 = t19732;
-int64_t n19733 = rt_list_len(it19733);
+rv it19747 = t19746;
+int64_t n19747 = rt_list_len(it19747);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1369, turn);
 rt_pop();
-if (turn >= n19733) break;
-rv v_item = rt_list_at(it19733, turn);
+if (turn >= n19747) break;
+rv v_item = rt_list_at(it19747, turn);
 rt_push_loop(RT_BODY, 1369, turn + 1);
-rv t19734 = nx_field(1370, 54, 1370, 73, v_item, rt_str_at("name", 1370, 66, 1370, 72));
-rv t19735 = nx_text_of(1370, 46, 1370, 74, t19734);
-rv t19736 = rt_list_append(v_declared, t19735);
-v_declared = t19736;
+rv t19748 = nx_field(1370, 54, 1370, 73, v_item, rt_str_at("name", 1370, 66, 1370, 72));
+rv t19749 = nx_text_of(1370, 46, 1370, 74, t19748);
+rv t19750 = rt_list_append(v_declared, t19749);
+v_declared = t19750;
 rt_pop();
 turn++;
 }
 }
-rv t19737 = nx_declared_name(1372, 50, 1372, 71, v_record);
-rv t19738 = rt_list_append(v_record_names, t19737);
-v_record_names = t19738;
-rv t19739 = rt_list_append(v_record_fields, v_declared);
-v_record_fields = t19739;
-rv t19740 = nx_record_descriptor(1374, 23, 1374, 48, v_record);
-rv t19741 = rt_add(v_code, t19740, 1374, 16, 1374, 48);
-v_code = t19741;
+rv t19751 = nx_declared_name(1372, 50, 1372, 71, v_record);
+rv t19752 = rt_list_append(v_record_names, t19751);
+v_record_names = t19752;
+rv t19753 = rt_list_append(v_record_fields, v_declared);
+v_record_fields = t19753;
+rv t19754 = nx_record_descriptor(1374, 23, 1374, 48, v_record);
+rv t19755 = rt_add(v_code, t19754, 1374, 16, 1374, 48);
+v_code = t19755;
 rt_pop();
 turn++;
 }
 }
-rv t19742 = rt_list_from(0, 0);
-rv v_enums = t19742;
-rv t19743 = nx_field(1377, 33, 1377, 56, v_program, rt_str_at("enums", 1377, 48, 1377, 55));
-rv t19744 = nx_items_of(1377, 24, 1377, 57, t19743);
+rv t19756 = rt_list_from(0, 0);
+rv v_enums = t19756;
+rv t19757 = nx_field(1377, 33, 1377, 56, v_program, rt_str_at("enums", 1377, 48, 1377, 55));
+rv t19758 = nx_items_of(1377, 24, 1377, 57, t19757);
 {
-rv it19745 = t19744;
-int64_t n19745 = rt_list_len(it19745);
+rv it19759 = t19758;
+int64_t n19759 = rt_list_len(it19759);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1377, turn);
 rt_pop();
-if (turn >= n19745) break;
-rv v_declaration = rt_list_at(it19745, turn);
+if (turn >= n19759) break;
+rv v_declaration = rt_list_at(it19759, turn);
 rt_push_loop(RT_BODY, 1377, turn + 1);
-rv t19746 = nx_declared_name(1378, 36, 1378, 62, v_declaration);
-rv t19747 = rt_list_append(v_enums, t19746);
-v_enums = t19747;
+rv t19760 = nx_declared_name(1378, 36, 1378, 62, v_declaration);
+rv t19761 = rt_list_append(v_enums, t19760);
+v_enums = t19761;
 rt_pop();
 turn++;
 }
 }
-rv t19748 = rt_list_from(0, 0);
-rv v_refined = t19748;
-rv t19749 = nx_field(1381, 33, 1381, 56, v_program, rt_str_at("types", 1381, 48, 1381, 55));
-rv t19750 = nx_items_of(1381, 24, 1381, 57, t19749);
+rv t19762 = rt_list_from(0, 0);
+rv v_refined = t19762;
+rv t19763 = nx_field(1381, 33, 1381, 56, v_program, rt_str_at("types", 1381, 48, 1381, 55));
+rv t19764 = nx_items_of(1381, 24, 1381, 57, t19763);
 {
-rv it19751 = t19750;
-int64_t n19751 = rt_list_len(it19751);
+rv it19765 = t19764;
+int64_t n19765 = rt_list_len(it19765);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1381, turn);
 rt_pop();
-if (turn >= n19751) break;
-rv v_declaration = rt_list_at(it19751, turn);
+if (turn >= n19765) break;
+rv v_declaration = rt_list_at(it19765, turn);
 rt_push_loop(RT_BODY, 1381, turn + 1);
-rv t19752 = nx_declared_name(1382, 40, 1382, 66, v_declaration);
-rv t19753 = rt_list_append(v_refined, t19752);
-v_refined = t19753;
+rv t19766 = nx_declared_name(1382, 40, 1382, 66, v_declaration);
+rv t19767 = rt_list_append(v_refined, t19766);
+v_refined = t19767;
 rt_pop();
 turn++;
 }
 }
-rv t19754 = rt_list_from(0, 0);
-rv t19755 = rt_list_from(0, 0);
-rv t19756 = rt_record_new("Fn", rec_Fn, 3, (rv[]){rt_str_at("", 1385, 43, 1385, 45), t19754, t19755});
-rv t19757 = rt_record_new("Info", rec_Info, 6, (rv[]){v_fns, v_record_names, v_record_fields, v_enums, v_refined, v_paths});
-rv t19758 = rt_record_new("St", rec_St, 4, (rv[]){rt_int(INT64_C(0)), rt_str_at("", 1385, 23, 1385, 25), t19757, t19756});
-rv v_st = t19758;
+rv t19768 = rt_list_from(0, 0);
+rv t19769 = rt_list_from(0, 0);
+rv t19770 = rt_record_new("Fn", rec_Fn, 3, (rv[]){rt_str_at("", 1385, 43, 1385, 45), t19768, t19769});
+rv t19771 = rt_record_new("Info", rec_Info, 6, (rv[]){v_fns, v_record_names, v_record_fields, v_enums, v_refined, v_paths});
+rv t19772 = rt_record_new("St", rec_St, 4, (rv[]){rt_int(INT64_C(0)), rt_str_at("", 1385, 23, 1385, 25), t19771, t19770});
+rv v_st = t19772;
 rv v_declarations = rt_str_at("", 1390, 24, 1390, 26);
 rv v_definitions = rt_str_at("", 1391, 23, 1391, 25);
-rv t19759 = nx_field(1392, 30, 1392, 57, v_program, rt_str_at("functions", 1392, 45, 1392, 56));
-rv t19760 = nx_items_of(1392, 21, 1392, 58, t19759);
+rv t19773 = nx_field(1392, 30, 1392, 57, v_program, rt_str_at("functions", 1392, 45, 1392, 56));
+rv t19774 = nx_items_of(1392, 21, 1392, 58, t19773);
 {
-rv it19761 = t19760;
-int64_t n19761 = rt_list_len(it19761);
+rv it19775 = t19774;
+int64_t n19775 = rt_list_len(it19775);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1392, turn);
 rt_pop();
-if (turn >= n19761) break;
-rv v_function = rt_list_at(it19761, turn);
+if (turn >= n19775) break;
+rv v_function = rt_list_at(it19775, turn);
 rt_push_loop(RT_BODY, 1392, turn + 1);
-rv t19762 = nx_signature(1393, 39, 1393, 58, v_function);
-rv t19763 = rt_add(v_declarations, t19762, 1393, 24, 1393, 58);
-rv t19764 = rt_add(t19763, rt_str_at(";\n", 1393, 61, 1393, 66), 1393, 24, 1393, 66);
-v_declarations = t19764;
+rv t19776 = nx_signature(1393, 39, 1393, 58, v_function);
+rv t19777 = rt_add(v_declarations, t19776, 1393, 24, 1393, 58);
+rv t19778 = rt_add(t19777, rt_str_at(";\n", 1393, 61, 1393, 66), 1393, 24, 1393, 66);
+v_declarations = t19778;
 rt_pop();
 turn++;
 }
 }
-rv t19765 = nx_field(1395, 33, 1395, 56, v_program, rt_str_at("types", 1395, 48, 1395, 55));
-rv t19766 = nx_items_of(1395, 24, 1395, 57, t19765);
+rv t19779 = nx_field(1395, 33, 1395, 56, v_program, rt_str_at("types", 1395, 48, 1395, 55));
+rv t19780 = nx_items_of(1395, 24, 1395, 57, t19779);
 {
-rv it19767 = t19766;
-int64_t n19767 = rt_list_len(it19767);
+rv it19781 = t19780;
+int64_t n19781 = rt_list_len(it19781);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1395, turn);
 rt_pop();
-if (turn >= n19767) break;
-rv v_declaration = rt_list_at(it19767, turn);
+if (turn >= n19781) break;
+rv v_declaration = rt_list_at(it19781, turn);
 rt_push_loop(RT_BODY, 1395, turn + 1);
-rv t19768 = nx_refine_signature(1396, 39, 1396, 68, v_declaration);
-rv t19769 = rt_add(v_declarations, t19768, 1396, 24, 1396, 68);
-rv t19770 = rt_add(t19769, rt_str_at(";\n", 1396, 71, 1396, 76), 1396, 24, 1396, 76);
-v_declarations = t19770;
+rv t19782 = nx_refine_signature(1396, 39, 1396, 68, v_declaration);
+rv t19783 = rt_add(v_declarations, t19782, 1396, 24, 1396, 68);
+rv t19784 = rt_add(t19783, rt_str_at(";\n", 1396, 71, 1396, 76), 1396, 24, 1396, 76);
+v_declarations = t19784;
 rt_pop();
 turn++;
 }
 }
-rv t19771 = nx_field(1398, 33, 1398, 56, v_program, rt_str_at("types", 1398, 48, 1398, 55));
-rv t19772 = nx_items_of(1398, 24, 1398, 57, t19771);
+rv t19785 = nx_field(1398, 33, 1398, 56, v_program, rt_str_at("types", 1398, 48, 1398, 55));
+rv t19786 = nx_items_of(1398, 24, 1398, 57, t19785);
 {
-rv it19773 = t19772;
-int64_t n19773 = rt_list_len(it19773);
+rv it19787 = t19786;
+int64_t n19787 = rt_list_len(it19787);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1398, turn);
 rt_pop();
-if (turn >= n19773) break;
-rv v_declaration = rt_list_at(it19773, turn);
+if (turn >= n19787) break;
+rv v_declaration = rt_list_at(it19787, turn);
 rt_push_loop(RT_BODY, 1398, turn + 1);
-rv t19774 = nx_gen_refined(1399, 20, 1399, 48, v_st, v_declaration);
-rv v_made = t19774;
-rv t19775 = rt_field(v_made, "code");
-rv t19776 = rt_add(v_definitions, t19775, 1400, 23, 1400, 46);
-v_definitions = t19776;
-rv t19777 = rt_field(v_made, "st");
-v_st = t19777;
+rv t19788 = nx_gen_refined(1399, 20, 1399, 48, v_st, v_declaration);
+rv v_made = t19788;
+rv t19789 = rt_field(v_made, "code");
+rv t19790 = rt_add(v_definitions, t19789, 1400, 23, 1400, 46);
+v_definitions = t19790;
+rv t19791 = rt_field(v_made, "st");
+v_st = t19791;
 rt_pop();
 turn++;
 }
 }
-rv t19778 = nx_field(1403, 30, 1403, 57, v_program, rt_str_at("functions", 1403, 45, 1403, 56));
-rv t19779 = nx_items_of(1403, 21, 1403, 58, t19778);
+rv t19792 = nx_field(1403, 30, 1403, 57, v_program, rt_str_at("functions", 1403, 45, 1403, 56));
+rv t19793 = nx_items_of(1403, 21, 1403, 58, t19792);
 {
-rv it19780 = t19779;
-int64_t n19780 = rt_list_len(it19780);
+rv it19794 = t19793;
+int64_t n19794 = rt_list_len(it19794);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1403, turn);
 rt_pop();
-if (turn >= n19780) break;
-rv v_function = rt_list_at(it19780, turn);
+if (turn >= n19794) break;
+rv v_function = rt_list_at(it19794, turn);
 rt_push_loop(RT_BODY, 1403, turn + 1);
-rv t19781 = nx_gen_function(1404, 20, 1404, 46, v_st, v_function);
-rv v_made = t19781;
-rv t19782 = rt_field(v_made, "code");
-rv t19783 = rt_add(v_definitions, t19782, 1405, 23, 1405, 46);
-v_definitions = t19783;
-rv t19784 = rt_field(v_made, "st");
-v_st = t19784;
+rv t19795 = nx_gen_function(1404, 20, 1404, 46, v_st, v_function);
+rv v_made = t19795;
+rv t19796 = rt_field(v_made, "code");
+rv t19797 = rt_add(v_definitions, t19796, 1405, 23, 1405, 46);
+v_definitions = t19797;
+rv t19798 = rt_field(v_made, "st");
+v_st = t19798;
 rt_pop();
 turn++;
 }
 }
-rv t19785 = rt_add(v_code, v_declarations, 1408, 12, 1408, 31);
-rv t19786 = rt_add(t19785, rt_str_at("\n", 1408, 34, 1408, 38), 1408, 12, 1408, 38);
-rv t19787 = rt_add(t19786, v_definitions, 1408, 12, 1408, 52);
-v_code = t19787;
-rv t19788 = rt_add(v_code, rt_str_at("int main(int argc, char **argv) {\nrt_gc_start(RT_STACK_TOP(&argc));\nrt_setup(", 1409, 19, 1409, 101), 1409, 12, 1409, 101);
-rv t19789 = nx_c_string(1409, 104, 1409, 118, v_path);
-rv t19790 = rt_add(t19788, t19789, 1409, 12, 1409, 118);
-rv t19791 = rt_add(t19790, rt_str_at(", ", 1409, 121, 1409, 125), 1409, 12, 1409, 125);
-rv t19792 = rt_int(rt_list_len(v_paths));
-rv t19793 = rt_to_text(t19792, 1409, 128, 1409, 155);
-rv t19794 = rt_add(t19791, t19793, 1409, 12, 1409, 155);
-v_code = t19794;
-rv t19795 = rt_add(v_code, rt_str_at(", nx_paths, nx_files, nx_counts);\n", 1410, 19, 1410, 56), 1410, 12, 1410, 56);
-rv t19796 = nx_uses_code(1410, 59, 1410, 77, v_program);
-rv t19797 = rt_add(t19795, t19796, 1410, 12, 1410, 77);
-rv t19798 = rt_add(t19797, rt_str_at("rt_options(argc, argv);\n", 1410, 80, 1410, 107), 1410, 12, 1410, 107);
-v_code = t19798;
-rv t19799 = rt_add(v_code, rt_str_at("nx_main(0, 0, 0, 0);\nfflush(stdout);\nreturn rt_exit_status;\n}\n", 1411, 19, 1411, 87), 1411, 12, 1411, 87);
-v_code = t19799;
-rv t19800 = nx_part(1412, 12, 1412, 30, v_code, rt_str_at("", 1412, 23, 1412, 25), v_st);
-rv r19801 = t19800;
+rv t19799 = rt_add(v_code, v_declarations, 1408, 12, 1408, 31);
+rv t19800 = rt_add(t19799, rt_str_at("\n", 1408, 34, 1408, 38), 1408, 12, 1408, 38);
+rv t19801 = rt_add(t19800, v_definitions, 1408, 12, 1408, 52);
+v_code = t19801;
+rv t19802 = rt_add(v_code, rt_str_at("int main(int argc, char **argv) {\nrt_gc_start(RT_STACK_TOP(&argc));\nrt_setup(", 1409, 19, 1409, 101), 1409, 12, 1409, 101);
+rv t19803 = nx_c_string(1409, 104, 1409, 118, v_path);
+rv t19804 = rt_add(t19802, t19803, 1409, 12, 1409, 118);
+rv t19805 = rt_add(t19804, rt_str_at(", ", 1409, 121, 1409, 125), 1409, 12, 1409, 125);
+rv t19806 = rt_int(rt_list_len(v_paths));
+rv t19807 = rt_to_text(t19806, 1409, 128, 1409, 155);
+rv t19808 = rt_add(t19805, t19807, 1409, 12, 1409, 155);
+v_code = t19808;
+rv t19809 = rt_add(v_code, rt_str_at(", nx_paths, nx_files, nx_counts);\n", 1410, 19, 1410, 56), 1410, 12, 1410, 56);
+rv t19810 = nx_uses_code(1410, 59, 1410, 77, v_program);
+rv t19811 = rt_add(t19809, t19810, 1410, 12, 1410, 77);
+rv t19812 = rt_add(t19811, rt_str_at("rt_options(argc, argv);\n", 1410, 80, 1410, 107), 1410, 12, 1410, 107);
+v_code = t19812;
+rv t19813 = rt_add(v_code, rt_str_at("nx_main(0, 0, 0, 0);\nfflush(stdout);\nreturn rt_exit_status;\n}\n", 1411, 19, 1411, 87), 1411, 12, 1411, 87);
+v_code = t19813;
+rv t19814 = nx_part(1412, 12, 1412, 30, v_code, rt_str_at("", 1412, 23, 1412, 25), v_st);
+rv r19815 = t19814;
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19801;
+return r19815;
 }
 
 static rv nx_has_errors(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec, rv v_problems) {
 int rt_saved = rt_enter("has_errors", 10, s_l, s_c, s_el, s_ec);
 {
-rv it19802 = v_problems;
-int64_t n19802 = rt_list_len(it19802);
+rv it19816 = v_problems;
+int64_t n19816 = rt_list_len(it19816);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1416, turn);
 rt_pop();
-if (turn >= n19802) break;
-rv v_problem = rt_list_at(it19802, turn);
+if (turn >= n19816) break;
+rv v_problem = rt_list_at(it19816, turn);
 rt_push_loop(RT_BODY, 1416, turn + 1);
-rv t19803 = rt_field(v_problem, "code");
-rv t19804 = rt_text_starts(t19803, rt_str_at("W", 1417, 47, 1417, 50));
-rv t19805 = rt_bool(!rt_truth(t19804));
-if (rt_truth(t19805)) {
-rv r19806 = rt_bool(true);
+rv t19817 = rt_field(v_problem, "code");
+rv t19818 = rt_text_starts(t19817, rt_str_at("W", 1417, 47, 1417, 50));
+rv t19819 = rt_bool(!rt_truth(t19818));
+if (rt_truth(t19819)) {
+rv r19820 = rt_bool(true);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19806;
+return r19820;
 }
 rt_pop();
 turn++;
 }
 }
-rv r19807 = rt_bool(false);
+rv r19821 = rt_bool(false);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19807;
+return r19821;
 }
 
 static rv nx_main(int64_t s_l, int64_t s_c, int64_t s_el, int64_t s_ec) {
 int rt_saved = rt_enter("main", 10, s_l, s_c, s_el, s_ec);
-rv t19808 = rt_args(1425, 17, 1425, 23);
-rv v_words = t19808;
+rv t19822 = rt_args(1425, 17, 1425, 23);
+rv v_words = t19822;
 rv v_trusted = rt_bool(false);
 rv v_cli = rt_bool(false);
-rv t19809 = rt_int(rt_list_len(v_words));
-rv t19810 = rt_bool(!rt_less(t19809, rt_int(INT64_C(2))));
-rv v_known = t19810;
+rv t19823 = rt_int(rt_list_len(v_words));
+rv t19824 = rt_bool(!rt_less(t19823, rt_int(INT64_C(2))));
+rv v_known = t19824;
 rv v_k = rt_int(INT64_C(2));
 {
 int64_t turn = 0;
@@ -70973,16 +71029,16 @@ bool turn_has_before = false;
 int64_t before = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1430, turn);
-rv t19813 = rt_int(rt_list_len(v_words));
-rv t19814 = rt_bool(rt_less(v_k, t19813));
-bool go = rt_truth(t19814);
+rv t19827 = rt_int(rt_list_len(v_words));
+rv t19828 = rt_bool(rt_less(v_k, t19827));
+bool go = rt_truth(t19828);
 rt_pop();
 if (!go) break;
 turn++;
 rt_push_loop(RT_MEASURE, 1430, turn);
-rv t19811 = rt_int(rt_list_len(v_words));
-rv t19812 = rt_sub(t19811, v_k, 1431, 17, 1431, 39);
-int64_t m = t19812.u.i;
+rv t19825 = rt_int(rt_list_len(v_words));
+rv t19826 = rt_sub(t19825, v_k, 1431, 17, 1431, 39);
+int64_t m = t19826.u.i;
 rt_pop();
 if ((turn_has_before && m >= before) || m < 0) {
 rt_notes own = {{0}, 0};
@@ -71003,134 +71059,134 @@ rt_fail("contract", "E4006", "Loop measure did not decrease", label, "", &own, 0
 turn_has_before = true;
 before = m;
 rt_push_loop(RT_BODY, 1430, turn);
-rv t19815 = rt_list_get(v_words, v_k, 1433, 12, 1433, 30);
-rv t19816 = rt_bool(rt_eq(t19815, rt_str_at("--trusted", 1433, 34, 1433, 45)));
-if (rt_truth(t19816)) {
+rv t19829 = rt_list_get(v_words, v_k, 1433, 12, 1433, 30);
+rv t19830 = rt_bool(rt_eq(t19829, rt_str_at("--trusted", 1433, 34, 1433, 45)));
+if (rt_truth(t19830)) {
 v_trusted = rt_bool(true);
 } else {
-rv t19817 = rt_list_get(v_words, v_k, 1435, 19, 1435, 37);
-rv t19818 = rt_bool(rt_eq(t19817, rt_str_at("--cli", 1435, 41, 1435, 48)));
-if (rt_truth(t19818)) {
+rv t19831 = rt_list_get(v_words, v_k, 1435, 19, 1435, 37);
+rv t19832 = rt_bool(rt_eq(t19831, rt_str_at("--cli", 1435, 41, 1435, 48)));
+if (rt_truth(t19832)) {
 v_cli = rt_bool(true);
 } else {
 v_known = rt_bool(false);
 }
 }
-rv t19819 = rt_add(v_k, rt_int(INT64_C(1)), 1440, 13, 1440, 18);
-v_k = t19819;
+rv t19833 = rt_add(v_k, rt_int(INT64_C(1)), 1440, 13, 1440, 18);
+v_k = t19833;
 rt_pop();
 }
 }
-rv t19820 = rt_bool(!rt_truth(v_known));
-if (rt_truth(t19820)) {
+rv t19834 = rt_bool(!rt_truth(v_known));
+if (rt_truth(t19834)) {
 rt_print(rt_str_at("usage: cgen.nex PROGRAM.nex OUTPUT.c [--trusted] [--cli]", 1443, 15, 1443, 73));
-rv r19821 = rt_unit();
+rv r19835 = rt_unit();
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19821;
+return r19835;
 }
-rv t19822 = rt_list_get(v_words, rt_int(INT64_C(0)), 1446, 16, 1446, 34);
-rv v_path = t19822;
-rv t19823 = nx_project__load(1447, 18, 1447, 36, v_path);
-rv v_loaded = t19823;
-rv t19824 = rt_field(v_loaded, "modules");
+rv t19836 = rt_list_get(v_words, rt_int(INT64_C(0)), 1446, 16, 1446, 34);
+rv v_path = t19836;
+rv t19837 = nx_project__load(1447, 18, 1447, 36, v_path);
+rv v_loaded = t19837;
+rv t19838 = rt_field(v_loaded, "modules");
 {
-rv it19825 = t19824;
-int64_t n19825 = rt_list_len(it19825);
+rv it19839 = t19838;
+int64_t n19839 = rt_list_len(it19839);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1448, turn);
 rt_pop();
-if (turn >= n19825) break;
-rv v_module = rt_list_at(it19825, turn);
+if (turn >= n19839) break;
+rv v_module = rt_list_at(it19839, turn);
 rt_push_loop(RT_BODY, 1448, turn + 1);
-rv t19826 = rt_field(v_module, "clean");
-rv t19827 = rt_bool(!rt_truth(t19826));
-if (rt_truth(t19827)) {
-rv t19828 = rt_add(rt_str_at("error: ", 1450, 19, 1450, 28), v_path, 1450, 19, 1450, 35);
-rv t19829 = rt_add(t19828, rt_str_at(": the program has syntax errors; check it first", 1450, 38, 1450, 87), 1450, 19, 1450, 87);
-rt_print(t19829);
-rv r19830 = rt_unit();
+rv t19840 = rt_field(v_module, "clean");
+rv t19841 = rt_bool(!rt_truth(t19840));
+if (rt_truth(t19841)) {
+rv t19842 = rt_add(rt_str_at("error: ", 1450, 19, 1450, 28), v_path, 1450, 19, 1450, 35);
+rv t19843 = rt_add(t19842, rt_str_at(": the program has syntax errors; check it first", 1450, 38, 1450, 87), 1450, 19, 1450, 87);
+rt_print(t19843);
+rv r19844 = rt_unit();
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19830;
+return r19844;
 }
 rt_pop();
 turn++;
 }
 }
-rv t19831 = nx_project__check_all(1454, 19, 1454, 50, v_loaded, rt_bool(true));
-rv v_results = t19831;
-rv t19832 = rt_list_from(0, 0);
-rv v_paths = t19832;
+rv t19845 = nx_project__check_all(1454, 19, 1454, 50, v_loaded, rt_bool(true));
+rv v_results = t19845;
+rv t19846 = rt_list_from(0, 0);
+rv v_paths = t19846;
 {
-rv it19833 = v_results;
-int64_t n19833 = rt_list_len(it19833);
+rv it19847 = v_results;
+int64_t n19847 = rt_list_len(it19847);
 int64_t turn = 0;
 for (;;) {
 rt_push_loop(RT_COND, 1456, turn);
 rt_pop();
-if (turn >= n19833) break;
-rv v_result = rt_list_at(it19833, turn);
+if (turn >= n19847) break;
+rv v_result = rt_list_at(it19847, turn);
 rt_push_loop(RT_BODY, 1456, turn + 1);
-rv t19834 = rt_field(v_result, "unsupported");
-rv t19835 = rt_bool(!rt_eq(t19834, rt_str_at("", 1457, 34, 1457, 36)));
-rv t19836 = t19835;
-if (!rt_truth(t19836)) {
-rv t19837 = rt_field(v_result, "problems");
-rv t19838 = nx_has_errors(1457, 40, 1457, 67, t19837);
-t19836 = t19838;
+rv t19848 = rt_field(v_result, "unsupported");
+rv t19849 = rt_bool(!rt_eq(t19848, rt_str_at("", 1457, 34, 1457, 36)));
+rv t19850 = t19849;
+if (!rt_truth(t19850)) {
+rv t19851 = rt_field(v_result, "problems");
+rv t19852 = nx_has_errors(1457, 40, 1457, 67, t19851);
+t19850 = t19852;
 }
-if (rt_truth(t19836)) {
-rv t19839 = rt_add(rt_str_at("error: ", 1458, 19, 1458, 28), v_path, 1458, 19, 1458, 35);
-rv t19840 = rt_add(t19839, rt_str_at(": the program does not check; run `check` on it first", 1458, 38, 1458, 93), 1458, 19, 1458, 93);
-rt_print(t19840);
-rv r19841 = rt_unit();
+if (rt_truth(t19850)) {
+rv t19853 = rt_add(rt_str_at("error: ", 1458, 19, 1458, 28), v_path, 1458, 19, 1458, 35);
+rv t19854 = rt_add(t19853, rt_str_at(": the program does not check; run `check` on it first", 1458, 38, 1458, 93), 1458, 19, 1458, 93);
+rt_print(t19854);
+rv r19855 = rt_unit();
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19841;
+return r19855;
 }
-rv t19842 = rt_field(v_result, "module");
-rv t19843 = rt_field(t19842, "path");
-rv t19844 = rt_list_append(v_paths, t19843);
-v_paths = t19844;
+rv t19856 = rt_field(v_result, "module");
+rv t19857 = rt_field(t19856, "path");
+rv t19858 = rt_list_append(v_paths, t19857);
+v_paths = t19858;
 rt_pop();
 turn++;
 }
 }
-rv t19845 = rt_int(rt_list_len(v_results));
-rv t19846 = rt_sub(t19845, rt_int(INT64_C(1)), 1463, 34, 1463, 58);
-rv t19847 = rt_list_get(v_results, t19846, 1463, 16, 1463, 59);
-rv v_last = t19847;
-rv t19848 = rt_field(v_last, "node");
-rv v_program = t19848;
-rv t19849 = rt_int(rt_list_len(v_results));
-rv t19850 = rt_bool(rt_less(rt_int(INT64_C(1)), t19849));
-if (rt_truth(t19850)) {
-rv t19851 = nx_project__link(1466, 19, 1466, 40, v_results);
-v_program = t19851;
+rv t19859 = rt_int(rt_list_len(v_results));
+rv t19860 = rt_sub(t19859, rt_int(INT64_C(1)), 1463, 34, 1463, 58);
+rv t19861 = rt_list_get(v_results, t19860, 1463, 16, 1463, 59);
+rv v_last = t19861;
+rv t19862 = rt_field(v_last, "node");
+rv v_program = t19862;
+rv t19863 = rt_int(rt_list_len(v_results));
+rv t19864 = rt_bool(rt_less(rt_int(INT64_C(1)), t19863));
+if (rt_truth(t19864)) {
+rv t19865 = nx_project__link(1466, 19, 1466, 40, v_results);
+v_program = t19865;
 }
-rv t19852 = nx_generate(1468, 16, 1468, 60, v_program, v_path, v_paths, v_trusted, v_cli);
-rv v_made = t19852;
-rv t19853 = rt_field(v_made, "st");
-rv t19854 = rt_field(t19853, "bad");
-rv t19855 = rt_bool(!rt_eq(t19854, rt_str_at("", 1469, 23, 1469, 25)));
-if (rt_truth(t19855)) {
-rv t19856 = rt_field(v_made, "st");
-rv t19857 = rt_field(t19856, "bad");
-rv t19858 = rt_add(rt_str_at("not supported yet: ", 1470, 15, 1470, 36), t19857, 1470, 15, 1470, 50);
-rt_print(t19858);
-rv r19859 = rt_unit();
+rv t19866 = nx_generate(1468, 16, 1468, 60, v_program, v_path, v_paths, v_trusted, v_cli);
+rv v_made = t19866;
+rv t19867 = rt_field(v_made, "st");
+rv t19868 = rt_field(t19867, "bad");
+rv t19869 = rt_bool(!rt_eq(t19868, rt_str_at("", 1469, 23, 1469, 25)));
+if (rt_truth(t19869)) {
+rv t19870 = rt_field(v_made, "st");
+rv t19871 = rt_field(t19870, "bad");
+rv t19872 = rt_add(rt_str_at("not supported yet: ", 1470, 15, 1470, 36), t19871, 1470, 15, 1470, 50);
+rt_print(t19872);
+rv r19873 = rt_unit();
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
-return r19859;
+return r19873;
 }
-rv t19860 = rt_list_get(v_words, rt_int(INT64_C(1)), 1473, 16, 1473, 34);
-rv t19861 = rt_field(v_made, "code");
-rv t19862 = rt_write_file(t19860, t19861, 1473, 16, 1473, 34);
-rv t19863 = rt_list_get(v_words, rt_int(INT64_C(1)), 1474, 22, 1474, 40);
-rv t19864 = rt_add(rt_str_at("wrote ", 1474, 11, 1474, 19), t19863, 1474, 11, 1474, 40);
-rt_print(t19864);
+rv t19874 = rt_list_get(v_words, rt_int(INT64_C(1)), 1473, 16, 1473, 34);
+rv t19875 = rt_field(v_made, "code");
+rv t19876 = rt_write_file(t19874, t19875, 1473, 16, 1473, 34);
+rv t19877 = rt_list_get(v_words, rt_int(INT64_C(1)), 1474, 22, 1474, 40);
+rv t19878 = rt_add(rt_str_at("wrote ", 1474, 11, 1474, 19), t19877, 1474, 11, 1474, 40);
+rt_print(t19878);
 rt_top = rt_saved + 1;
 rt_leave(rt_saved);
 return rt_unit();
