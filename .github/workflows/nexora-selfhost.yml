@@ -15,9 +15,9 @@ name: nexora-selfhost
 on:
   push:
     branches: [main]
-    paths: ["selfhost/**", "nexora/src/**", "nexora/examples/**", "nexora/tests/migration/**", ".github/workflows/nexora-selfhost.yml"]
+    paths: ["selfhost/**", "nexora/src/**", "nexora/examples/**", "nexora/tests/migration/**", "nexora/tests/test_threat_model_rows.py", ".github/workflows/nexora-selfhost.yml"]
   pull_request:
-    paths: ["selfhost/**", "nexora/src/**", "nexora/examples/**", "nexora/tests/migration/**", ".github/workflows/nexora-selfhost.yml"]
+    paths: ["selfhost/**", "nexora/src/**", "nexora/examples/**", "nexora/tests/migration/**", "nexora/tests/test_threat_model_rows.py", ".github/workflows/nexora-selfhost.yml"]
 
 permissions:
   contents: read
@@ -130,6 +130,9 @@ jobs:
           python selfhost/compare_stdin.py
           echo "== limits (time and memory exist on Linux)"
           python selfhost/compare_limits.py
+          echo "== the rows of the threat model (docs/threat-model.md), Python and native, symbolic links included"
+          python -m pip install pytest
+          NEXORA_NEX="$PWD/out/nex" python -m pytest -q nexora/tests/test_threat_model_rows.py
 
       - name: inspect, context, symbols, check --evidence, format and test --format json
         if: matrix.suite == 'tooling'
