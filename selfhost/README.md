@@ -107,7 +107,7 @@ The host has limits that come from the language and are not fixed here:
 | `--max-output` with a character that is not ASCII | A Text has no code point, so the bytes of such a character cannot be counted. The run stops with `E0000` when it prints one under the limit. |
 | `--timeout` and `--max-memory` | The operating system measures them on the process (a timer, `RLIMIT_AS`), and a program cannot read a clock or ask for the memory in use. Run the interpreter itself with them: `nex run selfhost/interpreter.nex --timeout 5 --max-memory ...`. Its own bound is the fuel of the machine. |
 | `--max-input` and `--max-source` with a file that is not ASCII, or that has CRLF | Bytes are counted from the text: exact for ASCII, and the text is read with its line breaks normalised, so a CRLF file counts as if it had LF. A file with a character that is not ASCII stops the run with `E0000`. |
-| Symbolic links are not followed | Paths are resolved by their text, there is no `realpath`. A link that points outside what is allowed is not noticed. |
+| Symbolic links are not followed when Python runs the interpreter | Python cannot ask where a path leads from NEXORA code. The executables that `cgen.nex` makes do: `host_real` is the C `rt_resolve`, which follows every link (and every junction on Windows) as `os.path.realpath` does, so a link that leaves what is allowed is denied with `E3008`. The native `nex run` is an executable, so it is not affected; this limit only concerns `nex run selfhost/interpreter.nex` under Python. |
 
 ## The command: `nex.nex`
 

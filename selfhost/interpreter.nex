@@ -2979,7 +2979,7 @@ fn is_absolute_path(path: Text) gives Bool {
     return Text.starts_with(path, "/") or Text.starts_with(path, "\\") or (Text.length(path) > 1 and Text.slice(path, 1, 2) == ":")
 }
 
-// The path made absolute with the working directory, as the file system would see it, without following links.
+// The path made absolute with the working directory, as the file system would see it.
 fn resolve_path(host: HostCfg, path: Text) gives Text {
     if is_absolute_path(path) or host.cwd == "" {
         return path
@@ -2987,10 +2987,22 @@ fn resolve_path(host: HostCfg, path: Text) gives Text {
     return host.cwd + "/" + path
 }
 
+// Where a path really leads: every symbolic link, and on Windows every junction, followed (os.path.realpath of the Python
+// implementation), so that confinement does not depend on how a path is written. The empty text means that it cannot be decided (a
+// loop of links): such a path is inside nothing. The executables that cgen.nex makes replace this definition with a C one; here, where
+// Python runs the interpreter and has no way to follow links, a path leads where it is written.
+fn host_real(path: Text) gives Text {
+    return path
+}
+
 fn covered_by(host: HostCfg, scopes: List[Text], path: Text) gives Bool {
-    let target = resolve_path(host, path)
+    let target = host_real(resolve_path(host, path))
+    if target == "" {
+        return false
+    }
     for scope in scopes {
-        if checker.is_inside(resolve_path(host, scope), target) {
+        let real = host_real(resolve_path(host, scope))
+        if real != "" and checker.is_inside(real, target) {
             return true
         }
     }

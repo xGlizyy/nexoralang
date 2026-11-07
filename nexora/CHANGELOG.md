@@ -47,6 +47,15 @@ Each version groups its changes into these sections, when they contain content:
 - Enum support in language inspection, formatter, LSP completion and the VS Code grammar.
 - Decision 0024 and the NEXORA 0.14 language specification.
 
+### Fixed
+
+- **Security, native `nex` only:** a program run by the native `nex run` could read and write through a symbolic link that led
+  outside the folders the user allowed with `--allow-read` and `--allow-write` (the specification and the Python `nex` deny it with
+  `E3008`). The native tools now resolve where a path really leads, following every symbolic link and, on Windows, every junction,
+  before comparing it with the declared and the granted folders; a loop of links is denied. The releases `native-v0.15.0` and
+  `native-v0.15.1` have the defect: do not use their `nex run` with `--allow-read` or `--allow-write` on programs that you do not
+  trust, or on folders where others can create links. The Python package was never affected.
+
 ### Documentation
 
 - Publish a compatibility and versioning policy defining pre-1.0 language changes, 1.x SemVer,
