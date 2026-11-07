@@ -61,12 +61,12 @@ offline. What there is and what there is not, precisely: [Automated tools and AI
 
 ## Status
 
-**Version 0.15.0. Early-stage project**, before 1.0: the language may change
-incompatibly and NEXORA programs are not suitable for production use. The CLI, diagnostic machine
-fields, and versioned JSON schemas have explicit interface-level stability guarantees; this does
-not freeze the language. The public Playground is a
-production-hosted service for trying the language; that does not make the language itself
-production-ready.
+**Version 1.0.0.** The language is specified ([specification 1.0](docs/language-spec.md), frozen: the syntax and the semantics
+change only compatibly from here, under [the compatibility policy](docs/compatibility.md)) and the 1.0 scope is small, single-process
+command-line tools and local automation written and run by people who trust their own programs. What 1.0 does not include is in
+[the limitations](docs/limitations.md#what-10-does-not-include) (for example, a program cannot choose its exit status), each item
+with a way round it. The CLI, diagnostic machine fields and versioned JSON schemas have
+explicit interface-level stability guarantees. The public Playground is a production-hosted service for trying the language.
 
 | Status | What it includes |
 |--------|------------------|
@@ -110,7 +110,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.15.0
+NEXORA 1.0.0
 ```
 
 The `nex` command is installed inside the virtual environment, not system-wide: it is only

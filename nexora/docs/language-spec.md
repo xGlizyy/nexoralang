@@ -1,7 +1,7 @@
 # NEXORA language specification
 
 - **Specification version:** 1.0
-- **Reference implementation:** `nexora` 0.15.0 conforms to it (this repository, directory `nexora/`); 1.0.0 is the first release
+- **Reference implementation:** `nexora` 1.0.0 conforms to it (this repository, directory `nexora/`); 1.0.0 is the first release
   that carries the number of the specification. The native tools conform as well
   ([decision 0027](decisions/0027-herramientas-nativas-por-defecto.md)).
 - **Status:** normative for the NEXORA 1.0 language, and **frozen** ([decision 0029](decisions/0029-congelacion-de-la-especificacion-1-0.md)).
@@ -41,7 +41,7 @@ lists planned features; planned work is not part of this version.
 The words **must**, **must not** and **may** state requirements, prohibitions and permitted choices
 for a conforming implementation. An unmarked rule in sections 2–12 describes guaranteed language
 behavior for this specification version. A rule explicitly labelled as a reference-implementation
-limit describes `nexora` 0.15.0 and is not a portable language guarantee. Section 13 and section 14
+limit describes `nexora` 1.0.0 and is not a portable language guarantee. Section 13 and section 14
 describe absent features and planned work; planned work is not part of this version.
 
 A conforming implementation must follow the grammar, static rules, value semantics, evaluation
@@ -333,7 +333,7 @@ Notes:
   (`E2024`). The `.` is attached to both names, as in a qualified call.
 - A record does not change: `p.x = 1` is the error `E2025`. The form exists so that it can be said, not so that
   it can be done.
-- **Reference-implementation parser limit:** `nexora` 0.15.0 accepts at most 64 nested parentheses,
+- **Reference-implementation parser limit:** `nexora` 1.0.0 accepts at most 64 nested parentheses,
   unary operators, blocks, `else if` branches or type constructors, and at most 256 levels in an
   expression tree. It reports `E1105` when a limit is exceeded. These thresholds protect this
   parser; another conforming implementation may use different thresholds.
@@ -459,7 +459,7 @@ of the program. To keep it, a value can only come to have a refined type in two 
 
 A constant is a literal, optionally with `-` or `not` in front of it or in parentheses. Checking a
 constant costs as much as the conditions of the whole chain of its type. **Reference-implementation
-work limit:** if `nexora` 0.15.0 evaluates more than 100,000 condition nodes while checking constants,
+work limit:** if `nexora` 1.0.0 evaluates more than 100,000 condition nodes while checking constants,
 it rejects the program with `E2019` instead of leaving it half checked. Another conforming
 implementation may choose a different resource threshold. An ordinary program stays far below it.
 Any
@@ -1155,7 +1155,7 @@ modify anything of its caller.
 
 A function can call itself, and two functions can call each other.
 
-The reference implementation `nexora` 0.15.0 limits nested calls to 1000, counting `main`;
+The reference implementation `nexora` 1.0.0 limits nested calls to 1000, counting `main`;
 exceeding that limit produces `E3004`. Very deeply nested expressions can lower its effective
 threshold. This is an implementation limit, not a portable language guarantee (section 10.3).
 To repeat something many times, use a loop (section 9.5): its iterations are not calls.
@@ -1969,7 +1969,7 @@ static analysis claims nothing about them:
 The analysis does not decide whether a program ends. When it runs, an endless recursion stops with
 `E3004` and an endless loop, with `E4006`.
 
-The 1,000-call threshold is a reference-implementation limit of `nexora` 0.15.0, not a portable
+The 1,000-call threshold is a reference-implementation limit of `nexora` 1.0.0, not a portable
 language guarantee. `E3004` identifies call-depth exhaustion in that implementation; another
 conforming implementation may choose a different threshold. More generally, the exact Python
 runtime, AST representation, parser/checker algorithms, performance and resource use are not
@@ -2170,7 +2170,7 @@ fn main() {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.15.0",
+  "nexora_version": "1.0.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [

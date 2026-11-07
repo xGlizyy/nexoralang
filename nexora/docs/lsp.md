@@ -4,7 +4,7 @@
 [VS Code extension](../../vscode-nexora/README.md) uses. It was added with the editor work
 ([decision 0017](decisions/0017-un-editor-la-extension-de-vs-code.md)) and is tested by
 `tests/test_lsp.py`; the formatter it uses, by `tests/test_formatter.py`.
-Its methods and editor behavior may change before 1.0 ([stability policy](interface-stability.md)).
+Its methods and editor behavior may change in a 1.x release ([stability policy](interface-stability.md)).
 
 It does not re-implement the language. Every answer comes from the same stages the command line
 uses (lexer, parser and checker), so the diagnostics an editor shows are the ones `nex check`

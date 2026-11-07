@@ -1,7 +1,7 @@
 # CLI reference
 
 `nex` is the command-line tool of NEXORA. This page describes version
-`nexora` 0.15.0. An automated test checks that all the commands, options and exit
+`nexora` 1.0.0. An automated test checks that all the commands, options and exit
 codes that the program accepts are documented here.
 **Stability: stable** for documented command names, options, exit-code meanings, and machine-readable
 output contracts ([compatibility policy](interface-stability.md)).
@@ -397,7 +397,7 @@ nex --version
 ```
 
 ```text
-NEXORA 0.15.0
+NEXORA 1.0.0
 ```
 
 ## `nex --help`

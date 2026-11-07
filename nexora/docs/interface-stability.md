@@ -1,7 +1,7 @@
 # Public interfaces and stability
 
 This policy describes the compatibility promise for each interface. It is separate from the
-project's pre-1.0 status: the language and programs written in it can still change incompatibly.
+language's own versioning: from 1.0 the language changes only compatibly, while an interface marked experimental below may still change.
 Package versioning, deprecation, migrations and support periods are defined in the
 [compatibility policy](compatibility.md).
 
@@ -10,9 +10,9 @@ Package versioning, deprecation, migrations and support periods are defined in t
 | `nex` command line | **Stable** | Command names, documented options, exit-code meanings, and machine-readable output contracts listed below are maintained. Additions are allowed. |
 | Diagnostics | **Stable** | Diagnostic `code`, `category`, severity, and source positions are machine-readable contracts. English wording (`message`, `label`, `hint`, `notes`) may change. |
 | JSON protocols | **Stable per schema version** | A schema identifier such as `nexora.inspect/3` keeps its meaning. Breaking changes require a new version number. Additive changes are validated against the published schema and compatibility tests. |
-| Language Server Protocol (LSP) | **Experimental** | Methods, capabilities, and editor behavior may change before 1.0. |
-| Model Context Protocol (MCP) | **Experimental** | Tool names, arguments, and behavior may change before 1.0. |
-| Python API (`nexora.tooling`) | **Experimental** | Public names and behavior may change before 1.0. |
+| Language Server Protocol (LSP) | **Experimental** | Methods, capabilities, and editor behavior may change in a 1.x release. |
+| Model Context Protocol (MCP) | **Experimental** | Tool names, arguments, and behavior may change in a 1.x release. |
+| Python API (`nexora.tooling`) | **Experimental** | Public names and behavior may change in a 1.x release. |
 | Other Python modules (`lexer`, `parser`, `checker`, and implementation modules) | **Internal** | No compatibility promise; consumers should use the CLI or explicitly listed APIs. |
 
 ## Stable CLI contract
