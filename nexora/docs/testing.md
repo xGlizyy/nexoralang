@@ -825,7 +825,7 @@ The package is published on PyPI as `nexora-lang` since version 0.9.0; the steps
 
 At the root of the repository, `.github/workflows/nexora-ci.yml` defines the same checks for
 GitHub Actions: analysis of the code, tests with coverage and building the package, on Linux,
-Windows and macOS with Python 3.11, 3.12 and 3.13.
+Windows and macOS with Python 3.11, 3.12, 3.13 and 3.14, on the runners `ubuntu-24.04`, `windows-2025` and `macos-15`.
 
 **That workflow runs on every change to `main`.** The first real run, on 21 October
 2026, found three macOS differences that had not been seen until then: the operating system

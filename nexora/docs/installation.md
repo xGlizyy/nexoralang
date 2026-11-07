@@ -56,8 +56,8 @@ NEXORA works offline.
 | Windows 11, Node.js, npm package | **Checked**: `npm test` passes; the 0.14.1 tarball installs locally and reports the expected version |
 | Linux (Ubuntu 24.04 on WSL 2), Python 3.12 | **Checked** on 17 October 2026: full test suite, with none skipped, with a non-root user; package built and installed from the file in a clean environment, and `nex run` used. Other distributions and Linux without WSL, not checked |
 | Linux, Node.js, npm package | **Checked**: built with `npm pack`, installed from the file and used with `npx nex` on the previous published release |
-| macOS | **Run** on `macos-latest` by the [continuous integration](testing.md#continuous-integration): test suite with Python 3.11, 3.12 and 3.13, the npm package and the server. On a local Mac, not checked |
-| Python 3.11 and 3.13 | **Run** on Linux, Windows and macOS by the continuous integration, and **checked** by hand on Linux (3.11.17 and 3.13.16): full test suite, without installing the built package |
+| macOS | **Run** on `macos-15` (Apple Silicon) by the [continuous integration](testing.md#continuous-integration): test suite with Python 3.11 to 3.14 and the npm package. On a local Mac, not checked. See [platform support](platform-support.md) |
+| Python 3.11 to 3.14 | **Run** on Linux, Windows and macOS by the continuous integration (`ubuntu-24.04`, `windows-2025`, `macos-15`), and 3.11 and 3.13 **checked** by hand on Linux (3.11.17 and 3.13.16): full test suite, without installing the built package |
 
 ## Step-by-step installation
 

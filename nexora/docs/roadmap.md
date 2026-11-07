@@ -75,9 +75,9 @@ that decision or an approved reference application requires them. The status of 
 | **VS Code extension distribution** | The 0.14.0 VSIX is attached to the GitHub release | It is not listed on the Visual Studio Code Marketplace |
 | **Python API** (`nexora.tooling`) | Implemented and tested (`tests/test_tooling.py`) | Declaring it stable. Today it is experimental and may change |
 | **MCP server** (optional) | Seven analysis tools, tested with the client of the official SDK (`tests/test_mcp.py`). Checked by hand once in Claude Code. It does not run code | Testing it in other assistants. Including the specification in the installable package |
-| **Continuous integration** | GitHub Actions runs the Python test suite on Python 3.11, 3.12 and 3.13 on Linux, Windows and macOS | Manual smoke checks on native Linux and macOS machines remain (see platform verification below) |
+| **Continuous integration** | GitHub Actions runs the Python test suite on Python 3.11, 3.12, 3.13 and 3.14 on Linux, Windows and macOS ([platform support](platform-support.md)) | Manual smoke checks on native Linux and macOS machines remain (see platform verification below) |
 | **Optional values and results** | `Option[T]` and `Result[T, E]`, with `Some`, `None`, `Ok` and `Err`, and the functions that recognize the variant and read the value. `match`, `if let` and the `?` operator (decision 0028; `?` is not in the native tools until they are rebuilt) | Nothing planned |
-| **Verification on other platforms** | Checked on Windows 11 with Python 3.12; run on Linux, Windows and macOS with Python 3.11, 3.12 and 3.13 by the continuous integration | Checking it on macOS and on Linux on a real machine, not only on the runners |
+| **Verification on other platforms** | Checked on Windows 11 with Python 3.12; run on Linux, Windows and macOS with Python 3.11 to 3.14 by the continuous integration | Checking it on macOS and on Linux on a real machine, not only on the runners |
 | **Readiness for contributors** | MIT licence, contribution guide, code of conduct, public repository with its issue tracker, and a repository-level security policy with private reporting and response targets | No LTS or security backports; only the latest published release of each component is supported |
 
 ## Main line: verifiable requirements
@@ -143,7 +143,7 @@ Ideas from the original design whose value or form is not decided:
 |-------|------|--------|
 | 1 | Core: lexer, parser, interpreter, CLI, diagnostics | Completed (version 0.1.0) |
 | 2 | Type system, functions, contracts, JSON outputs | Completed (version 0.2.0); the contract rules became stable in 0.3.0, and their header syntax was revised in 0.12.0 |
-| 3 | Documentation, tests and quality | Implemented; CI runs the Python suite on Python 3.11, 3.12 and 3.13 across Linux, Windows and macOS. Native Linux/macOS smoke checks remain |
+| 3 | Documentation, tests and quality | Implemented; CI runs the Python suite on Python 3.11 to 3.14 across Linux, Windows and macOS. Native Linux/macOS smoke checks remain |
 | 4 | Playground: web editor that runs with the real interpreter | Live in production at NEXORA 0.14.1; multi-file projects and statement debugger are available. Docker isolation passed the staging and production release verifier |
 | 5 | Tools for agents: JSON protocol, `nex context`, `nex symbols`, Python API, MCP server | Implemented and tested locally, also the language server of the editor; a small local one-shot model pilot found no observed contract advantage, and broader evaluation remains |
 | 6 | Verifiable requirements: stable contracts, explanation of the rules and refined types | Core completed; examples arrived in 0.4.0, conservative requirement comparison is implemented, and the defined AI pilot is published. General proof of logical implication and independent model replication remain research |

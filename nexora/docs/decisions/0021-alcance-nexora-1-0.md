@@ -298,3 +298,8 @@ criteria and the gates above are unchanged. The status of every gate is in [1.0 
 - **2026-11-06, support target (section 6).** The target lists CPython 3.11 to 3.14; `pyproject.toml` and the CI
   matrix cover 3.11 to 3.13. The gate on platform support is not met for 3.14 until the CI matrix includes it or
   this decision is amended.
+- **2026-11-07, resolved by [decision 0029](0029-congelacion-de-la-especificacion-1-0.md).** CPython 3.14 is in the CI matrix and
+  in `pyproject.toml`; the runners are pinned to `ubuntu-24.04`, `windows-2025` and `macos-15`; the specification is frozen as 1.0; the five
+  findings of the reference applications are outside 1.0; the 1.0 promise is about the specification, and the Python and the native
+  implementations conform to it; the support period is unchanged. The evidence is in the [readiness page](../1-0-readiness.md) and in
+  [platform support](../platform-support.md).

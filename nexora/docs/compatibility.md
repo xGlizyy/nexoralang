@@ -6,9 +6,10 @@ public tool and protocol.
 
 ## What is stable today
 
-NEXORA is currently before 1.0. The language specification and programs written for it may change
-incompatibly between minor `0.y` releases. The package version does not replace the independent
-language specification version.
+NEXORA is currently before the release 1.0.0 of its implementation, but its **language specification is frozen as 1.0**
+([decision 0029](decisions/0029-congelacion-de-la-especificacion-1-0.md)): from now on the language changes only by the rules
+below for 1.x. The implementation, its tools and its experimental interfaces may still change incompatibly in `0.y` releases,
+outside what the specification freezes. The package version does not replace the independent language specification version.
 
 This does not cancel existing interface promises: the documented `nex` CLI, stable diagnostics and
 versioned JSON schemas remain governed by the [interface stability policy](interface-stability.md),

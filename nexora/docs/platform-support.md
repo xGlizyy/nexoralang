@@ -39,7 +39,28 @@ Dated, by hand, on real machines (CI records are in the summaries of the runs of
 |------|--------|------|--------|
 | 2026-11-07 | Windows 11 Pro 10.0.26200 x86-64 | `native-v0.15.2` (`nex.exe`), checked against its published `.sha256`: the 29 scenarios of `tests/test_threat_model_rows.py` that run on Windows, including a directory junction | 29 passed, 4 skipped (links that need a privilege, and POSIX path semantics) |
 | 2026-11-07 | Ubuntu 24.04 (WSL 2) x86-64 | `native-v0.15.2` (`nex`), checked against its published `.sha256`: the same 66 scenarios in Python and native, symbolic links included | 66 passed |
-| 2026-11-07 | Ubuntu 24.04 (WSL 2) x86-64 | `nex` built from the seed of the fixes of the pull request that follows `native-v0.15.2`: 70 scenarios (Python and native), 60 runs of a silent process, the arguments after `--`, the release check of the three artifacts | 70 passed; 0 failures in 60; same arguments; check passed |
+| 2026-11-07 | Ubuntu 24.04 (WSL 2) x86-64 | `nex` built from the seed of the fixes of pull request #65 (the release `native-v0.15.3`): 70 scenarios (Python and native), 60 runs of a silent process, the arguments after `--`, the release check of the three artifacts | 70 passed; 0 failures in 60; same arguments; check passed |
 | 2026-11-07 | Windows 11 Pro 10.0.26200 x86-64 | The reference implementation 0.15.x on Python 3.12: the whole suite | 3630 passed, 23 skipped (platform) |
 
-The run of `nexora-platform.yml` that checks every system of the target at once is linked from the readiness page when it passes.
+### The smoke test on the runners
+
+Run [42397018291](https://github.com/xGlizyy/nexoralang/actions/runs/42397018291) of `nexora-platform.yml`, on 2026-11-07 at about
+17:35 UTC, commit `b799571`. Every job passed.
+
+| System | Version found | The latest native release, `native-v0.15.2` |
+|--------|---------------|---------------------------------------------|
+| `ubuntu-24.04`, x86-64 | Ubuntu 24.04.5 LTS, Linux 7.0.0-1017-azure | `linux-x64` package: SHA-256 `9c820d5c…` verified, then `nex run`, `check`, `test` (hello, `textstats`, `checked_examples`) and the worker |
+| `windows-2025`, x86-64 | Windows Server 2025, build 10.0.26100 (the build of Windows 11 24H2) | `windows-x64` package: SHA-256 `c8758571…` verified, same programs |
+| `macos-15`, Apple Silicon | macOS 15.8.2, arm64 | `macos-arm64` package: SHA-256 `ed798139…` verified, same programs |
+| `macos-15-intel`, x86-64 | macOS 15.7.9, x86_64 | `macos-x64` package: SHA-256 `771e0a69…` verified, same programs (outside the target, see above) |
+
+| Python | `ubuntu-24.04` | `windows-2025` | `macos-15` |
+|--------|----------------|----------------|------------|
+| 3.11 | 3.11.18 | 3.11.9 | 3.11.9 |
+| 3.12 | 3.12.16 | 3.12.10 | 3.12.10 |
+| 3.13 | 3.13.18 | 3.13.17 | 3.13.17 |
+| 3.14 | 3.14.10 | 3.14.10 | 3.14.10 |
+
+On each of them the wheel built from the commit was installed in a clean environment, `nex --version` said `NEXORA 0.15.0` and
+`examples/hello.nex` printed `Hello from NEXORA`. The whole test suite on the same twelve combinations is the job `checks` of
+`nexora-ci.yml`.
