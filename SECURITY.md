@@ -19,9 +19,9 @@ release replaces the previous release in this table.
 
 **Known issue in the native tools.** The native `nex` of `native-v0.15.0` and `native-v0.15.1` followed no symbolic link when it
 compared a path with the folders granted by `--allow-read` and `--allow-write`, so a program could read or write through a link that
-led outside them. The Python `nex` (`nexora-lang` on PyPI and npm) was not affected. It is fixed in the source (see `CHANGELOG.md`);
-until a native release that includes the fix is published, do not run programs you do not trust with those two options, or on
-folders where others can create links.
+led outside them. The Python `nex` (`nexora-lang` on PyPI and npm) was not affected. It is fixed in `native-v0.15.2` (see
+`CHANGELOG.md`): update to it. If you cannot, do not run programs you do not trust with those two options, or on folders where others
+can create links.
 
 Development snapshots and older releases are unsupported. If a vulnerability affects a supported
 component, fixes are prepared for its current source and included in a new release. There is no
