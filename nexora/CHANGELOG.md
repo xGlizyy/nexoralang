@@ -51,10 +51,12 @@ Each version groups its changes into these sections, when they contain content:
 
 - **Security, native `nex` only:** a program run by the native `nex run` could read and write through a symbolic link that led
   outside the folders the user allowed with `--allow-read` and `--allow-write` (the specification and the Python `nex` deny it with
-  `E3008`). The native tools now resolve where a path really leads, following every symbolic link and, on Windows, every junction,
+  `E3008`). Fixed in `native-v0.15.2`. The native tools now resolve where a path really leads, following every symbolic link and, on Windows, every junction,
   before comparing it with the declared and the granted folders; a loop of links is denied. The releases `native-v0.15.0` and
-  `native-v0.15.1` have the defect: do not use their `nex run` with `--allow-read` or `--allow-write` on programs that you do not
-  trust, or on folders where others can create links. The Python package was never affected.
+  `native-v0.15.1` have the defect: update to `native-v0.15.2`, or do not use their `nex run` with `--allow-read` or `--allow-write`
+  on programs that you do not trust, or on folders where others can create links. The Python package was never affected.
+- The `.sha256` file of each native release listed itself too (the hash of an empty file) next to the archive. It now holds one line,
+  the hash of the archive.
 
 ### Documentation
 

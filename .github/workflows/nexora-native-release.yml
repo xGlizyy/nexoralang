@@ -72,11 +72,15 @@ jobs:
           cp out/nex${{ matrix.exe }} out/nexora-lsp${{ matrix.exe }} out/nex-mcp${{ matrix.exe }} out/nexora-format${{ matrix.exe }} out/nexora-worker${{ matrix.exe }} "$name/"
           cp LICENSE* "$name/" 2>/dev/null || true
           if [ "${{ matrix.exe }}" = ".exe" ]; then
-            7z a "dist/$name.zip" "$name" > /dev/null
+            archive="$name.zip"
+            7z a "dist/$archive" "$name" > /dev/null
           else
-            tar -czf "dist/$name.tar.gz" "$name"
+            archive="$name.tar.gz"
+            tar -czf "dist/$archive" "$name"
           fi
-          (cd dist && (sha256sum * 2>/dev/null || shasum -a 256 *) > "$name.sha256")
+          # Only the archive is summed: with `sha256sum *` the shell creates "$name.sha256" first and the file lists itself (the hash of
+          # an empty file), which is what native-v0.15.0 and native-v0.15.1 published.
+          (cd dist && (sha256sum "$archive" 2>/dev/null || shasum -a 256 "$archive") > "$name.sha256")
 
       - uses: actions/upload-artifact@v4
         with:
