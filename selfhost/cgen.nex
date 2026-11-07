@@ -1192,6 +1192,9 @@ fn intrinsic_of(function: parser.Node) gives Text {
     if count == 2 and name == "host_run" and file == "selfhost/interpreter.nex" {
         return "rt_intr_host_run"
     }
+    if count == 1 and name == "host_real" and file == "selfhost/interpreter.nex" {
+        return "rt_intr_host_real"
+    }
     if count == 0 and name == "mcp_line" and file == "selfhost/mcp.nex" {
         return "rt_intr_read_stdin_line"
     }

@@ -2386,11 +2386,18 @@ static const char *rt_absolute(const char *path) {
     return rt_format("%s/%s", cwd, path);
 }
 
+/* The path with every symbolic link, and on Windows every junction, followed (os.path.realpath of the Python implementation):
+ * confinement is decided on where a path really leads, not on how it is written. Defined with the system headers, below.
+ * 0 when it cannot be decided (a loop of links, a link whose target cannot be read): the path is then not inside anything. */
+static const char *rt_resolve(const char *path);
+
 static bool rt_inside(const char *scope, const char *path) {
     if (scope[0] == 0) return false;
+    const char *real_scope = rt_resolve(scope), *real_path = rt_resolve(path);
+    if (!real_scope || !real_path) return false;
     rt_parts inner, outer;
-    rt_split(rt_absolute(scope), &inner);
-    rt_split(rt_absolute(path), &outer);
+    rt_split(real_scope, &inner);
+    rt_split(real_path, &outer);
     if (strcmp(inner.root, outer.root) != 0 || outer.n < inner.n) return false;
     for (int i = 0; i < inner.n; i++) {
         if (strcmp(inner.seg[i], outer.seg[i]) != 0) return false;
@@ -2647,6 +2654,98 @@ static int64_t rt_host_now(void) {
     return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 #endif
+
+/* ---------- Where a path leads ---------- */
+
+static bool rt_separator(char c) {
+#ifdef _WIN32
+    return c == '/' || c == '\\';
+#else
+    return c == '/';
+#endif
+}
+
+/* The real path of something that exists, with its links followed; false if it does not exist or cannot be resolved. */
+static bool rt_real_existing(const char *path, char *out, size_t size) {
+#ifdef _WIN32
+    wchar_t wide[4096], final[4096];
+    if (MultiByteToWideChar(CP_UTF8, 0, path, -1, wide, 4096) <= 0) return false;
+    HANDLE handle = CreateFileW(wide, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0, OPEN_EXISTING,
+                                FILE_FLAG_BACKUP_SEMANTICS, 0);
+    if (handle == INVALID_HANDLE_VALUE) return false;
+    DWORD got = GetFinalPathNameByHandleW(handle, final, 4096, FILE_NAME_NORMALIZED);
+    CloseHandle(handle);
+    if (got == 0 || got >= 4096) return false;
+    const wchar_t *shown = final;
+    if (wcsncmp(shown, L"\\\\?\\UNC\\", 8) == 0) {
+        final[6] = L'\\';
+        shown = final + 6;
+    } else if (wcsncmp(shown, L"\\\\?\\", 4) == 0) {
+        shown += 4;
+    }
+    return WideCharToMultiByte(CP_UTF8, 0, shown, -1, out, (int)size, 0, 0) > 0;
+#else
+    char buffer[4096];
+    if (!realpath(path, buffer) || strlen(buffer) >= size) return false;
+    strcpy(out, buffer);
+    return true;
+#endif
+}
+
+/* Whether a path that does not resolve is itself a link (one that points nowhere, or in a loop), and where it points. */
+static bool rt_link_target(const char *path, char *out, size_t size, bool *unreadable) {
+    *unreadable = false;
+#ifdef _WIN32
+    wchar_t wide[4096];
+    if (MultiByteToWideChar(CP_UTF8, 0, path, -1, wide, 4096) <= 0) return false;
+    DWORD attributes = GetFileAttributesW(wide);
+    if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
+    *unreadable = true; /* the target of a link that points nowhere is not read on Windows: the path is denied */
+    (void)out; (void)size;
+    return true;
+#else
+    ssize_t n = readlink(path, out, size - 1);
+    if (n < 0) return false;
+    out[n] = 0;
+    return true;
+#endif
+}
+
+static const char *rt_resolve_depth(const char *path, int depth) {
+    if (depth > 40) return 0;
+    const char *absolute = rt_absolute(path);
+    size_t len = strlen(absolute);
+    char *work = rt_format("%s", absolute);
+    char resolved[4096], target[4096];
+    size_t cut = len;
+    for (;;) {
+        /* The longest part of the path, from the left, that exists. What follows it cannot be a link. */
+        char *prefix = rt_format("%.*s", (int)cut, work);
+        if (cut == 0) prefix = rt_format("%s", rt_separator(work[0]) ? "/" : ".");
+        else if (cut == 2 && work[1] == ':') prefix = rt_format("%c:/", work[0]);
+        const char *tail = work + cut;
+        while (*tail && rt_separator(*tail)) tail++;
+        if (rt_real_existing(prefix, resolved, sizeof resolved)) {
+            return *tail ? rt_format("%s/%s", resolved, tail) : rt_format("%s", resolved);
+        }
+        bool unreadable;
+        if (cut > 0 && rt_link_target(prefix, target, sizeof target, &unreadable)) {
+            if (unreadable) return 0;
+            size_t dir = cut;
+            while (dir > 0 && !rt_separator(work[dir - 1])) dir--;
+            const char *next = rt_separator(target[0]) ? rt_format("%s", target) : rt_format("%.*s%s", (int)dir, work, target);
+            return rt_resolve_depth(*tail ? rt_format("%s/%s", next, tail) : next, depth + 1);
+        }
+        if (cut == 0) return absolute;
+        size_t i = cut;
+        while (i > 0 && rt_separator(work[i - 1])) i--;
+        while (i > 0 && !rt_separator(work[i - 1])) i--;
+        cut = i > 0 ? i - 1 : 0;
+        if (cut == 0 && i == 0 && !rt_separator(work[0])) return absolute;
+    }
+}
+
+static const char *rt_resolve(const char *path) { return rt_resolve_depth(path, 0); }
 
 /* ---------- HTTP over a connection ---------- */
 
@@ -3823,6 +3922,12 @@ static rv rt_host_answer(rt_host_result r) {
 }
 
 static rv rt_intr_host_get(rv url) { return rt_host_answer(rt_https_get(url.u.t.p)); }
+
+/* Where a path really leads, for the interpreter written in NEXORA: the empty text when that cannot be decided. */
+static rv rt_intr_host_real(rv path) {
+    const char *real = rt_resolve(path.u.t.p);
+    return real ? rt_from_cstr(real) : rt_str("");
+}
 
 static rv rt_intr_host_run(rv command, rv arguments) {
     int count;
