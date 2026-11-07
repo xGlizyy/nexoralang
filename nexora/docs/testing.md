@@ -43,7 +43,7 @@ The full suite takes about three minutes. The tests need no internet connection.
 
 ## Feature-by-feature specification coverage
 
-The [language specification](language-spec.md) is normative for language version 0.14. This table
+The [language specification](language-spec.md) is normative for language version 1.0. This table
 maps every numbered normative clause in sections 2–12 to an executable NEXORA program and focused
 tests. Add or update a row whenever a clause or stable feature changes. The coverage test in
 `tests/test_docs.py` requires an exact row for every numbered clause, verifies that every example
