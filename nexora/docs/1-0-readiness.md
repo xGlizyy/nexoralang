@@ -26,14 +26,13 @@ left. Nothing here lowers a criterion.
 | Release integrity | **Met** | A changelog (`CHANGELOG.md`); [compatibility policy](compatibility.md); [migration guide](migration-guide.md) from every 0.x version; [yank policy](yanking.md); the [release checklist](../release/RELEASE_CHECKLIST.md), which `nexora-release.yml` attaches to the release of each tag | Nothing planned |
 | Documentation accuracy | **Met** | `tests/test_docs.py` keeps the documents tied to the implementation; decision 0021 has its amendments (the last one of 2026-11-07); README, roadmap, limitations, installation, deployment and testing were read against the code and say 1.0, Python 3.11 to 3.14 and the pinned runners | Nothing planned |
 | Support process | **Met** | Public security policy, with response targets, the list of supported releases and the known issue of the native tools | Keeping the table of supported releases current |
-| Release blockers | **Partial** | The issue list was reviewed on 2026-11-07: there are no open issues, the labels `P0` and `P1` exist, and none is open on any issue | Pull request #65 fixes two defects of the native `nex` that are not about the language (a silent process could fail with status -9 on Linux and macOS, and `--` reached the program as an argument): it passed its CI and has to be merged and released as `native-v0.15.3` before 1.0.0, as a defect that stops a documented use is a P1 |
+| Release blockers | **Met** | The issue list was reviewed on 2026-11-07: there are no open issues, the labels `P0` and `P1` exist, and none is open on any issue. The two defects of the native `nex` that the release tools found (a silent process could fail with status -9 on Linux and macOS, and `--` reached the program as an argument) were fixed by pull request #65 and released as `native-v0.15.3`, checked on the published programs on Linux and Windows | Nothing planned. A P0 or P1 found later blocks the release (the checklist asks for it) |
 
-Eleven of the twelve gates are met and one is partial.
+All twelve gates are met.
 
 ## What is left, in order
 
-1. **Merge the pull request #65 and release `native-v0.15.3`.** It is the one item that stops the last gate. The merge, the tag
-   `native-v0.15.3` and the update of the known issue in `SECURITY.md` are the maintainer's to authorize.
+1. ~~Merge the pull request #65 and release `native-v0.15.3`.~~ Done on 2026-11-07, with the maintainer's authorization.
 2. **Merge the pull request #63**, which has the reference applications, the compatibility suite, the threat model, the release
    tools, the 1.0 specification and this page.
 3. **Release 1.0.0** when the maintainer decides: the checklist in [`release/RELEASE_CHECKLIST.md`](../release/RELEASE_CHECKLIST.md),
