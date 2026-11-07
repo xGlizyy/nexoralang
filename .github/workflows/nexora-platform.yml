@@ -33,7 +33,7 @@ jobs:
         include:
           - { system: linux-x64, runner: ubuntu-24.04, archive: tar.gz, exe: "" }
           - { system: windows-x64, runner: windows-2025, archive: zip, exe: ".exe" }
-          - { system: macos-arm64, runner: macos-14, archive: tar.gz, exe: "" }
+          - { system: macos-arm64, runner: macos-15, archive: tar.gz, exe: "" }
           - { system: macos-x64, runner: macos-15-intel, archive: tar.gz, exe: "" }
     defaults:
       run:
@@ -95,7 +95,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, windows-2025, macos-14]
+        runner: [ubuntu-24.04, windows-2025, macos-15]
         python: ["3.11", "3.12", "3.13", "3.14"]
     defaults:
       run:

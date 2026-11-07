@@ -9,7 +9,7 @@
 #   - a changed artifact, a wrong tag and a changed hash are each caught (the check fails, status 5);
 #   - SHA256SUMS lists the three artifacts.
 #
-# For a tag `vX.Y.Z` the three files and SHA256SUMS are attached to the GitHub release of the tag. Those are the files to publish to
+# For a tag `vX.Y.Z` the three files, SHA256SUMS and the release checklist are attached to the GitHub release of the tag. Those are the files to publish to
 # PyPI and npm (nexora/release/RELEASING.md); the hashes in the release are then the hashes of what people install.
 #
 # It uses no secrets and no paid services: only free GitHub runners and the token of the workflow.
@@ -181,6 +181,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: release-artifacts
@@ -192,8 +194,8 @@ jobs:
         run: |
           ls -l dist
           if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}"
+            gh release upload "${GITHUB_REF_NAME}" dist/* nexora/release/RELEASE_CHECKLIST.md --repo "${GITHUB_REPOSITORY}"
           else
-            gh release create "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}" --title "NEXORA ${GITHUB_REF_NAME#v}" \
+            gh release create "${GITHUB_REF_NAME}" dist/* nexora/release/RELEASE_CHECKLIST.md --repo "${GITHUB_REPOSITORY}" --title "NEXORA ${GITHUB_REF_NAME#v}" \
               --notes "The artifacts of ${GITHUB_REF_NAME}: the wheel, the source distribution and the npm package, with SHA256SUMS. See CHANGELOG.md."
           fi

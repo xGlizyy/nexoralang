@@ -84,11 +84,12 @@ worse than one that is not made. It is reviewed with the first 1.y release.
 
 1. **CPython 3.11 to 3.14.** 3.14 is in the continuous integration matrix (the tests, the reference applications and the platform
    smoke test) and in the classifiers of `pyproject.toml`.
-2. **The runners are pinned to the systems that decision 0021 names**: `ubuntu-24.04`, `windows-2025` and `macos-14`, not
-   `*-latest`. GitHub offers no x86-64 Windows 11 image: `windows-2025` is Windows Server 2025, which shares its kernel and its API
+2. **The runners are pinned to the systems that decision 0021 names**: `ubuntu-24.04`, `windows-2025` and `macos-15` (the first two are the
+   systems named; macOS 15 is "14 or newer"), not `*-latest`. GitHub offers no x86-64 Windows 11 image: `windows-2025` is Windows Server 2025, which shares its kernel and its API
    with Windows 11, so the CI on it is evidence for the API and not for the desktop. The native smoke test on a real Windows 11
    is recorded with its date in the platform support page.
-3. **macOS: Apple Silicon is the target** (macOS 14 or newer, `macos-14`). Intel is built, smoke-tested on `macos-15-intel` and
+3. **macOS: Apple Silicon is the target** (macOS 14 or newer; the runner is `macos-15`, because GitHub answers `The configuration
+   'macos-14-arm64-us-default' is not supported` for `macos-14`). Intel is built, smoke-tested on `macos-15-intel` and
    published, but is not in the target of 1.0: the decision's condition for it (both architectures in the CI of the whole suite) is
    not met, and it is better to say so than to promise it.
 
