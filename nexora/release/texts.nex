@@ -1,0 +1,86 @@
+// texts: the few operations on texts that the release tools need and the language does not have. A module: it has no `main`, it is
+// imported by check_artifacts.nex and check_freeze.nex.
+
+// The pieces of `text` between the single-character `separator`, empty pieces included.
+pub fn split(text: Text, separator: Text) gives List[Text]
+    needs Text.length(separator) == 1, "The separator is one character"
+    example split("a\nb\n\nc", "\n") == ["a", "b", "", "c"]
+    example split("", "\n") == [""]
+    example split("a|b", "|") == ["a", "b"]
+{
+    var pieces: List[Text] = []
+    var start = 0
+    var i = 0
+    while i < Text.length(text)
+        keeps start <= i
+        shrinks Text.length(text) - i, "Each turn reads one more character"
+    {
+        if Text.slice(text, i, i + 1) == separator {
+            pieces = List.append(pieces, Text.slice(text, start, i))
+            start = i + 1
+        }
+        i = i + 1
+    }
+    return List.append(pieces, Text.slice(text, start, Text.length(text)))
+}
+
+// The lines of `text` that are not empty. (`read_file` turns CRLF into LF, and the commands that the tools run write LF.)
+pub fn lines_of(text: Text) gives List[Text]
+    example lines_of("a\nb\n") == ["a", "b"]
+    example lines_of("a\n\nb") == ["a", "b"]
+    example lines_of("") == []
+{
+    var found: List[Text] = []
+    for line in split(text, "\n")
+        keeps true
+    {
+        if Text.length(line) > 0 {
+            found = List.append(found, line)
+        }
+    }
+    return found
+}
+
+// Where `part` first appears in `text` at or after `from`, or -1.
+pub fn index_of(text: Text, part: Text, from: Int) gives Int
+    needs from >= 0, "A position is not negative"
+    example index_of("abcabc", "bc", 0) == 1
+    example index_of("abcabc", "bc", 2) == 4
+    example index_of("abc", "x", 0) == -1
+{
+    var i = from
+    while i + Text.length(part) <= Text.length(text)
+        keeps i >= from
+        shrinks Text.length(text) - i, "Each turn looks one position further"
+    {
+        if Text.slice(text, i, i + Text.length(part)) == part {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// `text` without the spaces at its start and at its end.
+pub fn strip(text: Text) gives Text
+    example strip("  a b  ") == "a b"
+    example strip("a") == "a"
+    example strip("   ") == ""
+    example strip("") == ""
+{
+    var start = 0
+    var end = Text.length(text)
+    while start < end and Text.slice(text, start, start + 1) == " "
+        keeps start <= end
+        shrinks end - start, "Each turn drops one space at the start"
+    {
+        start = start + 1
+    }
+    while end > start and Text.slice(text, end - 1, end) == " "
+        keeps end >= start
+        shrinks end - start, "Each turn drops one space at the end"
+    {
+        end = end - 1
+    }
+    return Text.slice(text, start, end)
+}

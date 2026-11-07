@@ -1,0 +1,199 @@
+# The artifacts of a release of the reference interpreter (nexora-lang): the wheel, the source distribution and the npm package.
+#
+# They are built once, here, and checked by `nexora/release/check_artifacts.nex`, a program written in NEXORA and run with the native
+# `nex` that this workflow builds from the seed of the compiler with a C compiler. Python only builds the wheel and the source
+# distribution, which is what a Python package needs; the check, the hashes and the tests of the check are NEXORA.
+#
+#   - the three artifacts have the same name, version and licence, and the same bytes for every module of the interpreter;
+#   - the source distribution is installed in a clean environment, and its `nex` runs a program;
+#   - a changed artifact, a wrong tag and a changed hash are each caught (the check fails, status 5);
+#   - SHA256SUMS lists the three artifacts.
+#
+# For a tag `vX.Y.Z` the three files and SHA256SUMS are attached to the GitHub release of the tag. Those are the files to publish to
+# PyPI and npm (nexora/release/RELEASING.md); the hashes in the release are then the hashes of what people install.
+#
+# It uses no secrets and no paid services: only free GitHub runners and the token of the workflow.
+
+name: nexora-release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "nexora/release/**"
+      - "nexora/docs/language-spec.md"
+      - "nexora/pyproject.toml"
+      - "nexora/MANIFEST.in"
+      - "nexora/src/nexora/version.py"
+      - "npm/**"
+      - "selfhost/seed/**"
+      - ".github/workflows/nexora-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  artifacts:
+    name: Build and check the artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: The native nex, from the seed (a C compiler and nothing else)
+        run: |
+          mkdir -p out
+          cc -std=c11 -O2 selfhost/seed/cgen.c -o out/compiler -lm -ldl
+          ./out/compiler --allow-read . --allow-write . -- selfhost/nex.nex out/nex.c --trusted --cli
+          cc -std=c11 -O2 out/nex.c -o out/nex -lm -ldl
+          ./out/nex --version
+
+      - name: The wheel and the source distribution
+        run: |
+          python -m pip install build
+          python -m build --outdir dist nexora
+
+      - name: The npm package
+        run: |
+          (cd npm && npm pack --pack-destination ../dist)
+          ls -l dist
+
+      - name: The checks are themselves tested (their examples)
+        run: |
+          ./out/nex test nexora/release/texts.nex
+          ./out/nex test nexora/release/check_artifacts.nex
+          ./out/nex test nexora/release/check_freeze.nex
+
+      - name: The artifacts agree, and SHA256SUMS
+        run: |
+          expected=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' nexora/src/nexora/version.py)
+          tag="-"
+          case "$GITHUB_REF" in refs/tags/v*) tag="${GITHUB_REF_NAME}";; esac
+          echo "version $expected, tag $tag"
+          mkdir -p work
+          ./out/nex run --allow-read . --allow-write . --allow-process ls --allow-process mkdir --allow-process tar --allow-process unzip --allow-process sha256sum \
+            nexora/release/check_artifacts.nex -- sums dist work "$tag" "$expected"
+          cat dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+
+      - name: The specification is what was frozen (decision 0029)
+        run: |
+          freeze() {
+            ./out/nex run --allow-read . nexora/release/check_freeze.nex -- check "$1" nexora/release/frozen
+          }
+          freeze nexora/docs/language-spec.md
+          mkdir -p bad
+          set +e
+          echo "== a new keyword is caught"
+          sed 's/^gives   needs   promises   trust/gives   needs   promises   trust   fresh/' nexora/docs/language-spec.md > bad/keyword.md
+          freeze bad/keyword.md > "$RUNNER_TEMP/out.txt" 2>&1; test "$?" = 5 || { cat "$RUNNER_TEMP/out.txt"; exit 1; }
+          grep -m1 '^error:' "$RUNNER_TEMP/out.txt"
+          echo "== a removed built-in function is caught"
+          grep -v '^| `Text.length(text: Text) gives Int`' nexora/docs/language-spec.md > bad/builtin.md
+          freeze bad/builtin.md > "$RUNNER_TEMP/out.txt" 2>&1; test "$?" = 5 || { cat "$RUNNER_TEMP/out.txt"; exit 1; }
+          grep -m1 '^error:' "$RUNNER_TEMP/out.txt"
+          echo "== a changed production of the grammar is caught"
+          sed 's/^import_decl = "import" TEXT ;/import_decl = "import" NAME ;/' nexora/docs/language-spec.md > bad/grammar.md
+          freeze bad/grammar.md > "$RUNNER_TEMP/out.txt" 2>&1; test "$?" = 5 || { cat "$RUNNER_TEMP/out.txt"; exit 1; }
+          grep -m1 '^error:' "$RUNNER_TEMP/out.txt"
+
+      - name: The hashes are verified by the check too
+        run: |
+          ./out/nex run --allow-read . --allow-process ls --allow-process sha256sum nexora/release/check_artifacts.nex -- verify dist
+
+      - name: The source distribution installs in a clean environment and runs a program
+        run: |
+          python -m venv "$RUNNER_TEMP/sdist"
+          "$RUNNER_TEMP/sdist/bin/python" -m pip install dist/nexora_lang-*.tar.gz
+          "$RUNNER_TEMP/sdist/bin/nex" --version
+          "$RUNNER_TEMP/sdist/bin/nex" run nexora/examples/hello.nex
+
+      - name: The check catches what it is for
+        run: |
+          nex_check() {
+            ./out/nex run --allow-read . --allow-write . --allow-process ls --allow-process mkdir --allow-process tar --allow-process unzip --allow-process sha256sum \
+              nexora/release/check_artifacts.nex -- "$@"
+          }
+          must_fail() {
+            set +e
+            "$@" > "$RUNNER_TEMP/out.txt" 2>&1
+            status=$?
+            set -e
+            test "$status" = 5 || { echo "expected status 5, got $status"; cat "$RUNNER_TEMP/out.txt"; exit 1; }
+            echo "failed as it must (status 5): $(grep -m1 '^error:' "$RUNNER_TEMP/out.txt")"
+          }
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' nexora/src/nexora/version.py)
+
+          echo "== a wrong tag"
+          rm -rf work && must_fail nex_check check dist work v0.0.0-wrong "$version"
+
+          echo "== a wrong expected version"
+          rm -rf work && must_fail nex_check check dist work - 0.0.0-wrong
+
+          echo "== an npm package with a changed module"
+          rm -rf bad work && mkdir -p bad/unpacked bad/dist
+          cp dist/*.whl dist/*.tar.gz bad/dist/
+          tar -xzf dist/nexora-lang-*.tgz -C bad/unpacked
+          echo "# changed" >> bad/unpacked/package/python/nexora/cli.py
+          (cd bad/unpacked && tar -czf "../dist/$(basename dist/nexora-lang-*.tgz)" package)
+          must_fail nex_check check bad/dist work - -
+
+          echo "== a missing artifact"
+          rm -rf bad work && mkdir -p bad/dist && cp dist/*.whl dist/*.tar.gz bad/dist/
+          must_fail nex_check check bad/dist work - -
+
+          echo "== two wheels"
+          rm -rf bad work && mkdir -p bad/dist && cp dist/*.whl dist/*.tar.gz dist/*.tgz bad/dist/
+          cp bad/dist/nexora_lang-*.whl bad/dist/nexora_lang-0.0.1-py3-none-any.whl
+          must_fail nex_check check bad/dist work - -
+
+          echo "== a changed hash"
+          rm -rf bad && mkdir -p bad/dist && cp dist/* bad/dist/
+          sed -i '1s/^./f/;1s/^ff/0f/' bad/dist/SHA256SUMS
+          must_fail ./out/nex run --allow-read . --allow-process ls --allow-process sha256sum nexora/release/check_artifacts.nex -- verify bad/dist
+
+          echo "== a file that is not listed"
+          rm -rf bad && mkdir -p bad/dist && cp dist/* bad/dist/
+          sed -i '1d' bad/dist/SHA256SUMS
+          must_fail ./out/nex run --allow-read . --allow-process ls --allow-process sha256sum nexora/release/check_artifacts.nex -- verify bad/dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/*
+          retention-days: 14
+
+  publish:
+    name: Attach to the release of the tag
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist
+
+      - name: Attach the artifacts and SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l dist
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}"
+          else
+            gh release create "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}" --title "NEXORA ${GITHUB_REF_NAME#v}" \
+              --notes "The artifacts of ${GITHUB_REF_NAME}: the wheel, the source distribution and the npm package, with SHA256SUMS. See CHANGELOG.md."
+          fi

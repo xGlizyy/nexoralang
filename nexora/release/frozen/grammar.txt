@@ -1,0 +1,70 @@
+program    = { NEWLINE } { import_decl } { ( type_decl | uses_decl | function ) { NEWLINE } } ;
+import_decl = "import" TEXT ;
+type_decl  = [ "pub" ] "type" NAME "=" type "where" expression [ explanation ] end
+           | record_decl | enum_decl ;
+record_decl = [ "pub" ] "type" NAME "=" "{" record_fields "}" ;
+record_fields = record_field { "," record_field } ;
+record_field = NAME ":" type ;
+enum_decl = [ "pub" ] "type" NAME "=" "enum" "{" variant { "," variant } "}" ;
+variant = NAME [ "(" record_fields ")" ] ;
+uses_decl  = "uses" ( "read" | "write" | "network" | "process" ) TEXT ;
+function   = [ "pub" ] "fn" NAME "(" [ params ] ")" [ "gives" type ] body ;
+body       = block                                          (* no header clauses *)
+           | NEWLINE header_clause { header_clause } block ;
+header_clause = ( "needs" | "promises" ) [ clause_name ] expression [ explanation ] NEWLINE
+              | "trust" [ clause_name ] expression explanation NEWLINE   (* explanation required *)
+              | "example" expression [ explanation ] NEWLINE ;           (* no name *)
+clause_name = NAME ":" ;
+params     = param { "," param } ;
+param      = NAME ":" type ;
+type       = [ NAME "." ] NAME
+           | "List" "[" type "]"
+           | "Option" "[" type "]"
+           | "Result" "[" type "," type "]" ;
+explanation = "," TEXT ;
+block      = "{" { NEWLINE } { statement end } "}" ;
+end        = NEWLINE | (* nothing, if what follows is "}" *) ;
+statement  = let | var | return | if | if_let | while | for | block | assignment | field_assignment | expression ;
+let        = "let" NAME [ ":" type ] "=" expression ;
+var        = "var" NAME [ ":" type ] "=" expression ;
+return     = "return" [ expression ] ;
+if         = "if" expression block [ "else" ( if | block ) ] ;
+if_let     = "if" "let" pattern "=" expression block [ "else" ( if | if_let | block ) ] ;
+while      = "while" expression loop_body ;
+for        = "for" NAME "in" expression loop_body ;
+loop_body  = block                                          (* no header clauses *)
+           | NEWLINE loop_clause { loop_clause } block ;
+loop_clause = ( "keeps" | "shrinks" ) [ clause_name ] expression [ explanation ] NEWLINE ;
+assignment = NAME "=" expression ;
+field_assignment = NAME "." NAME "=" expression ;
+expression     = or ;
+or             = and { "or" and } ;
+and            = comparison { "and" comparison } ;
+comparison     = additive [ ( "==" | "!=" | "<" | "<=" | ">" | ">=" ) additive ] ;
+additive       = multiplicative { ( "+" | "-" ) multiplicative } ;
+multiplicative = unary { ( "*" | "/" ) unary } ;
+unary          = ( "-" | "not" ) unary | primary ;
+primary        = INT | FLOAT | TEXT | "true" | "false"
+               | NAME
+               | NAME "(" [ expression { "," expression } ] ")"
+               | NAME "." NAME "(" [ expression { "," expression } ] ")"
+               | NAME "." NAME "." NAME "(" [ expression { "," expression } ] ")"
+               | NAME "." NAME
+               | NAME "(" record_fields_values ")"
+               | "match" expression "{" match_arm { [ "," ] match_arm } "}"
+               | "[" [ expression { "," expression } ] "]"
+               | "(" expression ")" ;
+match_arm = pattern "=>" ( expression | block ) ;
+pattern = "_" | NAME | literal | [ NAME "." ] NAME [ "(" [ pattern { "," pattern } ] ")" ] ;
+record_fields_values = record_value { "," record_value } ;
+record_value = NAME ":" expression ;
+type Positive = Int where value > 0, "A positive value is greater than zero"
+type Point = { x: Positive, y: Positive }
+pub fn square(value: Positive) gives Positive {
+    return Positive(value * value)
+}
+fn main() {
+    let point = Point(x: Positive(2), y: Positive(3))
+    print(square(point.x))
+}
+4

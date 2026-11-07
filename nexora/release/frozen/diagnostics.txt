@@ -1,0 +1,73 @@
+`E0001`|Cannot read file|`file`
+`E0002`|File is not valid UTF-8|`file`
+`E1001`|Unexpected character|`lexical`
+`E1002`|Unterminated string|`lexical`
+`E1003`|Invalid escape sequence|`lexical`
+`E1004`|Invalid number literal|`lexical`
+`E1005`|Unescaped '{' in string|`lexical`
+`E1101`|Unexpected token|`syntax`
+`E1102`|Unclosed block|`syntax`
+`E1103`|Reserved word|`syntax`
+`E1105`|Expression too deeply nested|`syntax`
+`E1106`|Misplaced contract clause|`syntax`
+`E1107`|Syntax before 0.12|`syntax`
+`E1108`|Arrow before the return type|`syntax`
+`E2001`|Missing main function|`semantic`
+`E2002`|Duplicate function|`semantic`
+`E2004`|Invalid return type|`type`
+`E2005`|Unknown variable|`semantic`
+`E2006`|Name already declared|`semantic`
+`E2007`|Cannot reassign variable|`semantic`
+`E2008`|Unknown function|`semantic`
+`E2009`|Wrong number of arguments|`type`
+`E2010`|Unused value|`semantic`
+`E2011`|Type mismatch|`type`
+`E2012`|Invalid type|`type`
+`E2013`|Invalid parameter|`semantic`
+`E2014`|Missing return|`semantic`
+`E2015`|Unreachable code|`semantic`
+`E2016`|Invalid type declaration|`semantic`
+`E2017`|Value outside refined type|`type`
+`E2018`|Invalid refinement condition|`semantic`
+`E2019`|Too many refinement checks|`semantic`
+`E2020`|Example without its function|`semantic`
+`E2021`|Missing loop measure|`semantic`
+`E2022`|Unsupported loop clause|`semantic`
+`E2023`|Invalid record construction|`type`
+`E2024`|Invalid field access|`type`
+`E2025`|Cannot reassign a field|`semantic`
+`E2026`|Missing capability declaration|`semantic`
+`E2027`|Unknown module|`semantic`
+`E2028`|Private name|`semantic`
+`E2029`|Circular import|`semantic`
+`E2030`|Module name clash|`semantic`
+`E2031`|Duplicate clause name|`semantic`
+`E2032`|Non-exhaustive match|`type`
+`E2033`|Invalid enum pattern|`type`
+`E2034`|Unreachable match arm|`type`
+`E2035`|Invalid enum construction|`type`
+`E2036`|Invalid use of '?'|`type`
+`W2001`|Unused variable|`semantic`
+`W2002`|Variable never reassigned|`semantic`
+`W2003`|Name is not snake_case|`semantic`
+`E3001`|Division by zero|`runtime`
+`E3002`|Integer overflow|`runtime`
+`E3003`|Float result out of range|`runtime`
+`E3004`|Too many nested calls|`runtime`
+`E3005`|Conversion out of range|`runtime`
+`E3006`|Text too long|`runtime`
+`E3007`|Out of memory|`runtime`
+`E3008`|Permission denied|`runtime`
+`E3009`|No more input|`runtime`
+`E3010`|File error|`runtime`
+`E3011`|Option has no value|`runtime`
+`E3012`|Result is an error|`runtime`
+`E3013`|Result is not an error|`runtime`
+`E3014`|External operation failed|`runtime`
+`E3015`|Resource limit exceeded|`runtime`
+`E4001`|Precondition violated|`contract`
+`E4002`|Postcondition violated|`contract`
+`E4003`|Refinement violated|`contract`
+`E4005`|Loop invariant violated|`contract`
+`E4006`|Loop measure did not decrease|`contract`
+`E4004`|Example failed|`test`
