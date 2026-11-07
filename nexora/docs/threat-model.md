@@ -70,18 +70,42 @@ These are not defects to report; they are what the CLI does not promise. SECURIT
 For code that is not trusted, the answer stays the one in SECURITY.md: a container, a virtual machine or a job object
 that enforces the deadline, the memory, the processes, the file system and the network.
 
+## The native `nex`
+
+[Decision 0027](decisions/0027-herramientas-nativas-por-defecto.md) makes the native `nex` the default way to use NEXORA, so the
+rows above have to hold for it too. `tests/test_threat_model_rows.py` runs the scenarios of T1, T2, T3, T5, T6, T8, T9 and of the
+modules through the real command of the Python implementation and, with `NEXORA_NEX` set, of the native one, and both have to give the
+same exit status and the same diagnostic code. The job `commands` of `nexora-selfhost.yml` runs it on every change of the native tools.
+
+Checked on 2026-11-07, native `nex` built from this tree: Linux x64 (Ubuntu 24.04, 66 tests, none skipped, symbolic links included)
+and Windows x64 (Windows 11, 29 tests of the native `nex`; the file-symlink and `..`-after-a-link cases need privileges or POSIX
+semantics and are the ones that Linux covers; the junction case runs). T4 (redirects, proxies, size) is read in the runtime rather than
+run, because the native client verifies certificates and the test has no certificate that it trusts: `rt_https_get` reads no proxy
+variable, accepts only status 200 (a redirect is a failure) and stops at one MiB (`RT_HOST_MAX_BYTES`).
+
+**What this found.** Before 2026-11-07 the native `nex run` did not follow symbolic links when it compared a path with the folders that
+the program declares and the user grants: a link inside an allowed folder that led outside it was read and written. The Python `nex`
+denied it (`E3008`), the specification says it must, and `selfhost/README.md` listed it as a limit of the self-hosted interpreter, but
+neither SECURITY.md nor this page did. `native-v0.15.0` and `native-v0.15.1` have the defect. It is fixed: `host_real` of
+`selfhost/interpreter.nex` asks the C runtime (`rt_resolve`) where a path really leads, with every link and, on Windows, every junction
+followed, a link that points nowhere resolved by its target, and a loop of links denied. The change is recorded in `CHANGELOG.md`.
+
 ## Gaps found while writing this page
 
-Three gaps found while writing it were closed with `tests/test_threat_model.py`: the network answer (T4), the rule that
+Three of the four gaps found while writing it were closed with `tests/test_threat_model.py`: the network answer (T4), the rule that
 modules do not inherit capabilities (`test_a_module_that_reads_a_file_must_declare_it_even_if_the_program_does`) and
-the environment of a child process (`test_a_child_process_does_not_receive_the_environment_of_the_user`). What is left:
+the environment of a child process (`test_a_child_process_does_not_receive_the_environment_of_the_user`).
 
 
-- **The native `nex`** (decision 0027) is the default of the tools. This page rests on the tests of the Python
-  reference implementation; whether the same rows hold for the native one, and which tests show it, has not been
-  checked here.
+None is open. The native `nex` was the fourth gap and is closed in the next section.
 
 ## Review
 
-Pending. The gate asks for a *reviewed* threat model: when the maintainer has read this page against
-`tests/test_security.py` and the other tests it names, the date and the outcome go here.
+2026-11-07, second pass by the author of this page, after writing the tests above: every row was re-read against the code that
+implements it and against the tests it names (all 37 names exist and pass), and each of T1, T2, T3, T5, T6, T8 and T9 was also run
+against the native `nex`, which is how the symbolic-link defect above was found. Nothing in the table is stated without a test or
+without the line of code that is named. This is a review by the author, not an independent one.
+
+The gate asks for a reviewed threat model. When the maintainer has read this page and the rows, the date and the outcome go below.
+
+- Maintainer's review: _not recorded yet_.
