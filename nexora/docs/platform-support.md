@@ -40,6 +40,8 @@ Dated, by hand, on real machines (CI records are in the summaries of the runs of
 | 2026-11-07 | Windows 11 Pro 10.0.26200 x86-64 | `native-v0.15.2` (`nex.exe`), checked against its published `.sha256`: the 29 scenarios of `tests/test_threat_model_rows.py` that run on Windows, including a directory junction | 29 passed, 4 skipped (links that need a privilege, and POSIX path semantics) |
 | 2026-11-07 | Ubuntu 24.04 (WSL 2) x86-64 | `native-v0.15.2` (`nex`), checked against its published `.sha256`: the same 66 scenarios in Python and native, symbolic links included | 66 passed |
 | 2026-11-07 | Ubuntu 24.04 (WSL 2) x86-64 | `nex` built from the seed of the fixes of pull request #65 (the release `native-v0.15.3`): 70 scenarios (Python and native), 60 runs of a silent process, the arguments after `--`, the release check of the three artifacts | 70 passed; 0 failures in 60; same arguments; check passed |
+| 2026-11-07 | Ubuntu 24.04 (WSL 2) x86-64 | `native-v0.15.3` as published (`nex`), checked against its published `.sha256` (one line): 60 runs of a silent process, the arguments after `--`, and the 70 scenarios in Python and native | 0 failures in 60; the same arguments; 70 passed |
+| 2026-11-07 | Windows 11 Pro 10.0.26200 x86-64 | `native-v0.15.3` as published (`nex.exe`), checked against its published `.sha256`: the 29 scenarios that run on Windows | 29 passed, 6 skipped (links that need a privilege, POSIX path semantics and POSIX programs) |
 | 2026-11-07 | Windows 11 Pro 10.0.26200 x86-64 | The reference implementation 0.15.x on Python 3.12: the whole suite | 3630 passed, 23 skipped (platform) |
 
 ### The smoke test on the runners

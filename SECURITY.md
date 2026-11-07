@@ -16,12 +16,15 @@ release replaces the previous release in this table.
 | --- | --- |
 | `nexora-lang` on PyPI and npm (Python package and CLI) | `0.15.0` |
 | NEXORA Visual Studio Code extension | `0.14.0`, the latest published VSIX |
+| Native tools (`nex`, `nexora-lsp`, `nex-mcp`, the formatter, the worker) | `native-v0.15.3` |
 
 **Known issue in the native tools.** The native `nex` of `native-v0.15.0` and `native-v0.15.1` followed no symbolic link when it
 compared a path with the folders granted by `--allow-read` and `--allow-write`, so a program could read or write through a link that
-led outside them. The Python `nex` (`nexora-lang` on PyPI and npm) was not affected. It is fixed in `native-v0.15.2` (see
-`CHANGELOG.md`): update to it. If you cannot, do not run programs you do not trust with those two options, or on folders where others
-can create links.
+led outside them. The Python `nex` (`nexora-lang` on PyPI and npm) was not affected. It is fixed in `native-v0.15.2`, and
+`native-v0.15.3` (the supported release) has it (see `CHANGELOG.md`): update to it. If you cannot, do not run programs you do not trust
+with those two options, or on folders where others can create links. `native-v0.15.3` also fixes two defects that are not about
+security: `Process.run` of a command that prints nothing could fail with status -9 on Linux and macOS, and `nex run FILE -- ARGUMENTS`
+gave the program `--` as an argument.
 
 Development snapshots and older releases are unsupported. If a vulnerability affects a supported
 component, fixes are prepared for its current source and included in a new release. There is no
