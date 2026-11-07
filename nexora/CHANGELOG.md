@@ -2,7 +2,7 @@
 
 Changelog for NEXORA, with the most recent version first.
 
-All versions are prior to 1.0: the language may change incompatibly between versions. Every incompatible change is recorded here; language-design and stable-contract changes are also explained in `docs/decisions/`.
+Versions before 1.0.0 could change the language incompatibly. From 1.0.0 the specification is frozen and the numbering follows [the compatibility and versioning policy](docs/compatibility.md): an incompatible change needs a new major version. Every incompatible change is recorded here; language-design and stable-contract changes are also explained in `docs/decisions/`.
 
 This log starts with version 0.1.0, the first that could run. Version 0.9.0 is the first published version: it is tagged (`v0.9.0`) and the `nexora-lang` package is on PyPI and npm. Versions 0.10.0, with `Option` and `Result`, 0.11.0, with modules and imports, 0.12.0, with the syntax of decision 0019, 0.13.0, with network and process capabilities, 0.14.0, with editor integrations and LSP project support, and 0.14.1, with local execution limits, are also tagged and published in both registries. Earlier ones only identify code states: they were never tagged or published.
 
@@ -19,7 +19,43 @@ Each version groups its changes into these sections, when they contain content:
 
 ## Unreleased
 
+### Incompatible changes
+
+None yet.
+
+## 1.0.0 — The 1.0 specification
+
+Released: 2026-11-07 (prepared on that date; the date of the tag is the one that counts if it differs).
+
+NEXORA 1.0.0 is the first release that carries the number of the specification. The language is the one of 0.15.0 with what was
+waiting in "Unreleased" (enumerations, exhaustive `match`, the `?` operator): giving it the number 1.0 changed no rule
+([decision 0029](docs/decisions/0029-congelacion-de-la-especificacion-1-0.md)). **A program that passes `nex check` with 0.12 to
+0.15 runs on 1.0.0 without a change**; the [migration guide](docs/migration-guide.md) says what to do from earlier versions.
+
+### Incompatible changes
+
+None for the language, the diagnostics, the JSON formats or the exit codes. Two things behave differently in the native `nex` only
+(not in the Python package), and both make it equal to the Python `nex`: `nex run FILE -- ARGUMENTS` no longer gives the program
+the first `--` as an argument, and the native `nex` denies a path that leads outside the allowed folders through a symbolic link
+(see Fixed). A program that relied on either was relying on a defect.
+
 ### Added
+
+- **The specification is 1.0 and frozen.** `docs/language-spec.md` is version 1.0. Its grammar, keywords, builtins, diagnostic codes
+  and exit codes are in `release/frozen/`, and `release/check_freeze.nex` fails the release when the grammar or the keywords
+  differ, or when a builtin, a diagnostic code or an exit code was removed (additions are allowed and reported).
+- **Release tools written in NEXORA** (`release/check_artifacts.nex`, `release/check_freeze.nex`, `release/texts.nex`), tested with
+  `nex test`: the wheel, the source distribution and the npm package must agree on name, version, licence and the SHA-256 of every
+  module, and `SHA256SUMS` is written and verified. `nexora-release.yml` runs them on every change, and on a tag `v*` it attaches the
+  three files, `SHA256SUMS` and `RELEASE_CHECKLIST.md` to the GitHub release.
+- A compatibility suite that pins the stable command-line interface of `check`, `run` and `test`
+  (`tests/test_cli_compatibility.py`, `tests/golden/cli_contract.json`), three reference applications
+  (`reference-apps/`) and tests behind every claim of the threat model (`tests/test_threat_model*.py`).
+- Documents: the [threat model](docs/threat-model.md), the [release process](docs/release-process.md), the
+  [yank policy](docs/yanking.md), the [migration guide](docs/migration-guide.md), the
+  [platform support](docs/platform-support.md) with dated records, the [1.0 readiness](docs/1-0-readiness.md) page and
+  [decision 0029](docs/decisions/0029-congelacion-de-la-especificacion-1-0.md).
+- Python 3.14 is supported and tested in the continuous integration, with Python 3.11 to 3.13, on Linux, Windows and macOS.
 
 - `nex impact BEFORE AFTER` (experimental): the changes of the declared requirements between two versions of a program, without running
   either one, as text or as `nexora.impact/1`. Removals and changed conditions are reported; a weakening is proved only for Boolean

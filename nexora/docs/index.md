@@ -1,6 +1,6 @@
 # NEXORA documentation
 
-NEXORA is a new programming language, at an early stage of development. This documentation
+NEXORA is a new programming language; its specification is 1.0 and frozen. This documentation
 describes what the current version really does: every example program and every output shown on
 these pages is run by the automated tests and compared against the real output of the interpreter.
 

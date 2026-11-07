@@ -3,26 +3,26 @@
 This document explains which NEXORA releases receive security fixes, what the project protects,
 what it does **not** protect, and how to report a vulnerability.
 
-NEXORA is an early-stage project that has not been audited. **We do not claim that it is safe to run
+NEXORA has not been audited. **We do not claim that it is safe to run
 untrusted code with it.**
 
 ## Supported versions
 
-NEXORA is pre-1.0 and has no long-term-support branch. Only the most recent published release of
+NEXORA has no long-term-support branch. Only the most recent published release of
 each component receives security fixes; older releases do not receive backports. A newer published
 release replaces the previous release in this table.
 
-| Component | Supported release as of 30 October 2026 |
+| Component | Supported release as of 7 November 2026 |
 | --- | --- |
-| `nexora-lang` on PyPI and npm (Python package and CLI) | `0.15.0` |
+| `nexora-lang` on PyPI and npm (Python package and CLI) | `1.0.0` |
 | NEXORA Visual Studio Code extension | `0.14.0`, the latest published VSIX |
-| Native tools (`nex`, `nexora-lsp`, `nex-mcp`, the formatter, the worker) | `native-v0.15.3` |
+| Native tools (`nex`, `nexora-lsp`, `nex-mcp`, the formatter, the worker) | `native-v1.0.0` |
 
 **Known issue in the native tools.** The native `nex` of `native-v0.15.0` and `native-v0.15.1` followed no symbolic link when it
 compared a path with the folders granted by `--allow-read` and `--allow-write`, so a program could read or write through a link that
 led outside them. The Python `nex` (`nexora-lang` on PyPI and npm) was not affected. It is fixed in `native-v0.15.2`, and
-`native-v0.15.3` (the supported release) has it (see `CHANGELOG.md`): update to it. If you cannot, do not run programs you do not trust
-with those two options, or on folders where others can create links. `native-v0.15.3` also fixes two defects that are not about
+`native-v0.15.3` and `native-v1.0.0` (the supported release) have it (see `CHANGELOG.md`): update to it. If you cannot, do not run programs you do not trust
+with those two options, or on folders where others can create links. `native-v0.15.3` also fixed two defects that are not about
 security: `Process.run` of a command that prints nothing could fail with status -9 on Linux and macOS, and `nex run FILE -- ARGUMENTS`
 gave the program `--` as an argument.
 

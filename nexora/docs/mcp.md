@@ -9,7 +9,7 @@ deterministically, with the same checker that `nex check` uses.
 
 ## Status
 
-**Stability: experimental.** Tool names, arguments, and behavior may change before 1.0
+**Stability: experimental.** Tool names, arguments, and behavior may change in a 1.x release
 ([stability policy](interface-stability.md)).
 
 | | |

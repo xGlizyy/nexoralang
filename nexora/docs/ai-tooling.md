@@ -11,7 +11,7 @@ that **today**, precisely, and what is still an intention.
 | **Features of the language** | Static types without implicit conversions, a single meaning per name, contracts and refined types with the explanation of every rule | Implemented |
 | **Command-line interface** | `nex` and its documented commands, options and exit codes | **Stable** ([compatibility promise](interface-stability.md)) |
 | **Structured data for tools** | Diagnostics, syntax tree, symbols and summary of the program as JSON, with [versioned schemas](json-protocol.md) | **Stable per schema version**; diagnostic machine fields are stable |
-| **Python API** | The `nexora.tooling` module: the same outputs, without going through the command line | Implemented and tested. **Experimental**: it may change before 1.0 |
+| **Python API** | The `nexora.tooling` module: the same outputs, without going through the command line | Implemented and tested. **Experimental**: it may change in a 1.x release |
 | **MCP server** | An optional server that offers the analysis as tools to a compatible assistant ([MCP](mcp.md)) | **Experimental**; tested with the client of the official SDK. Checked by hand in a Claude Code session; **in no other assistant** |
 | **Language server (LSP)** | Integration with editors ([LSP](lsp.md)): diagnostics, completion, hover, navigation, rename and formatting | **Experimental**; implemented and tested (`nexora-lsp`), including relative imports and negotiated position encodings |
 | **Research goal** | Finding out whether source contracts help agents preserve requirements while editing code | A small local, one-shot pilot is complete; independent replication and a diagnostics-feedback study remain ([protocol](ai-evaluation-protocol.md), [results](../experiments/agent-contracts-pilot/results-summary.md)) |
@@ -76,7 +76,7 @@ fn main() {
 ```json
 {
   "schema": "nexora.diagnostics/1",
-  "nexora_version": "0.15.0",
+  "nexora_version": "1.0.0",
   "file": "program.nex",
   "ok": false,
   "diagnostics": [
@@ -123,7 +123,7 @@ fn main() {
 ```json
 {
   "schema": "nexora.inspect/3",
-  "nexora_version": "0.15.0",
+  "nexora_version": "1.0.0",
   "file": "program.nex",
   "ok": true,
   "diagnostics": [],

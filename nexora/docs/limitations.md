@@ -1,17 +1,18 @@
 # Limitations
 
-What NEXORA does **not** do in the 1.0 specification and in the reference implementation 0.15.x, and the risks worth knowing before using it.
+What NEXORA does **not** do in the 1.0 specification and in the reference implementation 1.0.0, and the risks worth knowing before using it.
 Nothing that appears here as "does not exist" works today, even if it is mentioned in the design
 draft, in the roadmap or in a decision that is accepted and pending implementation.
 
 ## General status
 
-NEXORA is an early-stage project. Its specification is frozen as 1.0 ([decision 0029](decisions/0029-congelacion-de-la-especificacion-1-0.md)):
-the language changes from now on only by the rules of the [compatibility policy](compatibility.md). The release 1.0.0 of the
-implementation is the maintainer's to publish, and until then the implementation is 0.15.x:
+NEXORA 1.0 is a young language. Its specification is frozen as 1.0 ([decision 0029](decisions/0029-congelacion-de-la-especificacion-1-0.md)):
+the language changes from now on only by the rules of the [compatibility policy](compatibility.md):
 
-- The implementation may still change incompatibly before 1.0.0, outside what the specification freezes.
-- **It is not suitable for production use.**
+- The interfaces marked experimental (the Python API, the language server, the MCP server and `nex impact`) may still change in a 1.x
+  release; see [interface stability](interface-stability.md).
+- **Its scope is small single-process command-line tools and local automation run by trusted operators.** Web servers, multi-user
+  services and running programs that nobody trusts are outside it ([the threat model](threat-model.md)).
 - This describes programs built with NEXORA. The public Playground is a production-hosted service for
   experimentation, with a restricted worker; its availability does not make the language production-ready.
 - It has not had an independent user evaluation or a third-party audit.
