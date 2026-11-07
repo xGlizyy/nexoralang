@@ -88,7 +88,9 @@ the program declares and the user grants: a link inside an allowed folder that l
 denied it (`E3008`), the specification says it must, and `selfhost/README.md` listed it as a limit of the self-hosted interpreter, but
 neither SECURITY.md nor this page did. `native-v0.15.0` and `native-v0.15.1` have the defect. It is fixed: `host_real` of
 `selfhost/interpreter.nex` asks the C runtime (`rt_resolve`) where a path really leads, with every link and, on Windows, every junction
-followed, a link that points nowhere resolved by its target, and a loop of links denied. The change is recorded in `CHANGELOG.md`.
+followed, a link that points nowhere resolved by its target, and a loop of links denied. It is released as `native-v0.15.2`, and the
+rows were run again against the programs of that release on 2026-11-07: Linux x64, 66 tests; Windows x64, 29 tests, the junction one
+included. The change is recorded in `CHANGELOG.md` and SECURITY.md.
 
 ## Gaps found while writing this page
 
